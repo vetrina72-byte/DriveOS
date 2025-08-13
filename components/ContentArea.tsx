@@ -14,6 +14,8 @@ interface FetchedData {
 
 const ContentArea = ({ isNight }: { isNight: boolean }) => {
   const { accessToken, play } = useAuth();
+  console.log('%c[DEBUG] 1. Token in ContentArea:', 'color: blue; font-weight: bold;', accessToken);
+
   const [data, setData] = useState<FetchedData>({
     userPlaylists: [],
     recentlyPlayed: [],
@@ -26,28 +28,45 @@ const ContentArea = ({ isNight }: { isNight: boolean }) => {
     if (!accessToken) return;
 
     const fetchData = async () => {
+      console.log('%c[DEBUG] 2. useEffect attivato. Inizio a caricare i dati...', 'color: blue; font-weight: bold;');
       setLoading(true);
       setError(null);
       
       const headers = { Authorization: `Bearer ${accessToken}` };
       
       try {
-        const [playlistsRes, recentRes, albumsRes] = await Promise.all([
+        console.log('%c[DEBUG] 3. Sto per eseguire Promise.all con le chiamate API.', 'color: blue; font-weight: bold;');
+        const results = await Promise.all([
           axios.get('https://api.spotify.com/v1/me/playlists', { headers, params: { limit: 10 } }),
           axios.get('https://api.spotify.com/v1/me/player/recently-played', { headers, params: { limit: 10 } }),
           axios.get('https://api.spotify.com/v1/me/albums', { headers, params: { limit: 10 } }),
         ]);
 
-        setData({
-          userPlaylists: playlistsRes.data.items,
-          recentlyPlayed: recentRes.data.items.map((item: any) => ({
+        console.log('%c[DEBUG] 4. Chiamate API completate con successo! Dati grezzi:', 'color: green; font-weight: bold;', results);
+
+        const playlists = results[0].data.items;
+        const recentTracks = results[1].data.items.map((item: any) => ({
             ...item.track,
             images: item.track.album.images,
-          })),
-          savedAlbums: albumsRes.data.items.map((item: any) => item.album),
+        }));
+        const savedAlbums = results[2].data.items.map((item: any) => item.album);
+
+        console.log('%c[DEBUG] 5. Sto per impostare gli stati con questi dati elaborati.', 'color: green; font-weight: bold;', {
+            playlists,
+            recentTracks,
+            savedAlbums
         });
-      } catch (e) {
-        console.error("Failed to fetch Spotify content", e);
+
+        setData({
+          userPlaylists: playlists,
+          recentlyPlayed: recentTracks,
+          savedAlbums: savedAlbums,
+        });
+      } catch (error: any) {
+        console.error('%c[DEBUG] X. ERRORE CRITICO nel caricamento dati:', 'color: red; font-weight: bold;', error);
+        if (error.response) {
+            console.error('%c[DEBUG] X. Dettagli errore da Spotify:', 'color: red;', error.response.data);
+        }
         setError("Could not load content.");
       } finally {
         setLoading(false);
