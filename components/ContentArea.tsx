@@ -7,17 +7,17 @@ import { FiLoader } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 
 interface FetchedData {
-  featuredPlaylists: SpotifyItem[];
   userPlaylists: SpotifyItem[];
   recentlyPlayed: SpotifyItem[];
+  savedAlbums: SpotifyItem[];
 }
 
 const ContentArea = ({ isNight }: { isNight: boolean }) => {
   const { accessToken, play } = useAuth();
   const [data, setData] = useState<FetchedData>({
-    featuredPlaylists: [],
     userPlaylists: [],
     recentlyPlayed: [],
+    savedAlbums: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,16 +32,19 @@ const ContentArea = ({ isNight }: { isNight: boolean }) => {
       const headers = { Authorization: `Bearer ${accessToken}` };
       
       try {
-        const [featuredRes, playlistsRes, recentRes] = await Promise.all([
-          axios.get('https://api.spotify.com/v1/browse/featured-playlists', { headers, params: { limit: 10 } }),
+        const [playlistsRes, recentRes, albumsRes] = await Promise.all([
           axios.get('https://api.spotify.com/v1/me/playlists', { headers, params: { limit: 10 } }),
           axios.get('https://api.spotify.com/v1/me/player/recently-played', { headers, params: { limit: 10 } }),
+          axios.get('https://api.spotify.com/v1/me/albums', { headers, params: { limit: 10 } }),
         ]);
 
         setData({
-          featuredPlaylists: featuredRes.data.playlists.items,
           userPlaylists: playlistsRes.data.items,
-          recentlyPlayed: recentRes.data.items.map((item: any) => item.track),
+          recentlyPlayed: recentRes.data.items.map((item: any) => ({
+            ...item.track,
+            images: item.track.album.images,
+          })),
+          savedAlbums: albumsRes.data.items.map((item: any) => item.album),
         });
       } catch (e) {
         console.error("Failed to fetch Spotify content", e);
@@ -66,9 +69,9 @@ const ContentArea = ({ isNight }: { isNight: boolean }) => {
 
   return (
     <div className="flex-grow overflow-y-auto carousel-scrollbar-hidden pb-6">
-      <ContentCarousel title="Featured Playlists" items={data.featuredPlaylists} isNight={isNight} onPlay={play} />
-      <ContentCarousel title="Your Playlists" items={data.userPlaylists} isNight={isNight} onPlay={play} />
-      <ContentCarousel title="Recently Played" items={data.recentlyPlayed} isNight={isNight} onPlay={play} />
+      <ContentCarousel title="Le Tue Playlist" items={data.userPlaylists} isNight={isNight} onPlay={play} />
+      <ContentCarousel title="Ascoltati di Recente" items={data.recentlyPlayed} isNight={isNight} onPlay={play} />
+      <ContentCarousel title="I Tuoi Album Salvati" items={data.savedAlbums} isNight={isNight} onPlay={play} />
     </div>
   );
 };
