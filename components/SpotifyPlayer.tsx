@@ -1,17 +1,28 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FiX } from 'react-icons/fi';
-import { FaSpotify } from 'react-icons/fa';
+import { FiX, FiLogOut } from 'react-icons/fi';
+import { FaSpotify, FaUserCircle } from 'react-icons/fa';
+
+// Define a type for the auth props passed from the main App component
+interface SpotifyAuthProps {
+  accessToken: string | null;
+  userInfo: any;
+  error: string | null;
+  login: () => void;
+  logout: () => void;
+}
 
 export default function SpotifyPlayer({ 
     isOpen, 
     onClose, 
     spotifyPlayerTop,
     spotifyPlayerBottom,
+    auth,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    auth: SpotifyAuthProps;
 }) {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const [translateX, setTranslateX] = useState(100); // Start closed (100%)
@@ -19,27 +30,6 @@ export default function SpotifyPlayer({
 
   const openingBoxSpeed = 4.5;
   const closingBoxSpeed = 8.6;
-
-  const handleLogin = useCallback(() => {
-    const CLIENT_ID = 'ecc9e126d442404b92e8081c7d95ecca';
-    const REDIRECT_URI = 'http://localhost:8080/callback';
-    const scope = 'user-read-private user-read-email playlist-read-private user-modify-playback-state user-read-playback-state streaming';
-    
-    const authUrl = new URL("https://accounts.spotify.com/authorize");
-    
-    // NOTE: The request specified 'response_type=code', but the related callback functionality
-    // implies an implicit grant flow. 'token' is used here to ensure the flow works end-to-end.
-    const params = {
-        response_type: 'token',
-        client_id: CLIENT_ID,
-        scope,
-        redirect_uri: REDIRECT_URI,
-    };
-
-    authUrl.search = new URLSearchParams(params).toString();
-    
-    window.location.href = authUrl.toString();
-  }, []);
 
   useEffect(() => {
     let lastTime = performance.now();
@@ -71,6 +61,80 @@ export default function SpotifyPlayer({
         if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     };
   }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
+  
+  const renderContent = () => {
+    if (auth.error) {
+      return (
+        <div className="flex-grow flex flex-col justify-center items-center text-center p-8">
+          <h2 className="text-xl font-bold text-red-500 mb-2">Authentication Error</h2>
+          <p className="text-zinc-400 mb-6 max-w-sm">{auth.error}</p>
+          <button
+            onClick={auth.login}
+            className="bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 px-6 rounded-full text-md transition-all duration-300 transform hover:scale-105"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+
+    if (auth.accessToken && !auth.userInfo) {
+      return (
+        <div className="flex-grow flex flex-col justify-center items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+            <p className="text-zinc-400 mt-4">Loading user profile...</p>
+        </div>
+      );
+    }
+    
+    if (auth.accessToken && auth.userInfo) {
+      const userImage = auth.userInfo.images?.[0]?.url;
+      return (
+        <div className="flex-grow flex flex-col justify-between items-center p-8 bg-gradient-to-b from-zinc-800 to-black">
+            <div className="flex items-center gap-4">
+                {userImage ? (
+                    <img src={userImage} alt={auth.userInfo.display_name} className="w-12 h-12 rounded-full"/>
+                ) : (
+                    <FaUserCircle className="w-12 h-12 text-zinc-600"/>
+                )}
+                <div>
+                    <p className="text-zinc-400 text-sm">Logged in as</p>
+                    <h2 className="text-xl font-bold">{auth.userInfo.display_name}</h2>
+                </div>
+            </div>
+            
+            <div className="text-center">
+                <p className="text-zinc-400">Playback controls would be here.</p>
+                {/* Future implementation: Player UI */}
+            </div>
+
+            <button
+                onClick={auth.logout}
+                className="bg-red-600/80 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-full text-md transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
+                aria-label="Log out from Spotify"
+            >
+                <FiLogOut />
+                <span>Log Out</span>
+            </button>
+        </div>
+      );
+    }
+
+    // Default: Logged out
+    return (
+      <div className="flex-grow flex justify-center items-center overflow-hidden">
+           <button
+              id="login-button"
+              onClick={auth.login}
+              className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-4 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-3"
+              aria-label="Accedi con Spotify"
+          >
+              <FaSpotify className="w-6 h-6" />
+              <span>Accedi con Spotify</span>
+          </button>
+      </div>
+    );
+  };
 
 
   return (
@@ -93,18 +157,8 @@ export default function SpotifyPlayer({
                     <FiX className="h-5 w-5"/>
                 </button>
             </header>
-            <h1 id="spotify-player-title" className="sr-only">Spotify Login</h1>
-            <div className="flex-grow flex justify-center items-center overflow-hidden">
-                 <button
-                    id="login-button"
-                    onClick={handleLogin}
-                    className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-4 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-3"
-                    aria-label="Accedi con Spotify"
-                >
-                    <FaSpotify className="w-6 h-6" />
-                    <span>Accedi con Spotify</span>
-                </button>
-            </div>
+            <h1 id="spotify-player-title" className="sr-only">Spotify Player</h1>
+            {renderContent()}
         </div>
     </div>
   );

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
@@ -13,6 +11,7 @@ import DebugControls from './components/DebugControls';
 import MiniMap from './components/MiniMap';
 import { WeatherData, TempUnit } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
+import { useSpotifyAuth } from './hooks/useSpotifyAuth';
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
   icon: React.ComponentType<any>, 
@@ -119,6 +118,8 @@ export default function App() {
   const [nightFloorDarkness, setNightFloorDarkness] = useState(-12);
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(70);
+
+  const { accessToken, userInfo, error: authError, login, logout } = useSpotifyAuth();
 
 
   useEffect(() => {
@@ -427,6 +428,13 @@ export default function App() {
             onClose={() => setActiveApp(null)} 
             spotifyPlayerTop={spotifyPlayerTop}
             spotifyPlayerBottom={spotifyPlayerBottom}
+            auth={{
+                accessToken,
+                userInfo,
+                error: authError,
+                login,
+                logout,
+            }}
         />
         
         <MapsContainer 

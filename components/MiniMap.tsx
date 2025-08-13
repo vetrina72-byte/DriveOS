@@ -104,12 +104,17 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
       return null;
   }
 
-  // Use Stadia Maps tiles, swapping between dark and light themes based on isNight prop.
-  // This aligns the minimap style with the main navigation map.
-  // The {r} part handles retina displays.
-  const tileUrl = isNight 
-    ? `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`
-    : `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`;
+  // Use CARTO "dark_all" for night and Stadia "alidade_smooth" for day.
+  const lightThemeProps = {
+    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
+  };
+
+  const darkThemeProps = {
+    url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png`,
+    subdomains: 'abcd',
+  };
+
+  const themeProps = isNight ? darkThemeProps : lightThemeProps;
 
   return (
     <div 
@@ -130,8 +135,8 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
         keyboard={false}
       >
         <TileLayer
-            key={tileUrl} // Add key to force re-render on URL change
-            url={tileUrl}
+            key={themeProps.url}
+            {...themeProps}
         />
         {position && (
             <Marker
