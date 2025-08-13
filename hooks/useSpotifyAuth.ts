@@ -1,12 +1,11 @@
-
 import { useState, useEffect, useCallback } from 'react';
 
 // Client ID has been set with the one provided by the user.
 const SPOTIFY_CLIENT_ID = 'ecc9e126d442404b92e8081c7d95ecca'; 
 
-// Use a dynamic Redirect URI based on the current location.
-// This works for both local development (on any port) and deployed environments.
-const REDIRECT_URI = `${window.location.origin}/callback.html`;
+// This MUST be a publicly accessible URL that is whitelisted in the Spotify Developer Dashboard.
+// 'localhost' will not work in this sandboxed environment.
+const REDIRECT_URI = 'http://localhost:8080/callback';
 
 
 export const useSpotifyAuth = () => {
@@ -42,6 +41,37 @@ export const useSpotifyAuth = () => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_token_expires_at');
         localStorage.removeItem('spotify_auth_error');
+    }, []);
+
+    const setTokenFromUrl = useCallback((url: string) => {
+        try {
+            if (!url || !url.includes('#')) {
+                throw new Error("L'URL fornito non è valido o non contiene un token.");
+            }
+            const hash = new URL(url).hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const token = params.get('access_token');
+            const expiresIn = params.get('expires_in');
+            const urlError = params.get('error');
+
+            if (urlError) {
+                throw new Error(`Spotify ha restituito un errore: ${urlError}`);
+            }
+
+            if (token && expiresIn) {
+                const expiresAt = Date.now() + (parseInt(expiresIn, 10) * 1000);
+                localStorage.setItem('spotify_access_token', token);
+                localStorage.setItem('spotify_token_expires_at', expiresAt.toString());
+                setAccessToken(token);
+                setError(null);
+                localStorage.removeItem('spotify_auth_error');
+            } else {
+                throw new Error("Token di accesso o data di scadenza non trovati nell'URL.");
+            }
+        } catch (e: any) {
+            console.error("Errore durante il parsing dell'URL di Spotify:", e);
+            setError(`URL non valido. Assicurati di copiare l'URL completo dal popup dopo il login. Dettagli: ${e.message}`);
+        }
     }, []);
     
     // This effect listens for authentication results from the popup window via localStorage.
@@ -112,5 +142,5 @@ export const useSpotifyAuth = () => {
 
     }, [accessToken, logout]);
     
-    return { accessToken, userInfo, error, login, logout };
+    return { accessToken, userInfo, error, login, logout, setTokenFromUrl };
 };

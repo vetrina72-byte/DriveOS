@@ -4,11 +4,38 @@ This contains everything you need to run your app locally.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js
 
+### Frontend
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1.  **Install dependencies**:
+    `npm install`
+2.  **Set Environment Variables**: Create a file named `.env.local` and add your Gemini API key:
+    ```
+    GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+    ```
+3.  **Run the app**:
+    `npm run dev`
+
+    The frontend will run on `http://localhost:3000` (or another port if 3000 is busy).
+
+### Backend (for Spotify Authentication)
+
+This project includes a small Node.js server to handle the Spotify authentication flow securely.
+
+1.  **Create an environment file**: Create a file named `.env` in the root of the project.
+2.  **Add credentials**: Add your Spotify application credentials to the `.env` file. You can get these from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+
+    ```
+    # .env
+    SPOTIFY_CLIENT_ID=ecc9e126d442404b92e8081c7d95ecca
+    SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET
+    ```
+
+3.  **Run the server**: In a **separate terminal window**, start the backend server:
+    `npm run server`
+
+    The server will run on `http://localhost:8888`.
+
+4.  **Configure Spotify Redirect URI**: In your Spotify Developer Dashboard, go to your application's settings and make sure you have added the following URL to your "Redirect URIs":
+    `http://localhost:3000/spotify-callback`

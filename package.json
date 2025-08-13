@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "node server.js"
   },
   "dependencies": {
     "@google/genai": "^0.1.1",
@@ -18,7 +19,11 @@
     "@react-three/fiber": "^9.3.0",
     "three": "^0.178.0",
     "@react-three/drei": "^10.6.1",
-    "react-youtube": "^10.1.0"
+    "react-youtube": "^10.1.0",
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
