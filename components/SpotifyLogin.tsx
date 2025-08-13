@@ -1,21 +1,48 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { FiLoader } from 'react-icons/fi';
+
+// Helper to generate a random string for the code verifier
+const generateRandomString = (length: number): string => {
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let text = '';
+  for (let i = 0; i < length; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+};
+
+// Helper to generate the code challenge from the verifier using SHA-256
+const generateCodeChallenge = async (verifier: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await window.crypto.subtle.digest('SHA-256', data);
+  // Base64-URL-encode the result
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+};
+
 
 const SpotifyLogin: React.FC = () => {
     const { login, isLoading, error, clearError } = useAuth();
     const [popup, setPopup] = useState<Window | null>(null);
     const [authCode, setAuthCode] = useState<string | null>(null);
 
-    const handleLogin = () => {
+    const handleLogin = async () => {
         clearError();
 
         const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
         const redirectUri = 'http://localhost:5173/spotify-callback';
         const scope = 'user-read-private user-read-email streaming user-modify-playback-state user-read-playback-state playlist-read-private user-read-playback-state';
+
+        // PKCE Flow: Generate a code verifier and challenge
+        const codeVerifier = generateRandomString(128);
+        const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+        window.localStorage.setItem('spotify_code_verifier', codeVerifier);
 
         const authUrl = new URL("https://accounts.spotify.com/authorize");
         authUrl.search = new URLSearchParams({
@@ -24,6 +51,8 @@ const SpotifyLogin: React.FC = () => {
             redirect_uri: redirectUri,
             scope: scope,
             show_dialog: 'true',
+            code_challenge_method: 'S256',
+            code_challenge: codeChallenge,
         }).toString();
 
         const popupWidth = 500;

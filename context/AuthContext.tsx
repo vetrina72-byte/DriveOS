@@ -1,5 +1,3 @@
-
-
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import axios from 'axios';
 
@@ -61,6 +59,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_refresh_token');
         localStorage.removeItem('spotify_expires_in');
+        localStorage.removeItem('spotify_code_verifier');
         setState(initialState);
         setState(s => ({...s, isLoading: false}));
     }, []);
@@ -161,13 +160,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return;
         }
 
+        const codeVerifier = localStorage.getItem('spotify_code_verifier');
+        if (!codeVerifier) {
+            setState(s => ({ ...s, error: 'Code verifier not found. Please try logging in again.', isLoading: false }));
+            return;
+        }
+
+        const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
+        const redirectUri = 'http://localhost:5173/spotify-callback';
+        
+        const params = new URLSearchParams();
+        params.append('client_id', clientId);
+        params.append('grant_type', 'authorization_code');
+        params.append('code', authCode);
+        params.append('redirect_uri', redirectUri);
+        params.append('code_verifier', codeVerifier);
+
         try {
-            const response = await axios.post('http://localhost:8888/api/exchange-token', { code: authCode });
+            const response = await axios.post(
+                'https://accounts.spotify.com/api/token',
+                params,
+                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+            );
+
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
 
             localStorage.setItem('spotify_access_token', access_token);
             localStorage.setItem('spotify_expires_in', String(expiresAt));
+            localStorage.removeItem('spotify_code_verifier'); // Clean up verifier
 
             const userData = await fetchUserInfo(access_token);
             if (userData) {
@@ -184,7 +205,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         } catch (err: any) {
             console.error('Login process failed:', err);
-            const errorMessage = err.response?.data?.details?.error_description || 'Failed to complete login.';
+            const errorMessage = err.response?.data?.error_description || 'Failed to complete login.';
             setState(s => ({...s, error: errorMessage, isLoading: false}));
         }
     }, [fetchUserInfo]);

@@ -19,23 +19,13 @@ This contains everything you need to run your app locally.
 
     The frontend will run on `http://localhost:5173` (or another port if 5173 is busy).
 
-### Backend (for Spotify Authentication)
+### Spotify Integration
 
-This project includes a small Node.js server to handle the Spotify authentication flow securely.
+This project uses the Spotify Web Playback SDK. For the authentication to work, you need a Spotify application.
 
-1.  **Create an environment file**: Create a file named `.env` in the root of the project.
-2.  **Add credentials**: Add your Spotify application credentials to the `.env` file. You can get these from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-
-    ```
-    # .env
-    SPOTIFY_CLIENT_ID=ecc9e126d442404b92e8081c7d95ecca
-    SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET
-    ```
-
-3.  **Run the server**: In a **separate terminal window**, start the backend server:
-    `npm run server`
-
-    The server will run on `http://localhost:8888`.
-
-4.  **Configure Spotify Redirect URI**: In your Spotify Developer Dashboard, go to your application's settings and make sure you have added the following URL to your "Redirect URIs":
+1.  **Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)** and create a new application.
+2.  **Copy your Client ID**: You will find this on your application's dashboard. The code uses `ecc9e126d442404b92e8081c7d95ecca` by default, which you should replace with your own if you wish.
+3.  **Configure Spotify Redirect URI**: In your Spotify application's settings, make sure you have added the following URL to your "Redirect URIs":
     `http://localhost:5173/spotify-callback`
+
+The authentication flow uses the secure "Authorization Code Flow with PKCE" and does not require a backend server or a client secret.
