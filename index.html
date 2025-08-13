@@ -121,7 +121,7 @@
     @keyframes sun-move-set {
         0% { transform: translateY(-8px); }
         50% { transform: translateY(16px); }
-        100% { transform: translateY(-8px); }
+        100% { translateY(-8px); }
     }
     @keyframes arrow-move-rise {
         0%   { transform: translateY(8px) scale(1); }
@@ -177,6 +177,35 @@
     }
     .animate-fade-in {
       animation: fade-in 0.5s ease-out forwards;
+    }
+    
+    /* Spotify Carousel Scrollbar */
+    .carousel-scrollbar-hidden::-webkit-scrollbar {
+      display: none;
+    }
+    .carousel-scrollbar-hidden {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+    }
+
+    /* Music Player Styles */
+    .music-player {
+      position: fixed;
+      z-index: 40;
+      transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .player-docked {
+      bottom: 85px; /* Sits just above the 80px footer */
+      left: 20px;
+      width: 350px;
+    }
+
+    .player-floating {
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 500px;
     }
 
   </style>

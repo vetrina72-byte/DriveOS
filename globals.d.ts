@@ -1,4 +1,3 @@
-
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.
 
@@ -53,13 +52,13 @@ interface SpeechRecognitionStatic {
 
 // --- Spotify Web Playback SDK ---
 
-interface SpotifyPlayerOptions {
+export interface SpotifyPlayerOptions {
     name: string;
     getOAuthToken: (cb: (token: string) => void) => void;
     volume?: number;
 }
 
-interface SpotifyTrack {
+export interface SpotifyTrack {
     name: string;
     uri: string;
     id: string | null;
@@ -74,7 +73,7 @@ interface SpotifyTrack {
     artists: { uri: string; name: string; }[];
 }
 
-interface SpotifyPlayerState {
+export interface SpotifyPlayerState {
     context: {
         uri: string | null;
         metadata: any | null;
@@ -102,7 +101,7 @@ interface SpotifyPlayerState {
 }
 
 
-interface SpotifyPlayer {
+export interface SpotifyPlayer {
     _options: SpotifyPlayerOptions;
     connect: () => Promise<boolean>;
     disconnect: () => void;
@@ -132,3 +131,7 @@ declare global {
     };
   }
 }
+
+// This empty export statement is crucial. It turns this file into a module,
+// which allows the `declare global` block to correctly augment the global Window interface.
+export {};

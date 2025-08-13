@@ -22,6 +22,8 @@ interface AuthContextType extends AuthState {
     login: (authCode?: string | null, error?: string) => Promise<void>;
     logout: () => void;
     clearError: () => void;
+    play: (contextUri: string) => void;
+    setDeviceId: (id: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,6 +40,7 @@ const initialState: AuthState = {
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
+    const [deviceId, setDeviceIdState] = useState<string | null>(null);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -55,7 +58,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return data;
         } catch (err) {
             console.error('Failed to fetch user info', err);
-            // This will trigger a logout if the token is expired/invalid
             logout();
             return null;
         }
@@ -122,12 +124,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [fetchUserInfo]);
 
+    const setDeviceId = (id: string | null) => {
+        setDeviceIdState(id);
+    };
+
+    const play = useCallback(async (contextUri: string) => {
+        if (!state.accessToken || !deviceId) {
+            console.error("Cannot play: No access token or device ID");
+            return;
+        }
+        try {
+            await axios.put(
+                `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+                { context_uri: contextUri },
+                { headers: { Authorization: `Bearer ${state.accessToken}` } }
+            );
+        } catch (err) {
+            console.error('Failed to start playback', err);
+        }
+    }, [state.accessToken, deviceId]);
+
     const clearError = () => {
         setState(s => ({...s, error: null}));
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId }}>
             {children}
         </AuthContext.Provider>
     );

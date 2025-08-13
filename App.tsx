@@ -4,7 +4,8 @@ import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider } from './context/AuthContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
-import SpotifyPlayer from './components/SpotifyPlayer';
+import SpotifyApp from './components/SpotifyPlayer';
+import MusicPlayer from './components/MusicPlayer';
 import MapsContainer from './components/MapsContainer';
 import AppLauncher from './components/AppLauncher';
 import TopStatusBar from './components/TopStatusBar';
@@ -369,7 +370,6 @@ export default function App() {
   };
 
   const isUIOverlayActive = activeApp !== null;
-  const isOverlayVisible = isWeatherModalOpen || isUIOverlayActive;
 
   return (
     <VehicleProvider>
@@ -429,11 +429,17 @@ export default function App() {
               tempUnit={tempUnit}
           />
 
-          <SpotifyPlayer 
+          <SpotifyApp 
               isOpen={activeApp === 'spotify'} 
               onClose={() => setActiveApp(null)} 
+              isNight={isNight}
               spotifyPlayerTop={spotifyPlayerTop}
               spotifyPlayerBottom={spotifyPlayerBottom}
+          />
+
+          <MusicPlayer 
+            isAnyAppOpen={isUIOverlayActive}
+            isNight={isNight}
           />
           
           <MapsContainer 
