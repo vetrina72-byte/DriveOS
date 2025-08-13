@@ -1,0 +1,185 @@
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "react-dom/server": "https://esm.sh/react-dom@^19.1.1/server",
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "path": "https://esm.sh/path@^0.12.7",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@^10.6.1",
+    "three": "https://esm.sh/three@^0.179.1",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@^9.3.0",
+    "vite": "https://esm.sh/vite@^7.1.1",
+    "url": "https://esm.sh/url@^0.11.4",
+    "react-icons/": "https://esm.sh/react-icons@^5.5.0/",
+    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
+    "leaflet": "https://esm.sh/leaflet@^1.9.4"
+  }
+}
+</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mio Infotainment</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""/>
+  <style>
+    body, #root {
+      background-color: #1a1a1a;
+      color: #e5e7eb;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    .leaflet-container {
+      background-color: #333;
+    }
+    .leaflet-control-zoom, .leaflet-control-attribution {
+      display: none;
+    }
+    .hot-sun {
+      /* Intense orange-red tint for high heat, making it look fiery */
+      filter: hue-rotate(-25deg) saturate(500%) brightness(0.95) contrast(1.1);
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes drift {
+      0% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      100% { transform: translateX(-5px); }
+    }
+    @keyframes pulse-glow {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 0.9;
+      }
+      50% {
+        transform: scale(1.05);
+        opacity: 1;
+      }
+    }
+    @keyframes time-slide-replace {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      49% {
+        opacity: 0;
+        transform: translateY(-120%); /* Disappears by sliding UP */
+      }
+      50% {
+        opacity: 0;
+        transform: translateY(-120%); /* Re-appears ABOVE */
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0); /* Slides DOWN into view */
+      }
+    }
+    .time-slide-animation {
+      animation: time-slide-replace 0.5s ease-in-out;
+    }
+
+    /* Weather Icon Animations */
+    @keyframes ray-opacity-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+    }
+    @keyframes ray-length-rise {
+        0% { stroke-dashoffset: 5; opacity: 0; }
+        50% { stroke-dashoffset: 0; opacity: 1; }
+        100% { stroke-dashoffset: 5; opacity: 0; }
+    }
+    @keyframes ray-length-set {
+        0% { stroke-dashoffset: 0; opacity: 1; }
+        50% { stroke-dashoffset: 5; opacity: 0; }
+        100% { stroke-dashoffset: 0; opacity: 1; }
+    }
+    .ray-rise {
+        animation: ray-length-rise 6s ease-in-out infinite;
+    }
+    .ray-set {
+        animation: ray-length-set 6s ease-in-out infinite;
+    }
+    @keyframes sun-move-rise {
+        0% { transform: translateY(8px); }
+        50% { transform: translateY(-8px); }
+        100% { transform: translateY(8px); }
+    }
+    @keyframes sun-move-set {
+        0% { transform: translateY(-8px); }
+        50% { transform: translateY(16px); }
+        100% { transform: translateY(-8px); }
+    }
+    @keyframes arrow-move-rise {
+        0%   { transform: translateY(8px) scale(1); }
+        50%  { transform: translateY(-8px) scale(1.2); }
+        100% { transform: translateY(8px) scale(1); }
+    }
+    @keyframes arrow-move-set {
+        0%   { transform: translateY(-8px) scale(1.2); }
+        50%  { transform: translateY(16px) scale(0.8); }
+        100% { translateY(-8px) scale(1.2); }
+    }
+    @keyframes cloud-drift-subtle-sr { 0% { transform: translateX(-2px); } 50% { transform: translateX(2px); } 100% { translateX(-2px); } }
+    @keyframes cloud-drift-subtle-ss { 0% { transform: translateX(-2px); } 50% { transform: translateX(2px); } 100% { translateX(-2px); } }
+
+    /* MiniMap Styles */
+    .minimap-container {
+      position: absolute;
+      /* top, right, width, height are controlled by inline styles from React */
+      border-radius: 32px;
+      overflow: hidden;
+      z-index: 5;
+      opacity: 0;
+      transform: scale(0.95) translateY(-10px);
+      transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+      pointer-events: none;
+    }
+    
+    .minimap-container.visible {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .minimap-container .leaflet-container {
+      cursor: default !important;
+    }
+    
+    .minimap-leaflet {
+      width: 100%;
+      height: 100%;
+      background-color: #1a1a1a;
+    }
+
+    .vehicle-marker-icon {
+      background: transparent;
+      border: none;
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fade-in 0.5s ease-out forwards;
+    }
+
+  </style>
+  <script type="module" src="/index.tsx"></script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>
