@@ -1,25 +1,21 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { FiLoader } from 'react-icons/fi';
 
-interface SpotifyLoginProps {
-    onLoginSuccess: (tokenData: { access_token: string, refresh_token?: string }) => void;
-    onLoginError: (error: string) => void;
-}
-
-const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess, onLoginError }) => {
-    const [isLoading, setIsLoading] = useState(false);
+const SpotifyLogin: React.FC = () => {
+    const { login, isLoading, error, clearError } = useAuth();
     const [popup, setPopup] = useState<Window | null>(null);
     const [authCode, setAuthCode] = useState<string | null>(null);
 
     const handleLogin = () => {
-        setIsLoading(true);
-        onLoginError(''); // Clear previous errors
+        clearError();
 
         const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
         const redirectUri = 'http://localhost:5173/spotify-callback';
-        const scope = 'user-read-private user-read-email streaming user-modify-playback-state user-read-playback-state';
+        const scope = 'user-read-private user-read-email streaming user-modify-playback-state user-read-playback-state playlist-read-private user-read-playback-state';
 
         const authUrl = new URL("https://accounts.spotify.com/authorize");
         authUrl.search = new URLSearchParams({
@@ -43,19 +39,6 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess, onLoginErro
         setPopup(newPopup);
     };
 
-    const exchangeCodeForToken = useCallback(async (code: string) => {
-        try {
-            const response = await axios.post('http://localhost:8888/api/exchange-token', { code });
-            onLoginSuccess(response.data);
-        } catch (exchangeError: any) {
-            console.error('Token exchange error:', exchangeError);
-            const errorMessage = exchangeError.response?.data?.details?.error_description || 'Failed to exchange authorization code for a token.';
-            onLoginError(errorMessage);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [onLoginSuccess, onLoginError]);
-
     // Effect for listening to messages from the popup
     useEffect(() => {
         console.log("MAIN_APP: Listener di messaggi attivato.");
@@ -74,8 +57,7 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess, onLoginErro
                 }
 
                 if (authError) {
-                    onLoginError(`Authentication failed: ${authError}`);
-                    setIsLoading(false);
+                    login(null, `Authentication failed: ${authError}`);
                 } else if (code) {
                     console.log(`MAIN_APP: Messaggio ricevuto dal popup! Codice: ${code}`);
                     setAuthCode(code);
@@ -89,34 +71,37 @@ const SpotifyLogin: React.FC<SpotifyLoginProps> = ({ onLoginSuccess, onLoginErro
             console.log("MAIN_APP: Listener di messaggi rimosso.");
             window.removeEventListener('message', handleMessage);
         };
-    }, [popup, onLoginError]);
+    }, [popup, login]);
 
     // Effect for exchanging the token once we have an auth code
     useEffect(() => {
         if (authCode) {
-            exchangeCodeForToken(authCode);
+            login(authCode);
         }
-    }, [authCode, exchangeCodeForToken]);
+    }, [authCode, login]);
 
     return (
-        <button
-            onClick={handleLogin}
-            disabled={isLoading}
-            className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-4 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-3 disabled:bg-zinc-500 disabled:scale-100 disabled:cursor-wait"
-            aria-label="Accedi con Spotify"
-        >
-            {isLoading ? (
-                <>
-                    <FiLoader className="w-6 h-6 animate-spin" />
-                    <span>Authenticating...</span>
-                </>
-            ) : (
-                <>
-                    <FaSpotify className="w-6 h-6" />
-                    <span>Accedi con Spotify</span>
-                </>
-            )}
-        </button>
+        <div className="flex flex-col items-center gap-4">
+            <button
+                onClick={handleLogin}
+                disabled={isLoading}
+                className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-4 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-3 disabled:bg-zinc-500 disabled:scale-100 disabled:cursor-wait"
+                aria-label="Accedi con Spotify"
+            >
+                {isLoading ? (
+                    <>
+                        <FiLoader className="w-6 h-6 animate-spin" />
+                        <span>Authenticating...</span>
+                    </>
+                ) : (
+                    <>
+                        <FaSpotify className="w-6 h-6" />
+                        <span>Accedi con Spotify</span>
+                    </>
+                )}
+            </button>
+            {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+        </div>
     );
 };
 
