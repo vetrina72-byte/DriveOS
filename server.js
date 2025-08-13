@@ -9,7 +9,7 @@ const port = 8888;
 
 // Middlewares
 // Allow requests only from the frontend app's origin
-app.use(cors({ origin: 'http://localhost:3000' })); 
+app.use(cors({ origin: 'http://localhost:5173' })); 
 app.use(express.json()); // To parse JSON request bodies
 
 // --- Environment Variables ---
@@ -17,7 +17,7 @@ app.use(express.json()); // To parse JSON request bodies
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 // This must exactly match the Redirect URI used in the frontend and in your Spotify Developer Dashboard
-const REDIRECT_URI = 'http://localhost:3000/spotify-callback';
+const REDIRECT_URI = 'http://localhost:5173/spotify-callback';
 
 app.post('/api/exchange-token', async (req, res) => {
   const { code } = req.body;

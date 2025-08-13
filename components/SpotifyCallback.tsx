@@ -2,25 +2,27 @@ import React, { useEffect } from 'react';
 
 const SpotifyCallback: React.FC = () => {
   useEffect(() => {
-    // This effect runs once when the component mounts after the redirect.
+    console.log("POPUP: Componente Callback caricato.");
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const error = params.get('error');
 
-    // This component is expected to run within a different window context (iframe/popup),
-    // so it communicates back to the main application window that opened it.
-    const targetWindow = window.opener || (window.parent !== window ? window.parent : null);
-    
-    if (targetWindow) {
-      if (code) {
-        // Send the authorization code to the target window.
-        targetWindow.postMessage({ type: 'spotifyAuth', code: code }, window.location.origin);
-      } else if (error) {
-        // Send any error received from Spotify to the target window.
-        targetWindow.postMessage({ type: 'spotifyAuth', error: error }, window.location.origin);
+    if (code) {
+      console.log(`POPUP: Codice trovato: ${code}`);
+      if (window.opener) {
+        console.log("POPUP: Invio messaggio alla finestra principale...");
+        window.opener.postMessage({ type: 'spotifyAuth', code: code }, window.location.origin);
+        console.log("POPUP: Tento di chiudere la finestra.");
+        window.close();
       }
+    } else if (error) {
+      console.log(`POPUP: Spotify ha restituito un errore: ${error}`);
+      if (window.opener) {
+        window.opener.postMessage({ type: 'spotifyAuth', error: error }, window.location.origin);
+      }
+      window.close();
     }
-  }, []); // The empty dependency array ensures this effect runs only once on mount.
+  }, []);
 
   return (
     <div style={{

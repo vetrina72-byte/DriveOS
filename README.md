@@ -17,7 +17,7 @@ This contains everything you need to run your app locally.
 3.  **Run the app**:
     `npm run dev`
 
-    The frontend will run on `http://localhost:3000` (or another port if 3000 is busy).
+    The frontend will run on `http://localhost:5173` (or another port if 5173 is busy).
 
 ### Backend (for Spotify Authentication)
 
@@ -38,4 +38,4 @@ This project includes a small Node.js server to handle the Spotify authenticatio
     The server will run on `http://localhost:8888`.
 
 4.  **Configure Spotify Redirect URI**: In your Spotify Developer Dashboard, go to your application's settings and make sure you have added the following URL to your "Redirect URIs":
-    `http://localhost:3000/spotify-callback`
+    `http://localhost:5173/spotify-callback`
