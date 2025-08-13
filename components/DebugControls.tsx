@@ -1,6 +1,7 @@
 
 
 
+
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -53,6 +54,22 @@ interface DebugControlsProps {
   setSpotifyPlayerTop: (top: number) => void;
   spotifyPlayerBottom: number;
   setSpotifyPlayerBottom: (bottom: number) => void;
+  playerDockedWidth: number;
+  setPlayerDockedWidth: (width: number) => void;
+  playerDockedBottom: number;
+  setPlayerDockedBottom: (bottom: number) => void;
+  playerDockedLeft: number;
+  setPlayerDockedLeft: (left: number) => void;
+  playerDockedHeight: number;
+  setPlayerDockedHeight: (height: number) => void;
+  playerFloatingWidth: number;
+  setPlayerFloatingWidth: (width: number) => void;
+  playerFloatingBottom: number;
+  setPlayerFloatingBottom: (bottom: number) => void;
+  playerPlaceholderWidth: number;
+  setPlayerPlaceholderWidth: (width: number) => void;
+  playerFloatingHeight: number;
+  setPlayerFloatingHeight: (height: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -134,6 +151,22 @@ export default function DebugControls({
   setSpotifyPlayerTop,
   spotifyPlayerBottom,
   setSpotifyPlayerBottom,
+  playerDockedWidth,
+  setPlayerDockedWidth,
+  playerDockedBottom,
+  setPlayerDockedBottom,
+  playerDockedLeft,
+  setPlayerDockedLeft,
+  playerDockedHeight,
+  setPlayerDockedHeight,
+  playerFloatingWidth,
+  setPlayerFloatingWidth,
+  playerFloatingBottom,
+  setPlayerFloatingBottom,
+  playerPlaceholderWidth,
+  setPlayerPlaceholderWidth,
+  playerFloatingHeight,
+  setPlayerFloatingHeight,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -169,6 +202,14 @@ export default function DebugControls({
     setNightFloorDarkness(-12);
     setSpotifyPlayerTop(50);
     setSpotifyPlayerBottom(70);
+    setPlayerDockedWidth(519);
+    setPlayerDockedBottom(92);
+    setPlayerDockedLeft(66);
+    setPlayerDockedHeight(113);
+    setPlayerFloatingWidth(751);
+    setPlayerFloatingBottom(98);
+    setPlayerPlaceholderWidth(471);
+    setPlayerFloatingHeight(113);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -462,7 +503,7 @@ export default function DebugControls({
         </div>
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
-            <h3 className="text-md font-semibold text-zinc-200 mb-2">Spotify Player Controls</h3>
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Spotify App Panel</h3>
             <div>
               <label htmlFor="spotify-top-slider" className="block font-medium text-zinc-300 mb-2">
                 Top Offset: {spotifyPlayerTop}px
@@ -492,6 +533,50 @@ export default function DebugControls({
                 onChange={(e) => setSpotifyPlayerBottom(parseInt(e.target.value, 10))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
+            
+            <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-2">
+                <h4 className="text-sm font-semibold text-zinc-300">Docked State (App Open)</h4>
+                <div>
+                  <label htmlFor="docked-width-slider">Width: {playerDockedWidth}px</label>
+                  <input id="docked-width-slider" type="range" min="300" max="600" value={playerDockedWidth} onChange={(e) => setPlayerDockedWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+                <div>
+                  <label htmlFor="docked-height-slider">Height: {playerDockedHeight}px</label>
+                  <input id="docked-height-slider" type="range" min="60" max="150" value={playerDockedHeight} onChange={(e) => setPlayerDockedHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+                <div>
+                  <label htmlFor="docked-bottom-slider">Bottom Offset: {playerDockedBottom}px</label>
+                  <input id="docked-bottom-slider" type="range" min="20" max="200" value={playerDockedBottom} onChange={(e) => setPlayerDockedBottom(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+                <div>
+                  <label htmlFor="docked-left-slider">Left Offset: {playerDockedLeft}px</label>
+                  <input id="docked-left-slider" type="range" min="0" max="100" value={playerDockedLeft} onChange={(e) => setPlayerDockedLeft(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+            </div>
+
+            <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-2">
+                <h4 className="text-sm font-semibold text-zinc-300">Floating State (No App Open)</h4>
+                <div>
+                  <label htmlFor="floating-width-slider">Width: {playerFloatingWidth}px</label>
+                  <input id="floating-width-slider" type="range" min="400" max="800" value={playerFloatingWidth} onChange={(e) => setPlayerFloatingWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+                 <div>
+                  <label htmlFor="placeholder-width-slider">Placeholder Width: {playerPlaceholderWidth}px</label>
+                  <input id="placeholder-width-slider" type="range" min="300" max="600" value={playerPlaceholderWidth} onChange={(e) => setPlayerPlaceholderWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+                <div>
+                  <label htmlFor="floating-height-slider">Height: {playerFloatingHeight}px</label>
+                  <input id="floating-height-slider" type="range" min="60" max="150" value={playerFloatingHeight} onChange={(e) => setPlayerFloatingHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+                <div>
+                  <label htmlFor="floating-bottom-slider">Bottom Offset: {playerFloatingBottom}px</label>
+                  <input id="floating-bottom-slider" type="range" min="20" max="200" value={playerFloatingBottom} onChange={(e) => setPlayerFloatingBottom(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
             </div>
         </div>
 

@@ -1,6 +1,7 @@
 
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode } from 'react';
 import axios from 'axios';
+import apiClient, { setupInterceptors } from '../api';
 
 interface SpotifyUser {
     display_name: string;
@@ -50,18 +51,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setState(s => ({...s, isLoading: false}));
     }, []);
     
-    const fetchUserInfo = useCallback(async (token: string) => {
+    // Set up the interceptors when the provider mounts, passing the logout function.
+    useEffect(() => {
+        setupInterceptors(logout);
+    }, [logout]);
+    
+    const fetchUserInfo = useCallback(async () => {
         try {
-            const { data } = await axios.get('https://api.spotify.com/v1/me', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const { data } = await apiClient.get('/me');
             return data;
         } catch (err) {
-            console.error('Failed to fetch user info', err);
-            logout();
+            console.error('Failed to fetch user info. Interceptor will handle logout if necessary.', err);
             return null;
         }
-    }, [logout]);
+    }, []);
     
     useEffect(() => {
         const token = localStorage.getItem('spotify_access_token');
@@ -69,7 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (token && expires && Date.now() < Number(expires)) {
             setState(s => ({...s, isLoading: true, accessToken: token, refreshToken: localStorage.getItem('spotify_refresh_token')}));
-            fetchUserInfo(token).then(userData => {
+            fetchUserInfo().then(userData => {
                 if (userData) {
                     setState(s => ({...s, user: userData, isAuthenticated: true, isLoading: false}));
                 } else {
@@ -103,7 +106,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             localStorage.setItem('spotify_refresh_token', refresh_token);
             localStorage.setItem('spotify_expires_in', String(expiresAt));
 
-            const userData = await fetchUserInfo(access_token);
+            const userData = await fetchUserInfo();
             if (userData) {
                 setState({
                     accessToken: access_token,
@@ -120,29 +123,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (err: any) {
             console.error('Login process failed:', err);
             const errorMessage = err.response?.data?.details?.error_description || 'Failed to complete login.';
+            logout(); // Ensure we are logged out on failure
             setState(s => ({...s, error: errorMessage, isLoading: false}));
         }
-    }, [fetchUserInfo]);
+    }, [fetchUserInfo, logout]);
 
     const setDeviceId = (id: string | null) => {
         setDeviceIdState(id);
     };
 
     const play = useCallback(async (contextUri: string) => {
-        if (!state.accessToken || !deviceId) {
-            console.error("Cannot play: No access token or device ID");
+        if (!deviceId) {
+            console.error("Cannot play: No active Spotify device ID.");
+            // Optionally, show a user-facing error here.
             return;
         }
         try {
-            await axios.put(
-                `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
-                { context_uri: contextUri },
-                { headers: { Authorization: `Bearer ${state.accessToken}` } }
+            // The access token is handled by the interceptor.
+            await apiClient.put(
+                `/me/player/play?device_id=${deviceId}`,
+                { context_uri: contextUri }
             );
         } catch (err) {
             console.error('Failed to start playback', err);
         }
-    }, [state.accessToken, deviceId]);
+    }, [deviceId]);
 
     const clearError = () => {
         setState(s => ({...s, error: null}));

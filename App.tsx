@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider } from './context/AuthContext';
@@ -126,6 +129,16 @@ export default function App() {
   const [nightFloorDarkness, setNightFloorDarkness] = useState(-12);
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(70);
+
+  // New states for Music Player layout
+  const [playerDockedWidth, setPlayerDockedWidth] = useState(519);
+  const [playerDockedBottom, setPlayerDockedBottom] = useState(92);
+  const [playerDockedLeft, setPlayerDockedLeft] = useState(66);
+  const [playerDockedHeight, setPlayerDockedHeight] = useState(113);
+  const [playerFloatingWidth, setPlayerFloatingWidth] = useState(751);
+  const [playerFloatingBottom, setPlayerFloatingBottom] = useState(98);
+  const [playerPlaceholderWidth, setPlayerPlaceholderWidth] = useState(471);
+  const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
 
 
   useEffect(() => {
@@ -440,6 +453,18 @@ export default function App() {
           <MusicPlayer 
             isAnyAppOpen={isUIOverlayActive}
             isNight={isNight}
+            dockedConfig={{
+              width: playerDockedWidth,
+              bottom: playerDockedBottom,
+              left: playerDockedLeft,
+              height: playerDockedHeight,
+            }}
+            floatingConfig={{
+              width: playerFloatingWidth,
+              bottom: playerFloatingBottom,
+              placeholderWidth: playerPlaceholderWidth,
+              height: playerFloatingHeight,
+            }}
           />
           
           <MapsContainer 
@@ -509,6 +534,22 @@ export default function App() {
               setSpotifyPlayerTop={setSpotifyPlayerTop}
               spotifyPlayerBottom={spotifyPlayerBottom}
               setSpotifyPlayerBottom={setSpotifyPlayerBottom}
+              playerDockedWidth={playerDockedWidth}
+              setPlayerDockedWidth={setPlayerDockedWidth}
+              playerDockedBottom={playerDockedBottom}
+              setPlayerDockedBottom={setPlayerDockedBottom}
+              playerDockedLeft={playerDockedLeft}
+              setPlayerDockedLeft={setPlayerDockedLeft}
+              playerDockedHeight={playerDockedHeight}
+              setPlayerDockedHeight={setPlayerDockedHeight}
+              playerFloatingWidth={playerFloatingWidth}
+              setPlayerFloatingWidth={setPlayerFloatingWidth}
+              playerFloatingBottom={playerFloatingBottom}
+              setPlayerFloatingBottom={setPlayerFloatingBottom}
+              playerPlaceholderWidth={playerPlaceholderWidth}
+              setPlayerPlaceholderWidth={setPlayerPlaceholderWidth}
+              playerFloatingHeight={playerFloatingHeight}
+              setPlayerFloatingHeight={setPlayerFloatingHeight}
           />
           
           <footer 

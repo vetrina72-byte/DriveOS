@@ -66,6 +66,54 @@ app.post('/api/exchange-token', async (req, res) => {
   }
 });
 
+// New endpoint for refreshing the access token
+app.post('/api/refresh-token', async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token is missing' });
+  }
+
+  const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
+
+  const params = new URLSearchParams();
+  params.append('grant_type', 'refresh_token');
+  params.append('refresh_token', refreshToken);
+
+  try {
+    const spotifyResponse = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      params,
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': authHeader,
+        },
+      }
+    );
+    
+    // Spotify returns a new access token. It might also return a new refresh token.
+    // For simplicity, we are only returning the new access_token.
+    res.json({
+      access_token: spotifyResponse.data.access_token,
+    });
+
+  } catch (error) {
+    console.error('Error refreshing token with Spotify:', error.response ? error.response.data : error.message);
+    const status = error.response?.status || 500;
+    const details = error.response?.data || { message: 'An unknown error occurred while refreshing token' };
+    // Send a specific status if the refresh token is invalid
+    if (error.response?.data?.error === 'invalid_grant') {
+      return res.status(401).json({ error: 'Invalid refresh token', details });
+    }
+    res.status(status).json({
+      error: 'Failed to refresh token with Spotify',
+      details,
+    });
+  }
+});
+
+
 app.listen(port, () => {
   console.log(`Spotify auth backend server running at http://localhost:${port}`);
   if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
