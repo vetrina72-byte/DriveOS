@@ -15,7 +15,18 @@ const SpotifyLogin: React.FC = () => {
 
         const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
         const redirectUri = 'http://localhost:5173/spotify-callback';
-        const scope = 'user-read-private user-read-email streaming user-modify-playback-state user-read-playback-state playlist-read-private user-read-playback-state';
+        const scope = [
+          'streaming',
+          'user-read-email',
+          'user-read-private',
+          'user-library-read',
+          'user-library-modify',
+          'user-read-playback-state',
+          'user-modify-playback-state',
+          'user-read-recently-played',
+          'playlist-read-private',
+          'playlist-read-collaborative'
+        ].join(' ');
 
         const authUrl = new URL("https://accounts.spotify.com/authorize");
         authUrl.search = new URLSearchParams({
