@@ -1,7 +1,9 @@
 
+
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyPlayer from './components/SpotifyPlayer';
@@ -14,6 +16,7 @@ import MiniMap from './components/MiniMap';
 import { WeatherData, TempUnit } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
 import SpotifyCallback from './components/SpotifyCallback';
+import SpotifyMiniPlayer from './components/SpotifyMiniPlayer';
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
   icon: React.ComponentType<any>, 
@@ -84,12 +87,7 @@ const initialAppOpenConfig: SceneConfig = {
   modelScale: 0.74,
 };
 
-export default function App() {
-  // Simple routing based on URL path for the Spotify callback
-  if (window.location.pathname === '/spotify-callback') {
-    return <SpotifyCallback />;
-  }
-
+function AppContent() {
   const [activeApp, setActiveApp] = useState<string | null>(null);
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [isWeatherModalOpen, setWeatherModalOpen] = useState(false);
@@ -123,8 +121,10 @@ export default function App() {
 
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(initialAppOpenConfig);
   const [nightFloorDarkness, setNightFloorDarkness] = useState(-12);
-  const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
-  const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(70);
+  
+  const [spotifyInitialView, setSpotifyInitialView] = useState<any>(null);
+
+  const { isAuthenticated } = useAuth();
 
 
   useEffect(() => {
@@ -367,166 +367,183 @@ export default function App() {
     if (isAppLauncherOpen) setIsAppLauncherOpen(false);
     if (isDebugOpen) setIsDebugOpen(false);
   };
+  
+  const handleArtistClickFromPlayer = (artistId: string) => {
+      setSpotifyInitialView({ type: 'artist', id: artistId });
+      setActiveApp('spotify');
+  };
+  
+  const handleSpotifyClose = () => {
+      setActiveApp(null);
+      setSpotifyInitialView(null); // Reset deep link state when closing
+  };
 
   const isUIOverlayActive = activeApp !== null;
   const isOverlayVisible = isWeatherModalOpen || isUIOverlayActive;
 
   return (
-    <VehicleProvider>
-      <AuthProvider>
-        <div 
-          className="relative w-screen h-screen bg-black select-none overflow-hidden"
-          onClick={handleWrapperClick}
-        >
-          <VehicleCanvas 
-              isAppOpen={isUIOverlayActive} 
-              isNight={isNight}
-              minOrbitDistance={minOrbitDistance}
-              maxOrbitDistance={maxOrbitDistance}
-              appOpenConfig={appOpenConfig}
-              nightFloorDarkness={nightFloorDarkness}
-          />
+      <div 
+        className="relative w-screen h-screen bg-black select-none overflow-hidden"
+        onClick={handleWrapperClick}
+      >
+        <VehicleCanvas 
+            isAppOpen={isUIOverlayActive} 
+            isNight={isNight}
+            minOrbitDistance={minOrbitDistance}
+            maxOrbitDistance={maxOrbitDistance}
+            appOpenConfig={appOpenConfig}
+            nightFloorDarkness={nightFloorDarkness}
+        />
 
-          <MiniMap 
-              isVisible={!isUIOverlayActive} 
-              position={currentPosition} 
-              bearing={bearing}
-              isNight={isNight}
-              top={miniMapTop}
-              right={miniMapRight}
-              size={miniMapSize}
-              zoom={miniMapZoom}
-              fadeStart={miniMapFadeStart}
-              fadeEnd={miniMapFadeEnd}
-              onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
-          />
+        <MiniMap 
+            isVisible={!isUIOverlayActive} 
+            position={currentPosition} 
+            bearing={bearing}
+            isNight={isNight}
+            top={miniMapTop}
+            right={miniMapRight}
+            size={miniMapSize}
+            zoom={miniMapZoom}
+            fadeStart={miniMapFadeStart}
+            fadeEnd={miniMapFadeEnd}
+            onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
+        />
+        
+        {isAuthenticated && <SpotifyMiniPlayer isNight={isNight} onArtistClick={handleArtistClickFromPlayer} isAppOpen={isUIOverlayActive} />}
 
-          <TopStatusBar 
-            isNight={isNight} 
-            onWeatherClick={handleWeatherClick}
-            weatherData={weatherData}
-            weatherCondition={effectiveWeatherCondition}
+        <TopStatusBar 
+          isNight={isNight} 
+          onWeatherClick={handleWeatherClick}
+          weatherData={weatherData}
+          weatherCondition={effectiveWeatherCondition}
+          sunsetArrowYPosition={sunsetArrowYPosition}
+          sunriseArrowYPosition={sunriseArrowYPosition}
+          isHot={isHot}
+          isCold={isCold}
+          tempUnit={tempUnit}
+          setTempUnit={setTempUnit}
+          scale={topBarScale}
+          offsetY={topBarOffsetY}
+        />
+
+        <WeatherModal 
+            isOpen={isWeatherModalOpen}
+            onClose={() => setWeatherModalOpen(false)}
+            isNight={isNight}
+            status={weatherStatus}
+            data={weatherData}
+            error={weatherError}
+            effectiveTime={effectiveTime}
             sunsetArrowYPosition={sunsetArrowYPosition}
             sunriseArrowYPosition={sunriseArrowYPosition}
+            tempUnit={tempUnit}
+        />
+
+        <SpotifyPlayer 
+            isOpen={activeApp === 'spotify'} 
+            onClose={handleSpotifyClose}
+            initialView={spotifyInitialView}
+        />
+        
+        <MapsContainer 
+            isOpen={activeApp === 'maps'}
+            onClose={() => setActiveApp(null)}
+            isNight={isNight}
+            searchPanelWidth={mapsSearchPanelWidth}
+            searchPanelTop={mapsSearchPanelTop}
+        />
+
+        <AppLauncher
+            isOpen={isAppLauncherOpen}
+        />
+
+        <button
+          onClick={(e) => { e.stopPropagation(); setIsDebugOpen(p => !p); }}
+          className="absolute bottom-24 right-4 z-50 p-3 bg-gray-800/80 rounded-full text-white hover:bg-gray-700 transition"
+          aria-label="Toggle Debug Panel"
+        >
+          <ICONS.settings className="w-8 h-8" />
+        </button>
+
+        <DebugControls 
+            isOpen={isDebugOpen}
+            onClose={() => setIsDebugOpen(false)}
+            timeOverride={debugTimeOverride}
+            setTimeOverride={setDebugTimeOverride}
+            sunsetArrowYPosition={sunsetArrowYPosition}
+            setSunsetArrowYPosition={setSunsetArrowYPosition}
+            sunriseArrowYPosition={sunriseArrowYPosition}
+            setSunriseArrowYPosition={setSunriseArrowYPosition}
+            weatherConditionOverride={debugWeatherCondition}
+            setWeatherConditionOverride={setDebugWeatherCondition}
+            effectiveWeatherCondition={effectiveWeatherCondition}
+            isNight={isNight}
             isHot={isHot}
             isCold={isCold}
-            tempUnit={tempUnit}
-            setTempUnit={setTempUnit}
-            scale={topBarScale}
-            offsetY={topBarOffsetY}
+            topBarScale={topBarScale}
+            setTopBarScale={setTopBarScale}
+            topBarOffsetY={topBarOffsetY}
+            setTopBarOffsetY={setTopBarOffsetY}
+            mapsSearchPanelWidth={mapsSearchPanelWidth}
+            setMapsSearchPanelWidth={setMapsSearchPanelWidth}
+            mapsSearchPanelTop={mapsSearchPanelTop}
+            setMapsSearchPanelTop={setMapsSearchPanelTop}
+            miniMapTop={miniMapTop}
+            setMiniMapTop={setMiniMapTop}
+            miniMapRight={miniMapRight}
+            setMiniMapRight={setMiniMapRight}
+            miniMapSize={miniMapSize}
+            setMiniMapSize={setMiniMapSize}
+            miniMapZoom={miniMapZoom}
+            setMiniMapZoom={setMiniMapZoom}
+            miniMapFadeStart={miniMapFadeStart}
+            setMiniMapFadeStart={setMiniMapFadeStart}
+            miniMapFadeEnd={miniMapFadeEnd}
+            setMiniMapFadeEnd={setMiniMapFadeEnd}
+            minOrbitDistance={minOrbitDistance}
+            setMinOrbitDistance={setMinOrbitDistance}
+            maxOrbitDistance={maxOrbitDistance}
+            setMaxOrbitDistance={setMaxOrbitDistance}
+            appOpenConfig={appOpenConfig}
+            setAppOpenConfig={setAppOpenConfig}
+            nightFloorDarkness={nightFloorDarkness}
+            setNightFloorDarkness={setNightFloorDarkness}
+        />
+        
+        <footer 
+          className="absolute bottom-0 left-0 right-0 h-20 bg-black z-30 flex justify-center items-center"
+          aria-label="Application Dock"
+        >
+          <DockButton 
+            icon={ICONS.spotify} 
+            onClick={(e) => { e.stopPropagation(); toggleApp('spotify'); }} 
+            label="Open Spotify"
+            colorClasses="text-green-500 hover:text-green-400"
           />
+          <DockButton 
+            icon={ICONS.maps} 
+            onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
+            label="Open Maps"
+          />
+          <DockButton 
+            icon={ICONS.apps} 
+            onClick={toggleLauncher}
+            label="Open App Launcher"
+          />
+        </footer>
+      </div>
+  );
+}
 
-          <WeatherModal 
-              isOpen={isWeatherModalOpen}
-              onClose={() => setWeatherModalOpen(false)}
-              isNight={isNight}
-              status={weatherStatus}
-              data={weatherData}
-              error={weatherError}
-              effectiveTime={effectiveTime}
-              sunsetArrowYPosition={sunsetArrowYPosition}
-              sunriseArrowYPosition={sunriseArrowYPosition}
-              tempUnit={tempUnit}
-          />
+export default function App() {
+  if (window.location.pathname === '/spotify-callback') {
+    return <SpotifyCallback />;
+  }
 
-          <SpotifyPlayer 
-              isOpen={activeApp === 'spotify'} 
-              onClose={() => setActiveApp(null)} 
-              spotifyPlayerTop={spotifyPlayerTop}
-              spotifyPlayerBottom={spotifyPlayerBottom}
-          />
-          
-          <MapsContainer 
-              isOpen={activeApp === 'maps'}
-              onClose={() => setActiveApp(null)}
-              isNight={isNight}
-              searchPanelWidth={mapsSearchPanelWidth}
-              searchPanelTop={mapsSearchPanelTop}
-          />
-
-          <AppLauncher
-              isOpen={isAppLauncherOpen}
-          />
-
-          <button
-            onClick={(e) => { e.stopPropagation(); setIsDebugOpen(p => !p); }}
-            className="absolute bottom-24 right-4 z-50 p-3 bg-gray-800/80 rounded-full text-white hover:bg-gray-700 transition"
-            aria-label="Toggle Debug Panel"
-          >
-            <ICONS.settings className="w-8 h-8" />
-          </button>
-
-          <DebugControls 
-              isOpen={isDebugOpen}
-              onClose={() => setIsDebugOpen(false)}
-              timeOverride={debugTimeOverride}
-              setTimeOverride={setDebugTimeOverride}
-              sunsetArrowYPosition={sunsetArrowYPosition}
-              setSunsetArrowYPosition={setSunsetArrowYPosition}
-              sunriseArrowYPosition={sunriseArrowYPosition}
-              setSunriseArrowYPosition={setSunriseArrowYPosition}
-              weatherConditionOverride={debugWeatherCondition}
-              setWeatherConditionOverride={setDebugWeatherCondition}
-              effectiveWeatherCondition={effectiveWeatherCondition}
-              isNight={isNight}
-              isHot={isHot}
-              isCold={isCold}
-              topBarScale={topBarScale}
-              setTopBarScale={setTopBarScale}
-              topBarOffsetY={topBarOffsetY}
-              setTopBarOffsetY={setTopBarOffsetY}
-              mapsSearchPanelWidth={mapsSearchPanelWidth}
-              setMapsSearchPanelWidth={setMapsSearchPanelWidth}
-              mapsSearchPanelTop={mapsSearchPanelTop}
-              setMapsSearchPanelTop={setMapsSearchPanelTop}
-              miniMapTop={miniMapTop}
-              setMiniMapTop={setMiniMapTop}
-              miniMapRight={miniMapRight}
-              setMiniMapRight={setMiniMapRight}
-              miniMapSize={miniMapSize}
-              setMiniMapSize={setMiniMapSize}
-              miniMapZoom={miniMapZoom}
-              setMiniMapZoom={setMiniMapZoom}
-              miniMapFadeStart={miniMapFadeStart}
-              setMiniMapFadeStart={setMiniMapFadeStart}
-              miniMapFadeEnd={miniMapFadeEnd}
-              setMiniMapFadeEnd={setMiniMapFadeEnd}
-              minOrbitDistance={minOrbitDistance}
-              setMinOrbitDistance={setMinOrbitDistance}
-              maxOrbitDistance={maxOrbitDistance}
-              setMaxOrbitDistance={setMaxOrbitDistance}
-              appOpenConfig={appOpenConfig}
-              setAppOpenConfig={setAppOpenConfig}
-              nightFloorDarkness={nightFloorDarkness}
-              setNightFloorDarkness={setNightFloorDarkness}
-              spotifyPlayerTop={spotifyPlayerTop}
-              setSpotifyPlayerTop={setSpotifyPlayerTop}
-              spotifyPlayerBottom={spotifyPlayerBottom}
-              setSpotifyPlayerBottom={setSpotifyPlayerBottom}
-          />
-          
-          <footer 
-            className="absolute bottom-0 left-0 right-0 h-20 bg-black z-30 flex justify-center items-center"
-            aria-label="Application Dock"
-          >
-            <DockButton 
-              icon={ICONS.spotify} 
-              onClick={(e) => { e.stopPropagation(); toggleApp('spotify'); }} 
-              label="Open Spotify"
-              colorClasses="text-green-500 hover:text-green-400"
-            />
-            <DockButton 
-              icon={ICONS.maps} 
-              onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
-              label="Open Maps"
-            />
-            <DockButton 
-              icon={ICONS.apps} 
-              onClick={toggleLauncher}
-              label="Open App Launcher"
-            />
-          </footer>
-        </div>
+  return (
+    <VehicleProvider>
+      <AuthProvider>
+        <AppContent />
       </AuthProvider>
     </VehicleProvider>
   );

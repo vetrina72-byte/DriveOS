@@ -1,6 +1,7 @@
 
 
 
+
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -49,10 +50,6 @@ interface DebugControlsProps {
   setAppOpenConfig: React.Dispatch<React.SetStateAction<SceneConfig>>;
   nightFloorDarkness: number;
   setNightFloorDarkness: (darkness: number) => void;
-  spotifyPlayerTop: number;
-  setSpotifyPlayerTop: (top: number) => void;
-  spotifyPlayerBottom: number;
-  setSpotifyPlayerBottom: (bottom: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -130,10 +127,6 @@ export default function DebugControls({
   setAppOpenConfig,
   nightFloorDarkness,
   setNightFloorDarkness,
-  spotifyPlayerTop,
-  setSpotifyPlayerTop,
-  spotifyPlayerBottom,
-  setSpotifyPlayerBottom,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -167,8 +160,6 @@ export default function DebugControls({
     setMaxOrbitDistance(18);
     setAppOpenConfig(DEFAULT_APP_OPEN_CONFIG);
     setNightFloorDarkness(-12);
-    setSpotifyPlayerTop(50);
-    setSpotifyPlayerBottom(70);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -456,40 +447,6 @@ export default function DebugControls({
                 step="1"
                 value={nightFloorDarkness}
                 onChange={(e) => setNightFloorDarkness(parseInt(e.target.value, 10))}
-                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
-        </div>
-
-        <div className="pt-2 mt-2 border-t border-zinc-700">
-            <h3 className="text-md font-semibold text-zinc-200 mb-2">Spotify Player Controls</h3>
-            <div>
-              <label htmlFor="spotify-top-slider" className="block font-medium text-zinc-300 mb-2">
-                Top Offset: {spotifyPlayerTop}px
-              </label>
-              <input
-                id="spotify-top-slider"
-                type="range"
-                min="0"
-                max="200"
-                step="1"
-                value={spotifyPlayerTop}
-                onChange={(e) => setSpotifyPlayerTop(parseInt(e.target.value, 10))}
-                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
-            <div className="mt-2">
-              <label htmlFor="spotify-bottom-slider" className="block font-medium text-zinc-300 mb-2">
-                Bottom Offset: {spotifyPlayerBottom}px
-              </label>
-              <input
-                id="spotify-bottom-slider"
-                type="range"
-                min="0"
-                max="300"
-                step="1"
-                value={spotifyPlayerBottom}
-                onChange={(e) => setSpotifyPlayerBottom(parseInt(e.target.value, 10))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>

@@ -1,54 +1,57 @@
 
-import React, { useState } from 'react';
-import { FiX, FiMusic } from 'react-icons/fi';
+
+import React from 'react';
+import { FiX } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
-import PlaylistList from './PlaylistList';
-import MusicPlayer from './MusicPlayer';
+import SpotifyBrowse from './SpotifyBrowse';
 
 export default function SpotifyPlayer({ 
     isOpen, 
-    onClose, 
-    spotifyPlayerTop,
-    spotifyPlayerBottom,
+    onClose,
+    initialView,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
-    spotifyPlayerTop: number;
-    spotifyPlayerBottom: number;
+    initialView: any | null;
 }) {
-    const { isAuthenticated, user, error } = useAuth();
-    const [selectedPlaylistUri, setSelectedPlaylistUri] = useState<string | null>(null);
+    const { isAuthenticated, user, error, isLoading } = useAuth();
 
     const renderContent = () => {
+        if (isLoading && !isAuthenticated) {
+             return (
+                <div className="flex flex-col items-center justify-center h-full">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white/50"></div>
+                </div>
+            );
+        }
+        
         if (error) {
             return (
-                <div className="text-center text-red-400 flex flex-col items-center gap-4">
-                    <p>Error: {error}</p>
+                <div className="text-center text-red-400 flex flex-col items-center justify-center h-full gap-4 p-4">
+                    <p className="font-semibold">Errore di Autenticazione</p>
+                    <p className="text-sm">{error}</p>
                     <SpotifyLogin />
                 </div>
             );
         }
 
         if (isAuthenticated && user) {
-            return (
-                <div className="flex w-full h-full">
-                    <PlaylistList onSelectPlaylist={setSelectedPlaylistUri} />
-                    <MusicPlayer selectedPlaylistUri={selectedPlaylistUri} />
-                </div>
-            );
+            return <SpotifyBrowse key={initialView?.id || 'home'} initialView={initialView} />;
         }
         
-        return <SpotifyLogin />;
+        return (
+             <div className="flex flex-col items-center justify-center h-full">
+                <SpotifyLogin />
+            </div>
+        );
     };
 
     return (
         <div 
-            className={`fixed right-0 w-2/3 text-white shadow-2xl z-20 flex transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]`}
+            className={`fixed top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex transition-transform duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]`}
             style={{
-                transform: `translateX(${isOpen ? 0 : 100}%)`,
-                top: `${spotifyPlayerTop}px`,
-                bottom: `${spotifyPlayerBottom}px`,
+                transform: `translateX(${isOpen ? 0 : '100%'})`,
             }}
             aria-hidden={!isOpen}
             role="dialog"
@@ -56,8 +59,8 @@ export default function SpotifyPlayer({
             aria-labelledby="spotify-player-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="w-full h-full flex flex-col relative bg-black/90 backdrop-blur-lg border-l border-white/10">
-                <header className="absolute top-0 right-0 p-4 z-20">
+            <div className="w-full h-full flex flex-col relative bg-zinc-900/95 backdrop-blur-xl border-l border-white/10 overflow-hidden">
+                <header className="absolute top-4 right-4 z-30">
                     <button className="p-2 bg-black/50 rounded-full hover:bg-red-500/80 transition-colors" onClick={onClose} aria-label="Close Spotify">
                         <FiX className="h-5 w-5"/>
                     </button>
