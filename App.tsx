@@ -1,7 +1,5 @@
 
 
-
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider } from './context/AuthContext';
@@ -81,11 +79,11 @@ const wmoCodeToCondition = (code: number): string => {
 type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
 
 const initialAppOpenConfig: SceneConfig = {
-  cameraPos: { x: 1.38, y: 1.31, z: 3.78 },
+  cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
   cameraTarget: { x: 0.60, y: 0.00, z: 0.65 },
-  modelPos: { x: -4.76, y: -1.00, z: 1.47 },
+  modelPos: { x: -5.47, y: -1.00, z: 1.47 },
   modelRot: { x: 0, y: -0.09, z: 0.0 },
-  modelScale: 0.74,
+  modelScale: 0.90,
 };
 
 export default function App() {
@@ -139,6 +137,12 @@ export default function App() {
   const [playerFloatingBottom, setPlayerFloatingBottom] = useState(98);
   const [playerPlaceholderWidth, setPlayerPlaceholderWidth] = useState(471);
   const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
+  
+  // States for Focus Mode Night Lights
+  const [focusNightAmbient, setFocusNightAmbient] = useState(1.88);
+  const [focusNightSpotlight, setFocusNightSpotlight] = useState(20.0);
+  const [focusNightDirectional, setFocusNightDirectional] = useState(0.0);
+  const [focusNightEnvironment, setFocusNightEnvironment] = useState(0.21);
 
 
   useEffect(() => {
@@ -398,6 +402,10 @@ export default function App() {
               maxOrbitDistance={maxOrbitDistance}
               appOpenConfig={appOpenConfig}
               nightFloorDarkness={nightFloorDarkness}
+              focusNightAmbient={focusNightAmbient}
+              focusNightSpotlight={focusNightSpotlight}
+              focusNightDirectional={focusNightDirectional}
+              focusNightEnvironment={focusNightEnvironment}
           />
 
           <MiniMap 
@@ -550,6 +558,14 @@ export default function App() {
               setPlayerPlaceholderWidth={setPlayerPlaceholderWidth}
               playerFloatingHeight={playerFloatingHeight}
               setPlayerFloatingHeight={setPlayerFloatingHeight}
+              focusNightAmbient={focusNightAmbient}
+              setFocusNightAmbient={setFocusNightAmbient}
+              focusNightSpotlight={focusNightSpotlight}
+              setFocusNightSpotlight={setFocusNightSpotlight}
+              focusNightDirectional={focusNightDirectional}
+              setFocusNightDirectional={setFocusNightDirectional}
+              focusNightEnvironment={focusNightEnvironment}
+              setFocusNightEnvironment={setFocusNightEnvironment}
           />
           
           <footer 

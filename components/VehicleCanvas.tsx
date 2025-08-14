@@ -1,7 +1,4 @@
 
-
-
-
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
@@ -86,17 +83,19 @@ useGLTF.preload(MODEL_URL);
 
 function SceneController({
   isAppOpen, activeConfig, setAppOpenConfig, modelRef,
-  frontLightTarget
+  frontLightTarget, originalAppOpenConfig
 }: {
   isAppOpen: boolean;
   activeConfig: SceneConfig;
   setAppOpenConfig: React.Dispatch<React.SetStateAction<SceneConfig>>;
   modelRef: React.RefObject<THREE.Group>;
   frontLightTarget: THREE.Object3D;
+  originalAppOpenConfig: SceneConfig;
 }) {
   const { camera, controls, gl } = useThree();
   const [interacting, setInteracting] = useState(false);
   const interactTimeout = useRef<number | null>(null);
+  const dragResetTimeout = useRef<number | null>(null);
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
 
@@ -139,6 +138,7 @@ function SceneController({
     const startDrag = (x: number) => {
         dragging.current = true;
         lastPos.current.x = x;
+        if (dragResetTimeout.current) clearTimeout(dragResetTimeout.current);
     };
 
     const drag = (x: number) => {
@@ -152,7 +152,15 @@ function SceneController({
     };
 
     const endDrag = () => {
+        if (!dragging.current) return;
         dragging.current = false;
+        if (dragResetTimeout.current) clearTimeout(dragResetTimeout.current);
+        dragResetTimeout.current = window.setTimeout(() => {
+            setAppOpenConfig(prev => ({
+                ...prev,
+                modelRot: originalAppOpenConfig.modelRot,
+            }));
+        }, 7000);
     };
 
     // Event handlers
@@ -178,8 +186,9 @@ function SceneController({
         dom.removeEventListener('touchstart', handleTouchStart);
         dom.removeEventListener('touchmove', handleTouchMove);
         window.removeEventListener('touchend', endDrag);
+        if (dragResetTimeout.current) clearTimeout(dragResetTimeout.current);
     };
-  }, [isAppOpen, gl, setAppOpenConfig]);
+  }, [isAppOpen, gl, setAppOpenConfig, originalAppOpenConfig]);
 
   // Animazione camera e modello
   useFrame((_, delta) => {
@@ -271,33 +280,46 @@ function SceneController({
 
 function EnvironmentController({
   isNight,
+  isAppOpen,
   floorRef,
   ambientLightRef,
   frontLightRef,
+  directionalLightRef,
   nightAmbientIntensity,
   nightFrontLightIntensity,
   nightEnvironmentIntensity,
   nightFloorDarkness,
+  focusNightAmbient,
+  focusNightSpotlight,
+  focusNightDirectional,
+  focusNightEnvironment,
 }: {
   isNight: boolean;
+  isAppOpen: boolean;
   floorRef: React.RefObject<THREE.Mesh>;
   ambientLightRef: React.RefObject<THREE.AmbientLight>;
   frontLightRef: React.RefObject<THREE.SpotLight>;
+  directionalLightRef: React.RefObject<THREE.DirectionalLight>;
   nightAmbientIntensity: number;
   nightFrontLightIntensity: number;
   nightEnvironmentIntensity: number;
   nightFloorDarkness: number;
+  focusNightAmbient: number;
+  focusNightSpotlight: number;
+  focusNightDirectional: number;
+  focusNightEnvironment: number;
 }) {
   const { scene } = useThree();
   const targetSky = useRef(new THREE.Color()).current;
   const targetFloor = useRef(new THREE.Color()).current;
-  const environmentRotationY = 0; // Rotazione ambiente fissa
-  
-  // Valori fissi per le luci diurne
+  const environmentRotationY = 0;
+
+  // Day values
   const dayAmbientIntensity = 0.8;
   const dayFrontLightIntensity = 0.8;
+  const dayDirectionalIntensity = 0.8;
   const dayEnvironmentIntensity = 2.5;
-
+  
   useEffect(() => {
     scene.background = new THREE.Color('#ffffff');
     scene.fog = new THREE.Fog('#ffffff', 18, 35);
@@ -307,53 +329,64 @@ function EnvironmentController({
     const t = 1 - Math.exp(-1.5 * delta);
     targetSky.set(isNight ? '#000000' : '#ffffff');
 
-    let floorColorValue = nightFloorDarkness;
-    let lightIntensityFactor = 1.0;
-
-    if (isNight) {
-        if (nightFloorDarkness < 0) {
-            floorColorValue = 0;
-            // Map slider from [-50, 0] to [0.0, 1.0] for light intensity
-            lightIntensityFactor = Math.max(0, 1.0 + (nightFloorDarkness / 50.0));
+    if (isAppOpen) {
+        targetFloor.set(isNight ? '#000000' : '#ffffff');
+    } else {
+        let floorColorValue = nightFloorDarkness;
+        if (isNight) {
+            if (nightFloorDarkness < 0) {
+                floorColorValue = 0;
+            }
         }
+        const hex = Math.round(Math.min(50, floorColorValue)).toString(16).padStart(2, '0');
+        targetFloor.set(isNight ? `#${hex}${hex}${hex}` : '#ffffff');
     }
-
-    const hex = Math.round(Math.min(50, floorColorValue)).toString(16).padStart(2, '0');
-    targetFloor.set(isNight ? `#${hex}${hex}${hex}` : '#ffffff');
 
     if (scene.background instanceof THREE.Color) scene.background.lerp(targetSky, t);
     if (scene.fog) scene.fog.color.lerp(targetSky, t);
 
     const floorMat = floorRef.current!.material as any;
     floorMat.color.lerp(targetFloor, t);
-    floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror, isNight ? 0 : 0.8, t);
     
-    const finalAmbientIntensity = isNight ? (nightAmbientIntensity * lightIntensityFactor) : dayAmbientIntensity;
-    const finalEnvIntensity = isNight ? (nightEnvironmentIntensity * lightIntensityFactor) : dayEnvironmentIntensity;
+    const targetMirror = isAppOpen ? 0 : (isNight ? 0 : 0.8);
+    floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror, targetMirror, t);
+    
+    let targetAmbientIntensity: number, 
+        targetFrontLightIntensity: number, 
+        targetDirectionalIntensity: number, 
+        targetEnvIntensity: number;
 
-    if (ambientLightRef.current)
-      ambientLightRef.current.intensity = THREE.MathUtils.lerp(
-        ambientLightRef.current.intensity,
-        finalAmbientIntensity,
-        t
-      );
-    if (frontLightRef.current)
-      frontLightRef.current.intensity = THREE.MathUtils.lerp(
-        frontLightRef.current.intensity,
-        isNight ? nightFrontLightIntensity : dayFrontLightIntensity,
-        t
-      );
+    if (isNight) {
+        if (isAppOpen) { // Focus mode night
+            targetAmbientIntensity = focusNightAmbient;
+            targetFrontLightIntensity = focusNightSpotlight;
+            targetDirectionalIntensity = focusNightDirectional;
+            targetEnvIntensity = focusNightEnvironment;
+        } else { // Normal night
+            targetAmbientIntensity = nightAmbientIntensity;
+            targetFrontLightIntensity = nightFrontLightIntensity;
+            targetDirectionalIntensity = 0; // The sun is off
+            targetEnvIntensity = nightEnvironmentIntensity;
+        }
+    } else { // Day mode
+        targetAmbientIntensity = dayAmbientIntensity;
+        targetFrontLightIntensity = dayFrontLightIntensity;
+        targetDirectionalIntensity = dayDirectionalIntensity;
+        targetEnvIntensity = dayEnvironmentIntensity;
+    }
 
-    scene.environmentIntensity = THREE.MathUtils.lerp(
-      scene.environmentIntensity,
-      finalEnvIntensity,
-      t
-    );
-    scene.environmentRotation.y = THREE.MathUtils.lerp(
-      scene.environmentRotation.y,
-      environmentRotationY,
-      t
-    );
+    if (ambientLightRef.current) {
+        ambientLightRef.current.intensity = THREE.MathUtils.lerp(ambientLightRef.current.intensity, targetAmbientIntensity, t);
+    }
+    if (frontLightRef.current) {
+        frontLightRef.current.intensity = THREE.MathUtils.lerp(frontLightRef.current.intensity, targetFrontLightIntensity, t);
+    }
+    if (directionalLightRef.current) {
+        directionalLightRef.current.intensity = THREE.MathUtils.lerp(directionalLightRef.current.intensity, targetDirectionalIntensity, t);
+    }
+
+    scene.environmentIntensity = THREE.MathUtils.lerp(scene.environmentIntensity, targetEnvIntensity, t);
+    scene.environmentRotation.y = THREE.MathUtils.lerp(scene.environmentRotation.y, environmentRotationY, t);
   });
 
   return null;
@@ -366,6 +399,10 @@ interface VehicleCanvasProps {
   maxOrbitDistance: number;
   appOpenConfig: SceneConfig;
   nightFloorDarkness: number;
+  focusNightAmbient: number;
+  focusNightSpotlight: number;
+  focusNightDirectional: number;
+  focusNightEnvironment: number;
 }
 
 export default function VehicleCanvas({
@@ -375,11 +412,16 @@ export default function VehicleCanvas({
   maxOrbitDistance,
   appOpenConfig: appOpenConfigFromProps,
   nightFloorDarkness,
+  focusNightAmbient,
+  focusNightSpotlight,
+  focusNightDirectional,
+  focusNightEnvironment,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
   const ambientLightRef = useRef<THREE.AmbientLight>(null!);
   const frontLightRef = useRef<THREE.SpotLight>(null!);
+  const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
   
   // All debug controls have been removed. Visual parameters are now hardcoded.
@@ -472,9 +514,9 @@ export default function VehicleCanvas({
         <ambientLight ref={ambientLightRef} />
 
         <directionalLight
+          ref={directionalLightRef}
           castShadow
           position={[0.5, 10, 1]}
-          intensity={0.8}
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
           shadow-camera-near={1}
@@ -533,16 +575,23 @@ export default function VehicleCanvas({
           setAppOpenConfig={setRuntimeAppOpenConfig}
           modelRef={modelRef}
           frontLightTarget={frontLightTarget}
+          originalAppOpenConfig={appOpenConfigFromProps}
         />
         <EnvironmentController
           isNight={isNight}
+          isAppOpen={isAppOpen}
           floorRef={floorRef}
           ambientLightRef={ambientLightRef}
           frontLightRef={frontLightRef}
+          directionalLightRef={directionalLightRef}
           nightAmbientIntensity={nightAmbientIntensity}
           nightFrontLightIntensity={nightFrontLightIntensity}
           nightEnvironmentIntensity={nightEnvironmentIntensity}
           nightFloorDarkness={nightFloorDarkness}
+          focusNightAmbient={focusNightAmbient}
+          focusNightSpotlight={focusNightSpotlight}
+          focusNightDirectional={focusNightDirectional}
+          focusNightEnvironment={focusNightEnvironment}
         />
       </Canvas>
     </>

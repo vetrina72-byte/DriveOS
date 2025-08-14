@@ -53,7 +53,6 @@ export default function SpotifyApp({
     }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
 
     const bgColor = isNight ? 'bg-black/80' : 'bg-gray-100/80';
-    const borderColor = isNight ? 'border-white/10' : 'border-black/10';
     const buttonBg = isNight ? 'bg-black/50 hover:bg-red-500/80' : 'bg-white/50 hover:bg-red-500/80';
 
     const renderContent = () => {
@@ -92,7 +91,7 @@ export default function SpotifyApp({
             aria-labelledby="spotify-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className={`w-full h-full flex flex-col relative ${bgColor} backdrop-blur-lg border-l ${borderColor}`}>
+            <div className={`w-full h-full flex flex-col relative ${bgColor} backdrop-blur-lg`}>
                 <header className="absolute top-0 right-0 p-4 z-20">
                     <button className={`p-2 rounded-full transition-colors ${buttonBg}`} onClick={onClose} aria-label="Close Spotify">
                         <FiX className="h-5 w-5 text-white"/>

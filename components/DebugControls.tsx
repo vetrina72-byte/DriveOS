@@ -1,7 +1,5 @@
 
 
-
-
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -70,6 +68,14 @@ interface DebugControlsProps {
   setPlayerPlaceholderWidth: (width: number) => void;
   playerFloatingHeight: number;
   setPlayerFloatingHeight: (height: number) => void;
+  focusNightAmbient: number;
+  setFocusNightAmbient: (value: number) => void;
+  focusNightSpotlight: number;
+  setFocusNightSpotlight: (value: number) => void;
+  focusNightDirectional: number;
+  setFocusNightDirectional: (value: number) => void;
+  focusNightEnvironment: number;
+  setFocusNightEnvironment: (value: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -167,6 +173,14 @@ export default function DebugControls({
   setPlayerPlaceholderWidth,
   playerFloatingHeight,
   setPlayerFloatingHeight,
+  focusNightAmbient,
+  setFocusNightAmbient,
+  focusNightSpotlight,
+  setFocusNightSpotlight,
+  focusNightDirectional,
+  setFocusNightDirectional,
+  focusNightEnvironment,
+  setFocusNightEnvironment,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -210,6 +224,10 @@ export default function DebugControls({
     setPlayerFloatingBottom(98);
     setPlayerPlaceholderWidth(471);
     setPlayerFloatingHeight(113);
+    setFocusNightAmbient(1.88);
+    setFocusNightSpotlight(20.0);
+    setFocusNightDirectional(0.0);
+    setFocusNightEnvironment(0.21);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -499,6 +517,13 @@ export default function DebugControls({
                 onChange={(e) => setNightFloorDarkness(parseInt(e.target.value, 10))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
+            </div>
+            <div className="pl-2 border-l-2 border-zinc-600 my-3 space-y-1">
+              <h4 className="text-sm font-semibold text-zinc-300">Focus Mode Night Lights</h4>
+              <label>Ambient: {focusNightAmbient.toFixed(2)}</label><input type="range" min="0" max="5" step="0.01" value={focusNightAmbient} onChange={(e) => setFocusNightAmbient(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Spotlight: {focusNightSpotlight.toFixed(2)}</label><input type="range" min="0" max="20" step="0.01" value={focusNightSpotlight} onChange={(e) => setFocusNightSpotlight(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Directional: {focusNightDirectional.toFixed(2)}</label><input type="range" min="0" max="5" step="0.01" value={focusNightDirectional} onChange={(e) => setFocusNightDirectional(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Environment: {focusNightEnvironment.toFixed(2)}</label><input type="range" min="0" max="5" step="0.01" value={focusNightEnvironment} onChange={(e) => setFocusNightEnvironment(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
