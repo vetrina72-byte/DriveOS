@@ -147,12 +147,14 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           // Process top artists for recommendations and related artists
           const topArtists = topArtistsRes?.data?.items;
           if (topArtists && topArtists.length > 0) {
-              const artistSeed = topArtists.slice(0, 1).map((a: SpotifyItem) => a.id).join(',');
-              dependentPromises.push(
-                  apiClient.get(`/recommendations?seed_artists=${artistSeed}&limit=10`)
-                      .then(res => setArtistRecommendations(res.data.tracks.map((track: any) => ({ ...track, images: track.album?.images }))))
-                      .catch(() => {})
-              );
+              const artistSeed = topArtists.slice(0, 2).map((a: SpotifyItem) => a.id).join(',');
+              if (artistSeed) {
+                  dependentPromises.push(
+                      apiClient.get(`/recommendations?seed_artists=${artistSeed}&limit=10`)
+                          .then(res => setArtistRecommendations(res.data.tracks.map((track: any) => ({ ...track, images: track.album?.images }))))
+                          .catch(() => {})
+                  );
+              }
               dependentPromises.push(
                   apiClient.get(`/artists/${topArtists[0].id}/related-artists`)
                       .then(res => setRelatedArtists({ mainArtistName: topArtists[0].name, artists: res.data.artists }))
