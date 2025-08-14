@@ -1,7 +1,6 @@
-
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode } from 'react';
 import axios from 'axios';
-import apiClient, { setupInterceptors } from '../api';
+import apiClient from '../api';
 
 interface SpotifyUser {
     display_name: string;
@@ -59,10 +58,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setState(initialState);
         setState(s => ({...s, isLoading: false}));
     }, []);
-    
-    useEffect(() => {
-        setupInterceptors(logout);
-    }, [logout]);
     
     const fetchUserInfo = useCallback(async () => {
         try {

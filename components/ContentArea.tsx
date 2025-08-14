@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
@@ -7,33 +5,9 @@ import { FiLoader } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import apiClient from '../api';
 
-interface FetchedData {
-  greetingSection: SpotifyItem[];
-  recentlyPlayed: SpotifyItem[];
-  topMixes: SpotifyItem[];
-  topArtists: SpotifyItem[];
-  newReleases: SpotifyItem[];
-  radioRecs: SpotifyItem[];
-  moodPlaylists: SpotifyItem[];
-  topTracks: SpotifyItem[];
-  artistRecs: SpotifyItem[];
-  userPlaylists: SpotifyItem[];
-}
-
 const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
-  const { isAuthenticated, user } = useAuth();
-  const [data, setData] = useState<FetchedData>({
-    greetingSection: [],
-    recentlyPlayed: [],
-    topMixes: [],
-    topArtists: [],
-    newReleases: [],
-    radioRecs: [],
-    moodPlaylists: [],
-    topTracks: [],
-    artistRecs: [],
-    userPlaylists: [],
-  });
+  const { isAuthenticated } = useAuth();
+  const [myPlaylists, setMyPlaylists] = useState<SpotifyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,55 +20,24 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     const fetchData = async () => {
       setLoading(true);
       setError(null);
-      
       try {
-        const [
-          featuredPlaylistsRes,
-          recentlyPlayedRes,
-          userPlaylistsRes,
-          topArtistsRes,
-          newReleasesRes,
-          radioRecsRes,
-          moodPlaylistsRes,
-          topTracksRes,
-        ] = await Promise.allSettled([
-          apiClient.get('/browse/featured-playlists?limit=10'),
-          apiClient.get('/me/player/recently-played?limit=10'),
-          apiClient.get('/me/playlists?limit=50'),
-          apiClient.get('/me/top/artists?limit=10'),
-          apiClient.get('/browse/new-releases?limit=10'),
-          apiClient.get('/recommendations?seed_genres=pop,electronic,dance&limit=10'),
-          apiClient.get('/browse/categories/mood/playlists?limit=10'),
-          apiClient.get('/me/top/tracks?time_range=long_term&limit=10'),
-        ]);
-
-        let artistRecsData: SpotifyItem[] = [];
-        if (topArtistsRes.status === 'fulfilled' && topArtistsRes.value.data.items.length > 0) {
-            const topArtistIds = topArtistsRes.value.data.items.slice(0, 5).map((a: any) => a.id).join(',');
-            const artistRecsRes = await apiClient.get(`/recommendations?seed_artists=${topArtistIds}&limit=10`);
-            artistRecsData = artistRecsRes.data.tracks.map((t: any) => ({ ...t, type: 'track' }));
-        }
-
-        setData({
-          greetingSection: featuredPlaylistsRes.status === 'fulfilled' ? featuredPlaylistsRes.value.data.playlists.items : [],
-          recentlyPlayed: recentlyPlayedRes.status === 'fulfilled' ? recentlyPlayedRes.value.data.items.map((item: any) => ({ ...item.track, images: item.track.album.images })) : [],
-          userPlaylists: userPlaylistsRes.status === 'fulfilled' ? userPlaylistsRes.value.data.items : [],
-          topMixes: userPlaylistsRes.status === 'fulfilled' ? userPlaylistsRes.value.data.items.filter((p: any) => p.name.toLowerCase().includes('mix')) : [],
-          topArtists: topArtistsRes.status === 'fulfilled' ? topArtistsRes.value.data.items : [],
-          newReleases: newReleasesRes.status === 'fulfilled' ? newReleasesRes.value.data.albums.items : [],
-          radioRecs: radioRecsRes.status === 'fulfilled' ? radioRecsRes.value.data.tracks.map((t: any) => ({ ...t, type: 'track' })) : [],
-          moodPlaylists: moodPlaylistsRes.status === 'fulfilled' ? moodPlaylistsRes.value.data.playlists.items : [],
-          topTracks: topTracksRes.status === 'fulfilled' ? topTracksRes.value.data.items.map((t: any) => ({ ...t, type: 'track' })) : [],
-          artistRecs: artistRecsData,
-        });
-        
+        console.log("INIZIO TEST CHIAMATA API...");
+        // L'endpoint DEVE iniziare con '/' e NON deve contenere '/v1/'
+        const response = await apiClient.get('/me/playlists?limit=5');
+    
+        console.log('%cSUCCESSO! Dati ricevuti:', 'color: green; font-weight: bold;', response.data);
+        // Imposta uno stato per vedere il risultato, es:
+        setMyPlaylists(response.data.items);
       } catch (error: any) {
-        console.error('Failed to load content in ContentArea:', error);
-        setError("Could not load content.");
-        setData({
-            greetingSection: [], recentlyPlayed: [], topMixes: [], topArtists: [],
-            newReleases: [], radioRecs: [], moodPlaylists: [], topTracks: [], artistRecs: [], userPlaylists: [],
-        });
+        console.error('%cERRORE NEL TEST API:', 'color: red; font-weight: bold;', error);
+        if (error.response) {
+          console.error('Dettagli errore:', {
+            status: error.response.status,
+            url: error.config.url, // Questo ci mostrerà l'URL finale chiamato
+            data: error.response.data
+          });
+        }
+        setError("Test API fallito. Controlla la console.");
       } finally {
         setLoading(false);
       }
@@ -102,14 +45,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
 
     fetchData();
   }, [isAuthenticated, startFetching]);
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Buongiorno";
-    if (hour < 18) return "Buon pomeriggio";
-    return "Buonasera";
-  };
-
+  
   const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
 
   if (loading) {
@@ -119,21 +55,16 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   if (error) {
     return <div className="flex-grow flex justify-center items-center text-red-400">{error}</div>;
   }
-  
-  const userName = user?.display_name || 'Te';
 
   return (
     <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
-      <ContentCarousel title={getGreeting()} items={data.greetingSection} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="greeting" />
-      <ContentCarousel title="Ritorna ad ascoltare" items={data.recentlyPlayed} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="recent" />
-      <ContentCarousel title={`Creato per ${userName}`} items={data.userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
-      <ContentCarousel title="Un tuffo nel passato" items={data.topTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-tracks" />
-      <ContentCarousel title="Altro di ciò che ti piace" items={data.artistRecs} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="artist-recs" />
-      <ContentCarousel title="I tuoi top mix" items={data.topMixes} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="mixes" />
-      <ContentCarousel title="Nuove uscite" items={data.newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
-      <ContentCarousel title="Playlist per te" items={data.moodPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="mood-playlists" />
-      <ContentCarousel title="Stazioni consigliate" items={data.radioRecs} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="radio-recs" />
-      <ContentCarousel title="I tuoi artisti preferiti" items={data.topArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
+      <ContentCarousel 
+        title="Risultato Test API" 
+        items={myPlaylists} 
+        isNight={isNight} 
+        onSelectItem={onSelectItem} 
+        keyPrefix="test" 
+      />
     </div>
   );
 };
