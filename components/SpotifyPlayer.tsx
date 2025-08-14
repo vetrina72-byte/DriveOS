@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { FiX } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +16,7 @@ import AlbumGridView from './AlbumGridView';
 import PodcastGridView from './PodcastGridView';
 import RecentlyPlayedView from './RecentlyPlayedView';
 import ShowDetailView from './ShowDetailView';
+import GenresView from './GenresView';
 
 
 export type ViewType = 
@@ -37,14 +39,7 @@ export interface ViewState {
   query?: string;
 }
 
-const PlaceholderView = ({ name, isNight }: { name: string, isNight: boolean }) => (
-    <div className={`flex-grow flex justify-center items-center text-xl ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-        {name} (Not Implemented)
-    </div>
-);
-
-
-export default function SpotifyApp({ 
+const SpotifyPlayer = ({ 
     isOpen, 
     onClose, 
     isNight,
@@ -56,11 +51,12 @@ export default function SpotifyApp({
     isNight: boolean;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
-}) {
+}) => {
     const { isAuthenticated, user, error, play } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
+    const [startFetching, setStartFetching] = useState(false);
     
     const [view, setView] = useState<ViewState>({ type: 'home' });
     const [viewHistory, setViewHistory] = useState<ViewState[]>([]);
@@ -69,14 +65,21 @@ export default function SpotifyApp({
     const closingBoxSpeed = 8.6;
 
     useEffect(() => {
-        if (!isOpen) {
+        if (isOpen && !startFetching) {
+            // Delay fetching to allow the opening animation to be smooth
+            const timer = setTimeout(() => {
+                setStartFetching(true);
+            }, 400);
+            return () => clearTimeout(timer);
+        } else if (!isOpen) {
             const timer = setTimeout(() => {
                 setView({ type: 'home' });
                 setViewHistory([]);
+                setStartFetching(false); // Reset for next open
             }, 500); 
             return () => clearTimeout(timer);
         }
-    }, [isOpen]);
+    }, [isOpen, startFetching]);
 
     const changeView = (newView: ViewState) => {
         setViewHistory(prev => [...prev, view]);
@@ -92,6 +95,12 @@ export default function SpotifyApp({
     };
 
     const handleSelectItem = (item: SpotifyItem) => {
+        // Special case for the static 'Liked Songs' playlist item
+        if (item.id === 'liked-songs') {
+             changeView({ type: 'playlist', id: 'liked-songs' });
+             return;
+        }
+        
         if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist' || item.type === 'show') {
             changeView({ type: item.type, id: item.id });
         } else if (item.type === 'track') {
@@ -134,7 +143,7 @@ export default function SpotifyApp({
         };
     }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
 
-    const bgColor = isNight ? 'bg-[#2d3436]/95' : 'bg-[#fdf6e3]/95';
+    const bgColor = isNight ? 'bg-[#121212]/95' : 'bg-gray-100/95';
     const buttonBg = isNight ? 'bg-black/50 hover:bg-red-500/80' : 'bg-white/50 hover:bg-red-500/80';
 
     const renderContent = () => {
@@ -159,16 +168,14 @@ export default function SpotifyApp({
                         onBack={handleBack} 
                         showBackButton={isDetailView} 
                     />
-                    {view.type === 'home' && <ContentArea isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'home' && <ContentArea isNight={isNight} onSelectItem={handleSelectItem} startFetching={startFetching} />}
                     {view.type === 'playlists' && <PlaylistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'artists' && <ArtistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'albums' && <AlbumGridView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'podcasts' && <PodcastGridView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'recently-played' && <RecentlyPlayedView isNight={isNight} onPlay={play} />}
                     {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={play} />}
-                    
-                    {/* Placeholder Views */}
-                    {view.type === 'genres' && <PlaceholderView name="Generi e Mood" isNight={isNight} />}
+                    {view.type === 'genres' && <GenresView isNight={isNight} onSelectItem={handleSelectItem} />}
 
                     {(view.type === 'playlist' || view.type === 'album') && (
                         <PlaylistDetailView
@@ -201,7 +208,7 @@ export default function SpotifyApp({
 
     return (
         <div 
-            className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
+            className={`fixed right-0 w-2/3 shadow-2xl z-20 flex spotify-app-panel`}
             style={{
                 transform: `translateX(${translateX}%)`,
                 top: `${spotifyPlayerTop}px`,
@@ -226,4 +233,6 @@ export default function SpotifyApp({
             </div>
         </div>
     );
-}
+};
+
+export default React.memo(SpotifyPlayer);

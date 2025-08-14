@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
@@ -14,10 +15,9 @@ interface FetchedData {
   newReleases: SpotifyItem[];
   radioRecs: SpotifyItem[];
   moodPlaylists: SpotifyItem[];
-  likedSongs: SpotifyItem[];
 }
 
-const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem: (item: SpotifyItem) => void; }) => {
+const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
   const { isAuthenticated } = useAuth();
   const [data, setData] = useState<FetchedData>({
     greetingSection: [],
@@ -27,14 +27,14 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
     newReleases: [],
     radioRecs: [],
     moodPlaylists: [],
-    likedSongs: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setLoading(false);
+    if (!isAuthenticated || !startFetching) {
+      // Don't fetch if not authenticated or if the parent component hasn't triggered it yet
+      setLoading(!startFetching);
       return;
     }
 
@@ -51,7 +51,6 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
           newReleasesRes,
           radioRecsRes,
           moodPlaylistsRes,
-          likedSongsRes,
         ] = await Promise.allSettled([
           apiClient.get('/browse/featured-playlists?limit=10'),
           apiClient.get('/me/player/recently-played?limit=10'),
@@ -60,7 +59,6 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
           apiClient.get('/browse/new-releases?limit=10'),
           apiClient.get('/recommendations?seed_genres=pop,electronic,dance&limit=10'),
           apiClient.get('/browse/categories/mood/playlists?limit=10'),
-          apiClient.get('/me/tracks?limit=20'),
         ]);
 
         setData({
@@ -71,16 +69,14 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
           newReleases: newReleasesRes.status === 'fulfilled' ? newReleasesRes.value.data.albums.items : [],
           radioRecs: radioRecsRes.status === 'fulfilled' ? radioRecsRes.value.data.tracks.map((t: any) => ({ ...t, type: 'track' })) : [],
           moodPlaylists: moodPlaylistsRes.status === 'fulfilled' ? moodPlaylistsRes.value.data.playlists.items : [],
-          likedSongs: likedSongsRes.status === 'fulfilled' ? likedSongsRes.value.data.items.map((item: any) => item.track) : [],
         });
         
       } catch (error: any) {
         console.error('Failed to load content in ContentArea:', error);
         setError("Could not load content.");
-        // Ensure data is cleared on error
         setData({
             greetingSection: [], recentlyPlayed: [], topMixes: [], topArtists: [],
-            newReleases: [], radioRecs: [], moodPlaylists: [], likedSongs: [],
+            newReleases: [], radioRecs: [], moodPlaylists: [],
         });
       } finally {
         setLoading(false);
@@ -88,7 +84,7 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
     };
 
     fetchData();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, startFetching]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -110,7 +106,6 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
   return (
     <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
       <ContentCarousel title={getGreeting()} items={data.greetingSection} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="greeting" />
-      <ContentCarousel title="I tuoi brani preferiti" items={data.likedSongs} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="liked" />
       <ContentCarousel title="Ritorna ad ascoltare" items={data.recentlyPlayed} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="recent" />
       <ContentCarousel title="I tuoi top mix" items={data.topMixes} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="mixes" />
       <ContentCarousel title="Nuove uscite" items={data.newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />

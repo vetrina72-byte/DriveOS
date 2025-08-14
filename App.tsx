@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider } from './context/AuthContext';
@@ -394,6 +392,7 @@ export default function App() {
         <div 
           className="relative w-screen h-screen bg-black select-none overflow-hidden"
           onClick={handleWrapperClick}
+          data-theme={isNight ? 'dark' : 'light'}
         >
           <VehicleCanvas 
               isAppOpen={isUIOverlayActive} 

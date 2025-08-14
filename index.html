@@ -33,6 +33,21 @@
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""/>
   <style>
+    :root {
+      --spotify-panel-bg: #fdf6e3;
+      --player-bg: #fdf6e3;
+      --text-primary: #111827;
+      --text-secondary: #374151;
+      --text-spotify-logo: #1DB954;
+    }
+
+    [data-theme='dark'] {
+      --spotify-panel-bg: #121212;
+      --player-bg: #121212;
+      --text-primary: #FFFFFF;
+      --text-secondary: #b3b3b3;
+    }
+    
     body, #root {
       background-color: #1a1a1a;
       color: #e5e7eb;
@@ -202,6 +217,11 @@
       position: fixed;
       z-index: 40;
       transition: all 0.5s ease-out; /* Smoother animation curve */
+      will-change: width, height, bottom, left, transform;
+    }
+
+    .spotify-app-panel {
+      will-change: transform;
     }
 
     .loading-spinner-border {

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
@@ -7,14 +8,11 @@ import { SpotifyItem } from './PlaylistItem';
 interface PlayHistoryObject {
     track: SpotifyItem;
     played_at: string;
+    context?: {
+        type: 'playlist' | 'album' | 'artist';
+        uri: string;
+    };
 }
-
-const formatDuration = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-};
 
 const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (options: { uris?: string[] }) => void }) => {
     const [history, setHistory] = useState<PlayHistoryObject[]>([]);
@@ -27,7 +25,8 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
             setError(null);
             try {
                 const response = await apiClient.get('/me/player/recently-played?limit=50');
-                setHistory(response.data.items);
+                // Filter out any items that might not have a track object
+                setHistory(response.data.items.filter((item: any) => item.track));
             } catch (err) {
                 console.error('Failed to fetch recently played', err);
                 setError('Could not load your recently played tracks.');
@@ -53,26 +52,30 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
     }
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6">
+        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             <h2 className={`text-3xl font-bold mb-6 ${theme.textPrimary}`}>Ascoltati di recente</h2>
             <div className="flex flex-col">
-                {history.map(({ track }, index) => (
-                    <div 
-                        key={`${track.id}-${index}`}
-                        onClick={() => onPlay({ uris: [track.uri] })}
-                        className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
-                    >
-                        <img 
-                          src={track.album?.images?.[2]?.url || track.album?.images?.[0]?.url} 
-                          alt={track.album?.name} 
-                          className="w-12 h-12 rounded flex-shrink-0 object-cover" 
-                        />
-                        <div className="flex-grow flex flex-col overflow-hidden">
-                            <span className={`truncate font-medium ${theme.textPrimary}`}>{track.name}</span>
-                            <span className={`text-sm truncate ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</span>
+                {history.map(({ track, context }, index) => {
+                    const contextText = context?.type ? `Da ${context.type.charAt(0).toUpperCase() + context.type.slice(1)}` : track.artists?.map(a => a.name).join(', ');
+
+                    return (
+                        <div 
+                            key={`${track.id}-${index}`}
+                            onClick={() => onPlay({ uris: [track.uri] })}
+                            className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                        >
+                            <img 
+                              src={track.album?.images?.[2]?.url || track.album?.images?.[0]?.url} 
+                              alt={track.album?.name} 
+                              className="w-12 h-12 rounded flex-shrink-0 object-cover" 
+                            />
+                            <div className="flex-grow flex flex-col overflow-hidden">
+                                <span className={`truncate font-medium ${theme.textPrimary}`}>{track.name}</span>
+                                <span className={`text-sm truncate ${theme.textSecondary}`}>{contextText}</span>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

@@ -1,10 +1,16 @@
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiClock, FiMusic } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 
 export type ItemType = 'playlist' | 'album';
+
+interface SavedTrackObject {
+    added_at: string;
+    track: Track;
+}
 
 interface Track {
     id: string;
@@ -12,7 +18,7 @@ interface Track {
     artists: { name: string }[];
     duration_ms: number;
     uri: string;
-    album?: { name: string };
+    album: { name: string; images: { url: string }[] };
     track_number?: number;
 }
 
@@ -41,17 +47,36 @@ const formatDuration = (ms: number) => {
 };
 
 const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemType, isNight, onPlay }) => {
-    const [details, setDetails] = useState<PlaylistDetails | AlbumDetails | null>(null);
+    const [details, setDetails] = useState<any | null>(null);
+    const [tracks, setTracks] = useState<Track[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const isLikedSongs = itemId === 'liked-songs';
 
     useEffect(() => {
         const fetchDetails = async () => {
             setLoading(true);
             setError(null);
             try {
-                const response = await apiClient.get(`/${itemType}s/${itemId}`);
-                setDetails(response.data);
+                if (isLikedSongs) {
+                    const response = await apiClient.get('/me/tracks?limit=50');
+                    setTracks(response.data.items.map((item: SavedTrackObject) => item.track).filter(Boolean));
+                    // Create a mock details object for the header
+                    setDetails({
+                        name: 'Brani che ti piacciono',
+                        description: `La tua collezione personale di brani preferiti.`,
+                        type: 'playlist',
+                        uri: 'special:liked-songs', // Not a real context URI
+                    });
+                } else {
+                    const response = await apiClient.get(`/${itemType}s/${itemId}`);
+                    setDetails(response.data);
+                    const trackItems = itemType === 'playlist' 
+                        ? response.data.tracks.items.map((item: any) => item.track).filter(Boolean)
+                        : response.data.tracks.items;
+                    setTracks(trackItems);
+                }
             } catch (err) {
                 console.error(`Failed to fetch ${itemType} details`, err);
                 setError(`Could not load ${itemType} details.`);
@@ -61,13 +86,29 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
         };
 
         fetchDetails();
-    }, [itemId, itemType]);
+    }, [itemId, itemType, isLikedSongs]);
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-zinc-800',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
         border: isNight ? 'border-white/10' : 'border-black/10',
+    };
+
+    const handlePlay = () => {
+        if (isLikedSongs) {
+            onPlay({ uris: tracks.map(t => t.uri) });
+        } else if (details?.uri) {
+            onPlay({ context_uri: details.uri });
+        }
+    };
+    
+    const handleTrackPlay = (trackUri: string, index: number) => {
+        if (isLikedSongs) {
+            onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } });
+        } else if (details?.uri) {
+            onPlay({ context_uri: details.uri, offset: { uri: trackUri } });
+        }
     };
 
     if (loading) {
@@ -78,22 +119,21 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
         return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Details not found.'}</div>;
     }
 
-    const tracks: Track[] = (itemType === 'playlist' 
-        ? (details as PlaylistDetails).tracks.items.map(item => item.track).filter(Boolean)
-        : (details as AlbumDetails).tracks.items
-    ).filter(track => track && track.id); // Filter out null or invalid tracks
-
-    const subText = itemType === 'album' 
+    const subText = isLikedSongs ? details.description : (itemType === 'album' 
         ? `${(details as AlbumDetails).artists?.[0].name} • ${new Date((details as AlbumDetails).release_date).getFullYear()}`
-        : details.description;
+        : details.description);
         
     const sanitizedSubText = subText?.replace(/<[^>]*>?/gm, '');
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6">
+        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             {/* Header */}
             <header className="flex items-end gap-6 mb-6 pt-4">
-                {details.images?.[0]?.url ? (
+                 {isLikedSongs ? (
+                     <div className="w-48 h-48 rounded-md bg-gradient-to-br from-indigo-800 to-purple-800 flex items-center justify-center shadow-2xl">
+                        <FiHeart className="w-24 h-24 text-white/90" />
+                     </div>
+                 ) : details.images?.[0]?.url ? (
                     <img src={details.images[0].url} alt={details.name} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
                 ) : (
                     <div className="w-48 h-48 rounded-md bg-zinc-800 flex items-center justify-center shadow-2xl">
@@ -101,10 +141,10 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     </div>
                 )}
                 <div className="flex flex-col gap-3">
-                    <span className="text-sm font-bold uppercase">{itemType}</span>
+                    <span className="text-sm font-bold uppercase">{details.type === 'show' ? 'Podcast' : details.type}</span>
                     <h1 className="text-5xl font-bold tracking-tight">{details.name}</h1>
-                    {sanitizedSubText && <p className={`text-sm ${theme.textSecondary}`}>{sanitizedSubText}</p>}
-                    <button onClick={() => onPlay({ context_uri: details.uri })} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+                    {sanitizedSubText && <p className={`text-sm ${theme.textSecondary} line-clamp-2`}>{sanitizedSubText}</p>}
+                    <button onClick={handlePlay} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                         <FiPlay className="w-7 h-7 ml-1" />
                     </button>
                 </div>
@@ -123,7 +163,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                 {tracks.map((track, index) => (
                     <div 
                         key={`${track.id}-${index}`}
-                        onClick={() => onPlay({ context_uri: details.uri, offset: { uri: track.uri } })}
+                        onClick={() => handleTrackPlay(track.uri, index)}
                         className={`grid grid-cols-[3rem_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                     >
                         <div className={`text-center ${theme.textSecondary}`}>{index + 1}</div>
