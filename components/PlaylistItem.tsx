@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { FiMusic } from 'react-icons/fi';
 
@@ -8,7 +9,8 @@ export interface SpotifyItem {
   images?: { url: string }[];
   artists?: { name: string }[];
   description?: string;
-  type: 'playlist' | 'album' | 'track' | 'artist';
+  publisher?: string;
+  type: 'playlist' | 'album' | 'track' | 'artist' | 'show';
   album?: { name: string; images: { url: string }[] };
   explicit?: boolean;
 }
@@ -21,7 +23,9 @@ const PlaylistItem = ({ item, isNight, onSelectItem }: { item: SpotifyItem, isNi
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
 
   let descriptionText = '';
-  if (item.type === 'track' && item.artists) {
+  if (item.type === 'show' && item.publisher) {
+    descriptionText = item.publisher;
+  } else if (item.type === 'track' && item.artists) {
     descriptionText = item.artists.map(a => a.name).join(', ');
   } else if (item.description) {
     descriptionText = item.description;

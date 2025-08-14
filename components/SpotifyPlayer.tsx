@@ -11,6 +11,11 @@ import ArtistListView from './ArtistListView';
 import PlaylistListView from './PlaylistListView';
 import ArtistDetailView from './ArtistDetailView';
 import SearchResultsView from './SearchResultsView';
+import AlbumGridView from './AlbumGridView';
+import PodcastGridView from './PodcastGridView';
+import RecentlyPlayedView from './RecentlyPlayedView';
+import ShowDetailView from './ShowDetailView';
+
 
 export type ViewType = 
     | 'home' 
@@ -20,6 +25,7 @@ export type ViewType =
     | 'playlist' 
     | 'album' 
     | 'artist'
+    | 'show'
     | 'recently-played'
     | 'albums'
     | 'podcasts'
@@ -86,7 +92,7 @@ export default function SpotifyApp({
     };
 
     const handleSelectItem = (item: SpotifyItem) => {
-        if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist') {
+        if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist' || item.type === 'show') {
             changeView({ type: item.type, id: item.id });
         } else if (item.type === 'track') {
             play({ uris: [item.uri] });
@@ -128,7 +134,7 @@ export default function SpotifyApp({
         };
     }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
 
-    const bgColor = isNight ? 'bg-[#181818]/95' : 'bg-gray-100/95';
+    const bgColor = isNight ? 'bg-[#2d3436]/95' : 'bg-[#fdf6e3]/95';
     const buttonBg = isNight ? 'bg-black/50 hover:bg-red-500/80' : 'bg-white/50 hover:bg-red-500/80';
 
     const renderContent = () => {
@@ -142,7 +148,7 @@ export default function SpotifyApp({
         }
 
         if (isAuthenticated && user) {
-            const isDetailView = ['playlist', 'album', 'artist'].includes(view.type);
+            const isDetailView = ['playlist', 'album', 'artist', 'show'].includes(view.type);
             return (
                 <div className="flex flex-col w-full h-full">
                     <TopNavBar 
@@ -156,12 +162,12 @@ export default function SpotifyApp({
                     {view.type === 'home' && <ContentArea isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'playlists' && <PlaylistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'artists' && <ArtistListView isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'albums' && <AlbumGridView isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'podcasts' && <PodcastGridView isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'recently-played' && <RecentlyPlayedView isNight={isNight} onPlay={play} />}
                     {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={play} />}
                     
                     {/* Placeholder Views */}
-                    {view.type === 'recently-played' && <PlaceholderView name="Ascoltati di recente" isNight={isNight} />}
-                    {view.type === 'albums' && <PlaceholderView name="Album" isNight={isNight} />}
-                    {view.type === 'podcasts' && <PlaceholderView name="Podcast" isNight={isNight} />}
                     {view.type === 'genres' && <PlaceholderView name="Generi e Mood" isNight={isNight} />}
 
                     {(view.type === 'playlist' || view.type === 'album') && (
@@ -175,6 +181,13 @@ export default function SpotifyApp({
                     {view.type === 'artist' && (
                         <ArtistDetailView
                             artistId={view.id!}
+                            isNight={isNight}
+                            onPlay={play}
+                        />
+                    )}
+                     {view.type === 'show' && (
+                        <ShowDetailView
+                            showId={view.id!}
                             isNight={isNight}
                             onPlay={play}
                         />

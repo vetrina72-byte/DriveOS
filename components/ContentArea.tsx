@@ -14,6 +14,7 @@ interface FetchedData {
   newReleases: SpotifyItem[];
   radioRecs: SpotifyItem[];
   moodPlaylists: SpotifyItem[];
+  likedSongs: SpotifyItem[];
 }
 
 const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem: (item: SpotifyItem) => void; }) => {
@@ -26,6 +27,7 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
     newReleases: [],
     radioRecs: [],
     moodPlaylists: [],
+    likedSongs: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,28 +51,37 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
           newReleasesRes,
           radioRecsRes,
           moodPlaylistsRes,
+          likedSongsRes,
         ] = await Promise.allSettled([
           apiClient.get('/browse/featured-playlists?limit=10'),
           apiClient.get('/me/player/recently-played?limit=10'),
           apiClient.get('/me/playlists?limit=50'),
           apiClient.get('/me/top/artists?limit=10'),
           apiClient.get('/browse/new-releases?limit=10'),
-          apiClient.get('/recommendations?seed_genres=pop,electronic,dance,latino&limit=10'),
+          apiClient.get('/recommendations?seed_genres=pop,electronic,dance&limit=10'),
           apiClient.get('/browse/categories/mood/playlists?limit=10'),
+          apiClient.get('/me/tracks?limit=20'),
         ]);
 
-        const greetingSection = featuredPlaylistsRes.status === 'fulfilled' ? featuredPlaylistsRes.value.data.playlists.items : [];
-        const recentlyPlayed = recentlyPlayedRes.status === 'fulfilled' ? recentlyPlayedRes.value.data.items.map((item: any) => ({ ...item.track, images: item.track.album.images })) : [];
-        const topMixes = userPlaylistsRes.status === 'fulfilled' ? userPlaylistsRes.value.data.items.filter((p: any) => p.name.toLowerCase().includes('mix')) : [];
-        const topArtists = topArtistsRes.status === 'fulfilled' ? topArtistsRes.value.data.items : [];
-        const newReleases = newReleasesRes.status === 'fulfilled' ? newReleasesRes.value.data.albums.items : [];
-        const radioRecs = radioRecsRes.status === 'fulfilled' ? radioRecsRes.value.data.tracks.map((t: any) => ({ ...t, type: 'track' })) : [];
-        const moodPlaylists = moodPlaylistsRes.status === 'fulfilled' ? moodPlaylistsRes.value.data.playlists.items : [];
-
-        setData({ greetingSection, recentlyPlayed, topMixes, topArtists, newReleases, radioRecs, moodPlaylists });
+        setData({
+          greetingSection: featuredPlaylistsRes.status === 'fulfilled' ? featuredPlaylistsRes.value.data.playlists.items : [],
+          recentlyPlayed: recentlyPlayedRes.status === 'fulfilled' ? recentlyPlayedRes.value.data.items.map((item: any) => ({ ...item.track, images: item.track.album.images })) : [],
+          topMixes: userPlaylistsRes.status === 'fulfilled' ? userPlaylistsRes.value.data.items.filter((p: any) => p.name.toLowerCase().includes('mix')) : [],
+          topArtists: topArtistsRes.status === 'fulfilled' ? topArtistsRes.value.data.items : [],
+          newReleases: newReleasesRes.status === 'fulfilled' ? newReleasesRes.value.data.albums.items : [],
+          radioRecs: radioRecsRes.status === 'fulfilled' ? radioRecsRes.value.data.tracks.map((t: any) => ({ ...t, type: 'track' })) : [],
+          moodPlaylists: moodPlaylistsRes.status === 'fulfilled' ? moodPlaylistsRes.value.data.playlists.items : [],
+          likedSongs: likedSongsRes.status === 'fulfilled' ? likedSongsRes.value.data.items.map((item: any) => item.track) : [],
+        });
+        
       } catch (error: any) {
         console.error('Failed to load content in ContentArea:', error);
         setError("Could not load content.");
+        // Ensure data is cleared on error
+        setData({
+            greetingSection: [], recentlyPlayed: [], topMixes: [], topArtists: [],
+            newReleases: [], radioRecs: [], moodPlaylists: [], likedSongs: [],
+        });
       } finally {
         setLoading(false);
       }
@@ -99,6 +110,7 @@ const ContentArea = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem
   return (
     <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
       <ContentCarousel title={getGreeting()} items={data.greetingSection} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="greeting" />
+      <ContentCarousel title="I tuoi brani preferiti" items={data.likedSongs} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="liked" />
       <ContentCarousel title="Ritorna ad ascoltare" items={data.recentlyPlayed} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="recent" />
       <ContentCarousel title="I tuoi top mix" items={data.topMixes} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="mixes" />
       <ContentCarousel title="Nuove uscite" items={data.newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />

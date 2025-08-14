@@ -4,7 +4,9 @@ import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 
 const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: SpotifyItem[], isNight: boolean, onSelectItem: (item: SpotifyItem) => void, keyPrefix: string }) => {
-  if (!items || items.length === 0) return null;
+  const validItems = Array.isArray(items) ? items.filter(item => item && item.id) : [];
+
+  if (validItems.length === 0) return null;
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const textColor = isNight ? 'text-white' : 'text-zinc-900';
@@ -38,7 +40,7 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
       </button>
 
       <div ref={scrollRef} className="spotify-carousel gap-4 px-6">
-        {items.map((item, index) => (
+        {validItems.map((item, index) => (
           <PlaylistItem key={`${keyPrefix}-${item.id || index}`} item={item} isNight={isNight} onSelectItem={onSelectItem} />
         ))}
       </div>

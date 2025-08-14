@@ -86,6 +86,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const subText = itemType === 'album' 
         ? `${(details as AlbumDetails).artists?.[0].name} • ${new Date((details as AlbumDetails).release_date).getFullYear()}`
         : details.description;
+        
+    const sanitizedSubText = subText?.replace(/<[^>]*>?/gm, '');
 
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6">
@@ -101,7 +103,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                 <div className="flex flex-col gap-3">
                     <span className="text-sm font-bold uppercase">{itemType}</span>
                     <h1 className="text-5xl font-bold tracking-tight">{details.name}</h1>
-                    {subText && <p className={`text-sm ${theme.textSecondary}`} dangerouslySetInnerHTML={{ __html: subText }}></p>}
+                    {sanitizedSubText && <p className={`text-sm ${theme.textSecondary}`}>{sanitizedSubText}</p>}
                     <button onClick={() => onPlay({ context_uri: details.uri })} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                         <FiPlay className="w-7 h-7 ml-1" />
                     </button>
