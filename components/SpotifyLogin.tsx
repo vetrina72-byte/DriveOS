@@ -25,7 +25,8 @@ const SpotifyLogin: React.FC = () => {
           'user-modify-playback-state',
           'user-read-recently-played',
           'playlist-read-private',
-          'playlist-read-collaborative'
+          'playlist-read-collaborative',
+          'user-top-read'
         ].join(' ');
 
         const authUrl = new URL("https://accounts.spotify.com/authorize");
