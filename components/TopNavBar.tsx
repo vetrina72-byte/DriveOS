@@ -2,10 +2,19 @@
 import React, { useRef, useState } from 'react';
 import { FaSpotify } from 'react-icons/fa';
 import { FiSearch, FiChevronLeft } from 'react-icons/fi';
+import { ViewType } from './SpotifyPlayer';
 
-const navLinks = ["Home", "Playlist", "Artisti"];
+const navLinks = ["Home", "Ascoltati di recente", "Playlist", "Artisti", "Album", "Podcast", "Generi e Mood"];
 
-type ViewType = 'home' | 'playlists' | 'artists' | 'search' | 'playlist' | 'album' | 'artist';
+const linkToViewMap: { [key: string]: ViewType } = {
+    "Home": 'home',
+    "Ascoltati di recente": 'recently-played',
+    "Playlist": 'playlists',
+    "Artisti": 'artists',
+    "Album": 'albums',
+    "Podcast": 'podcasts',
+    "Generi e Mood": 'genres',
+};
 
 interface TopNavBarProps {
     isNight: boolean;
@@ -18,7 +27,6 @@ interface TopNavBarProps {
 
 const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBackButton }: TopNavBarProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const scrollRef = useRef<HTMLDivElement>(null);
   
   const textColor = isNight ? 'text-white' : 'text-zinc-900';
   const secondaryTextColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
@@ -32,13 +40,6 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
     }
   };
   
-  // Map internal view types to display names for nav links
-  const viewToLinkName: { [key in ViewType]?: string } = {
-    home: "Home",
-    playlists: "Playlist",
-    artists: "Artisti",
-  };
-
   return (
     <nav className="w-full px-6 pt-6 pb-4 flex-shrink-0 z-20">
       <div className="flex items-center gap-4">
@@ -61,11 +62,13 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
           />
         </div>
       </div>
-      <div ref={scrollRef} className="mt-4 spotify-carousel -mx-6 px-6">
+      <div className="mt-4 spotify-carousel -mx-6 px-6">
         <div className="flex items-center gap-2">
           {navLinks.map((link) => {
-            const linkView = link.toLowerCase() as ViewType;
-            const isActive = activeView === linkView || (activeView === 'search' && link === 'Home'); // Show home as active during search
+            const linkView = linkToViewMap[link];
+            if (!linkView) return null;
+            
+            const isActive = activeView === linkView || (activeView === 'search' && link === 'Home');
             return (
               <a
                 key={link}

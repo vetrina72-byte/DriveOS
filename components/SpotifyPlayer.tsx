@@ -12,13 +12,31 @@ import PlaylistListView from './PlaylistListView';
 import ArtistDetailView from './ArtistDetailView';
 import SearchResultsView from './SearchResultsView';
 
-export type ViewType = 'home' | 'playlists' | 'artists' | 'search' | 'playlist' | 'album' | 'artist';
+export type ViewType = 
+    | 'home' 
+    | 'playlists' 
+    | 'artists' 
+    | 'search' 
+    | 'playlist' 
+    | 'album' 
+    | 'artist'
+    | 'recently-played'
+    | 'albums'
+    | 'podcasts'
+    | 'genres';
 
 export interface ViewState {
   type: ViewType;
   id?: string;
   query?: string;
 }
+
+const PlaceholderView = ({ name, isNight }: { name: string, isNight: boolean }) => (
+    <div className={`flex-grow flex justify-center items-center text-xl ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+        {name} (Not Implemented)
+    </div>
+);
+
 
 export default function SpotifyApp({ 
     isOpen, 
@@ -139,6 +157,13 @@ export default function SpotifyApp({
                     {view.type === 'playlists' && <PlaylistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'artists' && <ArtistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={play} />}
+                    
+                    {/* Placeholder Views */}
+                    {view.type === 'recently-played' && <PlaceholderView name="Ascoltati di recente" isNight={isNight} />}
+                    {view.type === 'albums' && <PlaceholderView name="Album" isNight={isNight} />}
+                    {view.type === 'podcasts' && <PlaceholderView name="Podcast" isNight={isNight} />}
+                    {view.type === 'genres' && <PlaceholderView name="Generi e Mood" isNight={isNight} />}
+
                     {(view.type === 'playlist' || view.type === 'album') && (
                         <PlaylistDetailView
                             itemId={view.id!}

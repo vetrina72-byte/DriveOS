@@ -185,13 +185,16 @@
       overflow-x: scroll;
       padding-bottom: 20px;
       scroll-behavior: smooth;
-      /* Hide scrollbar for IE, Edge and Firefox */
-      -ms-overflow-style: none;  /* IE and Edge */
-      scrollbar-width: none;  /* Firefox */
     }
-    /* Hide scrollbar for Chrome, Safari and Opera */
+    /* Hide scrollbar for Chrome, Safari, Opera, IE, Edge and Firefox */
+    .hide-scrollbar,
+    .spotify-carousel {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+    }
+    .hide-scrollbar::-webkit-scrollbar,
     .spotify-carousel::-webkit-scrollbar {
-        display: none;
+        display: none; /* Chrome, Safari and Opera */
     }
 
     /* Music Player Styles */

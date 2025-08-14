@@ -100,22 +100,24 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
             </header>
 
             <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
-            <div>
+            <div className="flex flex-col">
                 {tracks.map((track, index) => (
                     <div 
                         key={track.id + index}
                         onClick={() => onPlay({ uris: trackUris, offset: { position: index } })}
-                        className={`grid grid-cols-[3rem_minmax(0,1fr)_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                        className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                     >
-                        <div className="flex items-center gap-4">
-                            <span className={`text-center w-4 ${theme.textSecondary}`}>{index + 1}</span>
-                            <img src={track.album.images[2]?.url || track.album.images[0]?.url} alt={track.album.name} className="w-10 h-10 rounded" />
+                        <span className={`w-8 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>
+                        <img 
+                          src={track.album.images?.[2]?.url || track.album.images?.[0]?.url} 
+                          alt={track.album.name} 
+                          className="w-10 h-10 rounded flex-shrink-0 object-cover" 
+                        />
+                        <div className="flex-grow flex flex-col overflow-hidden">
+                            <span className={`truncate font-medium ${theme.textPrimary}`}>{track.name}</span>
+                            {track.explicit && <span className="text-xs text-zinc-400">Explicit</span>}
                         </div>
-                        <div className="flex flex-col overflow-hidden">
-                            <span className={`truncate ${theme.textPrimary}`}>{track.name}</span>
-                            <span className={`text-xs truncate ${theme.textSecondary}`}>{track.explicit && <span className="mr-2 bg-zinc-500/50 text-white text-[10px] rounded-sm px-1 py-0.5">E</span>}{track.album.name}</span>
-                        </div>
-                        <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
+                        <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
                     </div>
                 ))}
             </div>
