@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { FiMusic } from 'react-icons/fi';
 
@@ -11,7 +12,7 @@ export interface SpotifyItem {
   type: 'playlist' | 'album' | 'track';
 }
 
-const PlaylistItem = ({ item, isNight, onItemSelect }: { item: SpotifyItem, isNight: boolean, onItemSelect: (item: SpotifyItem) => void }) => {
+const PlaylistItem = ({ item, isNight, onPlay }: { item: SpotifyItem, isNight: boolean, onPlay: (uri: string) => void }) => {
   const textColorPrimary = isNight ? 'text-zinc-100' : 'text-zinc-800';
   const textColorSecondary = isNight ? 'text-zinc-400' : 'text-zinc-500';
   const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
@@ -31,7 +32,7 @@ const PlaylistItem = ({ item, isNight, onItemSelect }: { item: SpotifyItem, isNi
   const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
 
   return (
-    <div onClick={() => onItemSelect(item)} className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 ${bgColor}`}>
+    <div onClick={() => onPlay(item.uri)} className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 ${bgColor}`}>
       <div className="relative w-full aspect-square mb-3">
         {item.images?.[0]?.url ? (
           <img src={item.images[0].url} alt={item.name} className="w-full h-full rounded-md object-cover shadow-lg" />
