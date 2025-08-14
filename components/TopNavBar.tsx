@@ -1,6 +1,5 @@
 
-
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { FaSpotify } from 'react-icons/fa';
 import { FiSearch, FiChevronLeft, FiSend } from 'react-icons/fi';
 import { ViewType } from './SpotifyPlayer';
@@ -30,9 +29,6 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
   
   const textColor = 'var(--text-primary)';
   const secondaryTextColor = 'var(--text-secondary)';
-  const activeLinkColor = isNight ? 'text-black' : 'text-white';
-  const inactiveLinkColor = isNight ? 'text-white' : 'text-zinc-800';
-  const activeLinkBg = isNight ? 'bg-white' : 'bg-black';
   const hoverBg = isNight ? 'hover:bg-white/10' : 'hover:bg-black/5';
   const inputBg = isNight ? 'bg-white/10' : 'bg-black/5';
 
@@ -88,13 +84,16 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
           if (!linkView) return null;
           
           const isActive = activeView === linkView;
+          const linkColor = isActive ? textColor : secondaryTextColor;
+          const fontWeight = isActive ? 'font-bold' : 'font-semibold';
+
           return (
             <a
               key={link}
               href="#"
               onClick={(e) => { e.preventDefault(); onNavigate(linkView); }}
-              className={`px-4 py-2 rounded-md text-base font-semibold whitespace-nowrap transition-colors duration-300 ${isActive ? activeLinkBg : hoverBg}`}
-              style={{ color: isActive ? activeLinkColor : inactiveLinkColor }}
+              className={`px-4 py-2 rounded-md text-base whitespace-nowrap transition-colors duration-300 ${fontWeight} ${hoverBg}`}
+              style={{ color: linkColor }}
             >
               {link}
             </a>

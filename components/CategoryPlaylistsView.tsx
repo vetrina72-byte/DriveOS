@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiLoader, FiChevronLeft } from 'react-icons/fi';
+import { FiLoader } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 
 interface CategoryPlaylistsViewProps {
@@ -15,11 +16,13 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     const [playlists, setPlaylists] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isEmpty, setIsEmpty] = useState(false);
 
     useEffect(() => {
         const fetchPlaylists = async () => {
             setLoading(true);
             setError(null);
+            setIsEmpty(false);
             setPlaylists([]); // Clear previous results
             try {
                 const response = await apiClient.get(`/browse/categories/${categoryId}/playlists`, {
@@ -28,10 +31,10 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                         limit: 50 
                     }
                 });
-                if (response.data?.playlists?.items) {
+                if (response.data?.playlists?.items && response.data.playlists.items.length > 0) {
                     setPlaylists(response.data.playlists.items);
                 } else {
-                    setPlaylists([]);
+                    setIsEmpty(true);
                 }
             } catch (err: any) {
                  console.error(`Failed to fetch playlists for category ${categoryId}`, err);
@@ -56,7 +59,6 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
 
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
-            {/* The Back button is now handled by the TopNavBar */}
             <h2 className={`text-3xl font-bold mb-6 ${textColor}`}>{title}</h2>
 
             {playlists.length > 0 ? (
@@ -72,7 +74,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 </div>
             ) : (
                 <div className={`text-center mt-10 text-lg ${themeColor}`}>
-                    Spiacenti, non abbiamo trovato playlist per questa categoria in questo momento.
+                    Spiacenti, non abbiamo trovato playlist per questa categoria. Prova con un altro genere!
                 </div>
             )}
         </div>

@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { FiMusic, FiMic, FiUser } from 'react-icons/fi';
+import { FiMusic, FiMic, FiUser, FiHeart } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 
 export interface SpotifyItem {
@@ -25,6 +26,20 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
   const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
+
+  // Special rendering for the "Liked Songs" playlist
+  if (item.id === 'liked-songs') {
+      return (
+          <div onClick={() => onSelectItem(item)} className="p-3 rounded-lg transition-all duration-200 cursor-pointer w-44 flex-shrink-0 bg-gradient-to-br from-indigo-800 to-purple-800 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105">
+              <div className="relative w-full aspect-square mb-3 flex items-center justify-center">
+                  <FiHeart className="w-16 h-16 text-white/90" />
+              </div>
+              <h3 className="font-bold truncate text-white">{item.name}</h3>
+              <p className="text-sm truncate text-gray-300">{item.description}</p>
+          </div>
+      );
+  }
+
 
   let descriptionText = '';
   if (item.type === 'show' && item.publisher) {
