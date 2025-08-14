@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
@@ -12,7 +10,7 @@ import {
 } from 'react-icons/pi';
 import { IoMdAddCircleOutline } from 'react-icons/io';
 import { HiOutlineQueueList } from 'react-icons/hi2';
-import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
+import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
@@ -25,20 +23,19 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     const [position, setPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
-    const frameRef = useRef<number | null>(null);
-
+    
     useEffect(() => {
-        if (!state.paused) {
-            const animate = () => {
-                setPosition(p => p + 100);
-                frameRef.current = requestAnimationFrame(animate);
-            };
-            frameRef.current = requestAnimationFrame(animate);
-            return () => {
-                if (frameRef.current) cancelAnimationFrame(frameRef.current);
-            };
+        let interval: number | undefined;
+        if (!state.paused && !isSeeking) {
+            interval = window.setInterval(() => {
+                setPosition(p => Math.min(p + 1000, state.duration));
+            }, 1000);
         }
-    }, [state.paused]);
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [state.paused, state.duration, isSeeking]);
+
 
     useEffect(() => {
         if (!isSeeking) {
@@ -56,8 +53,9 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
         const seekTo = Math.round(state.duration * percentage);
         
         setPosition(seekTo);
-        player.seek(seekTo);
-
+        if (player) {
+           player.seek(seekTo);
+        }
     }, [player, state.duration]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -72,8 +70,10 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     }, [isSeeking, handleSeek]);
 
     const handleMouseUp = useCallback(() => {
-        setIsSeeking(false);
-    }, []);
+        if(isSeeking) {
+            setIsSeeking(false);
+        }
+    }, [isSeeking]);
 
     useEffect(() => {
         window.addEventListener('mousemove', handleMouseMove);
@@ -111,6 +111,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const [isReady, setIsReady] = useState(false);
     const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
     const [showQueue, setShowQueue] = useState(false);
+    const [queue, setQueue] = useState<SpotifyTrack[]>([]);
     
     const isPlayerActive = isAuthenticated && isReady && playerState && playerState.track_window.current_track;
 
@@ -180,6 +181,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
+
+    const handleToggleQueue = async () => {
+        if (!showQueue) {
+            try {
+                const { data } = await apiClient.get('/me/player/queue');
+                setQueue(data.queue);
+            } catch (e) {
+                console.error("Failed to fetch queue", e);
+                setQueue([]); // Set to empty array on error
+            }
+        }
+        setShowQueue(!showQueue);
+    };
     
     const playerStyle = useMemo(() => {
         if (isAnyAppOpen) {
@@ -210,7 +224,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         if (isPlayerActive) {
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
-            const nextTrack = playerState.track_window.next_tracks[0];
+            const nextTrack = queue[0];
 
             const iconColor = isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black';
             const activeIconColor = isNight ? 'text-white' : 'text-black';
@@ -252,7 +266,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                                 <FiSkipForward className="w-6 h-6" />
                             </button>
                              <button className={`transition ${iconColor}`}><IoMdAddCircleOutline className="w-6 h-6" /></button>
-                             <button onClick={() => setShowQueue(s => !s)} className={`transition ${iconColor}`}><HiOutlineQueueList className="w-6 h-6" /></button>
+                             <button onClick={handleToggleQueue} className={`transition ${iconColor}`}><HiOutlineQueueList className="w-6 h-6" /></button>
                              <button className={`transition ${iconColor}`}><FiSearch className="w-5 h-5" /></button>
                         </div>
                     </div>
