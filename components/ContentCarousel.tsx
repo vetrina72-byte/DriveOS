@@ -1,7 +1,8 @@
+
 import React from 'react';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 
-const ContentCarousel = ({ title, items, isNight, onPlay }: { title: string, items: SpotifyItem[], isNight: boolean, onPlay: (uri: string) => void }) => {
+const ContentCarousel = ({ title, items, isNight, onSelectItem }: { title: string, items: SpotifyItem[], isNight: boolean, onSelectItem: (item: SpotifyItem) => void }) => {
   if (!items || items.length === 0) return null;
   
   const textColor = isNight ? 'text-white' : 'text-zinc-900';
@@ -11,7 +12,7 @@ const ContentCarousel = ({ title, items, isNight, onPlay }: { title: string, ite
       <h2 className={`text-2xl font-bold mb-4 px-6 ${textColor}`}>{title}</h2>
       <div className="spotify-carousel gap-4 px-6">
         {items.map((item, index) => (
-          <PlaylistItem key={item.id || index} item={item} isNight={isNight} onPlay={onPlay} />
+          <PlaylistItem key={item.id || index} item={item} isNight={isNight} onSelectItem={onSelectItem} />
         ))}
       </div>
     </section>

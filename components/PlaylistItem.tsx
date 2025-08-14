@@ -12,9 +12,9 @@ export interface SpotifyItem {
   type: 'playlist' | 'album' | 'track';
 }
 
-const PlaylistItem = ({ item, isNight, onPlay }: { item: SpotifyItem, isNight: boolean, onPlay: (uri: string) => void }) => {
-  const textColorPrimary = isNight ? 'text-zinc-100' : 'text-zinc-800';
-  const textColorSecondary = isNight ? 'text-zinc-400' : 'text-zinc-500';
+const PlaylistItem = ({ item, isNight, onSelectItem }: { item: SpotifyItem, isNight: boolean, onSelectItem: (item: SpotifyItem) => void }) => {
+  const textColorPrimary = isNight ? 'text-white' : 'text-zinc-800';
+  const textColorSecondary = isNight ? 'text-[#b3b3b3]' : 'text-zinc-500';
   const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
   const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
@@ -32,7 +32,7 @@ const PlaylistItem = ({ item, isNight, onPlay }: { item: SpotifyItem, isNight: b
   const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
 
   return (
-    <div onClick={() => onPlay(item.uri)} className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 ${bgColor}`}>
+    <div onClick={() => onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 ${bgColor}`}>
       <div className="relative w-full aspect-square mb-3">
         {item.images?.[0]?.url ? (
           <img src={item.images[0].url} alt={item.name} className="w-full h-full rounded-md object-cover shadow-lg" />

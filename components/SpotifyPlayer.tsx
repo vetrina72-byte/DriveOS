@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
 import ContentArea from './ContentArea';
+import { SpotifyItem } from './PlaylistItem';
+import PlaylistDetailView, { ItemType } from './PlaylistDetailView';
 
 export default function SpotifyApp({ 
     isOpen, 
@@ -19,13 +21,38 @@ export default function SpotifyApp({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) {
-    const { isAuthenticated, user, error } = useAuth();
+    const { isAuthenticated, user, error, play } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
+    
+    const [view, setView] = useState<{ type: 'home' | ItemType; id: string | null }>({ type: 'home', id: null });
 
     const openingBoxSpeed = 4.5;
     const closingBoxSpeed = 8.6;
+
+    useEffect(() => {
+        // When the panel is closed, reset the view to home
+        if (!isOpen) {
+            const timer = setTimeout(() => {
+                setView({ type: 'home', id: null });
+            }, 500); // Delay should match the closing animation
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen]);
+
+    const handleSelectItem = (item: SpotifyItem) => {
+        if (item.type === 'playlist' || item.type === 'album') {
+            setView({ type: item.type, id: item.id });
+        } else if (item.type === 'track') {
+            // Play a single track without context
+            play(undefined, { trackUri: item.uri });
+        }
+    };
+
+    const handleBack = () => {
+        setView({ type: 'home', id: null });
+    };
 
     useEffect(() => {
         let lastTime = performance.now();
@@ -52,7 +79,7 @@ export default function SpotifyApp({
         };
     }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
 
-    const bgColor = isNight ? 'bg-black/80' : 'bg-gray-100/80';
+    const bgColor = isNight ? 'bg-[#181818]/95' : 'bg-gray-100/95';
     const buttonBg = isNight ? 'bg-black/50 hover:bg-red-500/80' : 'bg-white/50 hover:bg-red-500/80';
 
     const renderContent = () => {
@@ -68,8 +95,17 @@ export default function SpotifyApp({
         if (isAuthenticated && user) {
             return (
                 <div className="flex flex-col w-full h-full">
-                    <TopNavBar isNight={isNight} />
-                    <ContentArea isNight={isNight} />
+                    <TopNavBar isNight={isNight} onBack={handleBack} showBackButton={view.type !== 'home'} />
+                     {view.type === 'home' ? (
+                        <ContentArea isNight={isNight} onSelectItem={handleSelectItem} />
+                    ) : (
+                        <PlaylistDetailView
+                            itemId={view.id!}
+                            itemType={view.type}
+                            isNight={isNight}
+                            onPlay={play}
+                        />
+                    )}
                 </div>
             );
         }
@@ -92,7 +128,7 @@ export default function SpotifyApp({
             onClick={(e) => e.stopPropagation()}
         >
             <div className={`w-full h-full flex flex-col relative ${bgColor} backdrop-blur-lg`}>
-                <header className="absolute top-0 right-0 p-4 z-20">
+                <header className="absolute top-0 right-0 p-4 z-30">
                     <button className={`p-2 rounded-full transition-colors ${buttonBg}`} onClick={onClose} aria-label="Close Spotify">
                         <FiX className="h-5 w-5 text-white"/>
                     </button>

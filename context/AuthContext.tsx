@@ -23,7 +23,7 @@ interface AuthContextType extends AuthState {
     login: (authCode?: string | null, error?: string) => Promise<void>;
     logout: () => void;
     clearError: () => void;
-    play: (contextUri: string) => void;
+    play: (contextUri?: string, options?: { trackUri?: string }) => void;
     setDeviceId: (id: string | null) => void;
 }
 
@@ -132,17 +132,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setDeviceIdState(id);
     };
 
-    const play = useCallback(async (contextUri: string) => {
+    const play = useCallback(async (contextUri?: string, options?: { trackUri?: string }) => {
         if (!deviceId) {
             console.error("Cannot play: No active Spotify device ID.");
-            // Optionally, show a user-facing error here.
             return;
         }
         try {
-            // The access token is handled by the interceptor.
+            const body: { context_uri?: string; uris?: string[]; offset?: any; } = {};
+
+            if (contextUri) {
+                body.context_uri = contextUri;
+                if (options?.trackUri) {
+                    body.offset = { uri: options.trackUri };
+                }
+            } else if (options?.trackUri) {
+                body.uris = [options.trackUri];
+            } else {
+                console.error("Play function called without context or track URI.");
+                return;
+            }
+
             await apiClient.put(
                 `/me/player/play?device_id=${deviceId}`,
-                { context_uri: contextUri }
+                body
             );
         } catch (err) {
             console.error('Failed to start playback', err);
