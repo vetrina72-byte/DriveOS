@@ -36,33 +36,69 @@ const ContentArea = ({ isNight, onItemSelect, activeCategory }: { isNight: boole
       setError(null);
       
       try {
-        const [playlistsRes, recentRes, featuredPlaylistsRes, recommendationsRes] = await Promise.all([
+        const results = await Promise.all([
           apiClient.get('/me/playlists', { params: { limit: 10 } }),
           apiClient.get('/me/player/recently-played', { params: { limit: 10 } }),
           apiClient.get('/browse/featured-playlists', { params: { limit: 10, country: 'IT' } }),
           apiClient.get('/recommendations', { params: { limit: 10, seed_genres: 'pop,rock,electronic' } }),
         ]);
+        
+        console.log('%c[DEBUG] 4. DATI GREZZI RICEVUTI:', 'color: #00e676; font-weight: bold;', {
+          playlistsResponse: results[0],
+          recentResponse: results[1],
+          featuredPlaylistsResponse: results[2],
+          recommendationsResponse: results[3]
+        });
 
-        const playlists = playlistsRes.data.items;
-        const recentTracks = recentRes.data.items.map((item: any) => ({
+        // Controlla se i dati principali esistono
+        const playlists = results[0]?.data?.items;
+        const recentItems = results[1]?.data?.items;
+        const featuredPlaylists = results[2]?.data?.playlists?.items;
+        const recommendations = results[3]?.data?.tracks;
+
+        console.log('%c[DEBUG] 5. DATI ESTRATTI:', 'color: #00e676; font-weight: bold;', {
+          extractedPlaylists: playlists,
+          extractedRecent: recentItems,
+          extractedFeatured: featuredPlaylists,
+          extractedRecommendations: recommendations
+        });
+        
+        if (!playlists || playlists.length === 0) {
+          console.warn('%c[AVVISO] Le playlist dell\'utente sono vuote o non definite.', 'color: orange;');
+        }
+        if (!recentItems || recentItems.length === 0) {
+          console.warn('%c[AVVISO] Gli ascolti recenti sono vuoti o non definiti.', 'color: orange;');
+        }
+        if (!featuredPlaylists || featuredPlaylists.length === 0) {
+          console.warn('%c[AVVISO] Le playlist in primo piano sono vuote o non definite.', 'color: orange;');
+        }
+        if (!recommendations || recommendations.length === 0) {
+          console.warn('%c[AVVISO] Le raccomandazioni sono vuote o non definite.', 'color: orange;');
+        }
+
+        const recentTracks = recentItems ? recentItems.map((item: any) => ({
             ...item.track,
             type: 'track',
             images: item.track.album.images,
-        }));
+        })) : [];
         
-        setData({
-          greetings: featuredPlaylistsRes.data.playlists.items.slice(0,6),
-          userPlaylists: playlists,
-          recentlyPlayed: recentTracks,
-          topMixes: recommendationsRes.data.tracks.map((track:any) => ({
+        const topMixes = recommendations ? recommendations.map((track:any) => ({
             ...track,
             type: 'track',
             images: track.album.images
-          })),
+        })) : [];
+
+        console.log('%c[DEBUG] 6. Sto per aggiornare lo stato di React con i dati estratti.', 'color: #00e676; font-weight: bold;');
+
+        setData({
+          greetings: featuredPlaylists ? featuredPlaylists.slice(0,6) : [],
+          userPlaylists: playlists || [],
+          recentlyPlayed: recentTracks,
+          topMixes: topMixes,
         });
 
       } catch (error: any) {
-        console.error('Failed to load content in ContentArea:', error);
+        console.error('%c[ERRORE] Qualcosa è andato storto nel blocco try-catch:', 'color: red; font-weight: bold;', error);
         setError("Impossibile caricare il contenuto.");
       } finally {
         setLoading(false);
