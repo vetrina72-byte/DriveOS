@@ -6,7 +6,19 @@ import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
 import ContentArea from './ContentArea';
 import { SpotifyItem } from './PlaylistItem';
-import PlaylistDetailView, { ItemType } from './PlaylistDetailView';
+import PlaylistDetailView from './PlaylistDetailView';
+import ArtistListView from './ArtistListView';
+import PlaylistListView from './PlaylistListView';
+import ArtistDetailView from './ArtistDetailView';
+import SearchResultsView from './SearchResultsView';
+
+export type ViewType = 'home' | 'playlists' | 'artists' | 'search' | 'playlist' | 'album' | 'artist';
+
+export interface ViewState {
+  type: ViewType;
+  id?: string;
+  query?: string;
+}
 
 export default function SpotifyApp({ 
     isOpen, 
@@ -26,32 +38,51 @@ export default function SpotifyApp({
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
     
-    const [view, setView] = useState<{ type: 'home' | ItemType; id: string | null }>({ type: 'home', id: null });
+    const [view, setView] = useState<ViewState>({ type: 'home' });
+    const [viewHistory, setViewHistory] = useState<ViewState[]>([]);
 
     const openingBoxSpeed = 4.5;
     const closingBoxSpeed = 8.6;
 
     useEffect(() => {
-        // When the panel is closed, reset the view to home
         if (!isOpen) {
             const timer = setTimeout(() => {
-                setView({ type: 'home', id: null });
-            }, 500); // Delay should match the closing animation
+                setView({ type: 'home' });
+                setViewHistory([]);
+            }, 500); 
             return () => clearTimeout(timer);
         }
     }, [isOpen]);
 
+    const changeView = (newView: ViewState) => {
+        setViewHistory(prev => [...prev, view]);
+        setView(newView);
+    };
+
+    const handleNavigate = (type: ViewType) => {
+        changeView({ type });
+    };
+
+    const handleSearch = (query: string) => {
+        changeView({ type: 'search', query });
+    };
+
     const handleSelectItem = (item: SpotifyItem) => {
-        if (item.type === 'playlist' || item.type === 'album') {
-            setView({ type: item.type, id: item.id });
+        if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist') {
+            changeView({ type: item.type, id: item.id });
         } else if (item.type === 'track') {
-            // Play a single track without context
-            play(undefined, { trackUri: item.uri });
+            play({ uris: [item.uri] });
         }
     };
 
     const handleBack = () => {
-        setView({ type: 'home', id: null });
+        const lastView = viewHistory[viewHistory.length - 1];
+        if (lastView) {
+            setView(lastView);
+            setViewHistory(prev => prev.slice(0, -1));
+        } else {
+            setView({ type: 'home' });
+        }
     };
 
     useEffect(() => {
@@ -93,15 +124,32 @@ export default function SpotifyApp({
         }
 
         if (isAuthenticated && user) {
+            const isDetailView = ['playlist', 'album', 'artist'].includes(view.type);
             return (
                 <div className="flex flex-col w-full h-full">
-                    <TopNavBar isNight={isNight} onBack={handleBack} showBackButton={view.type !== 'home'} />
-                     {view.type === 'home' ? (
-                        <ContentArea isNight={isNight} onSelectItem={handleSelectItem} />
-                    ) : (
+                    <TopNavBar 
+                        isNight={isNight} 
+                        activeView={view.type} 
+                        onNavigate={handleNavigate}
+                        onSearch={handleSearch}
+                        onBack={handleBack} 
+                        showBackButton={isDetailView} 
+                    />
+                    {view.type === 'home' && <ContentArea isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'playlists' && <PlaylistListView isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'artists' && <ArtistListView isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={play} />}
+                    {(view.type === 'playlist' || view.type === 'album') && (
                         <PlaylistDetailView
                             itemId={view.id!}
                             itemType={view.type}
+                            isNight={isNight}
+                            onPlay={play}
+                        />
+                    )}
+                    {view.type === 'artist' && (
+                        <ArtistDetailView
+                            artistId={view.id!}
                             isNight={isNight}
                             onPlay={play}
                         />

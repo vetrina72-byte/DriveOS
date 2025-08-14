@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { FiMusic } from 'react-icons/fi';
 
@@ -6,10 +5,12 @@ export interface SpotifyItem {
   id: string;
   name: string;
   uri: string;
-  images: { url: string }[];
+  images?: { url: string }[];
   artists?: { name: string }[];
   description?: string;
-  type: 'playlist' | 'album' | 'track';
+  type: 'playlist' | 'album' | 'track' | 'artist';
+  album?: { name: string; images: { url: string }[] };
+  explicit?: boolean;
 }
 
 const PlaylistItem = ({ item, isNight, onSelectItem }: { item: SpotifyItem, isNight: boolean, onSelectItem: (item: SpotifyItem) => void }) => {

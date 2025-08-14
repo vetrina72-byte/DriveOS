@@ -19,11 +19,20 @@ interface AuthState {
     error: string | null;
 }
 
+interface PlayOptions {
+    uris?: string[];
+    context_uri?: string;
+    offset?: {
+        position?: number;
+        uri?: string;
+    };
+}
+
 interface AuthContextType extends AuthState {
     login: (authCode?: string | null, error?: string) => Promise<void>;
     logout: () => void;
     clearError: () => void;
-    play: (contextUri?: string, options?: { trackUri?: string }) => void;
+    play: (options: PlayOptions) => void;
     setDeviceId: (id: string | null) => void;
 }
 
@@ -51,7 +60,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setState(s => ({...s, isLoading: false}));
     }, []);
     
-    // Set up the interceptors when the provider mounts, passing the logout function.
     useEffect(() => {
         setupInterceptors(logout);
     }, [logout]);
@@ -123,7 +131,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (err: any) {
             console.error('Login process failed:', err);
             const errorMessage = err.response?.data?.details?.error_description || 'Failed to complete login.';
-            logout(); // Ensure we are logged out on failure
+            logout(); 
             setState(s => ({...s, error: errorMessage, isLoading: false}));
         }
     }, [fetchUserInfo, logout]);
@@ -132,7 +140,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setDeviceIdState(id);
     };
 
-    const play = useCallback(async (contextUri?: string, options?: { trackUri?: string }) => {
+    const play = useCallback(async (options: PlayOptions) => {
         if (!deviceId) {
             console.error("Cannot play: No active Spotify device ID.");
             return;
@@ -140,15 +148,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const body: { context_uri?: string; uris?: string[]; offset?: any; } = {};
 
-            if (contextUri) {
-                body.context_uri = contextUri;
-                if (options?.trackUri) {
-                    body.offset = { uri: options.trackUri };
+            if (options.context_uri) {
+                body.context_uri = options.context_uri;
+                if (options.offset) {
+                    body.offset = options.offset;
                 }
-            } else if (options?.trackUri) {
-                body.uris = [options.trackUri];
+            } else if (options.uris) {
+                body.uris = options.uris;
+                if (options.offset) {
+                    body.offset = options.offset;
+                }
             } else {
-                console.error("Play function called without context or track URI.");
+                console.error("Play function called without context_uri or uris.");
                 return;
             }
 

@@ -12,6 +12,7 @@ interface Track {
     artists: { name: string }[];
     duration_ms: number;
     uri: string;
+    album?: { name: string };
     track_number?: number;
 }
 
@@ -29,7 +30,7 @@ interface PlaylistDetailViewProps {
     itemId: string;
     itemType: ItemType;
     isNight: boolean;
-    onPlay: (contextUri?: string, options?: { trackUri?: string }) => void;
+    onPlay: (options: { context_uri?: string, uris?: string[], offset?: any }) => void;
 }
 
 const formatDuration = (ms: number) => {
@@ -63,7 +64,6 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     }, [itemId, itemType]);
     
     const theme = {
-        bg: isNight ? 'bg-[#181818]' : 'bg-gray-100',
         textPrimary: isNight ? 'text-white' : 'text-zinc-800',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
@@ -78,9 +78,10 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
         return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Details not found.'}</div>;
     }
 
-    const tracks = itemType === 'playlist' 
+    const tracks: Track[] = (itemType === 'playlist' 
         ? (details as PlaylistDetails).tracks.items.map(item => item.track).filter(Boolean)
-        : (details as AlbumDetails).tracks.items;
+        : (details as AlbumDetails).tracks.items
+    ).filter(track => track && track.id); // Filter out null or invalid tracks
 
     const subText = itemType === 'album' 
         ? `${(details as AlbumDetails).artists?.[0].name} • ${new Date((details as AlbumDetails).release_date).getFullYear()}`
@@ -89,7 +90,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6">
             {/* Header */}
-            <div className="flex items-end gap-6 mb-6 pt-4">
+            <header className="flex items-end gap-6 mb-6 pt-4">
                 {details.images?.[0]?.url ? (
                     <img src={details.images[0].url} alt={details.name} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
                 ) : (
@@ -100,12 +101,12 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                 <div className="flex flex-col gap-3">
                     <span className="text-sm font-bold uppercase">{itemType}</span>
                     <h1 className="text-5xl font-bold tracking-tight">{details.name}</h1>
-                    <p className={`text-sm ${theme.textSecondary}`} dangerouslySetInnerHTML={{ __html: subText || '' }}></p>
-                    <button onClick={() => onPlay(details.uri)} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+                    {subText && <p className={`text-sm ${theme.textSecondary}`} dangerouslySetInnerHTML={{ __html: subText }}></p>}
+                    <button onClick={() => onPlay({ context_uri: details.uri })} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                         <FiPlay className="w-7 h-7 ml-1" />
                     </button>
                 </div>
-            </div>
+            </header>
 
             {/* Track List Header */}
             <div className={`grid grid-cols-[3rem_1fr_1fr_5rem] gap-4 px-4 py-2 border-b ${theme.border} text-sm font-medium ${theme.textSecondary}`}>
@@ -119,8 +120,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             <div className="mt-2">
                 {tracks.map((track, index) => (
                     <div 
-                        key={track.id + index}
-                        onClick={() => onPlay(details.uri, { trackUri: track.uri })}
+                        key={`${track.id}-${index}`}
+                        onClick={() => onPlay({ context_uri: details.uri, offset: { uri: track.uri } })}
                         className={`grid grid-cols-[3rem_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                     >
                         <div className={`text-center ${theme.textSecondary}`}>{index + 1}</div>
@@ -129,7 +130,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                             <span className={`text-sm ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
                         </div>
                         <div className={`text-sm truncate ${theme.textSecondary}`}>
-                            {itemType === 'playlist' ? (track as any).album.name : details.name}
+                            {track.album ? track.album.name : details.name}
                         </div>
                         <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
                     </div>
