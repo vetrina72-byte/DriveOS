@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiMic } from 'react-icons/fi';
 
 interface Show {
     id: string;
@@ -72,6 +71,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
         border: isNight ? 'border-white/10' : 'border-black/10',
+        placeholderBg: isNight ? 'bg-zinc-800' : 'bg-zinc-300',
+        placeholderIcon: isNight ? 'text-zinc-500' : 'text-zinc-600',
     };
 
     if (loading) {
@@ -85,7 +86,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     const sanitizedShowDescription = show.description.replace(/<[^>]*>?/gm, '');
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6">
+        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             {/* Header */}
             <header className="flex items-end gap-6 mb-6 pt-4">
                 <img src={show.images[0].url} alt={show.name} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
@@ -109,7 +110,13 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                         onClick={() => onPlay({ uris: [episode.uri] })}
                         className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                     >
-                        <img src={episode.images[0].url} alt={episode.name} className="w-16 h-16 rounded object-cover"/>
+                        {episode.images?.[0]?.url ? (
+                            <img src={episode.images[0].url} alt={episode.name} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
+                        ) : (
+                            <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
+                                <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
+                            </div>
+                        )}
                         <div className="flex flex-col overflow-hidden">
                             <span className={`font-medium truncate ${theme.textPrimary}`}>{episode.name}</span>
                             <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description.replace(/<[^>]*>?/gm, '')}</span>

@@ -23,7 +23,18 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     const [position, setPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
+    const seekTimeoutRef = useRef<number | null>(null);
+
+    // This effect syncs the local position with the official state from Spotify,
+    // but only when the user is not actively dragging the seek bar.
+    useEffect(() => {
+        if (!isSeeking) {
+            setPosition(state.position);
+        }
+    }, [state.position, isSeeking]);
     
+    // This effect creates a timer to smoothly advance the progress bar locally,
+    // making the UI feel more responsive than waiting for the `player_state_changed` event.
     useEffect(() => {
         let interval: number | undefined;
         if (!state.paused && !isSeeking) {
@@ -36,26 +47,23 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
         };
     }, [state.paused, state.duration, isSeeking]);
 
-
-    useEffect(() => {
-        if (!isSeeking) {
-            setPosition(state.position);
-        }
-    }, [state.position, isSeeking]);
-
-    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | MouseEvent) => {
         if (!progressRef.current || !player) return;
         
         const rect = progressRef.current.getBoundingClientRect();
-        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientX = 'touches' in e ? (e as any).touches[0].clientX : e.clientX;
         const newPosition = Math.max(0, Math.min(clientX - rect.left, rect.width));
         const percentage = newPosition / rect.width;
-        const seekTo = Math.round(state.duration * percentage);
+        const seekToMs = Math.round(state.duration * percentage);
         
-        setPosition(seekTo);
-        if (player) {
-           player.seek(seekTo);
-        }
+        setPosition(seekToMs);
+        
+        // Debounce the actual seek command to avoid spamming the API
+        if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+        seekTimeoutRef.current = window.setTimeout(() => {
+            player.seek(seekToMs);
+        }, 150);
+
     }, [player, state.duration]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -65,7 +73,7 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (isSeeking) {
-            handleSeek(e as any);
+            handleSeek(e);
         }
     }, [isSeeking, handleSeek]);
 
@@ -81,6 +89,7 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
+            if(seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
         };
     }, [handleMouseMove, handleMouseUp]);
     
@@ -227,7 +236,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             const nextTrack = queue[0];
 
             const iconColor = isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black';
-            const activeIconColor = isNight ? 'text-white' : 'text-black';
+            const activeIconColor = isNight ? 'text-green-400' : 'text-green-600';
 
             return (
                 <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-2 relative">
@@ -273,7 +282,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
                     {/* Queue Popover */}
                     {showQueue && (
-                        <div className={`absolute bottom-full mb-3 right-0 w-64 p-3 rounded-lg shadow-2xl ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'}`}>
+                        <div className={`absolute bottom-full mb-3 right-0 w-64 p-3 rounded-lg shadow-2xl ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}>
                             <p className={`text-xs font-bold mb-2 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>Prossima in coda</p>
                             {nextTrack ? (
                                 <div className="flex items-center gap-3">

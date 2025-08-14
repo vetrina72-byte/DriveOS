@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
@@ -93,6 +91,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
         border: isNight ? 'border-white/10' : 'border-black/10',
+        placeholderBg: isNight ? 'bg-zinc-800' : 'bg-zinc-300',
+        placeholderIcon: isNight ? 'text-zinc-500' : 'text-zinc-600',
     };
 
     const handlePlay = () => {
@@ -130,14 +130,14 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             {/* Header */}
             <header className="flex items-end gap-6 mb-6 pt-4">
                  {isLikedSongs ? (
-                     <div className="w-48 h-48 rounded-md bg-gradient-to-br from-indigo-800 to-purple-800 flex items-center justify-center shadow-2xl">
+                     <div className="w-48 h-48 rounded-md bg-gradient-to-br from-indigo-800 to-purple-800 flex items-center justify-center shadow-2xl flex-shrink-0">
                         <FiHeart className="w-24 h-24 text-white/90" />
                      </div>
                  ) : details.images?.[0]?.url ? (
-                    <img src={details.images[0].url} alt={details.name} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
+                    <img src={details.images[0].url} alt={details.name} className="w-48 h-48 rounded-md object-cover shadow-2xl flex-shrink-0" />
                 ) : (
-                    <div className="w-48 h-48 rounded-md bg-zinc-800 flex items-center justify-center shadow-2xl">
-                        <FiMusic className="w-24 h-24 text-zinc-500" />
+                    <div className={`w-48 h-48 rounded-md flex items-center justify-center shadow-2xl flex-shrink-0 ${theme.placeholderBg}`}>
+                        <FiMusic className={`w-24 h-24 ${theme.placeholderIcon}`} />
                     </div>
                 )}
                 <div className="flex flex-col gap-3">
@@ -151,8 +151,9 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             </header>
 
             {/* Track List Header */}
-            <div className={`grid grid-cols-[3rem_1fr_1fr_5rem] gap-4 px-4 py-2 border-b ${theme.border} text-sm font-medium ${theme.textSecondary}`}>
+            <div className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 px-4 py-2 border-b ${theme.border} text-sm font-medium ${theme.textSecondary}`}>
                 <div className="text-center">#</div>
+                <div/>
                 <div>Titolo</div>
                 <div>Album</div>
                 <div className="text-right"><FiClock /></div>
@@ -164,12 +165,21 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     <div 
                         key={`${track.id}-${index}`}
                         onClick={() => handleTrackPlay(track.uri, index)}
-                        className={`grid grid-cols-[3rem_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                        className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                     >
                         <div className={`text-center ${theme.textSecondary}`}>{index + 1}</div>
-                        <div className="flex flex-col">
-                            <span className={theme.textPrimary}>{track.name}</span>
-                            <span className={`text-sm ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
+                        <div>
+                             {track.album?.images?.[0]?.url ? (
+                                <img src={track.album.images[0].url} alt={track.album.name} className="w-10 h-10 rounded object-cover" />
+                            ) : (
+                                <div className={`w-10 h-10 rounded flex items-center justify-center ${theme.placeholderBg}`}>
+                                    <FiMusic className={theme.placeholderIcon} />
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className={`truncate ${theme.textPrimary}`}>{track.name}</span>
+                            <span className={`text-sm truncate ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
                         </div>
                         <div className={`text-sm truncate ${theme.textSecondary}`}>
                             {track.album ? track.album.name : details.name}
