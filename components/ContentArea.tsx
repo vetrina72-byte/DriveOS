@@ -7,24 +7,25 @@ import { SpotifyItem } from './PlaylistItem';
 import apiClient from '../api';
 
 interface FetchedData {
+  greetings: SpotifyItem[];
   userPlaylists: SpotifyItem[];
   recentlyPlayed: SpotifyItem[];
-  savedAlbums: SpotifyItem[];
+  topMixes: SpotifyItem[];
 }
 
-const ContentArea = ({ isNight }: { isNight: boolean }) => {
-  const { play, isAuthenticated } = useAuth();
+const ContentArea = ({ isNight, onItemSelect, activeCategory }: { isNight: boolean, onItemSelect: (item: SpotifyItem) => void, activeCategory: string }) => {
+  const { isAuthenticated } = useAuth();
 
   const [data, setData] = useState<FetchedData>({
+    greetings: [],
     userPlaylists: [],
     recentlyPlayed: [],
-    savedAlbums: [],
+    topMixes: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Only fetch data if the user is authenticated.
     if (!isAuthenticated) {
       setLoading(false);
       return;
@@ -35,37 +36,50 @@ const ContentArea = ({ isNight }: { isNight: boolean }) => {
       setError(null);
       
       try {
-        const results = await Promise.all([
+        const [playlistsRes, recentRes, featuredPlaylistsRes, recommendationsRes] = await Promise.all([
           apiClient.get('/me/playlists?limit=10'),
           apiClient.get('/me/player/recently-played?limit=10'),
-          apiClient.get('/me/albums?limit=10'),
+          apiClient.get('/browse/featured-playlists?limit=10&country=IT'),
+          apiClient.get('/recommendations?limit=10&seed_genres=pop,rock,electronic'),
         ]);
 
-        const playlists = results[0].data.items;
-        const recentTracks = results[1].data.items.map((item: any) => ({
+        const playlists = playlistsRes.data.items;
+        const recentTracks = recentRes.data.items.map((item: any) => ({
             ...item.track,
+            type: 'track',
             images: item.track.album.images,
         }));
-        const savedAlbums = results[2].data.items.map((item: any) => item.album);
         
         setData({
+          greetings: featuredPlaylistsRes.data.playlists.items.slice(0,6),
           userPlaylists: playlists,
           recentlyPlayed: recentTracks,
-          savedAlbums: savedAlbums,
+          topMixes: recommendationsRes.data.tracks.map((track:any) => ({
+            ...track,
+            type: 'track',
+            images: track.album.images
+          })),
         });
 
       } catch (error: any) {
         console.error('Failed to load content in ContentArea:', error);
-        setError("Could not load content.");
+        setError("Impossibile caricare il contenuto.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [isAuthenticated]); // Rerunning the effect when authentication state changes.
+  }, [isAuthenticated, activeCategory]);
 
   const themeColor = isNight ? 'text-zinc-300' : 'text-zinc-600';
+  
+  const getGreeting = () => {
+      const hour = new Date().getHours();
+      if (hour < 12) return "Buongiorno";
+      if (hour < 18) return "Buon pomeriggio";
+      return "Buonasera";
+  }
 
   if (loading) {
     return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${themeColor}`} /></div>;
@@ -76,10 +90,11 @@ const ContentArea = ({ isNight }: { isNight: boolean }) => {
   }
 
   return (
-    <div className="flex-grow overflow-y-auto carousel-scrollbar-hidden pb-6">
-      <ContentCarousel title="Le Tue Playlist" items={data.userPlaylists} isNight={isNight} onPlay={play} />
-      <ContentCarousel title="Ascoltati di Recente" items={data.recentlyPlayed} isNight={isNight} onPlay={play} />
-      <ContentCarousel title="I Tuoi Album Salvati" items={data.savedAlbums} isNight={isNight} onPlay={play} />
+    <div className="flex-grow overflow-y-auto w-full">
+      <ContentCarousel title={getGreeting()} items={data.greetings} isNight={isNight} onItemSelect={onItemSelect} />
+      <ContentCarousel title="Ritorna in" items={data.recentlyPlayed} isNight={isNight} onItemSelect={onItemSelect} />
+      <ContentCarousel title="I tuoi mix preferiti" items={data.topMixes} isNight={isNight} onItemSelect={onItemSelect} />
+      <ContentCarousel title="Le Tue Playlist" items={data.userPlaylists} isNight={isNight} onItemSelect={onItemSelect} />
     </div>
   );
 };

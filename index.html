@@ -179,27 +179,18 @@
       animation: fade-in 0.5s ease-out forwards;
     }
     
-    /* Custom Spotify Carousel Scrollbar */
+    /* Custom Spotify Carousel Scrollbar (now hidden) */
     .spotify-carousel {
       display: flex;
-      overflow-x: scroll;
+      overflow-x: auto; /* Changed to auto to allow scrolling */
       padding-bottom: 20px;
-      scrollbar-width: thin;
-      scrollbar-color: #535353 #121212;
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
     }
     .spotify-carousel::-webkit-scrollbar {
-      height: 8px;
+      display: none; /* Chrome, Safari, and Opera */
     }
-    .spotify-carousel::-webkit-scrollbar-track {
-      background: #121212;
-    }
-    .spotify-carousel::-webkit-scrollbar-thumb {
-      background: #535353;
-      border-radius: 4px;
-    }
-    .spotify-carousel::-webkit-scrollbar-thumb:hover {
-      background: #6b6b6b;
-    }
+
 
     /* Music Player Styles */
     .music-player {

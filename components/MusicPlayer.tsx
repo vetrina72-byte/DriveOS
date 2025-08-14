@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -140,8 +141,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     }, [isAnyAppOpen, isPlayerActive, dockedConfig, floatingConfig]);
 
     const themeClasses = isNight 
-        ? 'bg-zinc-800/95 text-white border-zinc-700' 
-        : 'bg-gray-100/95 text-black border-zinc-300';
+        ? 'bg-[#282828]/95 text-white border-zinc-700' 
+        : 'bg-white/95 text-black border-zinc-200';
     const iconColor = isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black';
     
     const renderPlayerContent = () => {
