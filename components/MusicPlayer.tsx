@@ -1,8 +1,10 @@
+
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiSearch, FiLoader
+    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiSearch
 } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 import { 
@@ -10,7 +12,7 @@ import {
 } from 'react-icons/pi';
 import { IoMdAddCircleOutline } from 'react-icons/io';
 import { HiOutlineQueueList } from 'react-icons/hi2';
-import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
+import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
@@ -25,54 +27,35 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     const progressRef = useRef<HTMLDivElement>(null);
     const frameRef = useRef<number | null>(null);
 
-    // This effect syncs the local position state with the state from Spotify,
-    // but only when the user is not actively dragging the seek bar.
+    useEffect(() => {
+        if (!state.paused) {
+            const animate = () => {
+                setPosition(p => p + 100);
+                frameRef.current = requestAnimationFrame(animate);
+            };
+            frameRef.current = requestAnimationFrame(animate);
+            return () => {
+                if (frameRef.current) cancelAnimationFrame(frameRef.current);
+            };
+        }
+    }, [state.paused]);
+
     useEffect(() => {
         if (!isSeeking) {
             setPosition(state.position);
         }
     }, [state.position, isSeeking]);
 
-    // This effect handles the smooth animation of the progress bar during playback.
-    useEffect(() => {
-        if (state.paused || isSeeking) {
-            if (frameRef.current) cancelAnimationFrame(frameRef.current);
-            return;
-        }
-
-        let animationStartTime = performance.now();
-        let animationStartPosition = position;
-
-        const animate = (now: number) => {
-            const elapsed = now - animationStartTime;
-            const newPosition = animationStartPosition + elapsed;
-            
-            if (newPosition < state.duration) {
-                setPosition(newPosition);
-                frameRef.current = requestAnimationFrame(animate);
-            } else {
-                setPosition(state.duration);
-            }
-        };
-
-        frameRef.current = requestAnimationFrame(animate);
-
-        return () => {
-            if (frameRef.current) cancelAnimationFrame(frameRef.current);
-        };
-    }, [state.paused, state.duration, isSeeking, position]); // Re-start animation if playback state changes or position is reset externally
-
-
-    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement> | MouseEvent) => {
+    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player) return;
         
         const rect = progressRef.current.getBoundingClientRect();
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const clickPosition = Math.max(0, Math.min(clientX - rect.left, rect.width));
-        const percentage = clickPosition / rect.width;
+        const newPosition = Math.max(0, Math.min(clientX - rect.left, rect.width));
+        const percentage = newPosition / rect.width;
         const seekTo = Math.round(state.duration * percentage);
         
-        setPosition(seekTo); // Immediately update local position for responsiveness
+        setPosition(seekTo);
         player.seek(seekTo);
 
     }, [player, state.duration]);
@@ -84,7 +67,7 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (isSeeking) {
-            handleSeek(e);
+            handleSeek(e as any);
         }
     }, [isSeeking, handleSeek]);
 
@@ -128,8 +111,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const [isReady, setIsReady] = useState(false);
     const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
     const [showQueue, setShowQueue] = useState(false);
-    const [queue, setQueue] = useState<SpotifyTrack[] | null>(null);
-    const [queueLoading, setQueueLoading] = useState(false);
     
     const isPlayerActive = isAuthenticated && isReady && playerState && playerState.track_window.current_track;
 
@@ -199,24 +180,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
-
-    const handleToggleQueue = useCallback(async () => {
-        const willBeOpen = !showQueue;
-        setShowQueue(willBeOpen);
-    
-        if (willBeOpen) {
-            setQueueLoading(true);
-            try {
-                const { data } = await apiClient.get('/me/player/queue');
-                setQueue(data.queue);
-            } catch (error) {
-                console.error("Failed to fetch queue", error);
-                setQueue([]);
-            } finally {
-                setQueueLoading(false);
-            }
-        }
-    }, [showQueue]);
     
     const playerStyle = useMemo(() => {
         if (isAnyAppOpen) {
@@ -247,7 +210,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         if (isPlayerActive) {
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
-            const nextInQueue = queue?.[0];
+            const nextTrack = playerState.track_window.next_tracks[0];
 
             const iconColor = isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black';
             const activeIconColor = isNight ? 'text-white' : 'text-black';
@@ -289,7 +252,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                                 <FiSkipForward className="w-6 h-6" />
                             </button>
                              <button className={`transition ${iconColor}`}><IoMdAddCircleOutline className="w-6 h-6" /></button>
-                             <button onClick={handleToggleQueue} className={`transition ${iconColor}`}><HiOutlineQueueList className="w-6 h-6" /></button>
+                             <button onClick={() => setShowQueue(s => !s)} className={`transition ${iconColor}`}><HiOutlineQueueList className="w-6 h-6" /></button>
                              <button className={`transition ${iconColor}`}><FiSearch className="w-5 h-5" /></button>
                         </div>
                     </div>
@@ -298,16 +261,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                     {showQueue && (
                         <div className={`absolute bottom-full mb-3 right-0 w-64 p-3 rounded-lg shadow-2xl ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'}`}>
                             <p className={`text-xs font-bold mb-2 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>Prossima in coda</p>
-                            {queueLoading ? (
-                                <div className="flex justify-center items-center h-10">
-                                    <FiLoader className="animate-spin" />
-                                </div>
-                            ) : nextInQueue ? (
+                            {nextTrack ? (
                                 <div className="flex items-center gap-3">
-                                    <img src={nextInQueue.album.images[0].url} alt={nextInQueue.name} className="w-10 h-10 rounded-md" />
+                                    <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md" />
                                     <div>
-                                        <p className="font-semibold text-sm truncate">{nextInQueue.name}</p>
-                                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>{nextInQueue.artists.map((a: any) => a.name).join(', ')}</p>
+                                        <p className="font-semibold text-sm truncate">{nextTrack.name}</p>
+                                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
                                     </div>
                                 </div>
                             ) : (
