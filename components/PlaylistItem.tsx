@@ -18,6 +18,10 @@ export interface SpotifyItem {
       type: string;
       uri: string;
   };
+  owner?: {
+    display_name: string;
+    id: string;
+  };
 }
 
 const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: SpotifyItem, isNight: boolean, onSelectItem: (item: SpotifyItem) => void, contextInfo?: string }) => {
