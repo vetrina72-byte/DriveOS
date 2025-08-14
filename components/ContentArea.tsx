@@ -33,92 +33,147 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [recommendations, setRecommendations] = useState<SpotifyItem[]>([]);
   
   const fetchData = useCallback(async () => {
-      if (!user) return;
-      setLoading(true);
-      setError(null);
+    if (!user) return;
+    setLoading(true);
+    setError(null);
 
-      // Reset all states to prevent showing old data on re-fetch
-      setRecentlyPlayed([]);
-      setNewReleases([]);
-      setUserPlaylists([]);
-      setTopTracks([]);
-      setToplistsPlaylists([]);
-      setWorkoutPlaylists([]);
-      setPartyPlaylists([]);
-      setRelatedArtists({ artistName: '', items: [] });
-      setRecommendations([]);
+    // Reset all states to prevent showing old data on re-fetch
+    setRecentlyPlayed([]);
+    setNewReleases([]);
+    setUserPlaylists([]);
+    setTopTracks([]);
+    setToplistsPlaylists([]);
+    setWorkoutPlaylists([]);
+    setPartyPlaylists([]);
+    setRelatedArtists({ artistName: '', items: [] });
+    setRecommendations([]);
 
-      try {
-          // Fetch a curated set of data in parallel
-          const [
-              recentlyPlayedRes,
-              newReleasesRes,
-              topArtistsRes,
-              userPlaylistsRes,
-              topTracksRes,
-              toplistsPlaylistsRes,
-              workoutPlaylistsRes,
-              partyPlaylistsRes,
-          ] = await Promise.all([
-              apiClient.get('/me/player/recently-played?limit=10').catch(e => { console.warn('Could not fetch recently played', e); return null; }),
-              apiClient.get('/browse/new-releases?country=IT&limit=10').catch(e => { console.warn('Could not fetch new releases', e); return null; }),
-              apiClient.get('/me/top/artists?limit=1').catch(e => { console.warn('Could not fetch top artists', e); return null; }),
-              apiClient.get('/me/playlists?limit=20').catch(e => { console.warn('Could not fetch user playlists', e); return null; }),
-              apiClient.get('/me/top/tracks?limit=10&time_range=long_term').catch(e => { console.warn('Could not fetch top tracks', e); return null; }),
-              apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10').catch(e => { console.warn('Could not fetch toplists', e); return null; }),
-              apiClient.get('/browse/categories/workout/playlists?country=IT&limit=10').catch(e => { console.warn('Could not fetch workout playlists', e); return null; }),
-              apiClient.get('/browse/categories/party/playlists?country=IT&limit=10').catch(e => { console.warn('Could not fetch party playlists', e); return null; }),
-          ]);
+    try {
+        const promises = [
+            apiClient.get('/me/player/recently-played?limit=10'),
+            apiClient.get('/browse/new-releases?country=IT&limit=10'),
+            apiClient.get('/me/top/artists?limit=1'),
+            apiClient.get('/me/playlists?limit=20'),
+            apiClient.get('/me/top/tracks?limit=10&time_range=long_term'),
+            apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'),
+            apiClient.get('/browse/categories/workout/playlists?country=IT&limit=10'),
+            apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'),
+        ];
 
-          // Populate states with fetched data, checking if the response is not null
-          if (recentlyPlayedRes) setRecentlyPlayed(recentlyPlayedRes.data.items.map((item: any) => item.track).filter(Boolean));
-          if (newReleasesRes) setNewReleases(newReleasesRes.data.albums.items);
-          if (userPlaylistsRes) setUserPlaylists(userPlaylistsRes.data.items);
-          if (topTracksRes) setTopTracks(topTracksRes.data.items);
-          if (toplistsPlaylistsRes) setToplistsPlaylists(toplistsPlaylistsRes.data.playlists.items);
-          if (workoutPlaylistsRes) setWorkoutPlaylists(workoutPlaylistsRes.data.playlists.items);
-          if (partyPlaylistsRes) setPartyPlaylists(partyPlaylistsRes.data.playlists.items);
+        const results = await Promise.allSettled(promises);
 
-          // --- Dependent API Calls ---
+        const [
+            recentlyPlayedRes,
+            newReleasesRes,
+            topArtistsRes,
+            userPlaylistsRes,
+            topTracksRes,
+            toplistsPlaylistsRes,
+            workoutPlaylistsRes,
+            partyPlaylistsRes,
+        ] = results;
 
-          // 1. Fetch related artists based on the user's top artist
-          const topArtist = topArtistsRes?.data?.items?.[0];
-          if (topArtist) {
-              const relatedArtistsRes = await apiClient.get(`/artists/${topArtist.id}/related-artists`);
-              setRelatedArtists({
-                  artistName: topArtist.name,
-                  items: relatedArtistsRes.data.artists,
-              });
-          }
+        // Process results safely
+        if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data) {
+            setRecentlyPlayed(recentlyPlayedRes.value.data.items.map((item: any) => item.track).filter(Boolean));
+        } else {
+            console.warn('Failed to fetch recently played:', recentlyPlayedRes.status === 'rejected' && recentlyPlayedRes.reason);
+            setRecentlyPlayed([]);
+        }
 
-          // 2. Fetch recommendations based on recently played tracks
-          const recentTrackIds = recentlyPlayedRes?.data?.items
-              .map((item: any) => item.track?.id)
-              .filter(Boolean)
-              .slice(0, 2); // Use first 2 tracks as seed
-          
-          if (recentTrackIds && recentTrackIds.length > 0) {
-              const recommendationsRes = await apiClient.get(`/recommendations?seed_tracks=${recentTrackIds.join(',')}&limit=10`);
-              setRecommendations(recommendationsRes.data.tracks);
-          }
+        if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data) {
+            setNewReleases(newReleasesRes.value.data.albums.items);
+        } else {
+            console.warn('Failed to fetch new releases:', newReleasesRes.status === 'rejected' && newReleasesRes.reason);
+            setNewReleases([]);
+        }
 
-      } catch (err: any) {
-          console.error("Errore critico durante il caricamento della Home:", err);
-          setError("Impossibile caricare i contenuti. Riprova più tardi.");
-          // Set all states to empty arrays in the catch block to prevent crashes
-          setRecentlyPlayed([]);
-          setNewReleases([]);
-          setUserPlaylists([]);
-          setTopTracks([]);
-          setToplistsPlaylists([]);
-          setWorkoutPlaylists([]);
-          setPartyPlaylists([]);
-          setRelatedArtists({ artistName: '', items: [] });
-          setRecommendations([]);
-      } finally {
-          setLoading(false);
-      }
-  }, [user]);
+        if (userPlaylistsRes.status === 'fulfilled' && userPlaylistsRes.value.data) {
+            setUserPlaylists(userPlaylistsRes.value.data.items);
+        } else {
+            console.warn('Failed to fetch user playlists:', userPlaylistsRes.status === 'rejected' && userPlaylistsRes.reason);
+            setUserPlaylists([]);
+        }
+        
+        if (topTracksRes.status === 'fulfilled' && topTracksRes.value.data) {
+            setTopTracks(topTracksRes.value.data.items);
+        } else {
+            console.warn('Failed to fetch top tracks:', topTracksRes.status === 'rejected' && topTracksRes.reason);
+            setTopTracks([]);
+        }
+
+        if (toplistsPlaylistsRes.status === 'fulfilled' && toplistsPlaylistsRes.value.data) {
+            setToplistsPlaylists(toplistsPlaylistsRes.value.data.playlists.items);
+        } else {
+            console.warn('Failed to fetch toplists:', toplistsPlaylistsRes.status === 'rejected' && toplistsPlaylistsRes.reason);
+            setToplistsPlaylists([]);
+        }
+
+        if (workoutPlaylistsRes.status === 'fulfilled' && workoutPlaylistsRes.value.data) {
+            setWorkoutPlaylists(workoutPlaylistsRes.value.data.playlists.items);
+        } else {
+            console.warn('Failed to fetch workout playlists:', workoutPlaylistsRes.status === 'rejected' && workoutPlaylistsRes.reason);
+            setWorkoutPlaylists([]);
+        }
+
+        if (partyPlaylistsRes.status === 'fulfilled' && partyPlaylistsRes.value.data) {
+            setPartyPlaylists(partyPlaylistsRes.value.data.playlists.items);
+        } else {
+            console.warn('Failed to fetch party playlists:', partyPlaylistsRes.status === 'rejected' && partyPlaylistsRes.reason);
+            setPartyPlaylists([]);
+        }
+
+        // --- Dependent API Calls ---
+
+        // 1. Fetch related artists based on the user's top artist
+        if (topArtistsRes.status === 'fulfilled' && topArtistsRes.value.data) {
+            const topArtist = topArtistsRes.value.data?.items?.[0];
+            if (topArtist) {
+                try {
+                    const relatedArtistsRes = await apiClient.get(`/artists/${topArtist.id}/related-artists`);
+                    setRelatedArtists({
+                        artistName: topArtist.name,
+                        items: relatedArtistsRes.data.artists,
+                    });
+                } catch (e) {
+                    console.warn('Failed to fetch related artists', e);
+                    setRelatedArtists({ artistName: '', items: [] });
+                }
+            }
+        } else {
+             console.warn('Could not get top artist to find related artists:', topArtistsRes.status === 'rejected' && topArtistsRes.reason);
+             setRelatedArtists({ artistName: '', items: [] });
+        }
+
+
+        // 2. Fetch recommendations based on recently played tracks
+        if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data) {
+            const recentTrackIds = recentlyPlayedRes.value.data.items
+                .map((item: any) => item.track?.id)
+                .filter(Boolean)
+                .slice(0, 2);
+            
+            if (recentTrackIds && recentTrackIds.length > 0) {
+                try {
+                    const recommendationsRes = await apiClient.get(`/recommendations?seed_tracks=${recentTrackIds.join(',')}&limit=10`);
+                    setRecommendations(recommendationsRes.data.tracks);
+                } catch (e) {
+                    console.warn('Failed to fetch recommendations', e);
+                    setRecommendations([]);
+                }
+            }
+        } else {
+            setRecommendations([]);
+        }
+
+    } catch (err: any) {
+        // This catch block will now only catch truly critical errors, not individual API failures.
+        console.error("Errore critico non gestito durante il caricamento della Home:", err);
+        setError("Impossibile caricare i contenuti. Riprova più tardi.");
+    } finally {
+        setLoading(false);
+    }
+}, [user]);
 
   useEffect(() => {
       if (user && startFetching) {
