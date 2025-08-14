@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
@@ -14,18 +15,16 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
             setLoading(true);
             setError(null);
             try {
-                // Fetch a large list of categories available in Italy
                 const response = await apiClient.get('/browse/categories', {
                     params: {
                         country: 'IT',
                         limit: 50,
                     }
                 });
-                // Map the response to our SpotifyItem structure
                 const mappedCategories = response.data.categories.items.map((cat: any) => ({
                     id: cat.id,
                     name: cat.name,
-                    uri: cat.href, // Not a playable URI, but good for reference
+                    uri: cat.href,
                     images: cat.icons,
                     type: 'category',
                 }));
@@ -59,8 +58,7 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
                         key={`genre-${category.id}-${index}`} 
                         item={{...category, description: 'Genere'}} 
                         isNight={isNight} 
-                        // Currently, clicking a category does nothing. This can be extended later.
-                        onSelectItem={() => { console.log('Category selected:', category.name); }}
+                        onSelectItem={onSelectItem}
                      />
                 ))}
             </div>

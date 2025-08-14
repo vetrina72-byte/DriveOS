@@ -16,6 +16,7 @@ interface PlayHistoryObject {
 
 const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (options: { uris?: string[] }) => void }) => {
     const [history, setHistory] = useState<PlayHistoryObject[]>([]);
+    const [contextDetails, setContextDetails] = useState<Map<string, any>>(new Map());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -25,8 +26,33 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
             setError(null);
             try {
                 const response = await apiClient.get('/me/player/recently-played?limit=50');
-                // Filter out any items that might not have a track object
-                setHistory(response.data.items.filter((item: any) => item.track));
+                const validHistory = response.data.items.filter((item: any) => item.track);
+                setHistory(validHistory);
+
+                // Fetch context details
+                const contextUris = [...new Set(
+                    validHistory
+                        .map((item: PlayHistoryObject) => item.context?.uri)
+                        .filter(Boolean)
+                )] as string[];
+
+                const contextPromises = contextUris.map(uri => {
+                    const [,,, type, id] = uri.split(':');
+                    if (type === 'playlist' || type === 'album') {
+                        return apiClient.get(`/${type}s/${id}`).catch(() => null);
+                    }
+                    return Promise.resolve(null);
+                });
+
+                const contextResponses = await Promise.all(contextPromises);
+                const detailsMap = new Map();
+                contextResponses.forEach((res, index) => {
+                    if (res) {
+                        detailsMap.set(contextUris[index], res.data);
+                    }
+                });
+                setContextDetails(detailsMap);
+
             } catch (err) {
                 console.error('Failed to fetch recently played', err);
                 setError('Could not load your recently played tracks.');
@@ -56,7 +82,12 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
             <h2 className={`text-3xl font-bold mb-6 ${theme.textPrimary}`}>Ascoltati di recente</h2>
             <div className="flex flex-col">
                 {history.map(({ track, context }, index) => {
-                    const contextText = context?.type ? `Da ${context.type.charAt(0).toUpperCase() + context.type.slice(1)}` : track.artists?.map(a => a.name).join(', ');
+                    let contextText = track.artists?.map(a => a.name).join(', ');
+                    if (context && contextDetails.has(context.uri)) {
+                        const details = contextDetails.get(context.uri);
+                        const typeText = context.type.charAt(0).toUpperCase() + context.type.slice(1);
+                        contextText = `Da ${typeText}: ${details.name}`;
+                    }
 
                     return (
                         <div 

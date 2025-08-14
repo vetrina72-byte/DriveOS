@@ -17,6 +17,7 @@ import PodcastGridView from './PodcastGridView';
 import RecentlyPlayedView from './RecentlyPlayedView';
 import ShowDetailView from './ShowDetailView';
 import GenresView from './GenresView';
+import CategoryPlaylistsView from './CategoryPlaylistsView';
 
 
 export type ViewType = 
@@ -31,12 +32,14 @@ export type ViewType =
     | 'recently-played'
     | 'albums'
     | 'podcasts'
-    | 'genres';
+    | 'genres'
+    | 'categoryPlaylists';
 
 export interface ViewState {
   type: ViewType;
   id?: string;
   query?: string;
+  title?: string;
 }
 
 const SpotifyPlayer = ({ 
@@ -95,7 +98,6 @@ const SpotifyPlayer = ({
     };
 
     const handleSelectItem = (item: SpotifyItem) => {
-        // Special case for the static 'Liked Songs' playlist item
         if (item.id === 'liked-songs') {
              changeView({ type: 'playlist', id: 'liked-songs' });
              return;
@@ -103,6 +105,8 @@ const SpotifyPlayer = ({
         
         if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist' || item.type === 'show') {
             changeView({ type: item.type, id: item.id });
+        } else if (item.type === 'category') {
+            changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
         } else if (item.type === 'track') {
             play({ uris: [item.uri] });
         }
@@ -157,7 +161,7 @@ const SpotifyPlayer = ({
         }
 
         if (isAuthenticated && user) {
-            const isDetailView = ['playlist', 'album', 'artist', 'show'].includes(view.type);
+            const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists'].includes(view.type);
             return (
                 <div className="flex flex-col w-full h-full">
                     <TopNavBar 
@@ -176,6 +180,7 @@ const SpotifyPlayer = ({
                     {view.type === 'recently-played' && <RecentlyPlayedView isNight={isNight} onPlay={play} />}
                     {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={play} />}
                     {view.type === 'genres' && <GenresView isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'categoryPlaylists' && <CategoryPlaylistsView categoryId={view.id!} title={view.title!} isNight={isNight} onSelectItem={handleSelectItem} onBack={handleBack} />}
 
                     {(view.type === 'playlist' || view.type === 'album') && (
                         <PlaylistDetailView
