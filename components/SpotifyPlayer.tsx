@@ -1,7 +1,6 @@
 
 
 import React, { useState, useEffect, useRef } from 'react';
-import { FiX } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
@@ -108,7 +107,17 @@ const SpotifyPlayer = ({
         } else if (item.type === 'category') {
             changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
         } else if (item.type === 'track') {
-            play({ uris: [item.uri] });
+            if (item.context?.uri) {
+                // If the track has context (album/playlist), play the context starting from this track
+                play({
+                    context_uri: item.context.uri,
+                    offset: {
+                        uri: item.uri,
+                    },
+                });
+            } else {
+                 play({ uris: [item.uri] });
+            }
         }
     };
 
@@ -148,7 +157,6 @@ const SpotifyPlayer = ({
     }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
 
     const bgColor = isNight ? 'bg-[#121212]/95' : 'bg-gray-100/95';
-    const buttonBg = isNight ? 'bg-black/50 hover:bg-red-500/80' : 'bg-white/50 hover:bg-red-500/80';
 
     const renderContent = () => {
         if (error) {
@@ -161,7 +169,7 @@ const SpotifyPlayer = ({
         }
 
         if (isAuthenticated && user) {
-            const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists'].includes(view.type);
+            const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists', 'search'].includes(view.type);
             return (
                 <div className="flex flex-col w-full h-full">
                     <TopNavBar 
@@ -226,11 +234,7 @@ const SpotifyPlayer = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div className={`w-full h-full flex flex-col relative ${bgColor} backdrop-blur-lg`}>
-                <header className="absolute top-0 right-0 p-4 z-30">
-                    <button className={`p-2 rounded-full transition-colors ${buttonBg}`} onClick={onClose} aria-label="Close Spotify">
-                        <FiX className="h-5 w-5 text-white"/>
-                    </button>
-                </header>
+                {/* The close button has been removed from the header */}
                 <h1 id="spotify-app-title" className="sr-only">Spotify App</h1>
                 <div className="flex-grow flex justify-center items-center overflow-hidden">
                      {renderContent()}

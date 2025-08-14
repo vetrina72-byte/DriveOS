@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
 import { FiLoader } from 'react-icons/fi';
@@ -7,109 +7,94 @@ import apiClient from '../api';
 
 const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
   const { user } = useAuth();
-  const [myPlaylists, setMyPlaylists] = useState<SpotifyItem[]>([]);
-  const [recentlyPlayed, setRecentlyPlayed] = useState<SpotifyItem[]>([]);
-  const [topArtists, setTopArtists] = useState<SpotifyItem[]>([]);
-  const [topTracks, setTopTracks] = useState<SpotifyItem[]>([]);
+  const [recentlyPlayedContexts, setRecentlyPlayedContexts] = useState<SpotifyItem[]>([]);
   const [newReleases, setNewReleases] = useState<SpotifyItem[]>([]);
   const [featuredPlaylists, setFeaturedPlaylists] = useState<SpotifyItem[]>([]);
-  const [genreRecommendations, setGenreRecommendations] = useState<SpotifyItem[]>([]);
   const [artistRecommendations, setArtistRecommendations] = useState<SpotifyItem[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user || !startFetching) {
-      setLoading(!startFetching);
-      return;
-    }
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const topArtistsResponse = await apiClient.get('/me/top/artists?limit=10&time_range=short_term');
-        const artistsForSeed = topArtistsResponse.data.items;
-        setTopArtists(artistsForSeed);
-        
-        const artistSeed = artistsForSeed.slice(0, 2).map((a: SpotifyItem) => a.id).join(',');
-
-        const promises = [
-          apiClient.get('/me/playlists?limit=10'), // 0
-          apiClient.get('/me/player/recently-played?limit=10'), // 1
-          apiClient.get('/me/top/tracks?limit=10&time_range=medium_term'), // 2
-          apiClient.get('/browse/new-releases?country=IT&limit=10'), // 3
-          apiClient.get('/browse/featured-playlists?limit=10&country=IT'), // 4
-          apiClient.get('/recommendations?seed_genres=pop,rock,italian,indie&limit=10'), // 5
-        ];
-        
-        if (artistSeed) {
-          promises.push(apiClient.get(`/recommendations?seed_artists=${artistSeed}&limit=10`)); // 6
-        }
-
-        const results = await Promise.all(promises.map(p => p.catch(e => e)));
-        
+    try {
+        // --- Step 1: Parallel fetching of primary data ---
         const [
-            playlistsRes,
             recentRes,
-            topTracksRes,
+            featuredRes,
+            topArtistsRes,
             newReleasesRes,
-            featuredPlaylistsRes,
-            genreRecsRes,
-            artistRecsRes
-        ] = results;
+        ] = await Promise.all([
+            apiClient.get('/me/player/recently-played?limit=25'), // Fetch more to find unique contexts
+            apiClient.get('/browse/featured-playlists?country=IT&limit=10'),
+            apiClient.get('/me/top/artists?limit=5&time_range=short_term'),
+            apiClient.get('/browse/new-releases?country=IT&limit=10'),
+        ].map(p => p.catch(e => e))); // Prevent one failure from stopping all fetches
 
-        if (playlistsRes && !playlistsRes.isAxiosError) setMyPlaylists(playlistsRes.data.items);
-        
-        if (recentRes && !recentRes.isAxiosError) {
-          const processedRecents = recentRes.data.items.map((item: any) => {
-            if (!item.track) return null;
-            let contextText = `Dall'album: ${item.track.album.name}`;
-            if (item.context && item.context.type === 'playlist') {
-                // In a real app, we might fetch the playlist name here, but for speed we'll use a generic text.
-                contextText = 'Da una delle tue playlist';
-            }
-            return {
-              ...item.track,
-              images: item.track.album?.images,
-              description: contextText // Use description to show context
-            };
-          }).filter(Boolean);
-          setRecentlyPlayed(processedRecents);
-        }
-
-        if (topTracksRes && !topTracksRes.isAxiosError) {
-            const normalizedTracks = topTracksRes.data.items.map((track: any) => ({
-                ...track,
-                images: track.album?.images,
-            }));
-            setTopTracks(normalizedTracks);
-        }
-
+        // Process immediate results
+        if (featuredRes && !featuredRes.isAxiosError) setFeaturedPlaylists(featuredRes.data.playlists.items);
         if (newReleasesRes && !newReleasesRes.isAxiosError) setNewReleases(newReleasesRes.data.albums.items);
-        if (featuredPlaylistsRes && !featuredPlaylistsRes.isAxiosError) setFeaturedPlaylists(featuredPlaylistsRes.data.playlists.items);
-        if (genreRecsRes && !genreRecsRes.isAxiosError) setGenreRecommendations(genreRecsRes.data.tracks);
-        if (artistRecsRes && !artistRecsRes.isAxiosError) setArtistRecommendations(artistRecsRes.data.tracks);
 
-      } catch (err: any) {
+        // --- Step 2: Process "Ritorna ad ascoltare" logic ---
+        if (recentRes && !recentRes.isAxiosError) {
+            const uniqueContexts = new Map<string, SpotifyItem>();
+            recentRes.data.items.forEach((item: any) => {
+                if (item.context && (item.context.type === 'playlist' || item.context.type === 'album')) {
+                    if (!uniqueContexts.has(item.context.uri)) {
+                         // We need to fetch full details for these contexts later
+                        uniqueContexts.set(item.context.uri, {
+                            id: item.context.uri.split(':').pop(),
+                            type: item.context.type,
+                            uri: item.context.uri,
+                            name: '', // Will be fetched
+                        });
+                    }
+                }
+            });
+
+            const contextFetchPromises = Array.from(uniqueContexts.values()).map(ctx => 
+                apiClient.get(`/${ctx.type}s/${ctx.id}`).catch(() => null)
+            );
+            
+            const contextDetailsResponses = await Promise.all(contextFetchPromises);
+            const validContexts = contextDetailsResponses
+                .map(res => res?.data)
+                .filter(Boolean); // Filter out any null responses from failed fetches
+            setRecentlyPlayedContexts(validContexts);
+        }
+
+        // --- Step 3: Dependent fetching for recommendations ---
+        const artistsForSeed = topArtistsRes?.data?.items;
+        if (artistsForSeed && artistsForSeed.length > 0) {
+            const artistSeed = artistsForSeed.slice(0, 2).map((a: SpotifyItem) => a.id).join(',');
+            const artistRecsRes = await apiClient.get(`/recommendations?seed_artists=${artistSeed}&limit=10`).catch(() => null);
+            if (artistRecsRes && !artistRecsRes.isAxiosError) {
+                 // Normalize tracks to have correct image property
+                const normalizedTracks = artistRecsRes.data.tracks.map((track: any) => ({
+                    ...track,
+                    images: track.album?.images,
+                }));
+                setArtistRecommendations(normalizedTracks);
+            }
+        }
+    } catch (err: any) {
         console.error('Failed to fetch home page data', err);
         setError('Could not load content.');
-        setMyPlaylists([]);
-        setRecentlyPlayed([]);
-        setTopArtists([]);
-        setTopTracks([]);
-        setNewReleases([]);
-        setFeaturedPlaylists([]);
-        setGenreRecommendations([]);
-        setArtistRecommendations([]);
-      } finally {
+    } finally {
         setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [user, startFetching]);
+    }
+  }, [user]);
+  
+  useEffect(() => {
+    if (user && startFetching) {
+        fetchData();
+    } else {
+        setLoading(!startFetching);
+    }
+  }, [user, startFetching, fetchData]);
   
   const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
   
@@ -120,7 +105,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     return 'Buonasera';
   };
   
-  const greeting = user ? `${getGreeting()}, ${user.display_name}` : getGreeting();
+  const greeting = user ? `${getGreeting()}` : getGreeting();
 
   if (loading) {
     return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${themeColor}`} /></div>;
@@ -132,20 +117,24 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
 
   return (
     <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
+      <h1 className="text-3xl font-bold mb-4 px-6">{greeting}, {user?.display_name}!</h1>
+      
       {featuredPlaylists.length > 0 && <ContentCarousel 
-        title={greeting}
+        title="Playlist in evidenza"
         items={featuredPlaylists} 
         isNight={isNight} 
         onSelectItem={onSelectItem} 
-        keyPrefix="greeting" 
+        keyPrefix="featured" 
       />}
-      {recentlyPlayed.length > 0 && <ContentCarousel 
+
+      {recentlyPlayedContexts.length > 0 && <ContentCarousel 
         title="Ritorna ad ascoltare"
-        items={recentlyPlayed} 
+        items={recentlyPlayedContexts} 
         isNight={isNight} 
         onSelectItem={onSelectItem} 
-        keyPrefix="recent" 
+        keyPrefix="recent-context" 
       />}
+
        {newReleases.length > 0 && <ContentCarousel 
         title="I più grandi successi di oggi"
         items={newReleases} 
@@ -153,40 +142,13 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
         onSelectItem={onSelectItem} 
         keyPrefix="new" 
       />}
-       {myPlaylists.length > 0 && <ContentCarousel 
-        title="Creato per te"
-        items={myPlaylists} 
-        isNight={isNight} 
-        onSelectItem={onSelectItem} 
-        keyPrefix="my-playlists" 
-      />}
+       
       {artistRecommendations.length > 0 && <ContentCarousel 
         title="Altro di ciò che ti piace"
-        items={artistRecommendations.map((t: any) => ({...t, images: t.album?.images}))}
+        items={artistRecommendations}
         isNight={isNight} 
         onSelectItem={onSelectItem} 
         keyPrefix="artist-recs" 
-      />}
-      {topArtists.length > 0 && <ContentCarousel 
-        title="I tuoi artisti del momento"
-        items={topArtists.map(item => ({...item, description: "Artista"}))} 
-        isNight={isNight} 
-        onSelectItem={onSelectItem} 
-        keyPrefix="top-artists" 
-      />}
-      {topTracks.length > 0 && <ContentCarousel 
-        title="Un tuffo nel passato"
-        items={topTracks} 
-        isNight={isNight} 
-        onSelectItem={onSelectItem} 
-        keyPrefix="top-tracks" 
-      />}
-      {genreRecommendations.length > 0 && <ContentCarousel 
-        title="Stazioni consigliate"
-        items={genreRecommendations.map((t: any) => ({...t, images: t.album?.images}))} 
-        isNight={isNight} 
-        onSelectItem={onSelectItem} 
-        keyPrefix="genre-recs" 
       />}
     </div>
   );

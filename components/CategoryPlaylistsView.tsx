@@ -23,17 +23,19 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
             setPlaylists([]); // Clear previous results
             try {
                 const response = await apiClient.get(`/browse/categories/${categoryId}/playlists`, {
-                    params: { limit: 50 }
+                    params: { 
+                        country: 'IT',
+                        limit: 50 
+                    }
                 });
-                setPlaylists(response.data.playlists.items);
-            } catch (err: any) {
-                if (err.response && err.response.status === 404) {
-                    // Category exists but has no playlists for this market, not a fatal error.
-                    setPlaylists([]);
+                if (response.data?.playlists?.items) {
+                    setPlaylists(response.data.playlists.items);
                 } else {
-                    console.error(`Failed to fetch playlists for category ${categoryId}`, err);
-                    setError('Could not load playlists for this category.');
+                    setPlaylists([]);
                 }
+            } catch (err: any) {
+                 console.error(`Failed to fetch playlists for category ${categoryId}`, err);
+                 setError('Could not load playlists for this category.');
             } finally {
                 setLoading(false);
             }
@@ -70,7 +72,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 </div>
             ) : (
                 <div className={`text-center mt-10 text-lg ${themeColor}`}>
-                    Nessuna playlist trovata in questa categoria.
+                    Spiacenti, non abbiamo trovato playlist per questa categoria in questo momento.
                 </div>
             )}
         </div>
