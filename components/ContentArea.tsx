@@ -37,10 +37,10 @@ const ContentArea = ({ isNight, onItemSelect, activeCategory }: { isNight: boole
       
       try {
         const [playlistsRes, recentRes, featuredPlaylistsRes, recommendationsRes] = await Promise.all([
-          apiClient.get('/me/playlists?limit=10'),
-          apiClient.get('/me/player/recently-played?limit=10'),
-          apiClient.get('/browse/featured-playlists?limit=10&country=IT'),
-          apiClient.get('/recommendations?limit=10&seed_genres=pop,rock,electronic'),
+          apiClient.get('/me/playlists', { params: { limit: 10 } }),
+          apiClient.get('/me/player/recently-played', { params: { limit: 10 } }),
+          apiClient.get('/browse/featured-playlists', { params: { limit: 10, country: 'IT' } }),
+          apiClient.get('/recommendations', { params: { limit: 10, seed_genres: 'pop,rock,electronic' } }),
         ]);
 
         const playlists = playlistsRes.data.items;
