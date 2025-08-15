@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { FiMusic, FiMic, FiUser, FiHeart } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
@@ -31,6 +30,32 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
 
+  const getContextualDescription = (): string => {
+    if (contextInfo) return contextInfo;
+
+    switch (item.type) {
+        case 'track':
+            return item.artists?.map(a => a.name).join(', ') ?? '';
+        case 'album':
+            const artists = item.artists?.map(a => a.name).join(', ') ?? 'Artista Sconosciuto';
+            return `Album • ${artists}`;
+        case 'playlist':
+            return item.description || `Di ${item.owner?.display_name ?? 'Spotify'}`;
+        case 'artist':
+            return 'Artista';
+        case 'show':
+            return item.publisher ?? 'Podcast';
+        case 'category':
+             return 'Genere';
+        default:
+            return item.description ?? '';
+    }
+  };
+
+  const descriptionText = getContextualDescription();
+  const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
+
+
   // Special rendering for the "Liked Songs" playlist
   if (item.id === 'liked-songs') {
       return (
@@ -39,25 +64,10 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
                   <FiHeart className="w-16 h-16 text-white/90" />
               </div>
               <h3 className="font-bold truncate text-white">{item.name}</h3>
-              <p className="text-sm truncate text-gray-300">{item.description}</p>
+              <p className="text-sm truncate text-gray-300">{sanitizedDescription}</p>
           </div>
       );
   }
-
-
-  let descriptionText = '';
-  if (item.type === 'show' && item.publisher) {
-    descriptionText = item.publisher;
-  } else if (item.type === 'track' && item.artists) {
-    descriptionText = item.artists.map(a => a.name).join(', ');
-  } else if (item.description) {
-    descriptionText = item.description;
-  } else if (item.type === 'album' && item.artists) {
-     descriptionText = item.artists.map(a => a.name).join(', ');
-  }
-
-  // Sanitize description to remove HTML tags that sometimes appear in Spotify descriptions
-  const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
 
   const getPlaceholderIcon = () => {
     switch (item.type) {
@@ -80,11 +90,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
         )}
       </div>
       <h3 className={`font-bold truncate ${textColorPrimary}`}>{item.name}</h3>
-      {contextInfo ? (
-         <p className={`text-xs truncate ${textColorSecondary}`}>{contextInfo}</p>
-      ) : (
-         <p className={`text-sm truncate ${textColorSecondary}`}>{sanitizedDescription}</p>
-      )}
+      <p className={`text-sm truncate ${textColorSecondary}`}>{sanitizedDescription}</p>
     </div>
   );
 };

@@ -21,7 +21,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [error, setError] = useState<string | null>(null);
   
   // States for each curated section
-  const [recentlyPlayedContexts, setRecentlyPlayedContexts] = useState<SpotifyItem[]>([]);
+  const [resumeItems, setResumeItems] = useState<SpotifyItem[]>([]);
   const [newReleases, setNewReleases] = useState<SpotifyItem[]>([]);
   const [userPlaylists, setUserPlaylists] = useState<SpotifyItem[]>([]);
   const [featuredPlaylists, setFeaturedPlaylists] = useState<SpotifyItem[]>([]);
@@ -33,7 +33,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     setError(null);
 
     // Reset states
-    setRecentlyPlayedContexts([]);
+    setResumeItems([]);
     setNewReleases([]);
     setUserPlaylists([]);
     setFeaturedPlaylists([]);
@@ -61,11 +61,9 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
           const recentItems = recentlyPlayedRes.value.data.items;
+
           const uniqueContextUris = [...new Set(recentItems.map((item: any) => item.context?.uri).filter(Boolean))];
-
-          const albumUris: string[] = [];
-          const playlistUris: string[] = [];
-
+          const albumUris: string[] = [], playlistUris: string[] = [];
           uniqueContextUris.forEach((uri: string) => {
               const [, , type, id] = uri.split(':');
               if (type === 'album') albumUris.push(id);
@@ -73,30 +71,37 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           });
           
           const contextDetails = new Map<string, SpotifyItem>();
-
           if (albumUris.length > 0) {
               const albumsRes = await apiClient.get(`/albums?ids=${albumUris.join(',')}`);
               albumsRes.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
           }
-
           if (playlistUris.length > 0) {
               const playlistPromises = playlistUris.map(id => apiClient.get(`/playlists/${id}`).catch(() => null));
               const playlistResults = await Promise.all(playlistPromises);
-              playlistResults.forEach(res => {
-                  if (res) contextDetails.set(res.data.uri, res.data);
-              });
+              playlistResults.forEach(res => { if (res) contextDetails.set(res.data.uri, res.data) });
           }
 
-          const finalContexts: SpotifyItem[] = [];
-          const addedUris = new Set<string>();
-          recentItems.forEach((item: any) => {
-              const contextUri = item.context?.uri;
-              if (contextUri && !addedUris.has(contextUri) && contextDetails.has(contextUri)) {
-                  finalContexts.push(contextDetails.get(contextUri)!);
-                  addedUris.add(contextUri);
+          const unifiedList: SpotifyItem[] = [];
+          const addedIdsOrUris = new Set<string>();
+          for (const item of recentItems) {
+              if (item.context && (item.context.type === 'album' || item.context.type === 'playlist')) {
+                  const contextUri = item.context.uri;
+                  if (!addedIdsOrUris.has(contextUri)) {
+                      const details = contextDetails.get(contextUri);
+                      if (details) {
+                          unifiedList.push(details);
+                          addedIdsOrUris.add(contextUri);
+                      }
+                  }
+              } else if (item.track) {
+                  const trackId = item.track.id;
+                  if (trackId && !addedIdsOrUris.has(trackId)) {
+                      unifiedList.push(item.track);
+                      addedIdsOrUris.add(trackId);
+                  }
               }
-          });
-          setRecentlyPlayedContexts(finalContexts);
+          }
+          setResumeItems(unifiedList);
       }
       if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data.albums) {
           setNewReleases(newReleasesRes.value.data.albums.items);
@@ -142,8 +147,8 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
       <h1 className="text-3xl font-bold mb-8 px-6">{greeting}, {user?.display_name}!</h1>
       
-      {recentlyPlayedContexts.length > 0 && (
-          <ContentCarousel title="Ritorna ad ascoltare" items={recentlyPlayedContexts} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="recently-played-context" />
+      {resumeItems.length > 0 && (
+          <ContentCarousel title="Riprendi da dove hai lasciato" items={resumeItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="resume-listening" />
       )}
       {userPlaylists.length > 0 && (
           <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
