@@ -23,82 +23,77 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     const [position, setPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
-    const animationFrameRef = useRef<number | null>(null);
+    const animationFrameRef = useRef(0);
     const lastUpdateTimeRef = useRef(Date.now());
 
-    // Sync with Spotify state when not seeking. This is our source of truth.
+    // Sync with Spotify state. This is our source of truth.
     useEffect(() => {
         if (!isSeeking) {
             setPosition(state.position);
-            lastUpdateTimeRef.current = Date.now(); // Reset timer on official update
+            lastUpdateTimeRef.current = Date.now();
         }
-    }, [state.position, isSeeking]);
+    }, [state.position]);
 
-    // Animate progress locally using requestAnimationFrame for smoothness
+    // Animate progress locally using requestAnimationFrame for smoothness when playing.
     useEffect(() => {
         const animate = () => {
             const now = Date.now();
             const elapsed = now - lastUpdateTimeRef.current;
-            setPosition(p => Math.min(p + elapsed, state.duration));
             lastUpdateTimeRef.current = now;
+            
+            setPosition(prevPosition => Math.min(prevPosition + elapsed, state.duration));
+            
             animationFrameRef.current = requestAnimationFrame(animate);
         };
 
         if (!state.paused && !isSeeking) {
-            lastUpdateTimeRef.current = Date.now(); // Reset timer when play starts
+            lastUpdateTimeRef.current = Date.now();
             animationFrameRef.current = requestAnimationFrame(animate);
         }
 
         return () => {
-            if (animationFrameRef.current !== null) {
+            if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = 0;
             }
         };
     }, [state.paused, state.duration, isSeeking]);
 
-    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | MouseEvent) => {
-        if (!progressRef.current) return 0;
-        const rect = progressRef.current.getBoundingClientRect();
-        const clientX = 'touches' in e ? (e as any).touches[0].clientX : e.clientX;
-        const newPositionRatio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-        const seekToMs = Math.round(state.duration * newPositionRatio);
-        setPosition(seekToMs); // Update local state for immediate feedback
-        return seekToMs;
-    }, [state.duration]);
-
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (!progressRef.current || !player) return;
+        
         setIsSeeking(true);
-        handleSeek(e);
-    }, [handleSeek]);
+        
+        const getSeekPosition = (clientX: number): number => {
+            if (!progressRef.current) return 0;
+            const rect = progressRef.current.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
+            return Math.round(state.duration * ratio);
+        };
+        
+        setPosition(getSeekPosition(e.clientX));
 
-    const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (isSeeking) {
-            handleSeek(e);
-        }
-    }, [isSeeking, handleSeek]);
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            setPosition(getSeekPosition(moveEvent.clientX));
+        };
 
-    const handleMouseUp = useCallback((e: MouseEvent) => {
-        if (isSeeking) {
-            setIsSeeking(false);
-            if (player && progressRef.current) {
-                const rect = progressRef.current.getBoundingClientRect();
-                const newPositionRatio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
-                const seekToMs = Math.round(state.duration * newPositionRatio);
-                player.seek(seekToMs);
-            }
-        }
-    }, [isSeeking, player, state.duration]);
-
-    useEffect(() => {
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-        return () => {
+        const handleMouseUp = (upEvent: MouseEvent) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
+            
+            const finalPosition = getSeekPosition(upEvent.clientX);
+            player.seek(finalPosition);
+            
+            // Set isSeeking to false after a short delay to allow the state to sync
+            // from the player_state_changed event first.
+            setTimeout(() => setIsSeeking(false), 50);
         };
-    }, [handleMouseMove, handleMouseUp]);
+        
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }, [player, state.duration]);
     
-    const progressPercentage = (position / state.duration) * 100;
+    const progressPercentage = state.duration > 0 ? (position / state.duration) * 100 : 0;
     const thumbColor = isNight ? '#FFF' : '#000';
     const progressBg = isNight ? 'bg-white/30' : 'bg-black/20';
     const progressFillBg = isNight ? 'bg-white' : 'bg-black';

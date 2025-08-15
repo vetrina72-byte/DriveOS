@@ -25,7 +25,6 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [newReleases, setNewReleases] = useState<SpotifyItem[]>([]);
   const [userPlaylists, setUserPlaylists] = useState<SpotifyItem[]>([]);
   const [featuredPlaylists, setFeaturedPlaylists] = useState<SpotifyItem[]>([]);
-  const [topTracks, setTopTracks] = useState<SpotifyItem[]>([]);
   const [topArtists, setTopArtists] = useState<SpotifyItem[]>([]);
   
   const fetchData = useCallback(async () => {
@@ -38,16 +37,14 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     setNewReleases([]);
     setUserPlaylists([]);
     setFeaturedPlaylists([]);
-    setTopTracks([]);
     setTopArtists([]);
 
     try {
       const promises = [
-        apiClient.get('/me/player/recently-played?limit=10'),
+        apiClient.get('/me/player/recently-played?limit=50'), // Increased limit for context grouping
         apiClient.get('/browse/new-releases?country=IT&limit=10'),
         apiClient.get('/me/playlists?limit=10'),
         apiClient.get('/browse/featured-playlists?country=IT&limit=10'),
-        apiClient.get('/me/top/tracks?time_range=medium_term&limit=10'),
         apiClient.get('/me/top/artists?time_range=medium_term&limit=10')
       ];
 
@@ -58,12 +55,20 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           newReleasesRes,
           userPlaylistsRes,
           featuredPlaylistsRes,
-          topTracksRes,
           topArtistsRes
       ] = results;
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
-          setRecentlyPlayed(recentlyPlayedRes.value.data.items.map((item: any) => item.track).filter(Boolean));
+          const uniqueAlbums: { [uri: string]: SpotifyItem } = {};
+          const recentContexts: SpotifyItem[] = [];
+          recentlyPlayedRes.value.data.items.forEach((item: any) => {
+              if (item.track?.album?.uri && !uniqueAlbums[item.track.album.uri]) {
+                  const albumItem: SpotifyItem = { ...item.track.album, type: 'album' };
+                  uniqueAlbums[item.track.album.uri] = albumItem;
+                  recentContexts.push(albumItem);
+              }
+          });
+          setRecentlyPlayed(recentContexts);
       }
       if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data.albums) {
           setNewReleases(newReleasesRes.value.data.albums.items);
@@ -73,9 +78,6 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       }
       if (featuredPlaylistsRes.status === 'fulfilled' && featuredPlaylistsRes.value.data.playlists) {
           setFeaturedPlaylists(featuredPlaylistsRes.value.data.playlists.items);
-      }
-      if (topTracksRes.status === 'fulfilled' && topTracksRes.value.data.items) {
-          setTopTracks(topTracksRes.value.data.items);
       }
       if (topArtistsRes.status === 'fulfilled' && topArtistsRes.value.data.items) {
           setTopArtists(topArtistsRes.value.data.items);
@@ -113,13 +115,10 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       <h1 className="text-3xl font-bold mb-8 px-6">{greeting}, {user?.display_name}!</h1>
       
       {recentlyPlayed.length > 0 && (
-          <ContentCarousel title="Ascoltati di recente" items={recentlyPlayed} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="recently-played" />
+          <ContentCarousel title="Ritorna ad ascoltare" items={recentlyPlayed} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="recently-played-context" />
       )}
       {userPlaylists.length > 0 && (
           <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
-      )}
-        {topTracks.length > 0 && (
-          <ContentCarousel title="I tuoi brani preferiti" items={topTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-tracks" />
       )}
       {topArtists.length > 0 && (
           <ContentCarousel title="I tuoi artisti del momento" items={topArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
