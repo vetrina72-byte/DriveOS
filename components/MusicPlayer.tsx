@@ -172,22 +172,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     const forceResumeSession = useCallback(async (deviceId: string) => {
       try {
-        console.log("Tentativo di ripresa sessione con comando unificato...");
-        // This is the most direct command: it transfers and starts playback in one go.
-        // It's our best chance to initiate autoplay successfully.
+        console.log("Tentativo di trasferire la riproduzione su questo dispositivo...");
+        // Omettendo il parametro 'play', chiediamo a Spotify di trasferire solo il controllo
+        // a questo dispositivo, mantenendo lo stato di riproduzione corrente (in play o in pausa).
+        // Questo evita di forzare la riproduzione, che può essere bloccata dai browser e causare
+        // problemi di "riproduzione silenziosa".
         await apiClient.put('/me/player', {
           device_ids: [deviceId],
-          play: true,
         });
-        console.log("Comando di trasferimento e riproduzione inviato con successo.");
+        console.log("Trasferimento della riproduzione riuscito. Il player ora riflette l'ultimo stato noto di Spotify.");
       } catch (error: any) {
-        // This is an EXPECTED case if there was no active session on Spotify.
-        // The Spotify API may return 403 or 404 in this case, which we handle silently.
+        // Un errore 403 o 404 può verificarsi se non c'è uno stato di riproduzione attivo da cui trasferire.
+        // Questo è uno scenario normale quando l'utente non stava ascoltando da nessun'altra parte.
         if (error.response && (error.response.status === 403 || error.response.status === 404)) {
-          console.log("Nessuna sessione attiva da riprendere. Il player rimane in attesa.");
+          console.log("Nessuna sessione attiva da trasferire. Il player è pronto per l'azione dell'utente.");
         } else {
-          // Other errors (e.g., network issues) are still logged.
-          console.error("Errore durante il tentativo di ripresa della sessione:", error.response?.data || error.message);
+          // Registra altri errori imprevisti.
+          console.error("Errore durante il trasferimento della riproduzione:", error.response?.data || error.message);
         }
       }
     }, []);
