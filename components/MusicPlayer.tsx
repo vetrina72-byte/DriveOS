@@ -171,36 +171,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const currentTrackId = playerState?.track_window.current_track?.id;
 
     const forceResumeSession = useCallback(async (deviceId: string) => {
-        try {
-            console.log("Inizio procedura di ripresa forzata della sessione...");
-
-            // PASSO 1: Trasferisci il controllo al player web.
-            await apiClient.put('/me/player', {
-              device_ids: [deviceId],
-            });
-            console.log("Controllo trasferito.");
-
-            // PASSO 2: Sincronizza con lo stato remoto.
-            const { data: playerState } = await apiClient.get('/me/player');
-            console.log("Stato remoto ricevuto:", playerState);
-
-            // PASSO 3: Avvia la riproduzione INCONDIZIONATAMENTE se c'era una sessione.
-            if (playerState && playerState.item) {
-              console.log("Sessione trovata. Invio comando di PLAY...");
-              await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
-                position_ms: playerState.progress_ms,
-              });
-              console.log("Comando di PLAY inviato con successo.");
-            } else {
-              console.log("Nessuna sessione di riproduzione precedente trovata. Rimango in attesa.");
-            }
-        } catch (error: any) {
-            if (error.response && error.response.status === 204) {
-                 console.log("Nessuna sessione di riproduzione attiva trovata (204). Rimango in attesa.");
-                 return;
-            }
-            console.error("Errore durante la ripresa forzata della sessione:", error.response?.data || error.message);
+      try {
+        console.log("Tentativo di ripresa sessione con comando unificato...");
+        // This is the most direct command: it transfers and starts playback in one go.
+        // It's our best chance to initiate autoplay successfully.
+        await apiClient.put('/me/player', {
+          device_ids: [deviceId],
+          play: true,
+        });
+        console.log("Comando di trasferimento e riproduzione inviato con successo.");
+      } catch (error: any) {
+        // This is an EXPECTED case if there was no active session on Spotify.
+        // The Spotify API may return 403 or 404 in this case, which we handle silently.
+        if (error.response && (error.response.status === 403 || error.response.status === 404)) {
+          console.log("Nessuna sessione attiva da riprendere. Il player rimane in attesa.");
+        } else {
+          // Other errors (e.g., network issues) are still logged.
+          console.error("Errore durante il tentativo di ripresa della sessione:", error.response?.data || error.message);
         }
+      }
     }, []);
 
     useEffect(() => {
