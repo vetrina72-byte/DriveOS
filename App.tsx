@@ -152,6 +152,38 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // This function will be our one-time event handler for user interaction.
+    const unlockAudio = () => {
+      // Create a dummy audio element and play it. This is enough to unlock the AudioContext
+      // in browsers that require a user gesture.
+      const sound = new Audio("data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAw");
+      sound.play().catch(() => {});
+      
+      // Clean up the event listeners after they have served their purpose.
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+
+    // Attach the listeners for the first user interaction.
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+
+    // Attempt a silent start immediately on load. This might work in some environments
+    // (e.g., desktop browsers where the user has previously interacted with the site).
+    const initialSound = new Audio("data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAw");
+    initialSound.play().catch(() => {
+      // If autoplay is blocked, we do nothing; the listeners we've set up will handle unlocking on the first click/touch.
+    });
+    
+    // Return a cleanup function to remove the listeners if the component unmounts
+    // before the user has a chance to interact.
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
+  useEffect(() => {
     const calculateBearing = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
       const dLon = (lon2 - lon1) * Math.PI / 180;
       const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);

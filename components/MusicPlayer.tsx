@@ -170,28 +170,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
-    const forceResumeSession = useCallback(async (deviceId: string) => {
-      try {
-        console.log("Tentativo di trasferire la riproduzione su questo dispositivo e metterla in pausa.");
-        // Trasferiamo la riproduzione su questo dispositivo e la mettiamo esplicitamente in pausa (play: false).
-        // Questo crea uno stato stabile e prevedibile, evitando che il browser blocchi la riproduzione
-        // automatica (autoplay) e causi una "riproduzione silenziosa".
-        // L'utente dovrà premere "play" una volta per avviare la musica, che è un'interazione
-        // utente richiesta dai browser moderni.
-        await apiClient.put('/me/player', {
-          device_ids: [deviceId],
-          play: false,
-        });
-        console.log("Trasferimento e messa in pausa riusciti. Il player è pronto per l'input dell'utente.");
-      } catch (error: any) {
-        if (error.response && (error.response.status === 403 || error.response.status === 404)) {
-          console.log("Nessuna sessione attiva da trasferire. Il player è pronto per l'azione dell'utente.");
-        } else {
-          console.error("Errore durante il trasferimento della riproduzione:", error.response?.data || error.message);
-        }
-      }
-    }, []);
-
     useEffect(() => {
         if (!accessToken) {
             if (playerRef.current) {
@@ -227,11 +205,38 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             });
 
             player.on('ready', async ({ device_id }) => {
-                console.log('Player pronto con device ID:', device_id);
+                console.log('Player Tesla-Style pronto. Inizio sequenza di avvio forzato.');
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
-                await forceResumeSession(device_id);
+
+                try {
+                    // 1. Trasferisci il controllo SENZA esitazione, richiedendo l'avvio immediato.
+                    await apiClient.put('/me/player', {
+                        device_ids: [device_id],
+                        play: true
+                    });
+
+                    // 2. Sincronizza lo stato per essere sicuri, dopo una breve attesa.
+                    await new Promise(resolve => setTimeout(resolve, 250));
+                    const { data: playerState } = await apiClient.get('/me/player');
+
+                    // 3. Invia un SECONDO comando di PLAY per massima ridondanza e per riprendere dal punto giusto.
+                    if (playerState && playerState.item) {
+                        await apiClient.put(`/me/player/play?device_id=${device_id}`, {
+                            position_ms: playerState.progress_ms,
+                        });
+                        console.log('Comando di ripresa ridondante inviato con successo.');
+                    }
+                } catch (error: any) {
+                    // Gestisce il caso comune in cui non c'è nessuna sessione di riproduzione attiva da trasferire.
+                    if (error.response && (error.response.status === 404 || error.response.status === 403)) {
+                        console.log("Nessuna sessione attiva da trasferire. Il player è pronto per una nuova riproduzione.");
+                    } else {
+                        console.error("Errore nell'avvio forzato:", error.response?.data || error.message);
+                    }
+                }
             });
+
             player.on('not_ready', () => {
                 setDeviceId(null);
                 setPlayerStatus('connecting');
@@ -256,7 +261,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, forceResumeSession]);
+    }, [accessToken, logout, setDeviceId]);
 
     useEffect(() => {
         const checkIsLiked = async () => {
