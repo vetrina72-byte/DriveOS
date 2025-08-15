@@ -5,14 +5,6 @@ import { FiLoader } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import apiClient from '../api';
 
-// Helper for dynamic greeting
-const getGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Buongiorno";
-  if (hour < 18) return "Buon pomeriggio";
-  return "Buonasera";
-};
-
 const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
     const contextUris = new Set<string>();
     const albumIds: string[] = [];
@@ -146,7 +138,6 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   }, [user, startFetching, fetchData, refreshTrigger]);
   
   const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
-  const greeting = getGreeting();
 
   if (loading) {
       return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${themeColor}`} /></div>;
@@ -162,7 +153,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
         className="text-3xl font-bold mb-8 px-6"
         style={{ color: 'var(--heading-color)' }}
       >
-        {greeting}, {user?.display_name}!
+        Bentornato, {user?.display_name}!
       </h1>
       
       {resumeItems.length > 0 && (
