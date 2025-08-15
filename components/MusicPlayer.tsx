@@ -23,48 +23,48 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     const [position, setPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
-    const seekTimeoutRef = useRef<number | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+    const lastUpdateTimeRef = useRef(Date.now());
 
-    // This effect syncs the local position with the official state from Spotify,
-    // but only when the user is not actively dragging the seek bar.
+    // Sync with Spotify state when not seeking. This is our source of truth.
     useEffect(() => {
         if (!isSeeking) {
             setPosition(state.position);
+            lastUpdateTimeRef.current = Date.now(); // Reset timer on official update
         }
     }, [state.position, isSeeking]);
-    
-    // This effect creates a timer to smoothly advance the progress bar locally,
-    // making the UI feel more responsive than waiting for the `player_state_changed` event.
+
+    // Animate progress locally using requestAnimationFrame for smoothness
     useEffect(() => {
-        let interval: number | undefined;
+        const animate = () => {
+            const now = Date.now();
+            const elapsed = now - lastUpdateTimeRef.current;
+            setPosition(p => Math.min(p + elapsed, state.duration));
+            lastUpdateTimeRef.current = now;
+            animationFrameRef.current = requestAnimationFrame(animate);
+        };
+
         if (!state.paused && !isSeeking) {
-            interval = window.setInterval(() => {
-                setPosition(p => Math.min(p + 1000, state.duration));
-            }, 1000);
+            lastUpdateTimeRef.current = Date.now(); // Reset timer when play starts
+            animationFrameRef.current = requestAnimationFrame(animate);
         }
+
         return () => {
-            if (interval) clearInterval(interval);
+            if (animationFrameRef.current !== null) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
         };
     }, [state.paused, state.duration, isSeeking]);
 
     const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | MouseEvent) => {
-        if (!progressRef.current || !player) return;
-        
+        if (!progressRef.current) return 0;
         const rect = progressRef.current.getBoundingClientRect();
         const clientX = 'touches' in e ? (e as any).touches[0].clientX : e.clientX;
-        const newPosition = Math.max(0, Math.min(clientX - rect.left, rect.width));
-        const percentage = newPosition / rect.width;
-        const seekToMs = Math.round(state.duration * percentage);
-        
-        setPosition(seekToMs);
-        
-        // Debounce the actual seek command to avoid spamming the API
-        if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
-        seekTimeoutRef.current = window.setTimeout(() => {
-            player.seek(seekToMs);
-        }, 150);
-
-    }, [player, state.duration]);
+        const newPositionRatio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
+        const seekToMs = Math.round(state.duration * newPositionRatio);
+        setPosition(seekToMs); // Update local state for immediate feedback
+        return seekToMs;
+    }, [state.duration]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         setIsSeeking(true);
@@ -77,11 +77,17 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
         }
     }, [isSeeking, handleSeek]);
 
-    const handleMouseUp = useCallback(() => {
-        if(isSeeking) {
+    const handleMouseUp = useCallback((e: MouseEvent) => {
+        if (isSeeking) {
             setIsSeeking(false);
+            if (player && progressRef.current) {
+                const rect = progressRef.current.getBoundingClientRect();
+                const newPositionRatio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+                const seekToMs = Math.round(state.duration * newPositionRatio);
+                player.seek(seekToMs);
+            }
         }
-    }, [isSeeking]);
+    }, [isSeeking, player, state.duration]);
 
     useEffect(() => {
         window.addEventListener('mousemove', handleMouseMove);
@@ -89,7 +95,6 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
-            if(seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
         };
     }, [handleMouseMove, handleMouseUp]);
     
