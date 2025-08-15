@@ -170,6 +170,43 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
+    const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
+        try {
+            // STEP 1: UNLOCK BROWSER AUDIO (MOST IMPORTANT)
+            await playerInstance.activateElement();
+            console.log('Browser audio context activated.');
+
+            // STEP 2: TRANSFER CONTROL
+            await apiClient.put('/me/player', {
+                device_ids: [deviceId],
+                play: true // Tell it to play immediately
+            });
+            console.log('Playback transferred and set to PLAY.');
+
+            // STEP 3: (Optional but recommended) RESYNCHRONIZE
+            setTimeout(async () => {
+                try {
+                    const { data: playerState } = await apiClient.get('/me/player');
+                    if (playerState && playerState.item) {
+                        await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
+                            position_ms: playerState.progress_ms
+                        });
+                        console.log('Explicit resume command sent.');
+                    }
+                } catch(e) {
+                    console.error("Error during resync play command", e);
+                }
+            }, 500);
+
+        } catch (error: any) {
+            if (error.response && (error.response.status === 404 || error.response.status === 403)) {
+                console.log("No active session to transfer. Player is ready for new playback.");
+            } else {
+                console.error("Error during startup and synchronization:", error.response?.data || error.message);
+            }
+        }
+    }, []);
+
     useEffect(() => {
         if (!accessToken) {
             if (playerRef.current) {
@@ -205,36 +242,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             });
 
             player.on('ready', async ({ device_id }) => {
-                console.log('Player Tesla-Style pronto. Inizio sequenza di avvio forzato.');
+                console.log('Player ready. Starting audio unlock and sync procedure.');
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
-
-                try {
-                    // 1. Trasferisci il controllo SENZA esitazione, richiedendo l'avvio immediato.
-                    await apiClient.put('/me/player', {
-                        device_ids: [device_id],
-                        play: true
-                    });
-
-                    // 2. Sincronizza lo stato per essere sicuri, dopo una breve attesa.
-                    await new Promise(resolve => setTimeout(resolve, 250));
-                    const { data: playerState } = await apiClient.get('/me/player');
-
-                    // 3. Invia un SECONDO comando di PLAY per massima ridondanza e per riprendere dal punto giusto.
-                    if (playerState && playerState.item) {
-                        await apiClient.put(`/me/player/play?device_id=${device_id}`, {
-                            position_ms: playerState.progress_ms,
-                        });
-                        console.log('Comando di ripresa ridondante inviato con successo.');
-                    }
-                } catch (error: any) {
-                    // Gestisce il caso comune in cui non c'è nessuna sessione di riproduzione attiva da trasferire.
-                    if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-                        console.log("Nessuna sessione attiva da trasferire. Il player è pronto per una nuova riproduzione.");
-                    } else {
-                        console.error("Errore nell'avvio forzato:", error.response?.data || error.message);
-                    }
-                }
+                await startAndSyncPlayer(player, device_id);
             });
 
             player.on('not_ready', () => {
@@ -261,7 +272,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId]);
+    }, [accessToken, logout, setDeviceId, startAndSyncPlayer]);
 
     useEffect(() => {
         const checkIsLiked = async () => {

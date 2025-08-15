@@ -104,6 +104,7 @@ export interface SpotifyPlayerState {
 export interface SpotifyPlayer {
     _options: SpotifyPlayerOptions;
     connect: () => Promise<boolean>;
+    activateElement: () => Promise<boolean>;
     disconnect: () => void;
     getCurrentState: () => Promise<SpotifyPlayerState | null>;
     getVolume: () => Promise<number>;
