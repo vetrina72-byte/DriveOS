@@ -170,37 +170,36 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
-    const initializeAndResumeSession = useCallback(async (deviceId: string) => {
+    const forceResumeSession = useCallback(async (deviceId: string) => {
         try {
-            console.log("Passo 1: Trasferisco il controllo al player web...");
-            // Step 1: Transfer control to make this player the active device
+            console.log("Inizio procedura di ripresa forzata della sessione...");
+
+            // PASSO 1: Trasferisci il controllo al player web.
             await apiClient.put('/me/player', {
-                device_ids: [deviceId],
-                play: false, // Do not start playing yet
+              device_ids: [deviceId],
             });
-            console.log("Passo 1 completato.");
+            console.log("Controllo trasferito.");
 
-            console.log("Passo 2: Chiedo a Spotify lo stato attuale della riproduzione...");
-            // Step 2: Get the user's current player state
-            const response = await apiClient.get('/me/player');
-            console.log("Passo 2 completato. Stato ricevuto:", response.data);
+            // PASSO 2: Sincronizza con lo stato remoto.
+            const { data: playerState } = await apiClient.get('/me/player');
+            console.log("Stato remoto ricevuto:", playerState);
 
-            // Step 3: Conditionally resume playback if music was already playing
-            // Spotify can return 204 No Content if no session is active.
-            if (response.data && response.data.is_playing) {
-                console.log("Passo 3: Lo stato era 'in riproduzione', avvio la musica...");
-                await apiClient.put(`/me/player/play?device_id=${deviceId}`);
-                console.log("Passo 3 completato.");
+            // PASSO 3: Avvia la riproduzione INCONDIZIONATAMENTE se c'era una sessione.
+            if (playerState && playerState.item) {
+              console.log("Sessione trovata. Invio comando di PLAY...");
+              await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
+                position_ms: playerState.progress_ms,
+              });
+              console.log("Comando di PLAY inviato con successo.");
             } else {
-                console.log("Passo 3: Lo stato era 'in pausa' o non c'era nulla in riproduzione. Non faccio nulla.");
+              console.log("Nessuna sessione di riproduzione precedente trovata. Rimango in attesa.");
             }
         } catch (error: any) {
-             // Handle cases where GET /me/player returns 204, which is not an error but has no data.
             if (error.response && error.response.status === 204) {
-                 console.log("Passo 3: Nessuna sessione di riproduzione attiva trovata. Non faccio nulla.");
+                 console.log("Nessuna sessione di riproduzione attiva trovata (204). Rimango in attesa.");
                  return;
             }
-            console.error("Errore durante l'inizializzazione della sessione:", error.response?.data || error.message);
+            console.error("Errore durante la ripresa forzata della sessione:", error.response?.data || error.message);
         }
     }, []);
 
@@ -242,7 +241,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 console.log('Player pronto con device ID:', device_id);
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
-                await initializeAndResumeSession(device_id);
+                await forceResumeSession(device_id);
             });
             player.on('not_ready', () => {
                 setDeviceId(null);
@@ -268,7 +267,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, initializeAndResumeSession]);
+    }, [accessToken, logout, setDeviceId, forceResumeSession]);
 
     useEffect(() => {
         const checkIsLiked = async () => {
