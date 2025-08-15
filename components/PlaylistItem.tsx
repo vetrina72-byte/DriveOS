@@ -55,6 +55,10 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   const descriptionText = getContextualDescription();
   const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
 
+  const imageUrl = item.type === 'track'
+    ? item.album?.images?.[0]?.url
+    : item.images?.[0]?.url;
+
 
   // Special rendering for the "Liked Songs" playlist
   if (item.id === 'liked-songs') {
@@ -81,8 +85,8 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   return (
     <div onClick={() => onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 ${bgColor}`}>
       <div className="relative w-full aspect-square mb-3">
-        {item.images?.[0]?.url ? (
-          <img src={item.images[0].url} alt={item.name} className="w-full h-full rounded-md object-cover shadow-lg" />
+        {imageUrl ? (
+          <img src={imageUrl} alt={item.name} className="w-full h-full rounded-md object-cover shadow-lg" />
         ) : (
           <div className={`w-full h-full rounded-md flex items-center justify-center ${placeholderBg}`}>
             {getPlaceholderIcon()}

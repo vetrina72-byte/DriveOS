@@ -50,13 +50,13 @@ const initialState: AuthState = {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
-    const hasCheckedPlayer = useRef(false);
+    const hasAttemptedAutoplay = useRef(false);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_refresh_token');
         localStorage.removeItem('spotify_expires_in');
-        hasCheckedPlayer.current = false; // Reset on logout
+        hasAttemptedAutoplay.current = false; // Reset on logout
         setState(initialState);
         setState(s => ({...s, isLoading: false}));
     }, []);
@@ -91,28 +91,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Auto-resume logic
     useEffect(() => {
-        if (state.isAuthenticated && deviceId && !hasCheckedPlayer.current) {
-            hasCheckedPlayer.current = true;
-            
-            const checkPlayerStateAndResume = async () => {
+        if (state.accessToken && deviceId && !hasAttemptedAutoplay.current) {
+            hasAttemptedAutoplay.current = true;
+
+            const attemptAutoplay = async () => {
                 try {
-                    const { data } = await apiClient.get('/me/player');
-                    // If data exists, has an item, and is paused, try to resume.
-                    if (data && data.item && !data.is_playing) {
+                    // Step A: Transfer playback to this device to "wake it up"
+                    await apiClient.put('/me/player', {
+                        device_ids: [deviceId],
+                        play: false,
+                    });
+
+                    // Step B: Now check the state and play if it's paused
+                    const { data: playerState } = await apiClient.get('/me/player');
+                    if (playerState && playerState.item && !playerState.is_playing) {
                         await apiClient.put(`/me/player/play?device_id=${deviceId}`);
                     }
                 } catch (err: any) {
-                    // A 204 No Content response is expected if nothing was playing, which is not an error.
-                    if (err.response && err.response.status !== 204) {
-                        console.error("Error checking player state for auto-resume:", err);
+                    // 204 or 404 are expected if there's no active session, not a critical error.
+                    if (err.response && ![204, 404].includes(err.response.status)) {
+                        console.warn("Could not attempt autoplay:", err.response.data);
                     }
                 }
             };
 
-            // Give the SDK a moment to fully initialize before checking the player state.
-            setTimeout(checkPlayerStateAndResume, 1500); 
+            // Give the SDK a moment before attempting to transfer.
+            setTimeout(attemptAutoplay, 1000);
         }
-    }, [state.isAuthenticated, deviceId]);
+    }, [state.accessToken, deviceId]);
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));

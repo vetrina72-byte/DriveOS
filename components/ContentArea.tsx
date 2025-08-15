@@ -61,43 +61,58 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
           const recentItems = recentlyPlayedRes.value.data.items;
+          const contextUris = new Set<string>();
+          const albumIds: string[] = [];
+          const playlistIds: string[] = [];
 
-          const uniqueContextUris = [...new Set(recentItems.map((item: any) => item.context?.uri).filter(Boolean))];
-          const albumUris: string[] = [], playlistUris: string[] = [];
-          uniqueContextUris.forEach((uri: string) => {
-              const [, , type, id] = uri.split(':');
-              if (type === 'album') albumUris.push(id);
-              if (type === 'playlist') playlistUris.push(id);
+          recentItems.forEach((item: any) => {
+              if (item.context?.uri && !contextUris.has(item.context.uri)) {
+                  contextUris.add(item.context.uri);
+                  const [, , type, id] = item.context.uri.split(':');
+                  if (type === 'album') albumIds.push(id);
+                  if (type === 'playlist') playlistIds.push(id);
+              }
           });
-          
+
           const contextDetails = new Map<string, SpotifyItem>();
-          if (albumUris.length > 0) {
-              const albumsRes = await apiClient.get(`/albums?ids=${albumUris.join(',')}`);
-              albumsRes.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
+          const contextPromises = [];
+
+          if (albumIds.length > 0) {
+              contextPromises.push(
+                  apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
+                      res.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
+                  }).catch(e => console.error("Failed to fetch album details", e))
+              );
           }
-          if (playlistUris.length > 0) {
-              const playlistPromises = playlistUris.map(id => apiClient.get(`/playlists/${id}`).catch(() => null));
-              const playlistResults = await Promise.all(playlistPromises);
-              playlistResults.forEach(res => { if (res) contextDetails.set(res.data.uri, res.data) });
+          if (playlistIds.length > 0) {
+              const playlistDetailPromises = playlistIds.map(id => 
+                  apiClient.get(`/playlists/${id}`).then(res => {
+                      contextDetails.set(res.data.uri, res.data);
+                  }).catch(e => console.error(`Failed to fetch playlist ${id}`, e))
+              );
+              contextPromises.push(Promise.all(playlistDetailPromises));
           }
+
+          await Promise.all(contextPromises);
 
           const unifiedList: SpotifyItem[] = [];
-          const addedIdsOrUris = new Set<string>();
+          const addedUris = new Set<string>();
+
           for (const item of recentItems) {
-              if (item.context && (item.context.type === 'album' || item.context.type === 'playlist')) {
+              if (item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')) {
                   const contextUri = item.context.uri;
-                  if (!addedIdsOrUris.has(contextUri)) {
+                  if (!addedUris.has(contextUri)) {
                       const details = contextDetails.get(contextUri);
                       if (details) {
                           unifiedList.push(details);
-                          addedIdsOrUris.add(contextUri);
+                          addedUris.add(contextUri);
                       }
                   }
               } else if (item.track) {
-                  const trackId = item.track.id;
-                  if (trackId && !addedIdsOrUris.has(trackId)) {
+                  const trackUri = item.track.uri;
+                  if (trackUri && !addedUris.has(trackUri)) {
                       unifiedList.push(item.track);
-                      addedIdsOrUris.add(trackId);
+                      addedUris.add(trackUri);
                   }
               }
           }
