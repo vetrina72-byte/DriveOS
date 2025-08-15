@@ -172,22 +172,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     const forceResumeSession = useCallback(async (deviceId: string) => {
       try {
-        console.log("Tentativo di trasferire la riproduzione su questo dispositivo...");
-        // Omettendo il parametro 'play', chiediamo a Spotify di trasferire solo il controllo
-        // a questo dispositivo, mantenendo lo stato di riproduzione corrente (in play o in pausa).
-        // Questo evita di forzare la riproduzione, che può essere bloccata dai browser e causare
-        // problemi di "riproduzione silenziosa".
+        console.log("Tentativo di trasferire la riproduzione su questo dispositivo e metterla in pausa.");
+        // Trasferiamo la riproduzione su questo dispositivo e la mettiamo esplicitamente in pausa (play: false).
+        // Questo crea uno stato stabile e prevedibile, evitando che il browser blocchi la riproduzione
+        // automatica (autoplay) e causi una "riproduzione silenziosa".
+        // L'utente dovrà premere "play" una volta per avviare la musica, che è un'interazione
+        // utente richiesta dai browser moderni.
         await apiClient.put('/me/player', {
           device_ids: [deviceId],
+          play: false,
         });
-        console.log("Trasferimento della riproduzione riuscito. Il player ora riflette l'ultimo stato noto di Spotify.");
+        console.log("Trasferimento e messa in pausa riusciti. Il player è pronto per l'input dell'utente.");
       } catch (error: any) {
-        // Un errore 403 o 404 può verificarsi se non c'è uno stato di riproduzione attivo da cui trasferire.
-        // Questo è uno scenario normale quando l'utente non stava ascoltando da nessun'altra parte.
         if (error.response && (error.response.status === 403 || error.response.status === 404)) {
           console.log("Nessuna sessione attiva da trasferire. Il player è pronto per l'azione dell'utente.");
         } else {
-          // Registra altri errori imprevisti.
           console.error("Errore durante il trasferimento della riproduzione:", error.response?.data || error.message);
         }
       }
