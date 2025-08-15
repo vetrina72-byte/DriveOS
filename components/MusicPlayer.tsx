@@ -170,15 +170,37 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
-    // This function now only transfers playback to this device without forcing a play state.
-    const transferPlaybackToDevice = useCallback(async (deviceId: string) => {
+    const initializeAndResumeSession = useCallback(async (deviceId: string) => {
         try {
+            console.log("Passo 1: Trasferisco il controllo al player web...");
+            // Step 1: Transfer control to make this player the active device
             await apiClient.put('/me/player', {
                 device_ids: [deviceId],
-                play: false, // This is key: transfer control without changing play state.
+                play: false, // Do not start playing yet
             });
-        } catch (err: any) {
-            console.error("Failed to transfer playback:", err.response?.data || err.message);
+            console.log("Passo 1 completato.");
+
+            console.log("Passo 2: Chiedo a Spotify lo stato attuale della riproduzione...");
+            // Step 2: Get the user's current player state
+            const response = await apiClient.get('/me/player');
+            console.log("Passo 2 completato. Stato ricevuto:", response.data);
+
+            // Step 3: Conditionally resume playback if music was already playing
+            // Spotify can return 204 No Content if no session is active.
+            if (response.data && response.data.is_playing) {
+                console.log("Passo 3: Lo stato era 'in riproduzione', avvio la musica...");
+                await apiClient.put(`/me/player/play?device_id=${deviceId}`);
+                console.log("Passo 3 completato.");
+            } else {
+                console.log("Passo 3: Lo stato era 'in pausa' o non c'era nulla in riproduzione. Non faccio nulla.");
+            }
+        } catch (error: any) {
+             // Handle cases where GET /me/player returns 204, which is not an error but has no data.
+            if (error.response && error.response.status === 204) {
+                 console.log("Passo 3: Nessuna sessione di riproduzione attiva trovata. Non faccio nulla.");
+                 return;
+            }
+            console.error("Errore durante l'inizializzazione della sessione:", error.response?.data || error.message);
         }
     }, []);
 
@@ -216,12 +238,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 volume: 0.5
             });
 
-            player.on('ready', ({ device_id }) => {
+            player.on('ready', async ({ device_id }) => {
+                console.log('Player pronto con device ID:', device_id);
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
-                // Passively transfer playback. The player will then sync to the
-                // current state via the 'player_state_changed' event.
-                transferPlaybackToDevice(device_id);
+                await initializeAndResumeSession(device_id);
             });
             player.on('not_ready', () => {
                 setDeviceId(null);
@@ -241,14 +262,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             playerRef.current = player;
         };
         
-        // The cleanup function for when the component unmounts or accessToken changes
         return () => {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, transferPlaybackToDevice]);
+    }, [accessToken, logout, setDeviceId, initializeAndResumeSession]);
 
     useEffect(() => {
         const checkIsLiked = async () => {
