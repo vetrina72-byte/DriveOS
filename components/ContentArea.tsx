@@ -15,7 +15,7 @@ const getGreeting = () => {
 
 // Main Component
 const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
-  const { user } = useAuth();
+  const { user, refreshTrigger } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +145,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       } else {
           setLoading(!startFetching);
       }
-  }, [user, startFetching, fetchData]);
+  }, [user, startFetching, fetchData, refreshTrigger]);
   
   const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
   const greeting = getGreeting();

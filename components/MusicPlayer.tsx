@@ -364,7 +364,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             );
         }
 
-        const placeholderText = isAuthenticated ? "Select music to play" : "Login to start listening";
+        // If authenticated and the player is ready, but no track is loaded, show a "waiting" state.
+        if (isAuthenticated && isReady) {
+             return (
+                 <div className="flex items-center w-full h-full gap-5 px-4">
+                    <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                        <FaSpotify className={`w-7 h-7 animate-pulse ${isNight ? 'text-green-500' : 'text-green-600'}`} />
+                    </div>
+                    <div className="flex-grow overflow-hidden">
+                        <div className="font-semibold truncate">Spotify</div>
+                        <div className={`text-sm truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                            In attesa di musica...
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Default placeholder for when not authenticated or the player SDK is not ready yet.
+        const placeholderText = isAuthenticated ? "Connecting..." : "Login to start listening";
         return (
              <div className="flex items-center w-full h-full gap-5 px-4">
                 <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>

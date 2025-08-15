@@ -33,6 +33,7 @@ interface AuthContextType extends AuthState {
     clearError: () => void;
     play: (options: PlayOptions) => void;
     setDeviceId: (id: string | null) => void;
+    refreshTrigger: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,6 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
     const hasAttemptedAutoplay = useRef(false);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -69,6 +71,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             console.error('Failed to fetch user info. Interceptor will handle logout if necessary.', err);
             return null;
         }
+    }, []);
+
+    const refreshHomePage = useCallback(() => {
+        // Add a small delay to give Spotify's API time to update "recently played"
+        setTimeout(() => {
+            setRefreshTrigger(prev => prev + 1);
+        }, 1000);
     }, []);
     
     useEffect(() => {
@@ -89,33 +98,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [fetchUserInfo]);
 
-    // Auto-resume logic
+    // Robust Auto-resume logic
     useEffect(() => {
         if (state.accessToken && deviceId && !hasAttemptedAutoplay.current) {
             hasAttemptedAutoplay.current = true;
 
             const attemptAutoplay = async () => {
                 try {
-                    // Step A: Transfer playback to this device to "wake it up"
+                    // Step A: Transfer playback to this device to "wake it up". This is crucial.
                     await apiClient.put('/me/player', {
                         device_ids: [deviceId],
                         play: false,
                     });
 
-                    // Step B: Now check the state and play if it's paused
-                    const { data: playerState } = await apiClient.get('/me/player');
-                    if (playerState && playerState.item && !playerState.is_playing) {
-                        await apiClient.put(`/me/player/play?device_id=${deviceId}`);
-                    }
+                    // Step B: Immediately attempt to play. This will resume if paused,
+                    // do nothing if already playing, and fail gracefully if nothing was active.
+                    await apiClient.put(`/me/player/play?device_id=${deviceId}`);
                 } catch (err: any) {
-                    // 204 or 404 are expected if there's no active session, not a critical error.
-                    if (err.response && ![204, 404].includes(err.response.status)) {
-                        console.warn("Could not attempt autoplay:", err.response.data);
+                    // 404 (No active device) or 403 (Player command failed) are expected
+                    // if there's no session to resume. We can ignore these safely.
+                    if (err.response && (err.response.status === 404 || err.response.status === 403)) {
+                        console.log("Autoplay: No active session to resume.");
+                    } else if (err.response && err.response.status !== 204) {
+                         console.warn("Could not attempt autoplay:", err.response?.data || err.message);
                     }
                 }
             };
 
-            // Give the SDK a moment before attempting to transfer.
+            // Give the SDK a moment after connection before attempting the transfer.
             setTimeout(attemptAutoplay, 1000);
         }
     }, [state.accessToken, deviceId]);
@@ -195,17 +205,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 `/me/player/play?device_id=${deviceId}`,
                 body
             );
+            // After successfully starting playback, trigger a refresh for the home page.
+            refreshHomePage();
         } catch (err) {
             console.error('Failed to start playback', err);
         }
-    }, [deviceId]);
+    }, [deviceId, refreshHomePage]);
 
     const clearError = () => {
         setState(s => ({...s, error: null}));
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger }}>
             {children}
         </AuthContext.Provider>
     );
