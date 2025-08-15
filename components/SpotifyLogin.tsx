@@ -13,7 +13,7 @@ const SpotifyLogin: React.FC = () => {
         clearError();
 
         const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
-        const redirectUri = import.meta.env.VITE_REDIRECT_URI;
+        const redirectUri = process.env.VITE_REDIRECT_URI;
         const scope = [
           'streaming',
           'user-read-email',
