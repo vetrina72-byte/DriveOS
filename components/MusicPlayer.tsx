@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiPlay, FiPause, FiSkipBack, FiSkipForward
+    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic
 } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 import { 
@@ -369,12 +369,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
              return (
                  <div className="flex items-center w-full h-full gap-5 px-4">
                     <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                        <FaSpotify className={`w-7 h-7 animate-pulse ${isNight ? 'text-green-500' : 'text-green-600'}`} />
+                        <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                     </div>
                     <div className="flex-grow overflow-hidden">
-                        <div className="font-semibold truncate">Spotify</div>
+                        <div className="font-semibold truncate">Niente in riproduzione</div>
                         <div className={`text-sm truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            In attesa di musica...
+                            Scegli qualcosa da ascoltare.
                         </div>
                     </div>
                 </div>

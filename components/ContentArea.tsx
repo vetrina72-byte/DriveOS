@@ -98,6 +98,8 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           const unifiedList: SpotifyItem[] = [];
           const addedUris = new Set<string>();
 
+          // This logic now correctly prioritizes and adds unique contexts (albums/playlists)
+          // from the recently played items.
           for (const item of recentItems) {
               if (item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')) {
                   const contextUri = item.context.uri;
@@ -107,12 +109,6 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
                           unifiedList.push(details);
                           addedUris.add(contextUri);
                       }
-                  }
-              } else if (item.track) {
-                  const trackUri = item.track.uri;
-                  if (trackUri && !addedUris.has(trackUri)) {
-                      unifiedList.push(item.track);
-                      addedUris.add(trackUri);
                   }
               }
           }
@@ -148,6 +144,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   }, [user, startFetching, fetchData, refreshTrigger]);
   
   const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
+  const textColor = isNight ? 'text-white' : 'text-zinc-900';
   const greeting = getGreeting();
 
   if (loading) {
@@ -160,7 +157,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
 
   return (
     <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
-      <h1 className="text-3xl font-bold mb-8 px-6">{greeting}, {user?.display_name}!</h1>
+      <h1 className={`text-3xl font-bold mb-8 px-6 ${textColor}`}>{greeting}, {user?.display_name}!</h1>
       
       {resumeItems.length > 0 && (
           <ContentCarousel title="Riprendi da dove hai lasciato" items={resumeItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="resume-listening" />
