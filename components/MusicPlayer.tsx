@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic, FiAlertTriangle, FiLoader
+    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic, FiAlertTriangle
 } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 import { 
@@ -170,21 +170,34 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
-    const resumePlayback = useCallback(async (deviceId: string) => {
+    const startLastPlayedTrack = useCallback(async (deviceId: string) => {
         try {
-            // 1. Transfer playback to this device to make it active.
-            await apiClient.put('/me/player', {
-                device_ids: [deviceId],
-                play: false, // Don't start playing immediately
-            });
-
-            // 2. Send the play command to resume whatever was last playing.
-            await apiClient.put(`/me/player/play?device_id=${deviceId}`);
-        } catch (err: any) {
-             if (err.response && (err.response.status === 404 || err.response.status === 403)) {
-                console.log("Resume Playback: No active session to resume.");
+            const response = await apiClient.get('/me/player/recently-played?limit=1');
+            const lastPlayedTrack = response.data?.items?.[0]?.track;
+    
+            if (lastPlayedTrack && lastPlayedTrack.uri) {
+                // Play the last played track on the new device.
+                await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
+                    uris: [lastPlayedTrack.uri],
+                });
             } else {
-                 console.error("Could not resume playback:", err.response?.data || err.message);
+                // No recent tracks found, just transfer playback to make this device active.
+                await apiClient.put('/me/player', {
+                    device_ids: [deviceId],
+                    play: false,
+                });
+                console.log("No recently played track to start. Device is now active.");
+            }
+        } catch (err: any) {
+            console.error("Could not start last played track:", err.response?.data || err.message);
+            // Fallback to just transferring playback if the API call fails for any reason
+            try {
+                await apiClient.put('/me/player', {
+                    device_ids: [deviceId],
+                    play: false,
+                });
+            } catch (transferErr) {
+                console.error("Fallback playback transfer failed:", transferErr);
             }
         }
     }, []);
@@ -226,7 +239,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             player.on('ready', ({ device_id }) => {
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
-                resumePlayback(device_id);
+                startLastPlayedTrack(device_id);
             });
             player.on('not_ready', () => {
                 setDeviceId(null);
@@ -246,7 +259,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             playerRef.current = player;
         };
 
-    }, [accessToken, logout, setDeviceId, resumePlayback]);
+    }, [accessToken, logout, setDeviceId, startLastPlayedTrack]);
 
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -347,7 +360,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             return (
                  <div className="flex items-center w-full h-full gap-5 px-4">
                     <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                       {isAuthenticated ? <FiLoader className={`w-7 h-7 animate-spin ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /> : <FaSpotify className={`w-7 h-7 ${isNight ? 'text-green-500' : 'text-green-600'}`} />}
+                       {isAuthenticated ? <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /> : <FaSpotify className={`w-7 h-7 ${isNight ? 'text-green-500' : 'text-green-600'}`} />}
                     </div>
                     <div className="flex-grow overflow-hidden">
                         <div className="font-semibold truncate">Spotify</div>
