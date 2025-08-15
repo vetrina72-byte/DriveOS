@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiSearch
+    FiPlay, FiPause, FiSkipBack, FiSkipForward
 } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 import { 
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
-import { IoMdAddCircleOutline } from 'react-icons/io';
+import { IoMdAddCircleOutline, IoMdHeart } from 'react-icons/io';
 import { HiOutlineQueueList } from 'react-icons/hi2';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 
@@ -114,15 +115,58 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
 };
 
 
+const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: boolean, nextTrack: SpotifyTrack | null, position: { bottom: number, right: number }, onClose: () => void }) => {
+    const popoverRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [onClose]);
+
+    return ReactDOM.createPortal(
+        <div
+            ref={popoverRef}
+            style={{
+                bottom: `${position.bottom}px`,
+                right: `${position.right}px`,
+            }}
+            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}
+        >
+            <p className={`text-xs font-bold mb-2 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>Prossima in coda</p>
+            {nextTrack ? (
+                <div className="flex items-center gap-3">
+                    <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md" />
+                    <div>
+                        <p className="font-semibold text-sm truncate">{nextTrack.name}</p>
+                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
+                    </div>
+                </div>
+            ) : (
+                <p className={`text-sm ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>Nessuna canzone in coda.</p>
+            )}
+        </div>,
+        document.getElementById('portal-root')!
+    );
+};
+
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, dockedConfig, floatingConfig }) => {
     const { accessToken, logout, setDeviceId, isAuthenticated } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [isReady, setIsReady] = useState(false);
     const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
     const [showQueue, setShowQueue] = useState(false);
-    const [queue, setQueue] = useState<SpotifyTrack[]>([]);
+    const [isLiked, setIsLiked] = useState(false);
+
+    const queueButtonRef = useRef<HTMLButtonElement>(null);
+    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, right: 0 });
     
     const isPlayerActive = isAuthenticated && isReady && playerState && playerState.track_window.current_track;
+    const currentTrackId = playerState?.track_window.current_track?.id;
 
     useEffect(() => {
         if (!accessToken) {
@@ -175,9 +219,38 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     }, [accessToken, logout, setDeviceId]);
 
+    useEffect(() => {
+        const checkIsLiked = async () => {
+            if (!currentTrackId) return;
+            try {
+                const { data } = await apiClient.get(`/me/tracks/contains?ids=${currentTrackId}`);
+                setIsLiked(data[0] || false);
+            } catch (e) {
+                console.error("Failed to check if track is liked", e);
+                setIsLiked(false);
+            }
+        };
+        checkIsLiked();
+    }, [currentTrackId]);
+
     const handleTogglePlay = () => playerRef.current?.togglePlay();
     const handleNextTrack = () => playerRef.current?.nextTrack();
     const handlePrevTrack = () => playerRef.current?.previousTrack();
+
+    const handleToggleLike = async () => {
+        if (!currentTrackId) return;
+        try {
+            if (isLiked) {
+                await apiClient.delete(`/me/tracks?ids=${currentTrackId}`);
+                setIsLiked(false);
+            } else {
+                await apiClient.put(`/me/tracks?ids=${currentTrackId}`);
+                setIsLiked(true);
+            }
+        } catch (e) {
+            console.error("Failed to update like status", e);
+        }
+    };
 
     const handleToggleShuffle = () => {
         if (!playerState) return;
@@ -191,17 +264,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
 
-    const handleToggleQueue = async () => {
-        if (!showQueue) {
-            try {
-                const { data } = await apiClient.get('/me/player/queue');
-                setQueue(data.queue);
-            } catch (e) {
-                console.error("Failed to fetch queue", e);
-                setQueue([]); // Set to empty array on error
-            }
+    const handleToggleQueue = () => {
+        if (queueButtonRef.current) {
+            const rect = queueButtonRef.current.getBoundingClientRect();
+            setPopoverPosition({
+                bottom: window.innerHeight - rect.top + 12, // 12px margin
+                right: window.innerWidth - rect.right,
+            });
         }
-        setShowQueue(!showQueue);
+        setShowQueue(prev => !prev);
     };
     
     const playerStyle = useMemo(() => {
@@ -233,7 +304,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         if (isPlayerActive) {
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
-            const nextTrack = queue[0];
+            const nextTrack = playerState.track_window.next_tracks[0];
 
             const iconColor = isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black';
             const activeIconColor = isNight ? 'text-green-400' : 'text-green-600';
@@ -274,28 +345,20 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                              <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
                                 <FiSkipForward className="w-6 h-6" />
                             </button>
-                             <button className={`transition ${iconColor}`}><IoMdAddCircleOutline className="w-6 h-6" /></button>
-                             <button onClick={handleToggleQueue} className={`transition ${iconColor}`}><HiOutlineQueueList className="w-6 h-6" /></button>
-                             <button className={`transition ${iconColor}`}><FiSearch className="w-5 h-5" /></button>
+                             <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-[#1DB954]' : iconColor}`}>
+                                {isLiked ? <IoMdHeart className="w-6 h-6" /> : <IoMdAddCircleOutline className="w-6 h-6" />}
+                            </button>
+                             <button ref={queueButtonRef} onClick={handleToggleQueue} className={`transition ${iconColor}`}><HiOutlineQueueList className="w-6 h-6" /></button>
                         </div>
                     </div>
 
-                    {/* Queue Popover */}
                     {showQueue && (
-                        <div className={`absolute bottom-full mb-3 right-0 w-64 p-3 rounded-lg shadow-2xl ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}>
-                            <p className={`text-xs font-bold mb-2 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>Prossima in coda</p>
-                            {nextTrack ? (
-                                <div className="flex items-center gap-3">
-                                    <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md" />
-                                    <div>
-                                        <p className="font-semibold text-sm truncate">{nextTrack.name}</p>
-                                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <p className={`text-sm ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>Nessuna canzone in coda.</p>
-                            )}
-                        </div>
+                        <QueuePopover
+                            isNight={isNight}
+                            nextTrack={nextTrack}
+                            position={popoverPosition}
+                            onClose={() => setShowQueue(false)}
+                        />
                     )}
                 </div>
             );

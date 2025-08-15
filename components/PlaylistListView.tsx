@@ -1,8 +1,6 @@
-
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiLoader, FiHeart } from 'react-icons/fi';
+import { FiLoader } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 
 const likedSongsItem: SpotifyItem = {
@@ -11,20 +9,8 @@ const likedSongsItem: SpotifyItem = {
     type: 'playlist',
     uri: 'special:liked-songs',
     description: 'I brani che hai salvato.',
-    // A placeholder, the custom rendering will handle the icon
+    // A placeholder, the custom rendering in PlaylistItem will handle the icon
     images: [{ url: 'liked-songs-cover' }], 
-};
-
-const LikedSongsPlaylistItem = ({ item, onSelectItem }: { item: SpotifyItem; onSelectItem: (item: SpotifyItem) => void }) => {
-    return (
-        <div onClick={() => onSelectItem(item)} className="p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 bg-gradient-to-br from-indigo-800 to-purple-800 hover:from-indigo-700 hover:to-purple-700">
-            <div className="relative w-full aspect-square mb-3 flex items-center justify-center">
-                <FiHeart className="w-16 h-16 text-white/90" />
-            </div>
-            <h3 className="font-bold truncate text-white">{item.name}</h3>
-            <p className="text-sm truncate text-gray-300">{item.description}</p>
-        </div>
-    );
 };
 
 
@@ -38,8 +24,10 @@ const PlaylistListView = ({ isNight, onSelectItem }: { isNight: boolean, onSelec
             setLoading(true);
             setError(null);
             try {
+                // Fetch up to 50 playlists for a more complete list
                 const response = await apiClient.get('/me/playlists?limit=50');
-                setPlaylists(response.data.items);
+                // Prepend the special "Liked Songs" item to the user's playlists
+                setPlaylists([likedSongsItem, ...response.data.items]);
             } catch (err) {
                 console.error('Failed to fetch playlists', err);
                 setError('Could not load your playlists.');
@@ -64,7 +52,6 @@ const PlaylistListView = ({ isNight, onSelectItem }: { isNight: boolean, onSelec
         <div className="flex-grow overflow-y-auto px-6 pb-6">
             <h2 className={`text-3xl font-bold mb-6 ${isNight ? 'text-white' : 'text-black'}`}>Le tue Playlist</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                <LikedSongsPlaylistItem item={likedSongsItem} onSelectItem={onSelectItem} />
                 {playlists.map((playlist, index) => (
                     <PlaylistItem key={`playlist-list-${playlist.id}-${index}`} item={playlist} isNight={isNight} onSelectItem={onSelectItem} />
                 ))}

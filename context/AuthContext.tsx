@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import axios from 'axios';
 import apiClient from '../api';
 
@@ -50,11 +50,13 @@ const initialState: AuthState = {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
+    const hasCheckedPlayer = useRef(false);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_refresh_token');
         localStorage.removeItem('spotify_expires_in');
+        hasCheckedPlayer.current = false; // Reset on logout
         setState(initialState);
         setState(s => ({...s, isLoading: false}));
     }, []);
@@ -86,6 +88,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setState(s => ({...s, isLoading: false}));
         }
     }, [fetchUserInfo]);
+
+    // Auto-resume logic
+    useEffect(() => {
+        if (state.isAuthenticated && deviceId && !hasCheckedPlayer.current) {
+            hasCheckedPlayer.current = true;
+            
+            const checkPlayerStateAndResume = async () => {
+                try {
+                    const { data } = await apiClient.get('/me/player');
+                    // If data exists, has an item, and is paused, try to resume.
+                    if (data && data.item && !data.is_playing) {
+                        await apiClient.put(`/me/player/play?device_id=${deviceId}`);
+                    }
+                } catch (err: any) {
+                    // A 204 No Content response is expected if nothing was playing, which is not an error.
+                    if (err.response && err.response.status !== 204) {
+                        console.error("Error checking player state for auto-resume:", err);
+                    }
+                }
+            };
+
+            // Give the SDK a moment to fully initialize before checking the player state.
+            setTimeout(checkPlayerStateAndResume, 1500); 
+        }
+    }, [state.isAuthenticated, deviceId]);
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));
