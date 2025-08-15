@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.
 

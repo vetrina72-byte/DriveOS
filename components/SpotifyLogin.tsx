@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -14,7 +13,7 @@ const SpotifyLogin: React.FC = () => {
         clearError();
 
         const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
-        const redirectUri = 'http://localhost:5173/spotify-callback';
+        const redirectUri = import.meta.env.VITE_REDIRECT_URI;
         const scope = [
           'streaming',
           'user-read-email',
