@@ -9,7 +9,6 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
   if (validItems.length === 0) return null;
   
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textColor = isNight ? 'text-white' : 'text-zinc-900';
   const buttonBg = isNight ? 'bg-black/60 hover:bg-black/90' : 'bg-white/80 hover:bg-white';
   const buttonIconColor = isNight ? 'text-white' : 'text-black';
 
@@ -22,7 +21,12 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
 
   return (
     <section className="mb-8 relative group">
-      <h2 className={`text-2xl font-bold mb-4 px-6 ${textColor}`}>{title}</h2>
+      <h2 
+        className="text-2xl font-bold mb-4 px-6" 
+        style={{ color: `var(--heading-color)` }}
+      >
+        {title}
+      </h2>
 
       <button
           onClick={() => scroll('left')}

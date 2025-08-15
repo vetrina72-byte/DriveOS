@@ -13,6 +13,59 @@ const getGreeting = () => {
   return "Buonasera";
 };
 
+const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
+    const contextUris = new Set<string>();
+    const albumIds: string[] = [];
+    const playlistIds: string[] = [];
+
+    items.forEach((item: any) => {
+        if (item.context?.uri && !contextUris.has(item.context.uri)) {
+            contextUris.add(item.context.uri);
+            const [, , type, id] = item.context.uri.split(':');
+            if (type === 'album') albumIds.push(id);
+            if (type === 'playlist') playlistIds.push(id);
+        }
+    });
+
+    const contextDetails = new Map<string, SpotifyItem>();
+    const contextPromises = [];
+
+    if (albumIds.length > 0) {
+        contextPromises.push(
+            apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
+                res.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
+            }).catch(e => console.error("Failed to fetch album details", e))
+        );
+    }
+    if (playlistIds.length > 0) {
+        const playlistDetailPromises = playlistIds.map(id => 
+            apiClient.get(`/playlists/${id}`).then(res => {
+                contextDetails.set(res.data.uri, res.data);
+            }).catch(e => console.error(`Failed to fetch playlist ${id}`, e))
+        );
+        contextPromises.push(Promise.all(playlistDetailPromises));
+    }
+
+    await Promise.all(contextPromises);
+
+    const unifiedList: SpotifyItem[] = [];
+    const addedUris = new Set<string>();
+
+    for (const item of items) {
+        if (item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')) {
+            const contextUri = item.context.uri;
+            if (!addedUris.has(contextUri)) {
+                const details = contextDetails.get(contextUri);
+                if (details) {
+                    unifiedList.push(details);
+                    addedUris.add(contextUri);
+                }
+            }
+        }
+    }
+    return unifiedList;
+};
+
 // Main Component
 const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
   const { user, refreshTrigger } = useAuth();
@@ -60,59 +113,8 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       ] = results;
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
-          const recentItems = recentlyPlayedRes.value.data.items;
-          const contextUris = new Set<string>();
-          const albumIds: string[] = [];
-          const playlistIds: string[] = [];
-
-          recentItems.forEach((item: any) => {
-              if (item.context?.uri && !contextUris.has(item.context.uri)) {
-                  contextUris.add(item.context.uri);
-                  const [, , type, id] = item.context.uri.split(':');
-                  if (type === 'album') albumIds.push(id);
-                  if (type === 'playlist') playlistIds.push(id);
-              }
-          });
-
-          const contextDetails = new Map<string, SpotifyItem>();
-          const contextPromises = [];
-
-          if (albumIds.length > 0) {
-              contextPromises.push(
-                  apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
-                      res.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
-                  }).catch(e => console.error("Failed to fetch album details", e))
-              );
-          }
-          if (playlistIds.length > 0) {
-              const playlistDetailPromises = playlistIds.map(id => 
-                  apiClient.get(`/playlists/${id}`).then(res => {
-                      contextDetails.set(res.data.uri, res.data);
-                  }).catch(e => console.error(`Failed to fetch playlist ${id}`, e))
-              );
-              contextPromises.push(Promise.all(playlistDetailPromises));
-          }
-
-          await Promise.all(contextPromises);
-
-          const unifiedList: SpotifyItem[] = [];
-          const addedUris = new Set<string>();
-
-          // This logic now correctly prioritizes and adds unique contexts (albums/playlists)
-          // from the recently played items.
-          for (const item of recentItems) {
-              if (item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')) {
-                  const contextUri = item.context.uri;
-                  if (!addedUris.has(contextUri)) {
-                      const details = contextDetails.get(contextUri);
-                      if (details) {
-                          unifiedList.push(details);
-                          addedUris.add(contextUri);
-                      }
-                  }
-              }
-          }
-          setResumeItems(unifiedList);
+          const processedItems = await processRecentPlays(recentlyPlayedRes.value.data.items);
+          setResumeItems(processedItems);
       }
       if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data.albums) {
           setNewReleases(newReleasesRes.value.data.albums.items);
@@ -144,7 +146,6 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   }, [user, startFetching, fetchData, refreshTrigger]);
   
   const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
-  const textColor = isNight ? 'text-white' : 'text-zinc-900';
   const greeting = getGreeting();
 
   if (loading) {
@@ -157,7 +158,12 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
 
   return (
     <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
-      <h1 className={`text-3xl font-bold mb-8 px-6 ${textColor}`}>{greeting}, {user?.display_name}!</h1>
+      <h1 
+        className="text-3xl font-bold mb-8 px-6"
+        style={{ color: 'var(--heading-color)' }}
+      >
+        {greeting}, {user?.display_name}!
+      </h1>
       
       {resumeItems.length > 0 && (
           <ContentCarousel title="Riprendi da dove hai lasciato" items={resumeItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="resume-listening" />

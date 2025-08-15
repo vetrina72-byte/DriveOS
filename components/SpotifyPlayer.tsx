@@ -156,8 +156,6 @@ const SpotifyPlayer = ({
         };
     }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
 
-    const bgColor = isNight ? 'bg-[#121212]/95' : 'bg-gray-100/95';
-
     const renderContent = () => {
         if (error) {
             return (
@@ -233,7 +231,10 @@ const SpotifyPlayer = ({
             aria-labelledby="spotify-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className={`w-full h-full flex flex-col relative ${bgColor} backdrop-blur-lg`}>
+            <div 
+              className={`w-full h-full flex flex-col relative backdrop-blur-lg`}
+              style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
+            >
                 {/* The close button has been removed from the header */}
                 <h1 id="spotify-app-title" className="sr-only">Spotify App</h1>
                 <div className="flex-grow flex justify-center items-center overflow-hidden">

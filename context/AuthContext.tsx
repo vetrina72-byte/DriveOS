@@ -51,14 +51,12 @@ const initialState: AuthState = {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
-    const hasAttemptedAutoplay = useRef(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_refresh_token');
         localStorage.removeItem('spotify_expires_in');
-        hasAttemptedAutoplay.current = false; // Reset on logout
         setState(initialState);
         setState(s => ({...s, isLoading: false}));
     }, []);
@@ -97,38 +95,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setState(s => ({...s, isLoading: false}));
         }
     }, [fetchUserInfo]);
-
-    // Robust Auto-resume logic
-    useEffect(() => {
-        if (state.accessToken && deviceId && !hasAttemptedAutoplay.current) {
-            hasAttemptedAutoplay.current = true;
-
-            const attemptAutoplay = async () => {
-                try {
-                    // Step A: Transfer playback to this device to "wake it up". This is crucial.
-                    await apiClient.put('/me/player', {
-                        device_ids: [deviceId],
-                        play: false,
-                    });
-
-                    // Step B: Immediately attempt to play. This will resume if paused,
-                    // do nothing if already playing, and fail gracefully if nothing was active.
-                    await apiClient.put(`/me/player/play?device_id=${deviceId}`);
-                } catch (err: any) {
-                    // 404 (No active device) or 403 (Player command failed) are expected
-                    // if there's no session to resume. We can ignore these safely.
-                    if (err.response && (err.response.status === 404 || err.response.status === 403)) {
-                        console.log("Autoplay: No active session to resume.");
-                    } else if (err.response && err.response.status !== 204) {
-                         console.warn("Could not attempt autoplay:", err.response?.data || err.message);
-                    }
-                }
-            };
-
-            // Give the SDK a moment after connection before attempting the transfer.
-            setTimeout(attemptAutoplay, 1000);
-        }
-    }, [state.accessToken, deviceId]);
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));

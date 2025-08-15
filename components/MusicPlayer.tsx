@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic
+    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic, FiAlertTriangle, FiLoader
 } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 import { 
@@ -19,6 +19,8 @@ interface MusicPlayerProps {
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
     floatingConfig: { width: number; bottom: number; placeholderWidth: number; height: number; };
 }
+
+type PlayerStatus = 'connecting' | 'ready' | 'error';
 
 const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, isNight: boolean }) => {
     const [position, setPosition] = useState(state.position);
@@ -157,7 +159,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, dockedConfig, floatingConfig }) => {
     const { accessToken, logout, setDeviceId, isAuthenticated } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
-    const [isReady, setIsReady] = useState(false);
+    const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
     const [showQueue, setShowQueue] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
@@ -165,17 +167,36 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const queueButtonRef = useRef<HTMLButtonElement>(null);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, right: 0 });
     
-    const isPlayerActive = isAuthenticated && isReady && playerState && playerState.track_window.current_track;
+    const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
+
+    const resumePlayback = useCallback(async (deviceId: string) => {
+        try {
+            // 1. Transfer playback to this device to make it active.
+            await apiClient.put('/me/player', {
+                device_ids: [deviceId],
+                play: false, // Don't start playing immediately
+            });
+
+            // 2. Send the play command to resume whatever was last playing.
+            await apiClient.put(`/me/player/play?device_id=${deviceId}`);
+        } catch (err: any) {
+             if (err.response && (err.response.status === 404 || err.response.status === 403)) {
+                console.log("Resume Playback: No active session to resume.");
+            } else {
+                 console.error("Could not resume playback:", err.response?.data || err.message);
+            }
+        }
+    }, []);
 
     useEffect(() => {
         if (!accessToken) {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
-                setIsReady(false);
-                setPlayerState(null);
             }
+            setPlayerStatus('connecting');
+            setPlayerState(null);
             return;
         }
 
@@ -195,6 +216,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         window.onSpotifyWebPlaybackSDKReady = () => {
             if (playerRef.current || !accessToken) return;
 
+            setPlayerStatus('connecting');
             const player = new window.Spotify.Player({
                 name: 'Tesla Infotainment UI',
                 getOAuthToken: cb => { cb(accessToken); },
@@ -203,21 +225,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
             player.on('ready', ({ device_id }) => {
                 setDeviceId(device_id);
-                setIsReady(true);
+                setPlayerStatus('ready');
+                resumePlayback(device_id);
             });
             player.on('not_ready', () => {
                 setDeviceId(null);
-                setIsReady(false);
+                setPlayerStatus('connecting');
             });
             player.on('player_state_changed', setPlayerState);
-            player.on('authentication_error', () => logout());
-            player.on('account_error', () => logout());
+
+            const handleError = () => {
+                setPlayerStatus('error');
+                logout();
+            };
+            player.on('initialization_error', handleError);
+            player.on('authentication_error', handleError);
+            player.on('account_error', handleError);
 
             player.connect();
             playerRef.current = player;
         };
 
-    }, [accessToken, logout, setDeviceId]);
+    }, [accessToken, logout, setDeviceId, resumePlayback]);
 
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -301,6 +330,35 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         : 'bg-white/90 text-black border-zinc-300';
     
     const renderPlayerContent = () => {
+        if (playerStatus === 'error') {
+            return (
+                <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
+                    <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
+                    <div className="overflow-hidden">
+                        <div className="font-semibold truncate">Errore di connessione</div>
+                        <div className="text-sm truncate">Impossibile connettersi a Spotify.</div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (playerStatus === 'connecting' || !isAuthenticated) {
+            const placeholderText = isAuthenticated ? "In attesa della musica..." : "Login to start listening";
+            return (
+                 <div className="flex items-center w-full h-full gap-5 px-4">
+                    <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                       {isAuthenticated ? <FiLoader className={`w-7 h-7 animate-spin ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /> : <FaSpotify className={`w-7 h-7 ${isNight ? 'text-green-500' : 'text-green-600'}`} />}
+                    </div>
+                    <div className="flex-grow overflow-hidden">
+                        <div className="font-semibold truncate">Spotify</div>
+                        <div className={`text-sm truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                            {placeholderText}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
         if (isPlayerActive) {
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
@@ -364,34 +422,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             );
         }
 
-        // If authenticated and the player is ready, but no track is loaded, show a "waiting" state.
-        if (isAuthenticated && isReady) {
-             return (
-                 <div className="flex items-center w-full h-full gap-5 px-4">
-                    <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                        <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                    </div>
-                    <div className="flex-grow overflow-hidden">
-                        <div className="font-semibold truncate">Niente in riproduzione</div>
-                        <div className={`text-sm truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            Scegli qualcosa da ascoltare.
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Default placeholder for when not authenticated or the player SDK is not ready yet.
-        const placeholderText = isAuthenticated ? "Connecting..." : "Login to start listening";
+        // If authenticated and ready, but no track is loaded, show a "waiting" state.
         return (
              <div className="flex items-center w-full h-full gap-5 px-4">
                 <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                    <FaSpotify className={`w-7 h-7 ${isNight ? 'text-green-500' : 'text-green-600'}`} />
+                    <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                 </div>
                 <div className="flex-grow overflow-hidden">
-                    <div className="font-semibold truncate">Spotify</div>
+                    <div className="font-semibold truncate">Niente in riproduzione</div>
                     <div className={`text-sm truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                        {placeholderText}
+                        Scegli qualcosa da ascoltare.
                     </div>
                 </div>
             </div>
