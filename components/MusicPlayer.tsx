@@ -35,7 +35,7 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
             setPosition(state.position);
             lastUpdateTimeRef.current = Date.now();
         }
-    }, [state.position]);
+    }, [state.position, isSeeking]);
 
     // Animate progress locally using requestAnimationFrame for smoothness when playing.
     useEffect(() => {
@@ -170,35 +170,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
-    const startLastPlayedTrack = useCallback(async (deviceId: string) => {
+    // This function now only transfers playback to this device without forcing a play state.
+    const transferPlaybackToDevice = useCallback(async (deviceId: string) => {
         try {
-            const response = await apiClient.get('/me/player/recently-played?limit=1');
-            const lastPlayedTrack = response.data?.items?.[0]?.track;
-    
-            if (lastPlayedTrack && lastPlayedTrack.uri) {
-                // Play the last played track on the new device.
-                await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
-                    uris: [lastPlayedTrack.uri],
-                });
-            } else {
-                // No recent tracks found, just transfer playback to make this device active.
-                await apiClient.put('/me/player', {
-                    device_ids: [deviceId],
-                    play: false,
-                });
-                console.log("No recently played track to start. Device is now active.");
-            }
+            await apiClient.put('/me/player', {
+                device_ids: [deviceId],
+                play: false, // This is key: transfer control without changing play state.
+            });
         } catch (err: any) {
-            console.error("Could not start last played track:", err.response?.data || err.message);
-            // Fallback to just transferring playback if the API call fails for any reason
-            try {
-                await apiClient.put('/me/player', {
-                    device_ids: [deviceId],
-                    play: false,
-                });
-            } catch (transferErr) {
-                console.error("Fallback playback transfer failed:", transferErr);
-            }
+            console.error("Failed to transfer playback:", err.response?.data || err.message);
         }
     }, []);
 
@@ -239,7 +219,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             player.on('ready', ({ device_id }) => {
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
-                startLastPlayedTrack(device_id);
+                // Passively transfer playback. The player will then sync to the
+                // current state via the 'player_state_changed' event.
+                transferPlaybackToDevice(device_id);
             });
             player.on('not_ready', () => {
                 setDeviceId(null);
@@ -247,9 +229,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             });
             player.on('player_state_changed', setPlayerState);
 
-            const handleError = () => {
+            const handleError = (error: { message: string }) => {
+                console.error("Spotify Player Error:", error.message);
                 setPlayerStatus('error');
-                logout();
             };
             player.on('initialization_error', handleError);
             player.on('authentication_error', handleError);
@@ -258,8 +240,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             player.connect();
             playerRef.current = player;
         };
-
-    }, [accessToken, logout, setDeviceId, startLastPlayedTrack]);
+        
+        // The cleanup function for when the component unmounts or accessToken changes
+        return () => {
+            if (playerRef.current) {
+                playerRef.current.disconnect();
+                playerRef.current = null;
+            }
+        }
+    }, [accessToken, logout, setDeviceId, transferPlaybackToDevice]);
 
     useEffect(() => {
         const checkIsLiked = async () => {
