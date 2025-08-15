@@ -163,7 +163,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
     const [showQueue, setShowQueue] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
-    const [userHasInteracted, setUserHasInteracted] = useState(false);
 
     const queueButtonRef = useRef<HTMLButtonElement>(null);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, right: 0 });
@@ -173,18 +172,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     const resumePlayback = useCallback(async (deviceId: string) => {
         try {
-            // Transfer playback to this device to make it active, but do not start playing.
-            // This is to respect browser autoplay policies. The UI will update with the
-            // current track in a paused state, awaiting user interaction.
+            // 1. Transfer playback to this device to make it active.
             await apiClient.put('/me/player', {
                 device_ids: [deviceId],
-                play: false,
+                play: false, // Don't start playing immediately
             });
+
+            // 2. Send the play command to resume whatever was last playing.
+            await apiClient.put(`/me/player/play?device_id=${deviceId}`);
         } catch (err: any) {
              if (err.response && (err.response.status === 404 || err.response.status === 403)) {
-                console.log("Resume Playback: No active session to transfer.");
+                console.log("Resume Playback: No active session to resume.");
             } else {
-                 console.error("Could not transfer playback:", err.response?.data || err.message);
+                 console.error("Could not resume playback:", err.response?.data || err.message);
             }
         }
     }, []);
@@ -262,25 +262,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handlePlayPauseClick = useCallback(async () => {
-        const player = playerRef.current;
-        if (!player) return;
-
-        if (!userHasInteracted) {
-            try {
-                // On first interaction, call resume() to "unlock" the audio context.
-                // This is required by browser autoplay policies.
-                await player.resume();
-                setUserHasInteracted(true);
-            } catch (e) {
-                console.error("Error resuming playback on first interaction:", e);
-            }
-        } else {
-            // For all subsequent clicks, togglePlay is the standard behavior.
-            player.togglePlay();
-        }
-    }, [userHasInteracted]);
-
+    const handleTogglePlay = () => playerRef.current?.togglePlay();
     const handleNextTrack = () => playerRef.current?.nextTrack();
     const handlePrevTrack = () => playerRef.current?.previousTrack();
 
@@ -415,7 +397,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                              <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
                                 <FiSkipBack className="w-6 h-6" />
                             </button>
-                             <button onClick={handlePlayPauseClick} className={`w-9 h-9 flex items-center justify-center rounded-full transition ${isNight ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-200 hover:bg-zinc-300'}`}>
+                             <button onClick={handleTogglePlay} className={`w-9 h-9 flex items-center justify-center rounded-full transition ${isNight ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-200 hover:bg-zinc-300'}`}>
                                {playerState.paused ? <FiPlay className="w-5 h-5 ml-0.5" /> : <FiPause className="w-5 h-5" />}
                             </button>
                              <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
