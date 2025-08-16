@@ -50,30 +50,34 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
 
     await Promise.all(contextPromises);
 
-    // 3. Build the final unified list, prioritizing contexts over individual tracks
+    // 3. Build the final unified list with a more chronological approach
     const unifiedList: SpotifyItem[] = [];
-    const addedUris = new Set<string>();
 
     for (const item of items) {
         const { track, context } = item;
-        if (!track) continue; // Skip if track is null (e.g., deleted)
+        if (!track) continue; // Skip if track is null
 
-        // If there's a context, prioritize adding it, but only once.
+        let currentItem: SpotifyItem | null = null;
+        let currentUri: string | null = null;
+
+        // Determine if the item to consider is the context or the individual track
         if (context?.uri && (context.type === 'album' || context.type === 'playlist')) {
-            if (!addedUris.has(context.uri)) {
-                const details = contextDetails.get(context.uri);
-                if (details) {
-                    unifiedList.push(details);
-                    addedUris.add(context.uri);
-                }
+            const details = contextDetails.get(context.uri);
+            if (details) {
+                currentItem = details;
+                currentUri = details.uri;
             }
-            // Whether the context was new or not, we don't add the individual track
-            // from a context to avoid clutter.
         } else {
-            // Only if there is NO context, do we add the individual track.
-            if (!addedUris.has(track.uri)) {
-                unifiedList.push(track);
-                addedUris.add(track.uri);
+            currentItem = track;
+            currentUri = track.uri;
+        }
+        
+        // Add the item if it's different from the last one added.
+        // This prevents consecutive duplicates (e.g., Album A, Album A)
+        // but allows for chronological history (e.g., Album A, Playlist B, Album A).
+        if (currentItem && currentUri) {
+            if (unifiedList.length === 0 || unifiedList[unifiedList.length - 1].uri !== currentUri) {
+                unifiedList.push(currentItem);
             }
         }
     }

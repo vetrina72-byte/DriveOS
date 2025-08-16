@@ -141,9 +141,9 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
         >
             <p className={`text-xs font-bold mb-2 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>Prossima in coda</p>
             {nextTrack ? (
-                <div className="flex items-center gap-3">
-                    <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md" />
-                    <div>
+                <div className="flex items-center gap-3 min-w-0">
+                    <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
+                    <div className="overflow-hidden">
                         <p className="font-semibold text-sm truncate">{nextTrack.name}</p>
                         <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
                     </div>
@@ -324,7 +324,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             const rect = queueButtonRef.current.getBoundingClientRect();
             setPopoverPosition({
                 bottom: window.innerHeight - rect.top + 12, // 12px margin
-                right: window.innerWidth - rect.right,
+                right: window.innerWidth - rect.right + (rect.width / 2),
             });
         }
         setShowQueue(prev => !prev);
