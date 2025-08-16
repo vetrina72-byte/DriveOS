@@ -197,7 +197,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
       )}
        {madeForYouPlaylists.length > 0 && (
-          <ContentCarousel title="Le playlist create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
+          <ContentCarousel title="Le playlist create per te da Spotify" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
       )}
       {userPlaylists.length > 0 && (
           <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />

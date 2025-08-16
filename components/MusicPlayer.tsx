@@ -137,6 +137,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
                 bottom: `${position.bottom}px`,
                 left: `${position.left}px`,
                 transform: position.transform,
+                transition: 'bottom 0.5s ease-out, left 0.5s ease-out'
             }}
             className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}
         >
@@ -295,11 +296,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         prevTrackUri.current = currentTrackUri;
     }, [currentTrackUri, isAutoQueueEnabled]);
 
-    // Calculate popover position when it's about to be shown
+    // Animate popover position smoothly
     useEffect(() => {
         const playerEl = playerContainerRef.current;
         if (!showQueue || !playerEl) return;
-    
+
+        let animationFrameId: number;
+
         const calculatePosition = () => {
             const playerRect = playerEl.getBoundingClientRect();
             setPopoverPosition({
@@ -308,15 +311,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 transform: '',
             });
         };
-    
-        calculatePosition(); // Set initial position
-    
-        // Add listeners to recalculate on layout changes
-        playerEl.addEventListener('transitionend', calculatePosition);
+        
+        const updateLoop = () => {
+            calculatePosition();
+            animationFrameId = requestAnimationFrame(updateLoop);
+        };
+
+        animationFrameId = requestAnimationFrame(updateLoop);
         window.addEventListener('resize', calculatePosition);
     
         return () => {
-            playerEl.removeEventListener('transitionend', calculatePosition);
+            cancelAnimationFrame(animationFrameId);
             window.removeEventListener('resize', calculatePosition);
         };
     }, [showQueue]);
