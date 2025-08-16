@@ -59,7 +59,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             try {
                 if (isLikedSongs) {
                     const response = await apiClient.get('/me/tracks?limit=50');
-                    setTracks(response.data.items.map((item: SavedTrackObject) => item.track).filter(Boolean));
+                    setTracks(response.data.items.map((item: SavedTrackObject) => item.track).filter((track: Track) => track && track.album));
                     // Create a mock details object for the header
                     setDetails({
                         name: 'Brani che ti piacciono',
@@ -71,8 +71,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     const response = await apiClient.get(`/${itemType}s/${itemId}`);
                     setDetails(response.data);
                     const trackItems = itemType === 'playlist' 
-                        ? response.data.tracks.items.map((item: any) => item.track).filter(Boolean)
-                        : response.data.tracks.items;
+                        ? response.data.tracks.items.map((item: any) => item.track).filter((track: Track) => track && track.album)
+                        : response.data.tracks.items.filter((track: Track) => track && track.album);
                     setTracks(trackItems);
                 }
             } catch (err) {

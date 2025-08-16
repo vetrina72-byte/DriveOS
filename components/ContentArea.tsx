@@ -35,7 +35,9 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
     if (albumIds.length > 0) {
         contextPromises.push(
             apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
-                res.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
+                if (res.data.albums) {
+                    res.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
+                }
             }).catch(e => console.error("Failed to fetch album details", e))
         );
     }
@@ -50,38 +52,34 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
 
     await Promise.all(contextPromises);
 
-    // 3. Build the final unified list with a more chronological approach
+    // 3. Build the final unified list, prioritizing context and ensuring uniqueness.
     const unifiedList: SpotifyItem[] = [];
+    const addedUris = new Set<string>();
 
     for (const item of items) {
         const { track, context } = item;
-        if (!track) continue; // Skip if track is null
+        if (!track) continue;
 
-        let currentItem: SpotifyItem | null = null;
-        let currentUri: string | null = null;
-
-        // Determine if the item to consider is the context or the individual track
+        let itemToAdd: SpotifyItem | null = null;
+        
+        // Prioritize playlist/album context
         if (context?.uri && (context.type === 'album' || context.type === 'playlist')) {
             const details = contextDetails.get(context.uri);
             if (details) {
-                currentItem = details;
-                currentUri = details.uri;
+                itemToAdd = details;
             }
         } else {
-            currentItem = track;
-            currentUri = track.uri;
+            // Fallback to the track itself if no valid context
+            itemToAdd = track;
         }
-        
-        // Add the item if it's different from the last one added.
-        // This prevents consecutive duplicates (e.g., Album A, Album A)
-        // but allows for chronological history (e.g., Album A, Playlist B, Album A).
-        if (currentItem && currentUri) {
-            if (unifiedList.length === 0 || unifiedList[unifiedList.length - 1].uri !== currentUri) {
-                unifiedList.push(currentItem);
-            }
+
+        // Add to the list only if it's a new, unique item
+        if (itemToAdd && itemToAdd.uri && !addedUris.has(itemToAdd.uri)) {
+            unifiedList.push(itemToAdd);
+            addedUris.add(itemToAdd.uri);
         }
     }
-    // Limit to a reasonable number for a carousel
+    
     return unifiedList.slice(0, 10);
 };
 
@@ -198,7 +196,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           <ContentCarousel title="Nuove uscite" items={newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
       )}
       {featuredPlaylists.length > 0 && (
-          <ContentCarousel title="Playlist in primo piano" items={featuredPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="featured-playlists" />
+          <ContentCarousel title="Le playlist create per te" items={featuredPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="featured-playlists" />
       )}
     </div>
   );

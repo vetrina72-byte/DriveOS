@@ -145,8 +145,8 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
                 <div className="flex items-center gap-3 min-w-0">
                     <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
                     <div className="overflow-hidden">
-                        <p className="font-semibold text-sm truncate">{nextTrack.name}</p>
-                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
+                        <p className="font-semibold text-sm truncate" style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.name}</p>
+                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`} style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
                     </div>
                 </div>
             ) : (
@@ -306,7 +306,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 transform: '', // No transform needed
             });
         }
-    }, [showQueue, isAnyAppOpen]); // Re-calculate if the player's layout changes
+    }, [showQueue, isAnyAppOpen, dockedConfig, floatingConfig, isPlayerActive]);
 
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -322,7 +322,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handleTogglePlay = () => playerRef.current?.togglePlay();
+    const handleTogglePlay = () => {
+        if (playerRef.current && playerState) {
+            playerState.paused ? playerRef.current.resume() : playerRef.current.pause();
+        }
+    };
     const handleNextTrack = () => playerRef.current?.nextTrack();
     const handlePrevTrack = () => playerRef.current?.previousTrack();
 
