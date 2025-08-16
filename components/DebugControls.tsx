@@ -68,14 +68,12 @@ interface DebugControlsProps {
   setPlayerPlaceholderWidth: (width: number) => void;
   playerFloatingHeight: number;
   setPlayerFloatingHeight: (height: number) => void;
-  focusNightAmbient: number;
-  setFocusNightAmbient: (value: number) => void;
-  focusNightSpotlight: number;
-  setFocusNightSpotlight: (value: number) => void;
-  focusNightDirectional: number;
-  setFocusNightDirectional: (value: number) => void;
-  focusNightEnvironment: number;
-  setFocusNightEnvironment: (value: number) => void;
+  nightAmbientIntensity: number;
+  setNightAmbientIntensity: (intensity: number) => void;
+  nightFrontLightIntensity: number;
+  setNightFrontLightIntensity: (intensity: number) => void;
+  nightEnvironmentIntensity: number;
+  setNightEnvironmentIntensity: (intensity: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -173,14 +171,12 @@ export default function DebugControls({
   setPlayerPlaceholderWidth,
   playerFloatingHeight,
   setPlayerFloatingHeight,
-  focusNightAmbient,
-  setFocusNightAmbient,
-  focusNightSpotlight,
-  setFocusNightSpotlight,
-  focusNightDirectional,
-  setFocusNightDirectional,
-  focusNightEnvironment,
-  setFocusNightEnvironment,
+  nightAmbientIntensity,
+  setNightAmbientIntensity,
+  nightFrontLightIntensity,
+  setNightFrontLightIntensity,
+  nightEnvironmentIntensity,
+  setNightEnvironmentIntensity,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -200,7 +196,7 @@ export default function DebugControls({
   const handleReset = () => {
     setTimeOverride(null);
     setWeatherConditionOverride(null);
-    setTopBarScale(1.20);
+    setTopBarScale(1.0);
     setTopBarOffsetY(-7);
     setMapsSearchPanelWidth(401);
     setMapsSearchPanelTop(61);
@@ -213,7 +209,10 @@ export default function DebugControls({
     setMinOrbitDistance(9.5);
     setMaxOrbitDistance(18);
     setAppOpenConfig(DEFAULT_APP_OPEN_CONFIG);
-    setNightFloorDarkness(-12);
+    setNightFloorDarkness(0);
+    setNightAmbientIntensity(0.25);
+    setNightFrontLightIntensity(0.60);
+    setNightEnvironmentIntensity(0.55);
     setSpotifyPlayerTop(50);
     setSpotifyPlayerBottom(70);
     setPlayerDockedWidth(519);
@@ -224,10 +223,6 @@ export default function DebugControls({
     setPlayerFloatingBottom(98);
     setPlayerPlaceholderWidth(471);
     setPlayerFloatingHeight(113);
-    setFocusNightAmbient(1.88);
-    setFocusNightSpotlight(20.0);
-    setFocusNightDirectional(0.0);
-    setFocusNightEnvironment(0.21);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -502,15 +497,15 @@ export default function DebugControls({
         </div>
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
-            <h3 className="text-md font-semibold text-zinc-200 mb-2">3D Scene Visuals</h3>
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">3D Scene Visuals (Night)</h3>
             <div>
               <label htmlFor="night-floor-darkness-slider" className="block font-medium text-zinc-300 mb-2">
-                Night Floor Darkness: {nightFloorDarkness}
+                Floor Darkness: {nightFloorDarkness}
               </label>
               <input
                 id="night-floor-darkness-slider"
                 type="range"
-                min="-50"
+                min="0"
                 max="50"
                 step="1"
                 value={nightFloorDarkness}
@@ -518,12 +513,50 @@ export default function DebugControls({
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
-            <div className="pl-2 border-l-2 border-zinc-600 my-3 space-y-1">
-              <h4 className="text-sm font-semibold text-zinc-300">Focus Mode Night Lights</h4>
-              <label>Ambient: {focusNightAmbient.toFixed(2)}</label><input type="range" min="0" max="5" step="0.01" value={focusNightAmbient} onChange={(e) => setFocusNightAmbient(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Spotlight: {focusNightSpotlight.toFixed(2)}</label><input type="range" min="0" max="20" step="0.01" value={focusNightSpotlight} onChange={(e) => setFocusNightSpotlight(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Directional: {focusNightDirectional.toFixed(2)}</label><input type="range" min="0" max="5" step="0.01" value={focusNightDirectional} onChange={(e) => setFocusNightDirectional(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Environment: {focusNightEnvironment.toFixed(2)}</label><input type="range" min="0" max="5" step="0.01" value={focusNightEnvironment} onChange={(e) => setFocusNightEnvironment(parseFloat(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+             <div className="mt-2">
+              <label htmlFor="night-ambient-slider" className="block font-medium text-zinc-300 mb-2">
+                Ambient Light: {nightAmbientIntensity.toFixed(2)}
+              </label>
+              <input
+                id="night-ambient-slider"
+                type="range"
+                min="0"
+                max="2"
+                step="0.05"
+                value={nightAmbientIntensity}
+                onChange={(e) => setNightAmbientIntensity(parseFloat(e.target.value))}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+            <div className="mt-2">
+              <label htmlFor="night-front-slider" className="block font-medium text-zinc-300 mb-2">
+                Front Light: {nightFrontLightIntensity.toFixed(2)}
+              </label>
+              <input
+                id="night-front-slider"
+                type="range"
+                min="0"
+                max="5"
+                step="0.1"
+                value={nightFrontLightIntensity}
+                onChange={(e) => setNightFrontLightIntensity(parseFloat(e.target.value))}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+            <div className="mt-2">
+              <label htmlFor="night-env-slider" className="block font-medium text-zinc-300 mb-2">
+                Environment Light: {nightEnvironmentIntensity.toFixed(2)}
+              </label>
+              <input
+                id="night-env-slider"
+                type="range"
+                min="0"
+                max="3"
+                step="0.05"
+                value={nightEnvironmentIntensity}
+                onChange={(e) => setNightEnvironmentIntensity(parseFloat(e.target.value))}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+              />
             </div>
         </div>
 

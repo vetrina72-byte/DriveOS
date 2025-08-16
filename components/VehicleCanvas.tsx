@@ -280,7 +280,6 @@ function SceneController({
 
 function EnvironmentController({
   isNight,
-  isAppOpen,
   floorRef,
   ambientLightRef,
   frontLightRef,
@@ -289,13 +288,8 @@ function EnvironmentController({
   nightFrontLightIntensity,
   nightEnvironmentIntensity,
   nightFloorDarkness,
-  focusNightAmbient,
-  focusNightSpotlight,
-  focusNightDirectional,
-  focusNightEnvironment,
 }: {
   isNight: boolean;
-  isAppOpen: boolean;
   floorRef: React.RefObject<THREE.Mesh>;
   ambientLightRef: React.RefObject<THREE.AmbientLight>;
   frontLightRef: React.RefObject<THREE.SpotLight>;
@@ -304,10 +298,6 @@ function EnvironmentController({
   nightFrontLightIntensity: number;
   nightEnvironmentIntensity: number;
   nightFloorDarkness: number;
-  focusNightAmbient: number;
-  focusNightSpotlight: number;
-  focusNightDirectional: number;
-  focusNightEnvironment: number;
 }) {
   const { scene } = useThree();
   const targetSky = useRef(new THREE.Color()).current;
@@ -329,26 +319,24 @@ function EnvironmentController({
     const t = 1 - Math.exp(-1.5 * delta);
     targetSky.set(isNight ? '#000000' : '#ffffff');
 
-    if (isAppOpen) {
-        targetFloor.set(isNight ? '#000000' : '#ffffff');
+    // This logic removes the "focus mode" completely, as requested.
+    // The floor appearance now only depends on isNight and the debug controls.
+    if (isNight) {
+        // nightFloorDarkness is a value from 0 (black) to 50 (dark grey)
+        const hex = Math.round(nightFloorDarkness).toString(16).padStart(2, '0');
+        targetFloor.set(`#${hex}${hex}${hex}`);
     } else {
-        let floorColorValue = nightFloorDarkness;
-        if (isNight) {
-            if (nightFloorDarkness < 0) {
-                floorColorValue = 0;
-            }
-        }
-        const hex = Math.round(Math.min(50, floorColorValue)).toString(16).padStart(2, '0');
-        targetFloor.set(isNight ? `#${hex}${hex}${hex}` : '#ffffff');
+        targetFloor.set('#ffffff');
     }
-
+    
     if (scene.background instanceof THREE.Color) scene.background.lerp(targetSky, t);
     if (scene.fog) scene.fog.color.lerp(targetSky, t);
 
     const floorMat = floorRef.current!.material as any;
     floorMat.color.lerp(targetFloor, t);
     
-    const targetMirror = isAppOpen ? 0 : (isNight ? 0 : 0.8);
+    // Mirror effect is now independent of app state (focus mode).
+    const targetMirror = isNight ? 0 : 0.8;
     floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror, targetMirror, t);
     
     let targetAmbientIntensity: number, 
@@ -357,17 +345,10 @@ function EnvironmentController({
         targetEnvIntensity: number;
 
     if (isNight) {
-        if (isAppOpen) { // Focus mode night
-            targetAmbientIntensity = focusNightAmbient;
-            targetFrontLightIntensity = focusNightSpotlight;
-            targetDirectionalIntensity = focusNightDirectional;
-            targetEnvIntensity = focusNightEnvironment;
-        } else { // Normal night
-            targetAmbientIntensity = nightAmbientIntensity;
-            targetFrontLightIntensity = nightFrontLightIntensity;
-            targetDirectionalIntensity = 0; // The sun is off
-            targetEnvIntensity = nightEnvironmentIntensity;
-        }
+        targetAmbientIntensity = nightAmbientIntensity;
+        targetFrontLightIntensity = nightFrontLightIntensity;
+        targetDirectionalIntensity = 0; // The sun is off
+        targetEnvIntensity = nightEnvironmentIntensity;
     } else { // Day mode
         targetAmbientIntensity = dayAmbientIntensity;
         targetFrontLightIntensity = dayFrontLightIntensity;
@@ -399,10 +380,9 @@ interface VehicleCanvasProps {
   maxOrbitDistance: number;
   appOpenConfig: SceneConfig;
   nightFloorDarkness: number;
-  focusNightAmbient: number;
-  focusNightSpotlight: number;
-  focusNightDirectional: number;
-  focusNightEnvironment: number;
+  nightAmbientIntensity: number;
+  nightFrontLightIntensity: number;
+  nightEnvironmentIntensity: number;
 }
 
 export default function VehicleCanvas({
@@ -412,10 +392,9 @@ export default function VehicleCanvas({
   maxOrbitDistance,
   appOpenConfig: appOpenConfigFromProps,
   nightFloorDarkness,
-  focusNightAmbient,
-  focusNightSpotlight,
-  focusNightDirectional,
-  focusNightEnvironment,
+  nightAmbientIntensity,
+  nightFrontLightIntensity,
+  nightEnvironmentIntensity,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -423,11 +402,6 @@ export default function VehicleCanvas({
   const frontLightRef = useRef<THREE.SpotLight>(null!);
   const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
-  
-  // All debug controls have been removed. Visual parameters are now hardcoded.
-  const nightAmbientIntensity = 0.45;
-  const nightFrontLightIntensity = 1.2;
-  const nightEnvironmentIntensity = 0.85;
   
   const beamLength = 5.0;
   const beamStartWidth = 1.86;
@@ -579,7 +553,6 @@ export default function VehicleCanvas({
         />
         <EnvironmentController
           isNight={isNight}
-          isAppOpen={isAppOpen}
           floorRef={floorRef}
           ambientLightRef={ambientLightRef}
           frontLightRef={frontLightRef}
@@ -588,10 +561,6 @@ export default function VehicleCanvas({
           nightFrontLightIntensity={nightFrontLightIntensity}
           nightEnvironmentIntensity={nightEnvironmentIntensity}
           nightFloorDarkness={nightFloorDarkness}
-          focusNightAmbient={focusNightAmbient}
-          focusNightSpotlight={focusNightSpotlight}
-          focusNightDirectional={focusNightDirectional}
-          focusNightEnvironment={focusNightEnvironment}
         />
       </Canvas>
     </>

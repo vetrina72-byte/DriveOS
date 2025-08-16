@@ -10,7 +10,7 @@ import {
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
 import { IoMdAddCircleOutline, IoMdHeart } from 'react-icons/io';
-import { HiOutlineQueueList } from 'react-icons/hi2';
+import { HiOutlineQueueList, HiMiniQueueList } from 'react-icons/hi2';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 
 interface MusicPlayerProps {
@@ -117,7 +117,7 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: boolean, nextTrack: SpotifyTrack | null, position: { bottom: number, right: number }, onClose: () => void }) => {
+const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: boolean, nextTrack: SpotifyTrack | null, position: { bottom: number, left: number, transform: string }, onClose: () => void }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -135,7 +135,8 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
             ref={popoverRef}
             style={{
                 bottom: `${position.bottom}px`,
-                right: `${position.right}px`,
+                left: `${position.left}px`,
+                transform: position.transform,
             }}
             className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}
         >
@@ -161,29 +162,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
+    const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
     const [showQueue, setShowQueue] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
 
     const queueButtonRef = useRef<HTMLButtonElement>(null);
-    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, right: 0 });
+    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
+    const currentTrackUri = playerState?.track_window.current_track?.uri;
 
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
-            // STEP 1: UNLOCK BROWSER AUDIO (MOST IMPORTANT)
             await playerInstance.activateElement();
             console.log('Browser audio context activated.');
 
-            // STEP 2: TRANSFER CONTROL
             await apiClient.put('/me/player', {
                 device_ids: [deviceId],
-                play: true // Tell it to play immediately
+                play: true 
             });
             console.log('Playback transferred and set to PLAY.');
 
-            // STEP 3: (Optional but recommended) RESYNCHRONIZE
             setTimeout(async () => {
                 try {
                     const { data: playerState } = await apiClient.get('/me/player');
@@ -274,6 +274,38 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         }
     }, [accessToken, logout, setDeviceId, startAndSyncPlayer]);
 
+    // Automatic queue visibility logic
+    useEffect(() => {
+        if (!isAutoQueueEnabled || !playerState || playerState.paused) {
+            return;
+        }
+        const { duration, position } = playerState;
+        const timeLeft = duration - position;
+        if (duration > 0 && timeLeft < 15000 && timeLeft > 0 && !showQueue) {
+            setShowQueue(true);
+        }
+    }, [playerState, isAutoQueueEnabled, showQueue]);
+
+    const prevTrackUri = useRef<string | undefined>();
+    useEffect(() => {
+        if (isAutoQueueEnabled && prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
+            setShowQueue(false);
+        }
+        prevTrackUri.current = currentTrackUri;
+    }, [currentTrackUri, isAutoQueueEnabled]);
+
+    // Calculate popover position when it's about to be shown
+    useEffect(() => {
+        if (showQueue && queueButtonRef.current) {
+            const rect = queueButtonRef.current.getBoundingClientRect();
+            setPopoverPosition({
+                bottom: window.innerHeight - rect.top + 12,
+                left: rect.left + rect.width / 2,
+                transform: 'translateX(-50%)',
+            });
+        }
+    }, [showQueue]);
+
     useEffect(() => {
         const checkIsLiked = async () => {
             if (!currentTrackId) return;
@@ -288,7 +320,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handleTogglePlay = () => playerRef.current?.togglePlay();
+    const handleTogglePlay = () => playerState?.paused ? playerRef.current?.resume() : playerRef.current?.pause();
     const handleNextTrack = () => playerRef.current?.nextTrack();
     const handlePrevTrack = () => playerRef.current?.previousTrack();
 
@@ -296,10 +328,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         if (!currentTrackId) return;
         try {
             if (isLiked) {
-                await apiClient.delete(`/me/tracks?ids=${currentTrackId}`);
+                await apiClient.delete(`/me/tracks`, { data: { ids: [currentTrackId] } });
                 setIsLiked(false);
             } else {
-                await apiClient.put(`/me/tracks?ids=${currentTrackId}`);
+                await apiClient.put(`/me/tracks`, { ids: [currentTrackId] });
                 setIsLiked(true);
             }
         } catch (e) {
@@ -309,25 +341,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     const handleToggleShuffle = () => {
         if (!playerState) return;
-        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
+        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`, null);
     };
 
     const handleToggleRepeat = () => {
         if (!playerState) return;
         const nextState = (playerState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
-        apiClient.put(`/me/player/repeat?state=${repeatMode}`);
+        apiClient.put(`/me/player/repeat?state=${repeatMode}`, null);
     };
-
-    const handleToggleQueue = () => {
-        if (queueButtonRef.current) {
-            const rect = queueButtonRef.current.getBoundingClientRect();
-            setPopoverPosition({
-                bottom: window.innerHeight - rect.top + 12, // 12px margin
-                right: window.innerWidth - rect.right + (rect.width / 2),
-            });
-        }
-        setShowQueue(prev => !prev);
+    
+    const handleToggleAutoQueue = () => {
+        setIsAutoQueueEnabled(prev => {
+            const newState = !prev;
+            if (!newState) {
+                setShowQueue(false); // Hide popover when disabling
+            }
+            return newState;
+        });
     };
     
     const playerStyle = useMemo(() => {
@@ -392,6 +423,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
             const iconColor = isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black';
             const activeIconColor = isNight ? 'text-green-400' : 'text-green-600';
+            const activeRepeatColor = isNight ? 'text-green-400' : 'text-green-600';
 
             return (
                 <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-2 relative">
@@ -410,7 +442,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                              <button onClick={handleToggleShuffle} className={`transition ${playerState.shuffle ? activeIconColor : iconColor}`}>
                                 <PiShuffleBold className="w-5 h-5" />
                             </button>
-                            <button onClick={handleToggleRepeat} className={`transition ${playerState.repeat_mode !== 0 ? activeIconColor : iconColor}`}>
+                            <button onClick={handleToggleRepeat} className={`transition ${playerState.repeat_mode !== 0 ? activeRepeatColor : iconColor}`}>
                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                             </button>
                         </div>
@@ -431,8 +463,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                             </button>
                              <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-[#1DB954]' : iconColor}`}>
                                 {isLiked ? <IoMdHeart className="w-6 h-6" /> : <IoMdAddCircleOutline className="w-6 h-6" />}
-                            </button>
-                             <button ref={queueButtonRef} onClick={handleToggleQueue} className={`transition ${iconColor}`}><HiOutlineQueueList className="w-6 h-6" /></button>
+                             </button>
+                             <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`transition ${isAutoQueueEnabled ? activeIconColor : iconColor}`}>
+                                {isAutoQueueEnabled ? <HiMiniQueueList className="w-6 h-6" /> : <HiOutlineQueueList className="w-6 h-6" />}
+                             </button>
                         </div>
                     </div>
 

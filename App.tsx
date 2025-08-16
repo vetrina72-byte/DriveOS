@@ -103,7 +103,7 @@ export default function App() {
   const [sunriseArrowYPosition, setSunriseArrowYPosition] = useState(5);
   const [debugWeatherCondition, setDebugWeatherCondition] = useState<string | null>(null);
   const [tempUnit, setTempUnit] = useState<TempUnit>('C');
-  const [topBarScale, setTopBarScale] = useState(1.20);
+  const [topBarScale, setTopBarScale] = useState(1.0);
   const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
   const [mapsSearchPanelWidth, setMapsSearchPanelWidth] = useState(401);
   const [mapsSearchPanelTop, setMapsSearchPanelTop] = useState(61);
@@ -122,7 +122,10 @@ export default function App() {
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
 
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(initialAppOpenConfig);
-  const [nightFloorDarkness, setNightFloorDarkness] = useState(-12);
+  const [nightFloorDarkness, setNightFloorDarkness] = useState(0);
+  const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.25);
+  const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.60);
+  const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(70);
 
@@ -136,12 +139,6 @@ export default function App() {
   const [playerPlaceholderWidth, setPlayerPlaceholderWidth] = useState(471);
   const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
   
-  // States for Focus Mode Night Lights
-  const [focusNightAmbient, setFocusNightAmbient] = useState(1.88);
-  const [focusNightSpotlight, setFocusNightSpotlight] = useState(20.0);
-  const [focusNightDirectional, setFocusNightDirectional] = useState(0.0);
-  const [focusNightEnvironment, setFocusNightEnvironment] = useState(0.21);
-
 
   useEffect(() => {
     // This effect ensures the app's time updates every minute when not in debug mode.
@@ -401,10 +398,9 @@ export default function App() {
               maxOrbitDistance={maxOrbitDistance}
               appOpenConfig={appOpenConfig}
               nightFloorDarkness={nightFloorDarkness}
-              focusNightAmbient={focusNightAmbient}
-              focusNightSpotlight={focusNightSpotlight}
-              focusNightDirectional={focusNightDirectional}
-              focusNightEnvironment={focusNightEnvironment}
+              nightAmbientIntensity={nightAmbientIntensity}
+              nightFrontLightIntensity={nightFrontLightIntensity}
+              nightEnvironmentIntensity={nightEnvironmentIntensity}
           />
 
           <MiniMap 
@@ -537,6 +533,12 @@ export default function App() {
               setAppOpenConfig={setAppOpenConfig}
               nightFloorDarkness={nightFloorDarkness}
               setNightFloorDarkness={setNightFloorDarkness}
+              nightAmbientIntensity={nightAmbientIntensity}
+              setNightAmbientIntensity={setNightAmbientIntensity}
+              nightFrontLightIntensity={nightFrontLightIntensity}
+              setNightFrontLightIntensity={setNightFrontLightIntensity}
+              nightEnvironmentIntensity={nightEnvironmentIntensity}
+              setNightEnvironmentIntensity={setNightEnvironmentIntensity}
               spotifyPlayerTop={spotifyPlayerTop}
               setSpotifyPlayerTop={setSpotifyPlayerTop}
               spotifyPlayerBottom={spotifyPlayerBottom}
@@ -557,14 +559,6 @@ export default function App() {
               setPlayerPlaceholderWidth={setPlayerPlaceholderWidth}
               playerFloatingHeight={playerFloatingHeight}
               setPlayerFloatingHeight={setPlayerFloatingHeight}
-              focusNightAmbient={focusNightAmbient}
-              setFocusNightAmbient={setFocusNightAmbient}
-              focusNightSpotlight={focusNightSpotlight}
-              setFocusNightSpotlight={setFocusNightSpotlight}
-              focusNightDirectional={focusNightDirectional}
-              setFocusNightDirectional={setFocusNightDirectional}
-              focusNightEnvironment={focusNightEnvironment}
-              setFocusNightEnvironment={setFocusNightEnvironment}
           />
           
           <footer 
