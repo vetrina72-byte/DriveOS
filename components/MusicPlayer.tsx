@@ -161,6 +161,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const { accessToken, logout, setDeviceId, isAuthenticated } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
+    const playerContainerRef = useRef<HTMLDivElement>(null);
     const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
     const [showQueue, setShowQueue] = useState(false);
@@ -296,15 +297,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     // Calculate popover position when it's about to be shown
     useEffect(() => {
-        if (showQueue && queueButtonRef.current) {
-            const rect = queueButtonRef.current.getBoundingClientRect();
+        if (showQueue && playerContainerRef.current) {
+            const playerRect = playerContainerRef.current.getBoundingClientRect();
+            // Position the popover above the player with a 16px margin, aligned to the right edge.
             setPopoverPosition({
-                bottom: window.innerHeight - rect.top + 12,
-                left: rect.left + rect.width / 2,
-                transform: 'translateX(-50%)',
+                bottom: window.innerHeight - playerRect.top + 16,
+                left: playerRect.right - 288, // 288 is w-72, the width of the popover
+                transform: '', // No transform needed
             });
         }
-    }, [showQueue]);
+    }, [showQueue, isAnyAppOpen]); // Re-calculate if the player's layout changes
 
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -320,7 +322,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handleTogglePlay = () => playerState?.paused ? playerRef.current?.resume() : playerRef.current?.pause();
+    const handleTogglePlay = () => playerRef.current?.togglePlay();
     const handleNextTrack = () => playerRef.current?.nextTrack();
     const handlePrevTrack = () => playerRef.current?.previousTrack();
 
@@ -500,6 +502,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     return (
         <div 
+            ref={playerContainerRef}
             className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
             style={{...playerStyle, background: `var(--player-bg)`}}
         >
