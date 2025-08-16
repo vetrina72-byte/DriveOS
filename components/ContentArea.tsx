@@ -14,6 +14,7 @@ const getGreeting = () => {
 };
 
 const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
+    // 1. Efficiently collect all unique context URIs and their IDs
     const contextUris = new Set<string>();
     const albumIds: string[] = [];
     const playlistIds: string[] = [];
@@ -26,7 +27,8 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
             if (type === 'playlist') playlistIds.push(id);
         }
     });
-
+    
+    // 2. Fetch details for all collected albums and playlists in parallel
     const contextDetails = new Map<string, SpotifyItem>();
     const contextPromises = [];
 
@@ -48,23 +50,37 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
 
     await Promise.all(contextPromises);
 
+    // 3. Build the final unified list, prioritizing contexts over individual tracks
     const unifiedList: SpotifyItem[] = [];
     const addedUris = new Set<string>();
 
     for (const item of items) {
-        if (item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')) {
-            const contextUri = item.context.uri;
-            if (!addedUris.has(contextUri)) {
-                const details = contextDetails.get(contextUri);
+        const { track, context } = item;
+        if (!track) continue; // Skip if track is null (e.g., deleted)
+
+        // If there's a context, prioritize adding it, but only once.
+        if (context?.uri && (context.type === 'album' || context.type === 'playlist')) {
+            if (!addedUris.has(context.uri)) {
+                const details = contextDetails.get(context.uri);
                 if (details) {
                     unifiedList.push(details);
-                    addedUris.add(contextUri);
+                    addedUris.add(context.uri);
                 }
+            }
+            // Whether the context was new or not, we don't add the individual track
+            // from a context to avoid clutter.
+        } else {
+            // Only if there is NO context, do we add the individual track.
+            if (!addedUris.has(track.uri)) {
+                unifiedList.push(track);
+                addedUris.add(track.uri);
             }
         }
     }
-    return unifiedList;
+    // Limit to a reasonable number for a carousel
+    return unifiedList.slice(0, 10);
 };
+
 
 // Main Component
 const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
@@ -74,7 +90,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [error, setError] = useState<string | null>(null);
   
   // States for each curated section
-  const [resumeItems, setResumeItems] = useState<SpotifyItem[]>([]);
+  const [continueListeningItems, setContinueListeningItems] = useState<SpotifyItem[]>([]);
   const [newReleases, setNewReleases] = useState<SpotifyItem[]>([]);
   const [userPlaylists, setUserPlaylists] = useState<SpotifyItem[]>([]);
   const [featuredPlaylists, setFeaturedPlaylists] = useState<SpotifyItem[]>([]);
@@ -86,7 +102,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     setError(null);
 
     // Reset states
-    setResumeItems([]);
+    setContinueListeningItems([]);
     setNewReleases([]);
     setUserPlaylists([]);
     setFeaturedPlaylists([]);
@@ -114,7 +130,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
           const processedItems = await processRecentPlays(recentlyPlayedRes.value.data.items);
-          setResumeItems(processedItems);
+          setContinueListeningItems(processedItems);
       }
       if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data.albums) {
           setNewReleases(newReleasesRes.value.data.albums.items);
@@ -165,8 +181,8 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
         {greeting}, {user?.display_name}!
       </h1>
       
-      {resumeItems.length > 0 && (
-          <ContentCarousel title="Riprendi da dove hai lasciato" items={resumeItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="resume-listening" />
+      {continueListeningItems.length > 0 && (
+          <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
       )}
       {userPlaylists.length > 0 && (
           <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
