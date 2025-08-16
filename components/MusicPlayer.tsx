@@ -136,8 +136,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
             style={{
                 bottom: `${position.bottom}px`,
                 left: `${position.left}px`,
-                transform: position.transform,
-                transition: 'bottom 0.5s ease-out, left 0.5s ease-out'
+                transform: position.transform
             }}
             className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}
         >
