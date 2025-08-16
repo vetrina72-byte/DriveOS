@@ -287,7 +287,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         }
     }, [playerState, isAutoQueueEnabled, showQueue]);
 
-    const prevTrackUri = useRef<string | undefined>();
+    const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (isAutoQueueEnabled && prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
             setShowQueue(false);
@@ -297,16 +297,29 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     // Calculate popover position when it's about to be shown
     useEffect(() => {
-        if (showQueue && playerContainerRef.current) {
-            const playerRect = playerContainerRef.current.getBoundingClientRect();
-            // Position the popover above the player with a 16px margin, aligned to the right edge.
+        const playerEl = playerContainerRef.current;
+        if (!showQueue || !playerEl) return;
+    
+        const calculatePosition = () => {
+            const playerRect = playerEl.getBoundingClientRect();
             setPopoverPosition({
                 bottom: window.innerHeight - playerRect.top + 16,
-                left: playerRect.right - 288, // 288 is w-72, the width of the popover
-                transform: '', // No transform needed
+                left: playerRect.right - 288, // 288 is w-72, width of popover
+                transform: '',
             });
-        }
-    }, [showQueue, isAnyAppOpen, dockedConfig, floatingConfig, isPlayerActive]);
+        };
+    
+        calculatePosition(); // Set initial position
+    
+        // Add listeners to recalculate on layout changes
+        playerEl.addEventListener('transitionend', calculatePosition);
+        window.addEventListener('resize', calculatePosition);
+    
+        return () => {
+            playerEl.removeEventListener('transitionend', calculatePosition);
+            window.removeEventListener('resize', calculatePosition);
+        };
+    }, [showQueue]);
 
     useEffect(() => {
         const checkIsLiked = async () => {

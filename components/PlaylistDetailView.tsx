@@ -59,20 +59,26 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             try {
                 if (isLikedSongs) {
                     const response = await apiClient.get('/me/tracks?limit=50');
-                    setTracks(response.data.items.map((item: SavedTrackObject) => item.track).filter((track: Track) => track && track.album));
-                    // Create a mock details object for the header
+                    const likedTracks = response.data.items
+                        .map((item: SavedTrackObject) => item.track)
+                        .filter((track: Track | null) => track && track.album); // Ensure track and its album info exist
+                    setTracks(likedTracks);
+                    
                     setDetails({
                         name: 'Brani che ti piacciono',
                         description: `La tua collezione personale di brani preferiti.`,
                         type: 'playlist',
-                        uri: 'special:liked-songs', // Not a real context URI
+                        uri: 'special:liked-songs',
                     });
                 } else {
                     const response = await apiClient.get(`/${itemType}s/${itemId}`);
                     setDetails(response.data);
-                    const trackItems = itemType === 'playlist' 
-                        ? response.data.tracks.items.map((item: any) => item.track).filter((track: Track) => track && track.album)
-                        : response.data.tracks.items.filter((track: Track) => track && track.album);
+                    
+                    const trackItems = (itemType === 'playlist'
+                        ? response.data.tracks.items.map((item: any) => item.track)
+                        : response.data.tracks.items)
+                        .filter(Boolean); // Filter out any null/undefined tracks
+
                     setTracks(trackItems);
                 }
             } catch (err) {
@@ -161,32 +167,37 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
 
             {/* Track List */}
             <div className="mt-2">
-                {tracks.map((track, index) => (
-                    <div 
-                        key={`${track.id}-${index}`}
-                        onClick={() => handleTrackPlay(track.uri, index)}
-                        className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
-                    >
-                        <div className={`text-center ${theme.textSecondary}`}>{index + 1}</div>
-                        <div>
-                             {track.album?.images?.[0]?.url ? (
-                                <img src={track.album.images[0].url} alt={track.album.name} className="w-10 h-10 rounded object-cover" />
-                            ) : (
-                                <div className={`w-10 h-10 rounded flex items-center justify-center ${theme.placeholderBg}`}>
-                                    <FiMusic className={theme.placeholderIcon} />
-                                </div>
-                            )}
+                {tracks.map((track, index) => {
+                    const imageUrl = itemType === 'album' ? details.images?.[0]?.url : track.album?.images?.[0]?.url;
+                    const albumName = itemType === 'album' ? details.name : track.album.name;
+
+                    return (
+                        <div 
+                            key={`${track.id}-${index}`}
+                            onClick={() => handleTrackPlay(track.uri, index)}
+                            className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                        >
+                            <div className={`text-center ${theme.textSecondary}`}>{index + 1}</div>
+                            <div>
+                                 {imageUrl ? (
+                                    <img src={imageUrl} alt={albumName} className="w-10 h-10 rounded object-cover" />
+                                ) : (
+                                    <div className={`w-10 h-10 rounded flex items-center justify-center ${theme.placeholderBg}`}>
+                                        <FiMusic className={theme.placeholderIcon} />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                                <span className={`truncate ${theme.textPrimary}`}>{track.name}</span>
+                                <span className={`text-sm truncate ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
+                            </div>
+                            <div className={`text-sm truncate ${theme.textSecondary}`}>
+                                {albumName}
+                            </div>
+                            <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
                         </div>
-                        <div className="flex flex-col min-w-0">
-                            <span className={`truncate ${theme.textPrimary}`}>{track.name}</span>
-                            <span className={`text-sm truncate ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
-                        </div>
-                        <div className={`text-sm truncate ${theme.textSecondary}`}>
-                            {track.album ? track.album.name : details.name}
-                        </div>
-                        <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

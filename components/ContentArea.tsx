@@ -96,6 +96,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [newReleases, setNewReleases] = useState<SpotifyItem[]>([]);
   const [userPlaylists, setUserPlaylists] = useState<SpotifyItem[]>([]);
   const [featuredPlaylists, setFeaturedPlaylists] = useState<SpotifyItem[]>([]);
+  const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<SpotifyItem[]>([]);
   const [topArtists, setTopArtists] = useState<SpotifyItem[]>([]);
   
   const fetchData = useCallback(async () => {
@@ -108,15 +109,20 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     setNewReleases([]);
     setUserPlaylists([]);
     setFeaturedPlaylists([]);
+    setMadeForYouPlaylists([]);
     setTopArtists([]);
 
     try {
       const randomOffset = Math.floor(Math.random() * 20);
+      // Spotify's "Made for You" category ID
+      const madeForYouCategoryId = '0JQ5DAqbMKF2JckPAnMAhA';
+      
       const promises = [
         apiClient.get('/me/player/recently-played?limit=50'),
         apiClient.get(`/browse/new-releases?country=IT&limit=10&offset=${randomOffset}`),
         apiClient.get('/me/playlists?limit=10'),
         apiClient.get('/browse/featured-playlists?country=IT&limit=10'),
+        apiClient.get(`/browse/categories/${madeForYouCategoryId}/playlists?country=IT&limit=10`),
         apiClient.get('/me/top/artists?time_range=medium_term&limit=10')
       ];
 
@@ -127,6 +133,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           newReleasesRes,
           userPlaylistsRes,
           featuredPlaylistsRes,
+          madeForYouRes,
           topArtistsRes
       ] = results;
 
@@ -142,6 +149,9 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       }
       if (featuredPlaylistsRes.status === 'fulfilled' && featuredPlaylistsRes.value.data.playlists) {
           setFeaturedPlaylists(featuredPlaylistsRes.value.data.playlists.items);
+      }
+      if (madeForYouRes.status === 'fulfilled' && madeForYouRes.value.data.playlists) {
+          setMadeForYouPlaylists(madeForYouRes.value.data.playlists.items);
       }
       if (topArtistsRes.status === 'fulfilled' && topArtistsRes.value.data.items) {
           setTopArtists(topArtistsRes.value.data.items);
@@ -186,6 +196,9 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       {continueListeningItems.length > 0 && (
           <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
       )}
+       {madeForYouPlaylists.length > 0 && (
+          <ContentCarousel title="Le playlist create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
+      )}
       {userPlaylists.length > 0 && (
           <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
       )}
@@ -196,7 +209,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           <ContentCarousel title="Nuove uscite" items={newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
       )}
       {featuredPlaylists.length > 0 && (
-          <ContentCarousel title="Le playlist create per te" items={featuredPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="featured-playlists" />
+          <ContentCarousel title="Playlist in evidenza" items={featuredPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="featured-playlists" />
       )}
     </div>
   );
