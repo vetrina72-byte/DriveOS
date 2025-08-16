@@ -13,7 +13,7 @@ const SpotifyLogin: React.FC = () => {
         clearError();
 
         const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
-        const redirectUri = process.env.VITE_REDIRECT_URI;
+        const redirectUri = 'http://localhost:5173/spotify-callback';
         const scope = [
           'streaming',
           'user-read-email',
