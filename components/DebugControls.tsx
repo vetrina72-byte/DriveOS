@@ -219,9 +219,8 @@ export default function DebugControls({
     setPlayerDockedBottom(92);
     setPlayerDockedLeft(66);
     setPlayerDockedHeight(113);
-    setPlayerFloatingWidth(751);
+    setPlayerFloatingWidth(558);
     setPlayerFloatingBottom(98);
-    setPlayerPlaceholderWidth(471);
     setPlayerFloatingHeight(113);
   };
   
@@ -623,10 +622,6 @@ export default function DebugControls({
                   <label htmlFor="floating-width-slider">Width: {playerFloatingWidth}px</label>
                   <input id="floating-width-slider" type="range" min="400" max="800" value={playerFloatingWidth} onChange={(e) => setPlayerFloatingWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
-                 <div>
-                  <label htmlFor="placeholder-width-slider">Placeholder Width: {playerPlaceholderWidth}px</label>
-                  <input id="placeholder-width-slider" type="range" min="300" max="600" value={playerPlaceholderWidth} onChange={(e) => setPlayerPlaceholderWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-                </div>
                 <div>
                   <label htmlFor="floating-height-slider">Height: {playerFloatingHeight}px</label>
                   <input id="floating-height-slider" type="range" min="60" max="150" value={playerFloatingHeight} onChange={(e) => setPlayerFloatingHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
@@ -661,7 +656,7 @@ export default function DebugControls({
               <label>Pos Y: {appOpenConfig.modelPos.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
               <label>Pos Z: {appOpenConfig.modelPos.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.z} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, z: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
               <label>Rot Y: {appOpenConfig.modelRot.y.toFixed(2)}</label><input type="range" min="-3.14" max="3.14" step="0.01" value={appOpenConfig.modelRot.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelRot: {...c.modelRot, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Scale: {appOpenConfig.modelScale.toFixed(2)}</label><input type="range" min="0.1" max="2.0" step="0.01" value={appOpenConfig.modelScale} onChange={(e) => setAppOpenConfig(c => ({...c, modelScale: parseFloat(e.target.value)}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Scale: {appOpenConfig.modelScale.toFixed(2)}</label><input type="range" min="0.1" max="2.0" step="0.01" value={appOpenConfig.modelScale} onChange={(e) => setAppOpenConfig(c => ({...c, modelScale: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 

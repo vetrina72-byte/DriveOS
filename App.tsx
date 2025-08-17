@@ -26,6 +26,179 @@ const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 
   </button>
 );
 
+const NavigateTool = ({ isVisible, isNight, onSelectDestination }: { 
+    isVisible: boolean, 
+    isNight: boolean,
+    onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
+}) => {
+    const [query, setQuery] = useState('');
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
+    const searchTimeoutRef = useRef<number | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const GEOAPIFY_API_KEY = '0d2c9c7f72c0477eb3260838db72a383';
+
+    const baseHeight = 113;
+    const expandedHeight = 350;
+
+    const highlightMatch = (text: string | undefined, query: string) => {
+        if (!query || !text) {
+            return text;
+        }
+        // Escape special characters for regex
+        const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        if (escapedQuery.trim() === '') {
+            return text;
+        }
+        const regex = new RegExp(`(${escapedQuery})`, 'gi');
+        const parts = text.split(regex);
+        return (
+            <>
+                {parts.map((part, i) =>
+                    // Parts that match the query will be at odd indices
+                    i % 2 === 1 ? (
+                        <strong key={i}>{part}</strong>
+                    ) : (
+                        part
+                    )
+                )}
+            </>
+        );
+    };
+
+    useEffect(() => {
+        if (query.length < 3) {
+            setSuggestions([]);
+            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+            return;
+        }
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+        setLoading(true);
+        searchTimeoutRef.current = window.setTimeout(async () => {
+            try {
+                const response = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&lang=it&limit=5&apiKey=${GEOAPIFY_API_KEY}`);
+                const data = await response.json();
+                setSuggestions(data.features || []);
+            } catch (error) {
+                console.error("Autocomplete search failed:", error);
+                setSuggestions([]);
+            } finally {
+                setLoading(false);
+            }
+        }, 300);
+
+        return () => {
+            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        }
+    }, [query]);
+
+    useEffect(() => {
+        setIsExpanded(isFocused && (loading || suggestions.length > 0));
+    }, [isFocused, loading, suggestions.length]);
+
+    const handleSelect = (feature: any) => {
+        const { lat, lon: lng } = feature.properties;
+        const name = feature.properties.name || feature.properties.formatted;
+        setQuery(name);
+        setSuggestions([]);
+        setIsFocused(false);
+        onSelectDestination({ lat, lng, name });
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && suggestions.length > 0) {
+            e.preventDefault();
+            handleSelect(suggestions[0]);
+        }
+    };
+    
+    const handleSearchClick = () => {
+        if (suggestions.length > 0) {
+            handleSelect(suggestions[0]);
+        }
+    }
+
+    const theme = {
+        bg: 'var(--player-bg)',
+        border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
+        inputBg: isNight ? 'bg-zinc-800' : 'bg-zinc-200',
+        inputText: isNight ? 'text-zinc-100' : 'text-zinc-800',
+        placeholderText: isNight ? 'placeholder:text-zinc-500' : 'placeholder:text-zinc-400',
+        buttonBg: isNight ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-200 hover:bg-zinc-300',
+        buttonText: isNight ? 'text-zinc-200' : 'text-zinc-700',
+        iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
+        suggestionHover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10'
+    };
+
+    return (
+        <div 
+            ref={containerRef}
+            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border} ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            style={{ 
+                width: '430px',
+                height: `${isExpanded ? expandedHeight : baseHeight}px`,
+                background: theme.bg
+            }}
+        >
+             <div className="p-4 flex flex-col h-full overflow-hidden">
+                <div className="relative flex-shrink-0">
+                    <ICONS.search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.iconColor}`} />
+                    <input
+                        type="text"
+                        id="home-search-input"
+                        name="destination"
+                        aria-label="Dove vuoi andare?"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        onFocus={() => setIsFocused(true)}
+                        onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+                        placeholder="Dove vuoi andare?"
+                        className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${theme.inputBg} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                    />
+                </div>
+                
+                <div className={`flex-grow mt-2 overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
+                    {loading && <div className="text-center p-2 text-sm text-zinc-400">Ricerca...</div>}
+                    {!loading && suggestions.map((feature) => {
+                        const name = feature.properties.name || feature.properties.formatted;
+                        const address = feature.properties.address_line2;
+                        return (
+                            <button 
+                                key={feature.properties.place_id} 
+                                onMouseDown={() => handleSelect(feature)} 
+                                className={`w-full text-left p-2 rounded-md ${theme.suggestionHover}`}
+                            >
+                                <p className={`font-medium text-sm ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
+                                    {highlightMatch(name, query)}
+                                </p>
+                                {address && (
+                                    <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                        {highlightMatch(address, query)}
+                                    </p>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div className="flex-shrink-0 flex gap-2 mt-auto pt-2">
+                    <button onClick={handleSearchClick} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold ${theme.buttonBg} ${theme.buttonText} transition-colors`}>
+                        <ICONS.search className="w-5 h-5" />
+                        <span>Cerca</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 // Helper Functions for weather data processing
 const degToCompass = (num: number) => {
     const val = Math.floor((num / 45) + 0.5);
@@ -129,16 +302,21 @@ export default function App() {
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(70);
 
+  const [navigationTarget, setNavigationTarget] = useState<{ lat: number, lng: number, name: string } | null>(null);
+
   // New states for Music Player layout
   const [playerDockedWidth, setPlayerDockedWidth] = useState(519);
   const [playerDockedBottom, setPlayerDockedBottom] = useState(92);
   const [playerDockedLeft, setPlayerDockedLeft] = useState(66);
   const [playerDockedHeight, setPlayerDockedHeight] = useState(113);
-  const [playerFloatingWidth, setPlayerFloatingWidth] = useState(751);
+  const [playerFloatingWidth, setPlayerFloatingWidth] = useState(430);
   const [playerFloatingBottom, setPlayerFloatingBottom] = useState(98);
-  const [playerPlaceholderWidth, setPlayerPlaceholderWidth] = useState(471);
   const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
   
+  const handleSelectDestination = (target: { lat: number, lng: number, name: string }) => {
+    setNavigationTarget(target);
+    setActiveApp('maps');
+  };
 
   useEffect(() => {
     // This effect ensures the app's time updates every minute when not in debug mode.
@@ -452,6 +630,26 @@ export default function App() {
               spotifyPlayerTop={spotifyPlayerTop}
               spotifyPlayerBottom={spotifyPlayerBottom}
           />
+          
+          <div
+            className="fixed z-40 flex items-end justify-center gap-6"
+            style={{
+                bottom: playerFloatingBottom,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                transition: 'opacity 0.3s ease-in-out',
+                opacity: isUIOverlayActive ? 0 : 1,
+                pointerEvents: isUIOverlayActive ? 'none' : 'auto',
+            }}
+          >
+              <div style={{ width: `${playerFloatingWidth}px`, height: `${playerFloatingHeight}px` }} />
+              <NavigateTool 
+                isVisible={!isUIOverlayActive} 
+                isNight={isNight}
+                onSelectDestination={handleSelectDestination}
+              />
+          </div>
+
 
           <MusicPlayer 
             isAnyAppOpen={isUIOverlayActive}
@@ -465,17 +663,21 @@ export default function App() {
             floatingConfig={{
               width: playerFloatingWidth,
               bottom: playerFloatingBottom,
-              placeholderWidth: playerPlaceholderWidth,
               height: playerFloatingHeight,
             }}
           />
           
           <MapsContainer 
               isOpen={activeApp === 'maps'}
-              onClose={() => setActiveApp(null)}
+              onClose={() => {
+                setActiveApp(null);
+                setNavigationTarget(null);
+              }}
               isNight={isNight}
               searchPanelWidth={mapsSearchPanelWidth}
               searchPanelTop={mapsSearchPanelTop}
+              navigationTarget={navigationTarget}
+              onClearNavigationTarget={() => setNavigationTarget(null)}
           />
 
           <AppLauncher
@@ -555,8 +757,8 @@ export default function App() {
               setPlayerFloatingWidth={setPlayerFloatingWidth}
               playerFloatingBottom={playerFloatingBottom}
               setPlayerFloatingBottom={setPlayerFloatingBottom}
-              playerPlaceholderWidth={playerPlaceholderWidth}
-              setPlayerPlaceholderWidth={setPlayerPlaceholderWidth}
+              playerPlaceholderWidth={0}
+              setPlayerPlaceholderWidth={() => {}}
               playerFloatingHeight={playerFloatingHeight}
               setPlayerFloatingHeight={setPlayerFloatingHeight}
           />

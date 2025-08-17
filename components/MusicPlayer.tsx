@@ -17,7 +17,7 @@ interface MusicPlayerProps {
     isAnyAppOpen: boolean;
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
-    floatingConfig: { width: number; bottom: number; placeholderWidth: number; height: number; };
+    floatingConfig: { width: number; bottom: number; height: number; };
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -413,16 +413,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 transform: 'translateX(0)',
             };
         } else {
-            const width = isPlayerActive ? floatingConfig.width : floatingConfig.placeholderWidth;
+            const navToolWidth = 430;
+            const gap = 24; // Corresponds to gap-6 (1.5rem) in Tailwind
+            const totalWidth = floatingConfig.width + navToolWidth + gap;
+            
             return {
-                width: `${width}px`,
+                width: `${floatingConfig.width}px`,
                 height: `${floatingConfig.height}px`,
                 bottom: `${floatingConfig.bottom}px`,
-                left: '50%',
-                transform: 'translateX(-50%)',
+                left: `calc(50% - ${totalWidth / 2}px)`,
+                transform: `translateX(0)`,
             };
         }
-    }, [isAnyAppOpen, isPlayerActive, dockedConfig, floatingConfig]);
+    }, [isAnyAppOpen, dockedConfig, floatingConfig]);
 
     const themeClasses = isNight 
         ? 'border-zinc-700/80' 
@@ -495,15 +498,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                         <ProgressBar player={playerRef.current} state={playerState} isNight={isNight} />
                         <div className="flex justify-between items-center mt-2">
                              <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <FiSkipBack className="w-6 h-6" />
+                                <FiSkipBack className="w-7 h-7" />
                             </button>
-                            <button onClick={handleTogglePlay} className={`transition ${iconColor} transform hover:scale-110`}>
+                            <button onClick={handleTogglePlay} className={`transition ${iconColor}`}>
                                 {playerState.paused 
-                                    ? <FiPlay className="w-8 h-8 ml-1" fill="currentColor" /> 
-                                    : <FiPause className="w-8 h-8" fill="currentColor" />}
+                                    ? <FiPlay className="w-9 h-9" /> 
+                                    : <FiPause className="w-9 h-9" />}
                             </button>
                              <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <FiSkipForward className="w-6 h-6" />
+                                <FiSkipForward className="w-7 h-7" />
                             </button>
                              <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-[#1DB954]' : iconColor}`}>
                                 {isLiked ? <IoMdHeart className="w-6 h-6" /> : <IoMdAddCircleOutline className="w-6 h-6" />}

@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
 const mapHtmlContent = `
 <!DOCTYPE html>
@@ -351,6 +350,26 @@ box-shadow: 0 0 5px rgba(0,0,0,0.5);
 </div>
 
 <script>
+// Robust message queuing system
+window.pendingNavMessage = null;
+window.teslaNav = null; // Flag to indicate if the main class is instantiated
+
+window.addEventListener('message', (event) => {
+    if (event.origin !== window.location.origin) {
+        return;
+    }
+    if (event.data && event.data.type === 'SET_DESTINATION') {
+        if (window.teslaNav) {
+            // If nav is ready, process immediately
+            const { lat, lng, name } = event.data.payload;
+            window.teslaNav.setDestination({ lat, lng }, name, true);
+        } else {
+            // If nav is not ready, queue the message
+            window.pendingNavMessage = event.data;
+        }
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     class TeslaNavigation {
         constructor() {
@@ -454,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.MAX_WEATHER_TILE_ZOOM = 7;
             this.wasInHeadingUpMode = false;
             this.externalTheme = null;
+            this.pendingDestination = null;
 
             this.init();
         }
@@ -469,9 +489,36 @@ document.addEventListener('DOMContentLoaded', () => {
             this.getCurrentPosition();
         }
 
+        async setDestination(coords, name, startNavigating = false) {
+            if (!this.currentPosition) {
+                this.showInfoToast("In attesa della posizione GPS...", "loader");
+                this.pendingDestination = { coords, name, startNavigating };
+                return;
+            }
+            this.clearRoute();
+            this.destination = coords;
+            this.searchInput.value = name;
+            this.destinationMarker = document.createElement('div');
+            this.destinationMarker.className = 'destination-marker';
+            this.markerOverlay.appendChild(this.destinationMarker);
+            this.showInfoToast('Calcolo percorso...', 'loader');
+            const success = await this.fetchAndSetRoute(this.currentPosition, this.destination);
+            if (success) {
+                if (startNavigating) {
+                    this.startNavigation();
+                } else {
+                    this.isViewingRoute = true;
+                    this.updateTripInfoPanel();
+                    this.fitBounds();
+                }
+            } else {
+                this.showInfoToast("Impossibile calcolare il percorso", "route-off");
+                this.clearRouteAndUI();
+            }
+        }
+
         setExternalTheme(theme) {
             this.externalTheme = theme;
-            // This will trigger a theme update if the current mode is 'auto'
             this.setMapMode(this.userSelectedMapMode, false);
         }
         
@@ -792,7 +839,31 @@ document.addEventListener('DOMContentLoaded', () => {
         
         toggleCompassMode() { const newMode = this.compassMode === 'heading-up' ? 'north-up' : 'heading-up'; this.setCompassMode(newMode); this.showInfoToast(newMode === 'heading-up' ? 'Modalità Heading Up' : 'Modalità North Up', newMode === 'heading-up' ? 'navigation' : 'navigation-off'); }
         
-        handlePositionUpdate(position) { const newPos = { lat: position.coords.latitude, lng: position.coords.longitude }; if (this.currentPosition) { const bearing = this.calculateBearing(this.currentPosition.lat, this.currentPosition.lng, newPos.lat, newPos.lng); if (!this.isUserInteracting) { this.vehicleOrientationBearing = this.smoothBearing(this.vehicleOrientationBearing, bearing); } } this.currentPosition = newPos; if (this.isFollowingUser && !this.isUserInteracting) { this.center = newPos; this.requestRedraw(); } if (this.isNavigating && !this.isRecalculating) { this.checkRouteDeviation(); this.updateRouteProgress(); } }
+        handlePositionUpdate(position) {
+            const newPos = { lat: position.coords.latitude, lng: position.coords.longitude };
+            if (this.currentPosition) {
+                const bearing = this.calculateBearing(this.currentPosition.lat, this.currentPosition.lng, newPos.lat, newPos.lng);
+                if (!this.isUserInteracting) {
+                    this.vehicleOrientationBearing = this.smoothBearing(this.vehicleOrientationBearing, bearing);
+                }
+            }
+            this.currentPosition = newPos;
+
+            if (this.pendingDestination) {
+                const { coords, name, startNavigating } = this.pendingDestination;
+                this.pendingDestination = null; // Important: clear it
+                this.setDestination(coords, name, startNavigating);
+            }
+            
+            if (this.isFollowingUser && !this.isUserInteracting) {
+                this.center = newPos;
+                this.requestRedraw();
+            }
+            if (this.isNavigating && !this.isRecalculating) {
+                this.checkRouteDeviation();
+                this.updateRouteProgress();
+            }
+        }
         
         drawRoute(ctx) { if (!this.routeGeometry) return; const upcomingPath = new Path2D(); const consumedPath = new Path2D(); const worldWidthInPixels = Math.pow(2, this.zoom) * this.TILE_SIZE; for(let i = 0; i < this.routeGeometry.length - 1; i++) { const p1 = this.geoToScreenPx(this.routeGeometry[i][1], this.routeGeometry[i][0]); const p2 = this.geoToScreenPx(this.routeGeometry[i+1][1], this.routeGeometry[i+1][0]); if (Math.abs(p1.x - p2.x) > worldWidthInPixels / 2) continue; const path = (i < this.currentStepIndex) ? consumedPath : upcomingPath; path.moveTo(p1.x, p1.y); path.lineTo(p2.x, p2.y); } const lineWidth = Math.max(4, Math.min(10, 7 * Math.pow(2, this.zoom - 15))); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--route-consumed-color'); ctx.lineWidth = lineWidth; ctx.stroke(consumedPath); ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--route-glow-color'); ctx.shadowBlur = 15; ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--route-upcoming-color'); ctx.lineWidth = lineWidth; ctx.stroke(upcomingPath); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; }
         
@@ -841,8 +912,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         async fetchAndSetRoute(startCoords, endCoords) { const url = \`https://api.geoapify.com/v1/routing?waypoints=\${startCoords.lat},\${startCoords.lng}|\${endCoords.lat},\${endCoords.lng}&mode=drive&details=route_details&lang=it&apiKey=\${this.geoapifyApiKey}\`; try { const response = await fetch(url); const data = await response.json(); if (data.features?.length) { const route = data.features[0]; this.routeGeometry = route.geometry.coordinates[0]; this.tripInfo = route.properties; this.requestRedraw(); return true;} return false;} catch (routeError) { console.error("Errore routing:", routeError); return false;}}
         
-        async setDestination(coords, name) { if (!this.currentPosition) { this.showInfoToast("Posizione attuale non disponibile", "alert-triangle"); return; } this.clearRoute(); this.destination = coords; this.searchInput.value = name; this.destinationMarker = document.createElement('div'); this.destinationMarker.className = 'destination-marker'; this.markerOverlay.appendChild(this.destinationMarker); this.showInfoToast('Calcolo percorso...', 'loader'); const success = await this.fetchAndSetRoute(this.currentPosition, this.destination); if (success) { this.isViewingRoute = true; this.updateTripInfoPanel(); this.fitBounds(); } else { this.showInfoToast("Impossibile calcolare il percorso", "route-off"); this.clearRouteAndUI();}}
-        
         startNavigation() { if (!this.routeGeometry) return; this.isNavigating = true; this.isViewingRoute = false; this.currentStepIndex = 0; this.updateUIVisibility(); this.recenterMap(); this.showInfoToast("Navigazione avviata!", "navigation");}
         
         clearRoute() { this.isNavigating = false; this.isViewingRoute = false; this.currentStepIndex = 0; this.destination = null; this.routeGeometry = null; this.tripInfo = null; if (this.destinationMarker) { this.destinationMarker.remove(); this.destinationMarker = null; } this.updateUIVisibility(); this.requestRedraw();}
@@ -870,6 +939,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.teslaNav = new TeslaNavigation();
+    
+    // Process any queued message that arrived before initialization
+    if (window.pendingNavMessage) {
+        const { lat, lng, name } = window.pendingNavMessage.payload;
+        window.teslaNav.setDestination({ lat, lng }, name, true);
+        window.pendingNavMessage = null; // Clear it
+    }
+    // Signal to parent that the map is ready to receive commands
+    window.parent.postMessage({ type: 'MAP_IFRAME_READY' }, window.location.origin);
 });
 </script>
 
@@ -883,17 +961,24 @@ export default function MapsContainer({
     isNight,
     searchPanelWidth,
     searchPanelTop,
+    navigationTarget,
+    onClearNavigationTarget,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
     isNight: boolean;
     searchPanelWidth: number;
     searchPanelTop: number;
+    navigationTarget: { lat: number, lng: number, name: string } | null;
+    onClearNavigationTarget: () => void;
 }) {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const [translateX, setTranslateX] = useState(100);
   const animationFrameId = useRef<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const [isIframeReady, setIsIframeReady] = useState(false);
+  const queuedNavigationTarget = useRef<{ lat: number, lng: number, name: string } | null>(null);
 
   const openingBoxSpeed = 4.5;
   const closingBoxSpeed = 8.6;
@@ -907,34 +992,72 @@ export default function MapsContainer({
         }
       </style>
     `;
-    // Inject the dynamic styles right before the closing </head> tag.
     return mapHtmlContent.replace('</head>', `${dynamicStyles}</head>`);
   }, [searchPanelWidth, searchPanelTop]);
+
+  const postMessageToIframe = useCallback((message: object) => {
+    if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(message, window.location.origin);
+    }
+  }, []);
+
+  // 1. Listen for the "ready" message from the iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === 'MAP_IFRAME_READY') {
+            setIsIframeReady(true);
+        }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // 2. Reset ready state when the map is closed to ensure clean state for next open
+  useEffect(() => {
+    if (!isOpen) {
+      setIsIframeReady(false);
+      queuedNavigationTarget.current = null;
+    }
+  }, [isOpen]);
+
+  // 3. Handle incoming navigation targets and send them only when the iframe is ready
+  useEffect(() => {
+      // If a new navigation target arrives, queue it up.
+      if (navigationTarget) {
+          queuedNavigationTarget.current = navigationTarget;
+          // Clear the prop in the parent immediately to allow for subsequent navigations.
+          onClearNavigationTarget();
+      }
+
+      // If the iframe is ready and we have a queued target, send the message.
+      if (isIframeReady && queuedNavigationTarget.current) {
+          postMessageToIframe({ type: 'SET_DESTINATION', payload: queuedNavigationTarget.current });
+          queuedNavigationTarget.current = null; // Clear the queue after sending.
+      }
+  }, [navigationTarget, isIframeReady, onClearNavigationTarget, postMessageToIframe]);
+
 
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!isOpen || !iframe) return;
 
     const applyTheme = () => {
-        if (iframe.contentWindow) {
-            const navInstance = (iframe.contentWindow as any).teslaNav;
-            if (navInstance && typeof navInstance.setExternalTheme === 'function') {
-                const theme = isNight ? 'dark' : 'light';
-                navInstance.setExternalTheme(theme);
-            }
+        const navInstance = (iframe.contentWindow as any)?.teslaNav;
+        if (navInstance?.setExternalTheme) {
+            navInstance.setExternalTheme(isNight ? 'dark' : 'light');
         }
     };
-    
-    // The iframe might be re-rendering. Add a load listener to be safe.
-    iframe.addEventListener('load', applyTheme, { once: true });
-    
-    // Also call directly in case the iframe is already loaded (e.g., on theme change).
-    applyTheme();
 
-    return () => {
-        iframe.removeEventListener('load', applyTheme);
-    };
+    if (iframe.contentDocument?.readyState === 'complete') {
+        applyTheme();
+    } else {
+        const handleLoad = () => applyTheme();
+        iframe.addEventListener('load', handleLoad, { once: true });
+        return () => iframe.removeEventListener('load', handleLoad);
+    }
   }, [isOpen, isNight]);
+
 
   useEffect(() => {
     let lastTime = performance.now();
