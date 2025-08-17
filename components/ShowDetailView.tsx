@@ -28,6 +28,21 @@ interface ShowDetailViewProps {
     onPlay: (options: { uris?: string[] }) => void;
 }
 
+const AnimatedEqualizer = ({ className }: { className?: string; }) => (
+    <div className={`flex items-end justify-center w-4 h-4 gap-0.5 ${className}`}>
+      <style>{`
+        @keyframes equalizer-bar {
+          0%, 100% { height: 20%; }
+          50% { height: 100%; }
+        }
+      `}</style>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '0s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.2s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.4s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.6s' }}></span>
+    </div>
+);
+
 const formatDuration = (ms: number) => {
     const totalMinutes = Math.floor(ms / 60000);
     const hours = Math.floor(totalMinutes / 60);
@@ -127,7 +142,10 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                                 </div>
                             )}
                             <div className="flex flex-col overflow-hidden">
-                                <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.name}</span>
+                                <div className="flex items-center gap-2 min-w-0">
+                                    {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
+                                    <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.name}</span>
+                                </div>
                                 <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description.replace(/<[^>]*>?/gm, '')}</span>
                                 <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
                                     <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>

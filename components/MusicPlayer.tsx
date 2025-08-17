@@ -117,7 +117,7 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: boolean, nextTrack: SpotifyTrack | null, position: { bottom: number, left: number, transform: string }, onClose: () => void }) => {
+const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { isNight: boolean, nextTrack: SpotifyTrack | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -139,7 +139,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
                 transform: position.transform,
                 backgroundColor: 'var(--spotify-panel-bg)'
             }}
-            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}
+            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
         >
             <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
             {nextTrack ? (
@@ -164,7 +164,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
+    
     const [showQueue, setShowQueue] = useState(false);
+    const [isQueuePopoverRendered, setIsQueuePopoverRendered] = useState(false);
+    const queuePopoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const [isLiked, setIsLiked] = useState(false);
 
     const queueButtonRef = useRef<HTMLButtonElement>(null);
@@ -325,6 +329,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         };
     }, [showQueue]);
 
+    // Effect to manage mounting/unmounting with animation
+    useEffect(() => {
+        if (queuePopoverTimeoutRef.current) {
+            clearTimeout(queuePopoverTimeoutRef.current);
+        }
+        if (showQueue) {
+            setIsQueuePopoverRendered(true);
+        } else {
+            // Wait for animation to finish before unmounting
+            queuePopoverTimeoutRef.current = setTimeout(() => {
+                setIsQueuePopoverRendered(false);
+            }, 300); // Animation duration (must match CSS)
+        }
+    }, [showQueue]);
+
     useEffect(() => {
         const checkIsLiked = async () => {
             if (!currentTrackId) return;
@@ -478,8 +497,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                              <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
                                 <FiSkipBack className="w-6 h-6" />
                             </button>
-                             <button onClick={handleTogglePlay} className={`w-9 h-9 flex items-center justify-center rounded-full transition ${isNight ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-200 hover:bg-zinc-300'}`}>
-                               {playerState.paused ? <FiPlay className="w-5 h-5 ml-0.5" /> : <FiPause className="w-5 h-5" />}
+                            <button onClick={handleTogglePlay} className={`transition ${iconColor} transform hover:scale-110`}>
+                                {playerState.paused 
+                                    ? <FiPlay className="w-8 h-8 ml-1" fill="currentColor" /> 
+                                    : <FiPause className="w-8 h-8" fill="currentColor" />}
                             </button>
                              <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
                                 <FiSkipForward className="w-6 h-6" />
@@ -493,11 +514,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                         </div>
                     </div>
 
-                    {showQueue && (
+                    {isQueuePopoverRendered && (
                         <QueuePopover
                             isNight={isNight}
                             nextTrack={nextTrack}
                             position={popoverPosition}
+                            isClosing={!showQueue}
                             onClose={() => setShowQueue(false)}
                         />
                     )}

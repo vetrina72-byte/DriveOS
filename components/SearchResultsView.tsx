@@ -19,6 +19,21 @@ interface SearchResultsViewProps {
     onPlay: (options: { uris?: string[], offset?: any }) => void;
 }
 
+const AnimatedEqualizer = ({ className }: { className?: string; }) => (
+    <div className={`flex items-end justify-center w-4 h-4 gap-0.5 ${className}`}>
+      <style>{`
+        @keyframes equalizer-bar {
+          0%, 100% { height: 20%; }
+          50% { height: 100%; }
+        }
+      `}</style>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '0s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.2s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.4s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.6s' }}></span>
+    </div>
+);
+
 const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, onSelectItem, onPlay }) => {
     const [results, setResults] = useState<SearchResults>({});
     const [loading, setLoading] = useState(true);
@@ -91,7 +106,10 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                 <img src={topResult.album.images[0].url} alt={topResult.name} className="w-24 h-24 rounded-md shadow-lg" />
                             )}
                             <div className="flex-grow">
-                                <h3 className={`text-3xl font-bold truncate ${isTopResultPlaying ? activeColor : theme.textPrimary}`}>{topResult.name}</h3>
+                                <div className="flex items-center gap-2">
+                                    {isTopResultPlaying && <AnimatedEqualizer className={`w-6 h-6 flex-shrink-0 ${activeColor}`} />}
+                                    <h3 className={`text-3xl font-bold truncate ${isTopResultPlaying ? activeColor : theme.textPrimary}`}>{topResult.name}</h3>
+                                </div>
                                 <p className={`text-sm ${theme.textSecondary}`}>
                                     {topResult.explicit && <span className="mr-2 bg-zinc-500/50 text-white text-[10px] rounded-sm px-1 py-0.5">E</span>}
                                     {topResult.artists?.map(a => a.name).join(', ')}
@@ -112,9 +130,12 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                 return (
                                     <div key={track.id} onClick={() => onPlay({ uris: trackUris, offset: { position: index + 1 } })} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${theme.hover}`}>
                                         <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>
-                                        <div className="flex-grow">
-                                            <p className={`font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</p>
-                                            <p className={`text-xs ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</p>
+                                        <div className="flex-grow overflow-hidden">
+                                            <div className="flex items-center gap-2">
+                                                {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
+                                                <p className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</p>
+                                            </div>
+                                            <p className={`text-xs truncate ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</p>
                                         </div>
                                     </div>
                                 );

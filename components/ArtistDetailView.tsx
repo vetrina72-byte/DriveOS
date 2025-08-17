@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiMusic, FiSpeaker } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiMusic } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 
 interface Artist {
@@ -25,6 +25,21 @@ interface ArtistDetailViewProps {
     isNight: boolean;
     onPlay: (options: { uris?: string[], offset?: any }) => void;
 }
+
+const AnimatedEqualizer = ({ className }: { className?: string; }) => (
+    <div className={`flex items-end justify-center w-4 h-4 gap-0.5 ${className}`}>
+      <style>{`
+        @keyframes equalizer-bar {
+          0%, 100% { height: 20%; }
+          50% { height: 100%; }
+        }
+      `}</style>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '0s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.2s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.4s' }}></span>
+      <span className="w-1 bg-current" style={{ animation: 'equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.6s' }}></span>
+    </div>
+);
 
 const formatFollowers = (count: number) => {
     return new Intl.NumberFormat('it-IT').format(count);
@@ -117,7 +132,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                         >
                             <div className="w-8 text-center font-medium">
                                 {isPlaying ? (
-                                    <FiSpeaker className={`w-4 h-4 mx-auto ${activeColor}`} />
+                                    <AnimatedEqualizer className={`mx-auto ${activeColor}`} />
                                 ) : (
                                     <span className={theme.textSecondary}>{index + 1}</span>
                                 )}
