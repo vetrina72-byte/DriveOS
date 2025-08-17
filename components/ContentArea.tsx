@@ -18,17 +18,15 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
     const addedUris = new Set<string>();
     const contextDetailsCache = new Map<string, SpotifyItem>();
 
-    // Special item for "Liked Songs"
     const likedSongsItem: SpotifyItem = {
         id: 'liked-songs',
         name: 'Brani che ti piacciono',
         type: 'playlist',
-        uri: 'special:liked-songs', // Use a unique URI for our internal tracking
+        uri: 'special:liked-songs',
         description: 'La tua collezione personale di brani preferiti.',
         images: [{ url: 'liked-songs-cover' }],
     };
 
-    // Pre-fetch all unique contexts to avoid duplicate fetches and improve efficiency
     const contextUrisToFetch = [...new Set(
         items.filter(item => item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist'))
              .map(item => item.context.uri)
@@ -37,54 +35,57 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
     if (contextUrisToFetch.length > 0) {
         const albumIds = contextUrisToFetch.filter(uri => uri.includes(':album:')).map(uri => uri.split(':')[2]);
         const playlistIds = contextUrisToFetch.filter(uri => uri.includes(':playlist:')).map(uri => uri.split(':')[2]);
-
         const promises = [];
         if (albumIds.length > 0) {
-            promises.push(
-                apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
-                    res.data.albums.forEach((album: any) => {
-                        if (album) contextDetailsCache.set(album.uri, album);
-                    });
-                }).catch(e => console.error("Failed fetching album details", e))
-            );
+            promises.push(apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
+                res.data.albums.forEach((album: any) => { if (album) contextDetailsCache.set(album.uri, album); });
+            }).catch(e => console.error("Failed fetching album details", e)));
         }
-         if (playlistIds.length > 0) {
-            const playlistPromises = playlistIds.map(id => 
+        if (playlistIds.length > 0) {
+            promises.push(...playlistIds.map(id => 
                 apiClient.get(`/playlists/${id}`).then(res => {
                     contextDetailsCache.set(res.data.uri, res.data);
                 }).catch(e => console.error(`Failed to fetch playlist ${id}`, e))
-            );
-            promises.push(Promise.all(playlistPromises));
+            ));
         }
-        await Promise.all(promises);
+        await Promise.allSettled(promises);
     }
 
-    // Iterate through the original recently played items to build the final list
     for (const item of items) {
-        if (!item.track) continue;
-
-        let itemToAdd: SpotifyItem | null = null;
-
-        // CRITICAL FIX: Explicitly check for "Liked Songs" context first.
-        if (item.context?.type === 'collection') {
-            itemToAdd = likedSongsItem;
-        } 
-        // If the track was played in a valid context (album/playlist) that we successfully fetched, use the context.
-        else if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
-            itemToAdd = contextDetailsCache.get(item.context.uri)!;
-        } else {
-            // Otherwise, fallback to showing the track itself.
-            itemToAdd = item.track;
+        // If there's no context, we can't determine what collection it came from, so we skip it.
+        // This prevents single tracks from appearing in "Continue Listening".
+        if (!item.track || !item.context || !item.context.uri) {
+            continue;
         }
 
-        // Add the determined item to our list, ensuring no duplicates.
-        if (itemToAdd && itemToAdd.uri && !addedUris.has(itemToAdd.uri)) {
-            unifiedList.push(itemToAdd);
-            addedUris.add(itemToAdd.uri);
+        const contextUri = item.context.uri;
+        const contextType = item.context.type;
+
+        // Handle "Liked Songs" as a special case.
+        if (contextType === 'collection' || contextUri.includes(':collection')) {
+            if (!addedUris.has('special:liked-songs')) {
+                unifiedList.push(likedSongsItem);
+                addedUris.add('special:liked-songs');
+            }
+            // Move to the next item, we don't need to process this track further.
+            continue;
+        }
+        
+        // Handle regular playlists and albums.
+        if (contextType === 'playlist' || contextType === 'album') {
+            if (contextDetailsCache.has(contextUri)) {
+                const contextItem = contextDetailsCache.get(contextUri)!;
+                if (!addedUris.has(contextUri)) {
+                    unifiedList.push(contextItem);
+                    addedUris.add(contextUri);
+                }
+            }
+            // Whether we found the context details or not, we skip adding the individual track.
+            continue;
         }
     }
     
-    return unifiedList.slice(0, 10); // Limit to a reasonable number of items
+    return unifiedList.slice(0, 10);
 };
 
 

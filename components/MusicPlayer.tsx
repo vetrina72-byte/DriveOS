@@ -478,8 +478,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                              <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
                                 <FiSkipBack className="w-6 h-6" />
                             </button>
-                             <button onClick={handleTogglePlay} className={`w-9 h-9 flex items-center justify-center rounded-full transition ${isNight ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-200 hover:bg-zinc-300'}`}>
-                               {playerState.paused ? <FiPlay className="w-5 h-5 ml-0.5" /> : <FiPause className="w-5 h-5" />}
+                             <button onClick={handleTogglePlay} className="transition-transform duration-200 ease-in-out hover:scale-110">
+                                {playerState.paused ? <FiPlay className="w-8 h-8" style={{ color: 'var(--text-primary)' }} /> : <FiPause className="w-8 h-8" style={{ color: 'var(--text-primary)' }} />}
                             </button>
                              <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
                                 <FiSkipForward className="w-6 h-6" />
