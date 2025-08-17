@@ -113,7 +113,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                     <div key={track.id} onClick={() => onPlay({ uris: trackUris, offset: { position: index + 1 } })} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${theme.hover}`}>
                                         <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>
                                         <div className="flex-grow">
-                                            <p className={`font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</p>
+                                            <p className={`font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</p>
                                             <p className={`text-xs ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</p>
                                         </div>
                                     </div>

@@ -136,21 +136,22 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
             style={{
                 bottom: `${position.bottom}px`,
                 left: `${position.left}px`,
-                transform: position.transform
+                transform: position.transform,
+                backgroundColor: 'var(--spotify-panel-bg)'
             }}
-            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 ${isNight ? 'bg-zinc-800' : 'bg-zinc-100'} border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}
+            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} animate-fade-in`}
         >
-            <p className={`text-xs font-bold mb-2 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>Prossima in coda</p>
+            <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
             {nextTrack ? (
                 <div className="flex items-center gap-3 min-w-0">
                     <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
                     <div className="overflow-hidden">
-                        <p className="font-semibold text-sm truncate" style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.name}</p>
-                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`} style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
+                        <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.name}</p>
+                        <p className="text-xs truncate" style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
                     </div>
                 </div>
             ) : (
-                <p className={`text-sm ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>Nessuna canzone in coda.</p>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Nessuna canzone in coda.</p>
             )}
         </div>,
         document.getElementById('portal-root')!
@@ -405,8 +406,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     }, [isAnyAppOpen, isPlayerActive, dockedConfig, floatingConfig]);
 
     const themeClasses = isNight 
-        ? 'bg-[#121212]/90 text-white border-zinc-700/80' 
-        : 'bg-white/90 text-black border-zinc-300';
+        ? 'border-zinc-700/80' 
+        : 'border-zinc-300';
     
     const renderPlayerContent = () => {
         if (playerStatus === 'error') {
@@ -429,8 +430,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                        {isAuthenticated ? <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /> : <FaSpotify className={`w-7 h-7 ${isNight ? 'text-green-500' : 'text-green-600'}`} />}
                     </div>
                     <div className="flex-grow overflow-hidden">
-                        <div className="font-semibold truncate">Spotify</div>
-                        <div className={`text-sm truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                        <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
+                        <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>
                             {placeholderText}
                         </div>
                     </div>
@@ -454,8 +455,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                         <div className="flex items-center gap-3 min-w-0">
                             {imageUrl && <img src={imageUrl} alt={album.name} className="w-10 h-10 rounded-md" />}
                             <div className="overflow-hidden">
-                                <div className="font-bold text-sm truncate">{trackName}</div>
-                                <div className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                <div className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)'}}>{trackName}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
                                     {artists.map(a => a.name).join(', ')}
                                 </div>
                             </div>
@@ -511,8 +512,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                     <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                 </div>
                 <div className="flex-grow overflow-hidden">
-                    <div className="font-semibold truncate">Niente in riproduzione</div>
-                    <div className={`text-sm truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                    <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Niente in riproduzione</div>
+                    <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>
                         Scegli qualcosa da ascoltare.
                     </div>
                 </div>

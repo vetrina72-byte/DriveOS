@@ -127,7 +127,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                                 </div>
                             )}
                             <div className="flex flex-col overflow-hidden">
-                                <span className={`font-semibold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.name}</span>
+                                <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.name}</span>
                                 <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description.replace(/<[^>]*>?/gm, '')}</span>
                                 <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
                                     <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>

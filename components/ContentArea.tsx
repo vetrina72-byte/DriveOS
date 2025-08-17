@@ -14,73 +14,64 @@ const getGreeting = () => {
 };
 
 const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
-    // 1. Efficiently collect all unique context URIs and their IDs
-    const contextUris = new Set<string>();
-    const albumIds: string[] = [];
-    const playlistIds: string[] = [];
-
-    items.forEach((item: any) => {
-        if (item.context?.uri && !contextUris.has(item.context.uri)) {
-            contextUris.add(item.context.uri);
-            const [, , type, id] = item.context.uri.split(':');
-            if (type === 'album') albumIds.push(id);
-            if (type === 'playlist') playlistIds.push(id);
-        }
-    });
-    
-    // 2. Fetch details for all collected albums and playlists in parallel
-    const contextDetails = new Map<string, SpotifyItem>();
-    const contextPromises = [];
-
-    if (albumIds.length > 0) {
-        contextPromises.push(
-            apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
-                if (res.data.albums) {
-                    res.data.albums.forEach((album: any) => contextDetails.set(album.uri, album));
-                }
-            }).catch(e => console.error("Failed to fetch album details", e))
-        );
-    }
-    if (playlistIds.length > 0) {
-        const playlistDetailPromises = playlistIds.map(id => 
-            apiClient.get(`/playlists/${id}`).then(res => {
-                contextDetails.set(res.data.uri, res.data);
-            }).catch(e => console.error(`Failed to fetch playlist ${id}`, e))
-        );
-        contextPromises.push(Promise.all(playlistDetailPromises));
-    }
-
-    await Promise.all(contextPromises);
-
-    // 3. Build the final unified list, prioritizing context and ensuring uniqueness.
     const unifiedList: SpotifyItem[] = [];
     const addedUris = new Set<string>();
+    const contextDetailsCache = new Map<string, SpotifyItem>();
 
+    // Pre-fetch all unique contexts to avoid duplicate fetches and improve efficiency
+    const contextUrisToFetch = [...new Set(
+        items.filter(item => item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist'))
+             .map(item => item.context.uri)
+    )] as string[];
+
+    if (contextUrisToFetch.length > 0) {
+        const albumIds = contextUrisToFetch.filter(uri => uri.includes(':album:')).map(uri => uri.split(':')[2]);
+        const playlistIds = contextUrisToFetch.filter(uri => uri.includes(':playlist:')).map(uri => uri.split(':')[2]);
+
+        const promises = [];
+        if (albumIds.length > 0) {
+            promises.push(
+                apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
+                    res.data.albums.forEach((album: any) => {
+                        if (album) contextDetailsCache.set(album.uri, album);
+                    });
+                }).catch(e => console.error("Failed fetching album details", e))
+            );
+        }
+         if (playlistIds.length > 0) {
+             // Fetching playlists one by one to avoid a single 404 from a deleted playlist breaking the entire request
+            const playlistPromises = playlistIds.map(id => 
+                apiClient.get(`/playlists/${id}`).then(res => {
+                    contextDetailsCache.set(res.data.uri, res.data);
+                }).catch(e => console.error(`Failed to fetch playlist ${id}`, e))
+            );
+            promises.push(Promise.all(playlistPromises));
+        }
+        await Promise.all(promises);
+    }
+
+    // Iterate through the original recently played items to build the final list
     for (const item of items) {
-        const { track, context } = item;
-        if (!track) continue;
+        if (!item.track) continue;
 
         let itemToAdd: SpotifyItem | null = null;
-        
-        // Prioritize playlist/album context
-        if (context?.uri && (context.type === 'album' || context.type === 'playlist')) {
-            const details = contextDetails.get(context.uri);
-            if (details) {
-                itemToAdd = details;
-            }
+
+        // If the track was played in a valid context (album/playlist) that we successfully fetched, use the context.
+        if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
+            itemToAdd = contextDetailsCache.get(item.context.uri)!;
         } else {
-            // Fallback to the track itself if no valid context
-            itemToAdd = track;
+            // Otherwise, fallback to showing the track itself.
+            itemToAdd = item.track;
         }
 
-        // Add to the list only if it's a new, unique item
+        // Add the determined item to our list, ensuring no duplicates.
         if (itemToAdd && itemToAdd.uri && !addedUris.has(itemToAdd.uri)) {
             unifiedList.push(itemToAdd);
             addedUris.add(itemToAdd.uri);
         }
     }
     
-    return unifiedList.slice(0, 10);
+    return unifiedList.slice(0, 10); // Limit to a reasonable number of items
 };
 
 
@@ -95,66 +86,88 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [continueListeningItems, setContinueListeningItems] = useState<SpotifyItem[]>([]);
   const [newReleases, setNewReleases] = useState<SpotifyItem[]>([]);
   const [userPlaylists, setUserPlaylists] = useState<SpotifyItem[]>([]);
-  const [featuredPlaylists, setFeaturedPlaylists] = useState<SpotifyItem[]>([]);
   const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<SpotifyItem[]>([]);
   const [topArtists, setTopArtists] = useState<SpotifyItem[]>([]);
+  const [chartsPlaylists, setChartsPlaylists] = useState<SpotifyItem[]>([]);
+  const [genresCategories, setGenresCategories] = useState<SpotifyItem[]>([]);
+  const [recommendedShows, setRecommendedShows] = useState<SpotifyItem[]>([]);
+
   
   const fetchData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
 
-    // Reset states
+    // Reset states to ensure fresh data on re-fetch
     setContinueListeningItems([]);
     setNewReleases([]);
     setUserPlaylists([]);
-    setFeaturedPlaylists([]);
     setMadeForYouPlaylists([]);
     setTopArtists([]);
+    setChartsPlaylists([]);
+    setGenresCategories([]);
+    setRecommendedShows([]);
+
 
     try {
       const randomOffset = Math.floor(Math.random() * 20);
-      // Spotify's "Made for You" category ID
       const madeForYouCategoryId = '0JQ5DAqbMKF2JckPAnMAhA';
       
       const promises = [
-        apiClient.get('/me/player/recently-played?limit=50'),
-        apiClient.get(`/browse/new-releases?country=IT&limit=10&offset=${randomOffset}`),
-        apiClient.get('/me/playlists?limit=10'),
-        apiClient.get('/browse/featured-playlists?country=IT&limit=10'),
-        apiClient.get(`/browse/categories/${madeForYouCategoryId}/playlists?country=IT&limit=10`),
-        apiClient.get('/me/top/artists?time_range=medium_term&limit=10')
+        apiClient.get('/me/player/recently-played?limit=50'), // For Continue Listening
+        apiClient.get('/me/playlists?limit=10'), // For User Playlists
+        apiClient.get('/me/top/artists?time_range=medium_term&limit=10'), // For Top Artists
+        apiClient.get(`/browse/categories/${madeForYouCategoryId}/playlists?country=IT&limit=10`), // For Made For You
+        apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'), // For Charts
+        apiClient.get(`/browse/new-releases?country=IT&limit=10&offset=${randomOffset}`), // For New Releases
+        apiClient.get('/browse/categories?country=IT&limit=20'), // For Genres
+        apiClient.get('/search?q=podcast&type=show&market=IT&limit=10') // For Podcasts
       ];
 
       const results = await Promise.allSettled(promises);
 
       const [
           recentlyPlayedRes,
-          newReleasesRes,
           userPlaylistsRes,
-          featuredPlaylistsRes,
+          topArtistsRes,
           madeForYouRes,
-          topArtistsRes
+          chartsRes,
+          newReleasesRes,
+          genresRes,
+          showsRes
       ] = results;
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
           const processedItems = await processRecentPlays(recentlyPlayedRes.value.data.items);
           setContinueListeningItems(processedItems);
       }
-      if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data.albums) {
-          setNewReleases(newReleasesRes.value.data.albums.items);
-      }
       if (userPlaylistsRes.status === 'fulfilled' && userPlaylistsRes.value.data.items) {
           setUserPlaylists(userPlaylistsRes.value.data.items);
       }
-      if (featuredPlaylistsRes.status === 'fulfilled' && featuredPlaylistsRes.value.data.playlists) {
-          setFeaturedPlaylists(featuredPlaylistsRes.value.data.playlists.items);
-      }
-      if (madeForYouRes.status === 'fulfilled' && madeForYouRes.value.data.playlists) {
-          setMadeForYouPlaylists(madeForYouRes.value.data.playlists.items);
-      }
       if (topArtistsRes.status === 'fulfilled' && topArtistsRes.value.data.items) {
           setTopArtists(topArtistsRes.value.data.items);
+      }
+       if (madeForYouRes.status === 'fulfilled' && madeForYouRes.value.data.playlists) {
+          setMadeForYouPlaylists(madeForYouRes.value.data.playlists.items);
+      }
+      if (chartsRes.status === 'fulfilled' && chartsRes.value.data.playlists) {
+          setChartsPlaylists(chartsRes.value.data.playlists.items);
+      }
+      if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data.albums) {
+          setNewReleases(newReleasesRes.value.data.albums.items);
+      }
+      if (genresRes.status === 'fulfilled' && genresRes.value.data.categories) {
+           const mappedCategories = genresRes.value.data.categories.items.map((cat: any) => ({
+                id: cat.id,
+                name: cat.name,
+                uri: cat.href,
+                images: cat.icons,
+                type: 'category',
+            }));
+          setGenresCategories(mappedCategories);
+      }
+      if (showsRes.status === 'fulfilled' && showsRes.value.data.shows) {
+          setRecommendedShows(showsRes.value.data.shows.items);
       }
 
     } catch (err: any) {
@@ -197,10 +210,13 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
       )}
        {madeForYouPlaylists.length > 0 && (
-          <ContentCarousel title="Le playlist create per te da Spotify" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
+          <ContentCarousel title="Create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
       )}
       {userPlaylists.length > 0 && (
           <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
+      )}
+      {chartsPlaylists.length > 0 && (
+          <ContentCarousel title="Classifiche" items={chartsPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
       )}
       {topArtists.length > 0 && (
           <ContentCarousel title="I tuoi artisti del momento" items={topArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
@@ -208,8 +224,11 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       {newReleases.length > 0 && (
           <ContentCarousel title="Nuove uscite" items={newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
       )}
-      {featuredPlaylists.length > 0 && (
-          <ContentCarousel title="Playlist in evidenza" items={featuredPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="featured-playlists" />
+      {recommendedShows.length > 0 && (
+          <ContentCarousel title="Podcast consigliati" items={recommendedShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
+      )}
+      {genresCategories.length > 0 && (
+          <ContentCarousel title="Esplora per generi e mood" items={genresCategories} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
       )}
     </div>
   );

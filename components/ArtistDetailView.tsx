@@ -128,7 +128,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                               className="w-10 h-10 rounded flex-shrink-0 object-cover" 
                             />
                             <div className="flex-grow flex flex-col overflow-hidden">
-                                <span className={`truncate font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
+                                <span className={`truncate font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
                                 {track.explicit && <span className="text-xs text-zinc-400">Explicit</span>}
                             </div>
                             <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>

@@ -53,7 +53,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const { playerState } = useAuth();
 
     const isLikedSongs = itemId === 'liked-songs';
-    const isPlayingContext = playerState && !playerState.paused;
+    const isPlayingContext = playerState && !playerState.paused && (playerState.context.uri === details?.uri || isLikedSongs);
     const currentTrackId = playerState?.track_window.current_track?.id;
 
 
@@ -202,7 +202,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                                 )}
                             </div>
                             <div className="flex flex-col min-w-0">
-                                <span className={`truncate font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
+                                <span className={`truncate font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
                                 <span className={`text-sm truncate ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
                             </div>
                             <div className={`text-sm truncate ${theme.textSecondary}`}>
