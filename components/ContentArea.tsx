@@ -18,6 +18,16 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
     const addedUris = new Set<string>();
     const contextDetailsCache = new Map<string, SpotifyItem>();
 
+    // Special item for "Liked Songs"
+    const likedSongsItem: SpotifyItem = {
+        id: 'liked-songs',
+        name: 'Brani che ti piacciono',
+        type: 'playlist',
+        uri: 'special:liked-songs', // Use a unique URI for our internal tracking
+        description: 'La tua collezione personale di brani preferiti.',
+        images: [{ url: 'liked-songs-cover' }],
+    };
+
     // Pre-fetch all unique contexts to avoid duplicate fetches and improve efficiency
     const contextUrisToFetch = [...new Set(
         items.filter(item => item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist'))
@@ -39,7 +49,6 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
             );
         }
          if (playlistIds.length > 0) {
-             // Fetching playlists one by one to avoid a single 404 from a deleted playlist breaking the entire request
             const playlistPromises = playlistIds.map(id => 
                 apiClient.get(`/playlists/${id}`).then(res => {
                     contextDetailsCache.set(res.data.uri, res.data);
@@ -56,8 +65,12 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
 
         let itemToAdd: SpotifyItem | null = null;
 
+        // CRITICAL FIX: Explicitly check for "Liked Songs" context first.
+        if (item.context?.type === 'collection') {
+            itemToAdd = likedSongsItem;
+        } 
         // If the track was played in a valid context (album/playlist) that we successfully fetched, use the context.
-        if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
+        else if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
             itemToAdd = contextDetailsCache.get(item.context.uri)!;
         } else {
             // Otherwise, fallback to showing the track itself.
@@ -210,7 +223,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
       )}
        {madeForYouPlaylists.length > 0 && (
-          <ContentCarousel title="Create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
+          <ContentCarousel title="Le playlist create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
       )}
       {userPlaylists.length > 0 && (
           <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
