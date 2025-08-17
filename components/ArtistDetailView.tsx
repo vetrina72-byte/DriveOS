@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiClock, FiMusic } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiMusic, FiSpeaker } from 'react-icons/fi';
+import { useAuth } from '../context/AuthContext';
 
 interface Artist {
     id: string;
@@ -42,6 +42,10 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const [tracks, setTracks] = useState<Track[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { playerState } = useAuth();
+
+    const isPlayingContext = playerState && !playerState.paused;
+    const currentTrackId = playerState?.track_window.current_track?.id;
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -65,7 +69,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     }, [artistId]);
     
     const theme = {
-        textPrimary: isNight ? 'text-white' : 'text-zinc-800',
+        textPrimary: isNight ? 'text-white' : 'text-black',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
     };
@@ -91,7 +95,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                     </div>
                 )}
                 <div className="flex flex-col gap-3">
-                    <h1 className="text-5xl font-bold tracking-tight">{artist.name}</h1>
+                    <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{artist.name}</h1>
                     <p className={`text-sm ${theme.textSecondary}`}>{formatFollowers(artist.followers.total)} followers</p>
                     <button onClick={() => onPlay({ uris: trackUris })} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                         <FiPlay className="w-7 h-7 ml-1" />
@@ -101,25 +105,36 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
 
             <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
             <div className="flex flex-col">
-                {tracks.map((track, index) => (
-                    <div 
-                        key={track.id + index}
-                        onClick={() => onPlay({ uris: trackUris, offset: { position: index } })}
-                        className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
-                    >
-                        <span className={`w-8 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>
-                        <img 
-                          src={track.album.images?.[2]?.url || track.album.images?.[0]?.url} 
-                          alt={track.album.name} 
-                          className="w-10 h-10 rounded flex-shrink-0 object-cover" 
-                        />
-                        <div className="flex-grow flex flex-col overflow-hidden">
-                            <span className={`truncate font-medium ${theme.textPrimary}`}>{track.name}</span>
-                            {track.explicit && <span className="text-xs text-zinc-400">Explicit</span>}
+                {tracks.map((track, index) => {
+                    const isPlaying = isPlayingContext && track.id === currentTrackId;
+                    const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+
+                    return (
+                        <div 
+                            key={track.id + index}
+                            onClick={() => onPlay({ uris: trackUris, offset: { position: index } })}
+                            className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                        >
+                            <div className="w-8 text-center font-medium">
+                                {isPlaying ? (
+                                    <FiSpeaker className={`w-4 h-4 mx-auto ${activeColor}`} />
+                                ) : (
+                                    <span className={theme.textSecondary}>{index + 1}</span>
+                                )}
+                            </div>
+                            <img 
+                              src={track.album.images?.[2]?.url || track.album.images?.[0]?.url} 
+                              alt={track.album.name} 
+                              className="w-10 h-10 rounded flex-shrink-0 object-cover" 
+                            />
+                            <div className="flex-grow flex flex-col overflow-hidden">
+                                <span className={`truncate font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
+                                {track.explicit && <span className="text-xs text-zinc-400">Explicit</span>}
+                            </div>
+                            <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
                         </div>
-                        <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
-                    </div>
-                ))}
+                    )
+                })}
             </div>
         </div>
     );

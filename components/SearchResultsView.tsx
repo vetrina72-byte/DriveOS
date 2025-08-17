@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader, FiPlay } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import ContentCarousel from './ContentCarousel';
+import { useAuth } from '../context/AuthContext';
 
 interface SearchResults {
     tracks?: { items: SpotifyItem[] };
@@ -23,6 +23,10 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const [results, setResults] = useState<SearchResults>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { playerState } = useAuth();
+
+    const isPlayingContext = playerState && !playerState.paused;
+    const currentTrackId = playerState?.track_window.current_track?.id;
 
     useEffect(() => {
         if (!query) return;
@@ -51,7 +55,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     }, [query]);
 
     const theme = {
-        textPrimary: isNight ? 'text-white' : 'text-zinc-800',
+        textPrimary: isNight ? 'text-white' : 'text-black',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
     };
@@ -73,6 +77,9 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
         return <div className="flex-grow flex justify-center items-center text-lg">Nessun risultato per "{query}"</div>
     }
 
+    const isTopResultPlaying = isPlayingContext && topResult?.id === currentTrackId;
+    const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -84,7 +91,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                 <img src={topResult.album.images[0].url} alt={topResult.name} className="w-24 h-24 rounded-md shadow-lg" />
                             )}
                             <div className="flex-grow">
-                                <h3 className={`text-3xl font-bold truncate ${theme.textPrimary}`}>{topResult.name}</h3>
+                                <h3 className={`text-3xl font-bold truncate ${isTopResultPlaying ? activeColor : theme.textPrimary}`}>{topResult.name}</h3>
                                 <p className={`text-sm ${theme.textSecondary}`}>
                                     {topResult.explicit && <span className="mr-2 bg-zinc-500/50 text-white text-[10px] rounded-sm px-1 py-0.5">E</span>}
                                     {topResult.artists?.map(a => a.name).join(', ')}
@@ -100,15 +107,18 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                      <div className="md:col-span-1">
                         <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Brani</h2>
                         <div className="flex flex-col gap-2">
-                             {trackResults.map((track, index) => (
-                                <div key={track.id} onClick={() => onPlay({ uris: trackUris, offset: { position: index + 1 } })} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${theme.hover}`}>
-                                    <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>
-                                    <div className="flex-grow">
-                                        <p className={`${theme.textPrimary}`}>{track.name}</p>
-                                        <p className={`text-xs ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</p>
+                             {trackResults.map((track, index) => {
+                                const isPlaying = isPlayingContext && track.id === currentTrackId;
+                                return (
+                                    <div key={track.id} onClick={() => onPlay({ uris: trackUris, offset: { position: index + 1 } })} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${theme.hover}`}>
+                                        <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>
+                                        <div className="flex-grow">
+                                            <p className={`font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</p>
+                                            <p className={`text-xs ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</p>
+                                        </div>
                                     </div>
-                                </div>
-                             ))}
+                                );
+                             })}
                         </div>
                      </div>
                 )}

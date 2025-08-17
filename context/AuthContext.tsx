@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import axios from 'axios';
 import apiClient from '../api';
+import type { SpotifyPlayerState } from '@/globals';
 
 interface SpotifyUser {
     display_name: string;
@@ -16,15 +17,7 @@ interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;
     error: string | null;
-}
-
-interface PlayOptions {
-    uris?: string[];
-    context_uri?: string;
-    offset?: {
-        position?: number;
-        uri?: string;
-    };
+    playerState: SpotifyPlayerState | null;
 }
 
 interface AuthContextType extends AuthState {
@@ -34,6 +27,16 @@ interface AuthContextType extends AuthState {
     play: (options: PlayOptions) => void;
     setDeviceId: (id: string | null) => void;
     refreshTrigger: number;
+    _setPlayerState: (state: SpotifyPlayerState | null) => void;
+}
+
+interface PlayOptions {
+    uris?: string[];
+    context_uri?: string;
+    offset?: {
+        position?: number;
+        uri?: string;
+    };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,6 +49,7 @@ const initialState: AuthState = {
     isAuthenticated: false,
     isLoading: true,
     error: null,
+    playerState: null,
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -59,6 +63,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('spotify_expires_in');
         setState(initialState);
         setState(s => ({...s, isLoading: false}));
+    }, []);
+
+    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
+        setState(s => ({ ...s, playerState: newState }));
     }, []);
     
     const fetchUserInfo = useCallback(async () => {
@@ -120,7 +128,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             const userData = await fetchUserInfo();
             if (userData) {
-                setState({
+                setState(s => ({
+                    ...s,
                     accessToken: access_token,
                     refreshToken: refresh_token,
                     expiresIn: expiresAt,
@@ -128,7 +137,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     isAuthenticated: true,
                     isLoading: false,
                     error: null,
-                });
+                }));
             } else {
                  throw new Error("Failed to fetch user info after login.");
             }
@@ -183,7 +192,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState }}>
             {children}
         </AuthContext.Provider>
     );

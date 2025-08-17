@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart, FiSpeaker } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
+import { useAuth } from '../context/AuthContext';
 
 export type ItemType = 'playlist' | 'album';
 
@@ -49,8 +50,12 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const [tracks, setTracks] = useState<Track[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { playerState } = useAuth();
 
     const isLikedSongs = itemId === 'liked-songs';
+    const isPlayingContext = playerState && !playerState.paused;
+    const currentTrackId = playerState?.track_window.current_track?.id;
+
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -93,7 +98,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     }, [itemId, itemType, isLikedSongs]);
     
     const theme = {
-        textPrimary: isNight ? 'text-white' : 'text-zinc-800',
+        textPrimary: isNight ? 'text-white' : 'text-black',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
         border: isNight ? 'border-white/10' : 'border-black/10',
@@ -148,7 +153,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                 )}
                 <div className="flex flex-col gap-3">
                     <span className="text-sm font-bold uppercase">{details.type === 'show' ? 'Podcast' : details.type}</span>
-                    <h1 className="text-5xl font-bold tracking-tight">{details.name}</h1>
+                    <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{details.name}</h1>
                     {sanitizedSubText && <p className={`text-sm ${theme.textSecondary} line-clamp-2`}>{sanitizedSubText}</p>}
                     <button onClick={handlePlay} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                         <FiPlay className="w-7 h-7 ml-1" />
@@ -168,8 +173,11 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             {/* Track List */}
             <div className="mt-2">
                 {tracks.map((track, index) => {
+                    if (!track) return null;
                     const imageUrl = itemType === 'album' ? details.images?.[0]?.url : track.album?.images?.[0]?.url;
                     const albumName = itemType === 'album' ? details.name : track.album.name;
+                    const isPlaying = isPlayingContext && track.id === currentTrackId;
+                    const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
                     return (
                         <div 
@@ -177,7 +185,13 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                             onClick={() => handleTrackPlay(track.uri, index)}
                             className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                         >
-                            <div className={`text-center ${theme.textSecondary}`}>{index + 1}</div>
+                            <div className="text-center">
+                                {isPlaying ? (
+                                    <FiSpeaker className={`w-4 h-4 mx-auto ${activeColor}`} />
+                                ) : (
+                                    <span className={theme.textSecondary}>{index + 1}</span>
+                                )}
+                            </div>
                             <div>
                                  {imageUrl ? (
                                     <img src={imageUrl} alt={albumName} className="w-10 h-10 rounded object-cover" />
@@ -188,7 +202,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                                 )}
                             </div>
                             <div className="flex flex-col min-w-0">
-                                <span className={`truncate ${theme.textPrimary}`}>{track.name}</span>
+                                <span className={`truncate font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
                                 <span className={`text-sm truncate ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
                             </div>
                             <div className={`text-sm truncate ${theme.textSecondary}`}>

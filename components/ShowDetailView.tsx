@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiMic } from 'react-icons/fi';
+import { useAuth } from '../context/AuthContext';
 
 interface Show {
     id: string;
@@ -43,6 +43,10 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     const [episodes, setEpisodes] = useState<Episode[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { playerState } = useAuth();
+
+    const isPlayingContext = playerState && !playerState.paused;
+    const currentTrackId = playerState?.track_window.current_track?.id;
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -68,7 +72,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     }, [showId]);
     
     const theme = {
-        textPrimary: isNight ? 'text-white' : 'text-zinc-800',
+        textPrimary: isNight ? 'text-white' : 'text-black',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
         border: isNight ? 'border-white/10' : 'border-black/10',
@@ -93,7 +97,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                 <img src={show.images[0].url} alt={show.name} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
                 <div className="flex flex-col gap-3 self-end">
                     <span className="text-sm font-bold uppercase">Podcast</span>
-                    <h1 className="text-5xl font-bold tracking-tight">{show.name}</h1>
+                    <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{show.name}</h1>
                     <p className={`text-lg font-semibold ${theme.textPrimary}`}>{show.publisher}</p>
                 </div>
             </header>
@@ -105,33 +109,38 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             
             {/* Episode List */}
             <div className="flex flex-col gap-2">
-                {episodes.map((episode) => (
-                    <div 
-                        key={episode.id}
-                        onClick={() => onPlay({ uris: [episode.uri] })}
-                        className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
-                    >
-                        {episode.images?.[0]?.url ? (
-                            <img src={episode.images[0].url} alt={episode.name} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
-                        ) : (
-                            <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
-                                <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
+                {episodes.map((episode) => {
+                    const isPlaying = isPlayingContext && episode.id === currentTrackId;
+                    const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+
+                    return (
+                        <div 
+                            key={episode.id}
+                            onClick={() => onPlay({ uris: [episode.uri] })}
+                            className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                        >
+                            {episode.images?.[0]?.url ? (
+                                <img src={episode.images[0].url} alt={episode.name} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
+                            ) : (
+                                <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
+                                    <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
+                                </div>
+                            )}
+                            <div className="flex flex-col overflow-hidden">
+                                <span className={`font-semibold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.name}</span>
+                                <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description.replace(/<[^>]*>?/gm, '')}</span>
+                                <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
+                                    <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                    <span>•</span>
+                                    <span>{formatDuration(episode.duration_ms)}</span>
+                                </div>
                             </div>
-                        )}
-                        <div className="flex flex-col overflow-hidden">
-                            <span className={`font-medium truncate ${theme.textPrimary}`}>{episode.name}</span>
-                            <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description.replace(/<[^>]*>?/gm, '')}</span>
-                            <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
-                                <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                                <span>•</span>
-                                <span>{formatDuration(episode.duration_ms)}</span>
-                            </div>
+                            <button onClick={(e) => { e.stopPropagation(); onPlay({ uris: [episode.uri] }); }} className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0">
+                                <FiPlay className="w-5 h-5 ml-0.5" />
+                            </button>
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); onPlay({ uris: [episode.uri] }); }} className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0">
-                            <FiPlay className="w-5 h-5 ml-0.5" />
-                        </button>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

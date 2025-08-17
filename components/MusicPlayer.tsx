@@ -158,11 +158,10 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose }: { isNight: bool
 };
 
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, dockedConfig, floatingConfig }) => {
-    const { accessToken, logout, setDeviceId, isAuthenticated } = useAuth();
+    const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
-    const [playerState, setPlayerState] = useState<SpotifyPlayerState | null>(null);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
     const [showQueue, setShowQueue] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
@@ -215,7 +214,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 playerRef.current = null;
             }
             setPlayerStatus('connecting');
-            setPlayerState(null);
+            _setPlayerState(null);
             return;
         }
 
@@ -253,7 +252,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 setDeviceId(null);
                 setPlayerStatus('connecting');
             });
-            player.on('player_state_changed', setPlayerState);
+            player.on('player_state_changed', _setPlayerState);
 
             const handleError = (error: { message: string }) => {
                 console.error("Spotify Player Error:", error.message);
@@ -273,7 +272,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer]);
+    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState]);
 
     // Automatic queue visibility logic
     useEffect(() => {
@@ -455,7 +454,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                         <div className="flex items-center gap-3 min-w-0">
                             {imageUrl && <img src={imageUrl} alt={album.name} className="w-10 h-10 rounded-md" />}
                             <div className="overflow-hidden">
-                                <div className="font-semibold text-sm truncate">{trackName}</div>
+                                <div className="font-bold text-sm truncate">{trackName}</div>
                                 <div className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
                                     {artists.map(a => a.name).join(', ')}
                                 </div>
