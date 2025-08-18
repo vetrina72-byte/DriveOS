@@ -160,20 +160,13 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
             handleSelect(suggestions[0].feature);
         }
     };
-    
-    const handleSearchClick = () => {
-        if (suggestions.length > 0) {
-            handleSelect(suggestions[0].feature);
-        }
-    }
 
     const theme = {
-        bg: 'var(--player-bg)',
+        bg: 'var(--spotify-panel-bg)',
         border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
-        inputBg: isNight ? 'bg-zinc-800' : 'bg-zinc-200',
+        inputBg: isNight ? 'bg-zinc-700' : 'bg-zinc-100',
         inputText: isNight ? 'text-zinc-100' : 'text-zinc-800',
         placeholderText: isNight ? 'placeholder:text-zinc-500' : 'placeholder:text-zinc-400',
-        buttonBg: isNight ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-200 hover:bg-zinc-300',
         buttonText: isNight ? 'text-zinc-200' : 'text-zinc-700',
         iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
         suggestionHover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10'
@@ -189,25 +182,25 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
                 background: theme.bg
             }}
         >
-             <div className="p-4 flex flex-col h-full overflow-hidden">
+             <div className="p-3 flex flex-col h-full overflow-hidden">
                 <div className="relative flex-shrink-0">
                     <ICONS.search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.iconColor}`} />
                     <input
                         type="text"
                         id="home-search-input"
                         name="destination"
-                        aria-label="Dove vuoi andare?"
+                        aria-label="Navigate"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onFocus={() => setIsFocused(true)}
                         onBlur={() => setTimeout(() => setIsFocused(false), 200)}
-                        placeholder="Dove vuoi andare?"
+                        placeholder="Navigate"
                         className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${theme.inputBg} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                     />
                 </div>
                 
-                <div className={`flex-grow mt-2 overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
+                <div className={`overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'flex-grow mt-2 opacity-100' : 'opacity-0'}`}>
                     {loading && <div className="text-center p-2 text-sm text-zinc-400">Ricerca...</div>}
                     {!loading && suggestions.map(({ feature, distance }) => {
                         const name = feature.properties.name || feature.properties.formatted;
@@ -248,11 +241,17 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
                     })}
                 </div>
 
-                <div className="flex-shrink-0 flex gap-2 mt-auto pt-2">
-                    <button onClick={handleSearchClick} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold ${theme.buttonBg} ${theme.buttonText} transition-colors`}>
-                        <ICONS.search className="w-5 h-5" />
-                        <span>Cerca</span>
-                    </button>
+                <div className={`flex-shrink-0 mt-auto pt-2 border-t ${theme.border}`}>
+                    <div className="flex justify-around items-center">
+                        <button className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold ${theme.buttonText} transition-colors ${theme.suggestionHover}`}>
+                            <ICONS.home className="w-5 h-5" />
+                            <span>Home</span>
+                        </button>
+                         <button className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold ${theme.buttonText} transition-colors ${theme.suggestionHover}`}>
+                            <ICONS.work className="w-5 h-5" />
+                            <span>Work</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

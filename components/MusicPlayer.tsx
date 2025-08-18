@@ -549,7 +549,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         <div 
             ref={playerContainerRef}
             className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
-            style={{...playerStyle, background: `var(--player-bg)`}}
+            style={{...playerStyle, background: `var(--spotify-panel-bg)`}}
         >
             {renderPlayerContent()}
         </div>
