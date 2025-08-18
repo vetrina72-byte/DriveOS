@@ -446,7 +446,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
 
             return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-4">
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
                             <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
@@ -501,7 +501,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
 
             return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-4">
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
                             {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
