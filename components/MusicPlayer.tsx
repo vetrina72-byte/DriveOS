@@ -19,6 +19,9 @@ interface MusicPlayerProps {
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
     floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };
+    playerControlsSize: number;
+    playerControlsGap: number;
+    playerControlsVerticalPosition: number;
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -155,7 +158,15 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { is
     );
 };
 
-const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, dockedConfig, floatingConfig }) => {
+const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
+    isAnyAppOpen, 
+    isNight, 
+    dockedConfig, 
+    floatingConfig, 
+    playerControlsSize,
+    playerControlsGap,
+    playerControlsVerticalPosition
+}) => {
     const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
@@ -463,15 +474,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                         </div>
                     </div>
                     
-                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: 'translateY(-1px)'}}>
+                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start">
                             {/* Empty left spacer */}
                         </div>
-                        <div className="flex items-center" style={{ gap: '80px' }}>
-                            <button disabled className={disabledIconColor}><IoPlaySkipBackSharp style={{ width: '20px', height: '20px'}} /></button>
-                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: '30px', height: '30px'}} /></button>
-                            <button disabled className={disabledIconColor}><IoPlaySkipForwardSharp style={{ width: '20px', height: '20px'}} /></button>
-                            <button disabled className={disabledIconColor}><FiHeart style={{ width: '18px', height: '18px'}} /></button>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                            <button disabled className={disabledIconColor}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
+                            <button disabled className={disabledIconColor}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button disabled className={disabledIconColor}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
                             <button disabled className={disabledIconColor}><BsList style={{ width: '20px', height: '20px'}} /></button>
@@ -515,24 +526,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                         <ProgressBar player={playerRef.current} state={playerState} />
                     </div>
                     
-                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: 'translateY(-1px)'}}>
+                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start">
                             {/* Empty left spacer */}
                         </div>
-                        <div className="flex items-center" style={{ gap: '80px'}}>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <IoPlaySkipBackSharp style={{ width: '20px', height: '20px'}} />
+                                <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
                             <button onClick={handleTogglePlay} className={`transition ${iconColor}`}>
                                 {playerState.paused 
-                                    ? <IoPlaySharp style={{ width: '30px', height: '30px'}} /> 
-                                    : <IoPauseSharp style={{ width: '30px', height: '30px'}} />}
+                                    ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
+                                    : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
                             </button>
                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <IoPlaySkipForwardSharp style={{ width: '20px', height: '20px'}} />
+                                <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
                              <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-green-500' : iconColor}`}>
-                                <FiHeart style={{ width: '18px', height: '18px'}} className={`${isLiked ? 'fill-current' : ''}`} />
+                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
                              </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">

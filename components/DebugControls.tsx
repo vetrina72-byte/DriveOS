@@ -240,9 +240,9 @@ export default function DebugControls({
     setPlayerFloatingBottom(98);
     setPlayerFloatingHeight(113);
     setNavigateToolWidth(340);
-    setPlayerControlsSize(20);
-    setPlayerControlsGap(80);
-    setPlayerControlsVerticalPosition(-1);
+    setPlayerControlsSize(18);
+    setPlayerControlsGap(100);
+    setPlayerControlsVerticalPosition(-2);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -687,7 +687,7 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-gap">Icon Gap: {playerControlsGap}px</label>
-              <input id="player-controls-gap" type="range" min="8" max="80" value={playerControlsGap} onChange={(e) => setPlayerControlsGap(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="player-controls-gap" type="range" min="8" max="120" value={playerControlsGap} onChange={(e) => setPlayerControlsGap(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
