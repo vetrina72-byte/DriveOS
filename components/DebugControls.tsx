@@ -82,6 +82,10 @@ interface DebugControlsProps {
   setPlayerControlsGap: (gap: number) => void;
   playerControlsVerticalPosition: number;
   setPlayerControlsVerticalPosition: (pos: number) => void;
+  playerButtonColor: string;
+  setPlayerButtonColor: (color: string) => void;
+  widgetBgHex: string;
+  setWidgetBgHex: (color: string) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -195,6 +199,10 @@ export default function DebugControls({
   setPlayerControlsGap,
   playerControlsVerticalPosition,
   setPlayerControlsVerticalPosition,
+  playerButtonColor,
+  setPlayerButtonColor,
+  widgetBgHex,
+  setWidgetBgHex,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -243,6 +251,8 @@ export default function DebugControls({
     setPlayerControlsSize(18);
     setPlayerControlsGap(100);
     setPlayerControlsVerticalPosition(2);
+    setPlayerButtonColor('#a49494');
+    setWidgetBgHex('#ffffff');
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -692,6 +702,30 @@ export default function DebugControls({
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">UI Colors</h3>
+            <div className="flex items-center justify-between">
+              <label htmlFor="player-button-color" className="font-medium text-zinc-300">Player Button Color</label>
+              <input
+                id="player-button-color"
+                type="color"
+                value={playerButtonColor}
+                onChange={(e) => setPlayerButtonColor(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <label htmlFor="widget-bg-color" className="font-medium text-zinc-300">Widget Background Color</label>
+              <input
+                id="widget-bg-color"
+                type="color"
+                value={widgetBgHex}
+                onChange={(e) => setWidgetBgHex(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
             </div>
         </div>
 

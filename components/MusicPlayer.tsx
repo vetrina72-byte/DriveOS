@@ -22,6 +22,8 @@ interface MusicPlayerProps {
     playerControlsSize: number;
     playerControlsGap: number;
     playerControlsVerticalPosition: number;
+    widgetBgColor: string;
+    playerButtonColor: string;
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -165,7 +167,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     floatingConfig, 
     playerControlsSize,
     playerControlsGap,
-    playerControlsVerticalPosition
+    playerControlsVerticalPosition,
+    widgetBgColor,
+    playerButtonColor,
 }) => {
     const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
@@ -404,8 +408,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
     
     const playerStyle: React.CSSProperties = useMemo(() => {
+        let baseStyle: React.CSSProperties;
         if (isAnyAppOpen) {
-            return {
+            baseStyle = {
                 width: `${dockedConfig.width}px`,
                 height: `${dockedConfig.height}px`,
                 bottom: `${dockedConfig.bottom}px`,
@@ -415,7 +420,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         } else {
             const { width, bottom, height, otherWidgetWidth } = floatingConfig;
             const transformX = -otherWidgetWidth / 2 - 8;
-            return {
+            baseStyle = {
                 width: `${width}px`,
                 height: `${height}px`,
                 bottom: `${bottom}px`,
@@ -423,7 +428,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 transform: `translateX(calc(-50% + ${transformX}px))`,
             };
         }
-    }, [isAnyAppOpen, dockedConfig, floatingConfig]);
+        baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
+        return baseStyle;
+    }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
 
     const themeClasses = isNight 
         ? 'border-zinc-700/80' 
@@ -496,28 +503,26 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
             const nextTrack = playerState.track_window.next_tracks[0];
-
-            const activeColor = isNight ? 'text-green-500' : 'text-zinc-600';
+            const activeColor = !isNight ? playerButtonColor : 'var(--color-accent)';
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
-            const activeQueueClass = isNight ? 'text-green-400 ring-1 ring-green-500/80' : 'text-zinc-700 ring-1 ring-zinc-600/80';
-
+            
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
                             {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
                             <div className="overflow-hidden">
-                                <div className={`font-semibold text-sm truncate ${playerState.paused ? '' : activeColor}`} style={playerState.paused ? { color: 'var(--text-primary)'} : {}}>{trackName}</div>
+                                <div className={`font-semibold text-sm truncate`} style={{ color: playerState.paused ? 'var(--text-primary)' : activeColor}}>{trackName}</div>
                                 <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
                                     {artists.map(a => a.name).join(', ')}
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-5">
-                            <button onClick={handleToggleShuffle} className={`transition ${playerState.shuffle ? activeColor : iconColor}`}>
+                            <button onClick={handleToggleShuffle} className={`transition ${iconColor}`} style={{ color: playerState.shuffle ? activeColor : undefined }}>
                                 <PiShuffleBold className="w-5 h-5" />
                             </button>
-                            <button onClick={handleToggleRepeat} className={`transition ${playerState.repeat_mode !== 0 ? activeColor : iconColor}`}>
+                            <button onClick={handleToggleRepeat} className={`transition ${iconColor}`} style={{ color: playerState.repeat_mode !== 0 ? activeColor : undefined }}>
                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                             </button>
                         </div>
@@ -532,23 +537,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             {/* Empty left spacer */}
                         </div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
-                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: activeColor }}>
                                 <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
-                            <button onClick={handleTogglePlay} className={`transition ${iconColor}`}>
+                            <button onClick={handleTogglePlay} className={`transition ${iconColor}`} style={{ color: activeColor }}>
                                 {playerState.paused 
                                     ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
                                     : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
                             </button>
-                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: activeColor }}>
                                 <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
-                             <button onClick={handleToggleLike} className={`transition ${isLiked ? (isNight ? 'text-green-500' : 'text-zinc-600') : iconColor}`}>
+                             <button onClick={handleToggleLike} className={`transition ${iconColor}`} style={{ color: isLiked ? activeColor : undefined }}>
                                 <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
                              </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
-                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200 ${isAutoQueueEnabled ? activeQueueClass : iconColor}`}>
+                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200 ${iconColor}`} style={{ color: isAutoQueueEnabled ? activeColor : undefined }}>
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>
@@ -586,7 +591,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <div 
             ref={playerContainerRef}
             className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
-            style={{...playerStyle, background: `var(--player-bg)`}}
+            style={playerStyle}
         >
             {renderPlayerContent()}
         </div>

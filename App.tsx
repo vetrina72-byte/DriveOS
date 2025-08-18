@@ -46,12 +46,14 @@ const formatTravelTime = (minutes: number | null): string => {
 };
 
 
-const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width }: { 
+const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, playerButtonColor }: { 
     isVisible: boolean, 
     isNight: boolean,
     onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
     currentPosition: { lat: number; lng: number } | null,
     width: number,
+    widgetBgColor: string;
+    playerButtonColor: string;
 }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
@@ -167,7 +169,6 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
         inputBg: isNight ? 'bg-zinc-700' : 'bg-zinc-100',
         inputText: isNight ? 'text-zinc-100' : 'text-zinc-800',
         placeholderText: isNight ? 'placeholder:text-zinc-500' : 'placeholder:text-zinc-400',
-        buttonText: isNight ? 'text-zinc-200' : 'text-zinc-600',
         iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
         suggestionHover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10'
     };
@@ -179,7 +180,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
             style={{ 
                 width: `${width}px`,
                 height: `${isExpanded ? expandedHeight : baseHeight}px`,
-                background: theme.bg
+                background: !isNight ? widgetBgColor : theme.bg
             }}
         >
              <div className="p-3 flex flex-col h-full overflow-hidden">
@@ -243,11 +244,17 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
 
                 <div className={`flex-shrink-0 mt-auto pt-2 border-t ${theme.border}`}>
                     <div className="flex justify-around items-center">
-                        <button className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold ${theme.buttonText} transition-colors ${theme.suggestionHover}`}>
+                        <button 
+                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
+                            style={{ color: !isNight ? playerButtonColor : 'var(--icon-color)' }}
+                        >
                             <ICONS.home className="w-5 h-5" />
                             <span>Home</span>
                         </button>
-                         <button className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold ${theme.buttonText} transition-colors ${theme.suggestionHover}`}>
+                         <button 
+                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
+                            style={{ color: !isNight ? playerButtonColor : 'var(--icon-color)' }}
+                         >
                             <ICONS.work className="w-5 h-5" />
                             <span>Work</span>
                         </button>
@@ -270,7 +277,7 @@ const calculateGeoDistance = (lat1: number, lon1: number, lat2: number, lon2: nu
     return R * c;
 };
 
-const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo, simulatedRemainingDistance, width }: {
+const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo, simulatedRemainingDistance, width, widgetBgColor }: {
     target: { lat: number, lng: number, name: string },
     currentPosition: { lat: number, lng: number } | null,
     isNight: boolean,
@@ -278,6 +285,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
     tripInfo: { time: number, distance: number } | null,
     simulatedRemainingDistance: number | null,
     width: number,
+    widgetBgColor: string,
 }) => {
     const [totalDistance, setTotalDistance] = useState<number | null>(null);
     const [remainingDistance, setRemainingDistance] = useState<number | null>(null);
@@ -404,7 +412,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
             style={{ 
                 width: `${width}px`,
                 height: '113px',
-                background: theme.bg
+                background: widgetBgColor || theme.bg
             }}
         >
             <div className="p-4 flex flex-col h-full justify-between">
@@ -509,6 +517,17 @@ const wmoCodeToCondition = (code: number): string => {
 
 type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+  hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  } : null;
+}
+
 export default function App() {
   // Simple routing based on URL path for the Spotify callback
   if (window.location.pathname === '/spotify-callback') {
@@ -563,6 +582,15 @@ export default function App() {
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
+
+  // Debug UI Colors
+  const [playerButtonColor, setPlayerButtonColor] = useState('#a49494');
+  const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
+  const widgetBgColor = useMemo(() => {
+    const rgb = hexToRgb(widgetBgHex);
+    // Maintain the translucent look
+    return rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.85)` : 'rgba(23, 23, 23, 0.85)';
+  }, [widgetBgHex]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1025,6 +1053,7 @@ export default function App() {
                   tripInfo={tripInfo}
                   simulatedRemainingDistance={simulatedRemainingDistance}
                   width={navigateToolWidth}
+                  widgetBgColor={widgetBgColor}
                 />
               ) : (
                 <NavigateTool 
@@ -1033,6 +1062,8 @@ export default function App() {
                   onSelectDestination={handleSelectDestination}
                   currentPosition={currentPosition}
                   width={navigateToolWidth}
+                  widgetBgColor={widgetBgColor}
+                  playerButtonColor={playerButtonColor}
                 />
               )}
           </div>
@@ -1056,6 +1087,8 @@ export default function App() {
             playerControlsSize={playerControlsSize}
             playerControlsGap={playerControlsGap}
             playerControlsVerticalPosition={playerControlsVerticalPosition}
+            widgetBgColor={widgetBgColor}
+            playerButtonColor={playerButtonColor}
           />
           
           <MapsContainer 
@@ -1172,6 +1205,10 @@ export default function App() {
             setPlayerControlsGap={setPlayerControlsGap}
             playerControlsVerticalPosition={playerControlsVerticalPosition}
             setPlayerControlsVerticalPosition={setPlayerControlsVerticalPosition}
+            playerButtonColor={playerButtonColor}
+            setPlayerButtonColor={setPlayerButtonColor}
+            widgetBgHex={widgetBgHex}
+            setWidgetBgHex={setWidgetBgHex}
         />
         </div>
       </AuthProvider>
