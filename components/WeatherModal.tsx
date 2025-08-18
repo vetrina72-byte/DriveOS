@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 import { FiX, FiLoader, FiAlertTriangle } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp, HOT_TEMP, COLD_TEMP } from './WeatherIcon';
@@ -184,90 +182,90 @@ export default function WeatherModal({ isOpen, onClose, isNight, status, data, e
                         <button onClick={onClose} className={`p-2 ${theme.textSecondary} ${theme.buttonHover} rounded-full`}>
                             <FiX size={22} />
                         </button>
-                        <h2 id="weather-title" className="font-bold text-base sm:text-lg md:text-xl text-center">{data.locationName}</h2>
+                        <h2 id="weather-title" className="font-bold text-sm sm:text-base md:text-lg text-center">{data.locationName}</h2>
                         <div className="w-10"></div>
                     </header>
                     <div className="flex flex-col items-center text-center my-1 md:my-2">
                         <p className={`text-sm font-medium ${theme.textSecondary}`}>Adesso</p>
-                        <div className="relative font-bold tracking-tight leading-none text-7xl sm:text-8xl md:text-9xl">
+                        <div className="relative font-bold tracking-tight leading-none text-6xl sm:text-7xl md:text-8xl">
                             <span>{isNaN(mainTemp) ? '--' : mainTemp}</span>
-                            <span className="absolute top-1 -right-3 text-3xl sm:top-2 sm:-right-4 sm:text-4xl md:text-5xl opacity-80">{mainUnitSymbol}</span>
+                            <span className="absolute top-1 -right-2 text-2xl sm:top-1 sm:-right-3 sm:text-3xl md:text-4xl opacity-80">{mainUnitSymbol}</span>
                         </div>
                         <div className="flex flex-col items-center mt-1 md:mt-2">
                             <div className="relative inline-block">
                                 <WeatherIcon 
                                     condition={nowData.condition} 
                                     isNight={nowData.isNight} 
-                                    className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 ${nowData.isHot ? 'hot-sun' : ''}`}
+                                    className={`w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 ${nowData.isHot ? 'hot-sun' : ''}`}
                                     arrowYPosition={getArrowYPosition(nowData.condition)}
                                 />
                                 {(nowData.isHot || nowData.isCold) && (
                                     <ExtremeTemp
                                         type={nowData.isHot ? 'hot' : 'cold'}
-                                        className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 absolute top-0 right-0"
+                                        className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 absolute top-0 right-0"
                                         aria-label={nowData.isHot ? 'Hot temperature warning' : 'Cold temperature warning'}
                                     />
                                 )}
                             </div>
                             <div className="flex flex-col items-center mt-1">
-                                <p className="font-bold text-base sm:text-lg md:text-xl">{nowData.condition}</p>
-                                <p className={`${theme.textSecondary} font-semibold text-sm sm:text-base`}>
+                                <p className="font-bold text-sm sm:text-base md:text-lg">{nowData.condition}</p>
+                                <p className={`${theme.textSecondary} font-semibold text-xs sm:text-sm`}>
                                     <span className={theme.textAccent}>↑{highTempFormatted}</span>
                                     <span className="mx-1">↓{lowTempFormatted}</span>
                                 </p>
                             </div>
                         </div>
                     </div>
-                    <div className={`flex justify-between border-t border-b ${theme.border} py-3 sm:py-4`}>
+                    <div className={`flex justify-between border-t border-b ${theme.border} py-2 sm:py-3`}>
                         {hourlyForecast.map((hour, index) => {
                             const hourlyFormatted = formatTempWithUnit(convertTemp(hour.temperature, tempUnit), tempUnit);
                             return (
-                                <div key={index} className="flex flex-col items-center gap-1 sm:gap-2 w-1/5">
-                                    <span className={`text-xs sm:text-sm font-medium ${theme.textSecondary}`}>{hour.time}</span>
+                                <div key={index} className="flex flex-col items-center gap-0.5 sm:gap-1 w-1/5">
+                                    <span className={`text-[10px] sm:text-xs font-medium ${theme.textSecondary}`}>{hour.time}</span>
                                     <div className="relative inline-block">
                                         <WeatherIcon 
                                           condition={hour.condition} 
                                           isNight={hour.isNight} 
-                                          className={`w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 ${hour.isHot ? 'hot-sun' : ''}`} 
+                                          className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 ${hour.isHot ? 'hot-sun' : ''}`} 
                                           arrowYPosition={getArrowYPosition(hour.condition)}
                                         />
                                          {(hour.isHot || hour.isCold) && (
                                             <ExtremeTemp 
                                                 type={hour.isHot ? 'hot' : 'cold'}
-                                                className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 absolute -top-0.5 -right-0.5"
+                                                className="w-2 h-2 sm:w-3 sm:h-3 md:w-4 md:h-4 absolute -top-0.5 -right-0.5"
                                                 aria-label={hour.isHot ? 'Hot temperature warning' : 'Cold temperature warning'}
                                             />
                                         )}
                                     </div>
-                                    <span className="font-bold text-base sm:text-lg md:text-xl">{hourlyFormatted}</span>
+                                    <span className="font-bold text-sm sm:text-base md:text-lg">{hourlyFormatted}</span>
                                 </div>
                             );
                         })}
                     </div>
-                    <div className="flex flex-col gap-y-0 sm:gap-y-1 pt-3 sm:pt-4">
-                        <div className={`flex items-center justify-between py-2 md:py-3 border-b ${theme.border}`}>
+                    <div className="flex flex-col gap-y-0 pt-2 sm:pt-3">
+                        <div className={`flex items-center justify-between py-1.5 md:py-2 border-b ${theme.border}`}>
                             <div className="flex items-center gap-3 sm:gap-4">
-                                <ICONS.rainChance className={`w-5 h-5 ${theme.textSecondary}`} />
-                                <span className={`${theme.textSecondary} font-medium text-xs sm:text-sm md:text-base`}>Probabilità di pioggia</span>
+                                <ICONS.rainChance className={`w-4 h-4 ${theme.textSecondary}`} />
+                                <span className={`${theme.textSecondary} font-medium text-[10px] sm:text-xs md:text-sm`}>Probabilità di pioggia</span>
                             </div>
-                            <span className="font-bold text-sm sm:text-base md:text-lg">{data.details.chanceOfRain}%</span>
+                            <span className="font-bold text-xs sm:text-sm md:text-base">{data.details.chanceOfRain}%</span>
                         </div>
-                        <div className={`flex items-center justify-between py-2 md:py-3 border-b ${theme.border}`}>
+                        <div className={`flex items-center justify-between py-1.5 md:py-2 border-b ${theme.border}`}>
                             <div className="flex items-center gap-3 sm:gap-4">
-                                <ICONS.humidity className={`w-5 h-5 ${theme.textSecondary}`} />
-                                <span className={`${theme.textSecondary} font-medium text-xs sm:text-sm md:text-base`}>Umidità</span>
+                                <ICONS.humidity className={`w-4 h-4 ${theme.textSecondary}`} />
+                                <span className={`${theme.textSecondary} font-medium text-[10px] sm:text-xs md:text-sm`}>Umidità</span>
                             </div>
-                            <span className="font-bold text-sm sm:text-base md:text-lg">{data.details.humidity}%</span>
+                            <span className="font-bold text-xs sm:text-sm md:text-base">{data.details.humidity}%</span>
                         </div>
-                        <div className={`flex items-center justify-between py-2 md:py-3`}>
+                        <div className={`flex items-center justify-between py-1.5 md:py-2`}>
                             <div className="flex items-center gap-3 sm:gap-4">
-                                <ICONS.wind className={`w-5 h-5 ${theme.textSecondary}`} />
-                                <span className={`${theme.textSecondary} font-medium text-xs sm:text-sm md:text-base`}>Vento</span>
+                                <ICONS.wind className={`w-4 h-4 ${theme.textSecondary}`} />
+                                <span className={`${theme.textSecondary} font-medium text-[10px] sm:text-xs md:text-sm`}>Vento</span>
                             </div>
-                            <span className="font-bold text-sm sm:text-base md:text-lg">{data.details.wind}</span>
+                            <span className="font-bold text-xs sm:text-sm md:text-base">{data.details.wind}</span>
                         </div>
                     </div>
-                    <footer className={`text-center text-[10px] sm:text-xs ${theme.textSecondary} pt-2 sm:pt-4`}>
+                    <footer className={`text-center text-[9px] sm:text-[10px] ${theme.textSecondary} pt-1 sm:pt-2`}>
                        Ultimo aggiornamento alle {data.lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                     </footer>
                 </>
@@ -285,11 +283,11 @@ export default function WeatherModal({ isOpen, onClose, isNight, status, data, e
 
     return (
         <div 
-            className={`fixed inset-0 bg-black/40 backdrop-blur-md z-40 flex justify-center items-center transition-opacity duration-500 ease-in-out ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`fixed inset-0 bg-black/40 backdrop-blur-md z-60 flex justify-center items-start pt-[15vh] transition-opacity duration-500 ease-in-out ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={onClose}
         >
             <div
-                className={`w-11/12 max-w-xs sm:max-w-sm md:max-w-md ${theme.bg} ${theme.textPrimary} rounded-2xl shadow-xl p-3 sm:p-4 md:p-6 flex flex-col gap-2 sm:gap-3 md:gap-4 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-12'}`}
+                className={`w-11/12 max-w-[240px] sm:max-w-[288px] md:max-w-[336px] ${theme.bg} ${theme.textPrimary} rounded-2xl shadow-xl p-2 sm:p-3 md:p-4 flex flex-col gap-1 sm:gap-2 md:gap-3 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-12'}`}
                 onClick={stopPropagation}
                 role="dialog"
                 aria-modal="true"

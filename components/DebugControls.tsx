@@ -271,7 +271,7 @@ export default function DebugControls({
 
   return (
     <div 
-      className="absolute bottom-36 right-4 z-40 bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto"
+      className="absolute bottom-36 right-4 z-50 bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto"
       onClick={stopPropagation}
       role="dialog"
       aria-modal="true"

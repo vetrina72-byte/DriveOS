@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 import { ICONS } from '../constants';
 
@@ -48,7 +46,7 @@ export default function AppLauncher({ isOpen }: { isOpen: boolean }) {
     return (
         <div
             className={`
-                absolute left-1/2 -translate-x-1/2 bottom-24 z-30
+                absolute left-1/2 -translate-x-1/2 bottom-24 z-40
                 w-11/12 max-w-lg
                 bg-black/80 backdrop-blur-sm rounded-2xl shadow-2xl
                 transition-all duration-300 ease-out
