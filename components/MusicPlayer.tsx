@@ -499,6 +499,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
             const activeColor = isNight ? 'text-green-500' : 'text-zinc-600';
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
+            const activeQueueClass = isNight ? 'text-green-400 ring-1 ring-green-500/80' : 'text-zinc-700 ring-1 ring-zinc-600/80';
 
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -547,7 +548,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                              </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
-                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`transition ${isAutoQueueEnabled ? activeColor : iconColor}`}>
+                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200 ${isAutoQueueEnabled ? activeQueueClass : iconColor}`}>
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>
