@@ -507,9 +507,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const nextTrack = playerState.track_window.next_tracks[0];
             
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const inactiveButtonColor = isNight ? '#464646' : '#e6e6e6';
             
             const songTitleColor = isNight 
-              ? (playerState.paused ? 'var(--text-primary)' : '#c0c0c0')
+              ? 'var(--text-primary)'
               : (playerState.paused ? 'var(--text-primary)' : '#000000');
 
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
@@ -527,10 +528,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                         <div className="flex items-center gap-5">
-                            <button onClick={handleToggleShuffle} className={`transition ${iconColor}`} style={{ color: playerState.shuffle ? buttonActiveColor : undefined }}>
+                            <button onClick={handleToggleShuffle} className={`transition`} style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}>
                                 <PiShuffleBold className="w-5 h-5" />
                             </button>
-                            <button onClick={handleToggleRepeat} className={`transition ${iconColor}`} style={{ color: playerState.repeat_mode !== 0 ? buttonActiveColor : undefined }}>
+                            <button onClick={handleToggleRepeat} className={`transition`} style={{ color: playerState.repeat_mode !== 0 ? buttonActiveColor : inactiveButtonColor }}>
                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                             </button>
                         </div>
@@ -545,23 +546,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             {/* Empty left spacer */}
                         </div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
-                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: buttonActiveColor }}>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
                                 <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
-                            <button onClick={handleTogglePlay} className={`transition ${iconColor}`} style={{ color: buttonActiveColor }}>
+                            <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
                                     ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
                                     : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
                             </button>
-                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: buttonActiveColor }}>
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
                                 <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
-                             <button onClick={handleToggleLike} className={`transition ${iconColor}`} style={{ color: isLiked ? buttonActiveColor : undefined }}>
+                             <button onClick={handleToggleLike} className={`transition`} style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}>
                                 <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
                              </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
-                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200 ${iconColor}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : undefined }}>
+                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>
