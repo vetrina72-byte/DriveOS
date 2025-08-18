@@ -3,14 +3,14 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic, FiAlertTriangle, FiSearch
+    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic, FiAlertTriangle
 } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 import { 
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
-import { IoMdHeart } from 'react-icons/io';
-import { HiOutlineArrowsUpDown } from 'react-icons/hi2';
+import { IoMdAddCircleOutline, IoMdHeart } from 'react-icons/io';
+import { HiOutlineQueueList, HiMiniQueueList } from 'react-icons/hi2';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 
 interface MusicPlayerProps {
@@ -104,12 +104,12 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     return (
         <div
             ref={progressRef}
-            className={`w-full h-1 rounded-full cursor-pointer relative group ${progressBg}`}
+            className={`w-full h-1.5 rounded-full cursor-pointer relative group ${progressBg}`}
             onMouseDown={handleMouseDown}
         >
             <div className={`h-full rounded-full ${progressFillBg}`} style={{ width: `${progressPercentage}%` }} />
             <div 
-                className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full opacity-100`}
+                className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity`}
                 style={{ left: `${progressPercentage}%`, transform: 'translate(-50%, -50%)', backgroundColor: thumbColor }} 
             />
         </div>
@@ -470,53 +470,50 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             const activeRepeatColor = isNight ? 'text-green-400' : 'text-green-600';
 
             return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-3">
-                    {/* Top Row: Info & Secondary Controls */}
-                    <div className="flex items-center gap-4 w-full">
+                <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-2 relative">
+                    {/* ROW 1: Info & Secondary Controls */}
+                    <div className="flex items-center justify-between gap-4 w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-md" />}
+                            {imageUrl && <img src={imageUrl} alt={album.name} className="w-10 h-10 rounded-md" />}
                             <div className="overflow-hidden">
-                                <div className="font-bold text-base truncate" style={{ color: 'var(--text-primary)'}}>{trackName}</div>
-                                <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>
+                                <div className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)'}}>{trackName}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
                                     {artists.map(a => a.name).join(', ')}
                                 </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-5 ml-auto">
-                            <button onClick={handleToggleShuffle} className={`transition ${playerState.shuffle ? activeIconColor : iconColor}`}>
+                        <div className="flex items-center gap-5">
+                             <button onClick={handleToggleShuffle} className={`transition ${playerState.shuffle ? activeIconColor : iconColor}`}>
                                 <PiShuffleBold className="w-5 h-5" />
                             </button>
                             <button onClick={handleToggleRepeat} className={`transition ${playerState.repeat_mode !== 0 ? activeRepeatColor : iconColor}`}>
-                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
+                               {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                             </button>
                         </div>
                     </div>
 
-                    {/* Middle Row: Progress Bar */}
+                    {/* ROW 2: Progress & Main Controls */}
                     <div className="w-full">
                         <ProgressBar player={playerRef.current} state={playerState} isNight={isNight} />
-                    </div>
-
-                    {/* Bottom Row: Main Controls */}
-                    <div className="flex justify-between items-center w-full">
-                        <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
-                            <FiSkipBack className="w-7 h-7" />
-                        </button>
-                        <button onClick={handleTogglePlay} className={`transition ${iconColor}`}>
-                            {playerState.paused ? <FiPlay className="w-9 h-9" /> : <FiPause className="w-9 h-9" />}
-                        </button>
-                        <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
-                            <FiSkipForward className="w-7 h-7" />
-                        </button>
-                        <button onClick={handleToggleLike} className={`transition`}>
-                            <IoMdHeart className={`w-6 h-6 transition-colors ${isLiked ? 'text-[#1DB954]' : iconColor}`} />
-                        </button>
-                        <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`transition ${isAutoQueueEnabled ? activeIconColor : iconColor}`}>
-                            <HiOutlineArrowsUpDown className="w-6 h-6" />
-                        </button>
-                        <button className={`transition ${iconColor}`}>
-                            <FiSearch className="w-6 h-6" />
-                        </button>
+                        <div className="flex justify-between items-center mt-2">
+                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
+                                <FiSkipBack className="w-6 h-6" />
+                            </button>
+                            <button onClick={handleTogglePlay} className={`transition ${iconColor}`}>
+                                {playerState.paused 
+                                    ? <FiPlay className="w-8 h-8" /> 
+                                    : <FiPause className="w-8 h-8" />}
+                            </button>
+                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
+                                <FiSkipForward className="w-6 h-6" />
+                            </button>
+                             <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-[#1DB954]' : iconColor}`}>
+                                {isLiked ? <IoMdHeart className="w-6 h-6" /> : <IoMdAddCircleOutline className="w-6 h-6" />}
+                             </button>
+                             <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`transition ${isAutoQueueEnabled ? activeIconColor : iconColor}`}>
+                                {isAutoQueueEnabled ? <HiMiniQueueList className="w-6 h-6" /> : <HiOutlineQueueList className="w-6 h-6" />}
+                             </button>
+                        </div>
                     </div>
 
                     {isQueuePopoverRendered && (
