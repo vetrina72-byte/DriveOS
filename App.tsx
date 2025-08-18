@@ -585,7 +585,7 @@ export default function App() {
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
 
   // Debug UI Colors
-  const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#c0c0c0');
+  const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
   const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#ffffff');
   const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
   const widgetBgColor = useMemo(() => {
