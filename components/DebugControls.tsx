@@ -115,11 +115,11 @@ const WEATHER_CONDITIONS = [
 ];
 
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
-  cameraPos: { x: 1.38, y: 1.31, z: 3.78 },
-  cameraTarget: { x: 0.60, y: 0.00, z: 0.65 },
-  modelPos: { x: -4.76, y: -1.00, z: 1.47 },
+  cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
+  cameraTarget: { x: 0.60, y: 0.22, z: 0.65 },
+  modelPos: { x: -4.65, y: -1.00, z: 1.47 },
   modelRot: { x: 0, y: -0.09, z: 0.0 },
-  modelScale: 0.74,
+  modelScale: 0.78,
 };
 
 export default function DebugControls({ 

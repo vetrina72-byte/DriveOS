@@ -1,4 +1,5 @@
 
+
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
@@ -83,7 +84,7 @@ useGLTF.preload(MODEL_URL);
 
 function SceneController({
   isAppOpen, activeConfig, setAppOpenConfig, modelRef,
-  frontLightTarget, originalAppOpenConfig
+  frontLightTarget, originalAppOpenConfig, onInteractionChange
 }: {
   isAppOpen: boolean;
   activeConfig: SceneConfig;
@@ -91,6 +92,7 @@ function SceneController({
   modelRef: React.RefObject<THREE.Group>;
   frontLightTarget: THREE.Object3D;
   originalAppOpenConfig: SceneConfig;
+  onInteractionChange?: (isInteracting: boolean) => void;
 }) {
   const { camera, controls, gl } = useThree();
   const [interacting, setInteracting] = useState(false);
@@ -106,19 +108,24 @@ function SceneController({
   // Gestione interazione orbit controls
   useEffect(() => {
     setInteracting(false);
+    onInteractionChange?.(false);
     if (interactTimeout.current) clearTimeout(interactTimeout.current);
-  }, [isAppOpen]);
+  }, [isAppOpen, onInteractionChange]);
 
   useEffect(() => {
     const ctrl = (controls as any);
     if (!ctrl || isAppOpen) return;
     const onStart = () => {
       setInteracting(true);
+      onInteractionChange?.(true);
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
     };
     const onEnd = () => {
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
-      interactTimeout.current = window.setTimeout(() => setInteracting(false), 7000);
+      interactTimeout.current = window.setTimeout(() => {
+        setInteracting(false);
+        onInteractionChange?.(false);
+      }, 7000);
     };
     ctrl.addEventListener('start', onStart);
     ctrl.addEventListener('end', onEnd);
@@ -127,7 +134,7 @@ function SceneController({
       ctrl.removeEventListener('end', onEnd);
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
     };
-  }, [controls, isAppOpen]);
+  }, [controls, isAppOpen, onInteractionChange]);
 
   // Drag per ruotare il modello in app-open
   useEffect(() => {
@@ -383,6 +390,7 @@ interface VehicleCanvasProps {
   nightAmbientIntensity: number;
   nightFrontLightIntensity: number;
   nightEnvironmentIntensity: number;
+  onInteractionChange?: (isInteracting: boolean) => void;
 }
 
 export default function VehicleCanvas({
@@ -395,6 +403,7 @@ export default function VehicleCanvas({
   nightAmbientIntensity,
   nightFrontLightIntensity,
   nightEnvironmentIntensity,
+  onInteractionChange,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -550,6 +559,7 @@ export default function VehicleCanvas({
           modelRef={modelRef}
           frontLightTarget={frontLightTarget}
           originalAppOpenConfig={appOpenConfigFromProps}
+          onInteractionChange={onInteractionChange}
         />
         <EnvironmentController
           isNight={isNight}

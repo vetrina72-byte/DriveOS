@@ -507,11 +507,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const nextTrack = playerState.track_window.next_tracks[0];
             
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-            const inactiveButtonColor = isNight ? '#464646' : '#e6e6e6';
+            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
             
             const songTitleColor = isNight 
-              ? 'var(--text-primary)'
-              : (playerState.paused ? 'var(--text-primary)' : '#000000');
+              ? '#f7f7f7'
+              : (playerState.paused ? '#454545' : '#000000');
 
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
             

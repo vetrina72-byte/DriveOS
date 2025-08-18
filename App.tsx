@@ -413,7 +413,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
             style={{ 
                 width: `${width}px`,
                 height: '113px',
-                background: widgetBgColor || theme.bg
+                background: !isNight ? widgetBgColor : theme.bg
             }}
         >
             <div className="p-4 flex flex-col h-full justify-between">
@@ -560,15 +560,16 @@ export default function App() {
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>({
       cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
-      cameraTarget: { x: 0.60, y: 0.00, z: 0.65 },
-      modelPos: { x: -5.47, y: -1.00, z: 1.47 },
+      cameraTarget: { x: 0.60, y: 0.22, z: 0.65 },
+      modelPos: { x: -4.65, y: -1.00, z: 1.47 },
       modelRot: { x: 0, y: -0.09, z: 0.0 },
-      modelScale: 0.90,
+      modelScale: 0.78,
   });
   const [nightFloorDarkness, setNightFloorDarkness] = useState(0);
   const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.25);
   const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.60);
   const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
+  const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
 
   // Spotify Player & Home Widgets
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
@@ -978,10 +979,11 @@ export default function App() {
               nightAmbientIntensity={nightAmbientIntensity}
               nightFrontLightIntensity={nightFrontLightIntensity}
               nightEnvironmentIntensity={nightEnvironmentIntensity}
+              onInteractionChange={setIsCanvasInteracting}
           />
 
           <MiniMap 
-              isVisible={!isUIOverlayActive} 
+              isVisible={!isUIOverlayActive && !isCanvasInteracting} 
               position={currentPosition} 
               bearing={bearing}
               isNight={isNight}
