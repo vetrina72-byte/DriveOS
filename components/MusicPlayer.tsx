@@ -497,15 +497,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                         <ProgressBar player={playerRef.current} state={playerState} isNight={isNight} />
                         <div className="flex justify-between items-center mt-2">
                              <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <FiSkipBack className="w-7 h-7" />
+                                <FiSkipBack className="w-6 h-6" />
                             </button>
                             <button onClick={handleTogglePlay} className={`transition ${iconColor}`}>
                                 {playerState.paused 
-                                    ? <FiPlay className="w-9 h-9" /> 
-                                    : <FiPause className="w-9 h-9" />}
+                                    ? <FiPlay className="w-8 h-8" /> 
+                                    : <FiPause className="w-8 h-8" />}
                             </button>
                              <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <FiSkipForward className="w-7 h-7" />
+                                <FiSkipForward className="w-6 h-6" />
                             </button>
                              <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-[#1DB954]' : iconColor}`}>
                                 {isLiked ? <IoMdHeart className="w-6 h-6" /> : <IoMdAddCircleOutline className="w-6 h-6" />}

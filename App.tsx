@@ -410,16 +410,16 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         >
             <div className="p-4 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start">
-                    <div className="flex-grow min-w-0">
-                        <p className={`font-semibold truncate text-lg ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>{target.name}</p>
-                         <div className={`flex items-center gap-3 text-sm font-medium ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    <div className="flex-grow min-w-0 pr-2">
+                        <p className={`font-semibold truncate text-base ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>{target.name}</p>
+                         <div className={`flex items-center gap-2 text-sm font-medium ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                             <span>{formatTravelTime(remainingTime)}</span>
                             <span className="text-xs">&#9679;</span>
                             <span>{remainingDistance?.toFixed(1) ?? '--'} km</span>
                         </div>
                     </div>
-                     <button onClick={() => onCancel('Navigazione terminata.')} className={`flex-shrink-0 flex items-center gap-2 py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${isNight ? 'bg-red-800/50 hover:bg-red-800/80 text-red-200' : 'bg-red-100 hover:bg-red-200 text-red-700'}`}>
-                        <ICONS.endTrip className="w-5 h-5" />
+                     <button onClick={() => onCancel('Navigazione terminata.')} className={`flex-shrink-0 flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors ${isNight ? 'bg-red-800/50 hover:bg-red-800/80 text-red-200' : 'bg-red-100 hover:bg-red-200 text-red-700'}`}>
+                        <ICONS.endTrip className="w-4 h-4" />
                         <span>Termina</span>
                     </button>
                 </div>
