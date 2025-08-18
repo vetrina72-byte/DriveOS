@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -685,7 +686,7 @@ export default function DebugControls({
               <label>Pos Y: {appOpenConfig.modelPos.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
               <label>Pos Z: {appOpenConfig.modelPos.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.z} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, z: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
               <label>Rot Y: {appOpenConfig.modelRot.y.toFixed(2)}</label><input type="range" min="-3.14" max="3.14" step="0.01" value={appOpenConfig.modelRot.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelRot: {...c.modelRot, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Scale: {appOpenConfig.modelScale.toFixed(2)}</label><input type="range" min="0.1" max="2.0" step="0.01" value={appOpenConfig.modelScale} onChange={(e) => setAppOpenConfig(c => ({...c, modelScale: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Scale: {appOpenConfig.modelScale.toFixed(2)}</label><input type="range" min="0.1" max="2.0" step="0.01" value={appOpenConfig.modelScale} onChange={(e) => setAppOpenConfig(c => ({...c, modelScale: parseFloat(e.target.value)}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
