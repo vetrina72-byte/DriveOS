@@ -242,7 +242,7 @@ export default function DebugControls({
     setNavigateToolWidth(340);
     setPlayerControlsSize(18);
     setPlayerControlsGap(100);
-    setPlayerControlsVerticalPosition(-2);
+    setPlayerControlsVerticalPosition(7);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

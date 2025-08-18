@@ -446,7 +446,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
 
             return (
-                <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-3">
+                <div className="w-full h-full flex flex-col justify-between px-4 py-4">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
                             <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
@@ -463,7 +463,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
 
-                    <div className="w-full py-1">
+                    <div className="w-full">
                         <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]">
                             <div className="h-full rounded-full bg-[var(--icon-color-disabled)] relative w-0">
                                  <div 
@@ -474,7 +474,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
                     
-                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start">
                             {/* Empty left spacer */}
                         </div>
@@ -501,7 +501,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
 
             return (
-                <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-3">
+                <div className="w-full h-full flex flex-col justify-between px-4 py-4">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
                             {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
@@ -522,11 +522,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
 
-                    <div className="w-full py-1">
+                    <div className="w-full">
                         <ProgressBar player={playerRef.current} state={playerState} />
                     </div>
                     
-                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start">
                             {/* Empty left spacer */}
                         </div>

@@ -562,7 +562,7 @@ export default function App() {
   const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
-  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(-2);
+  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(7);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
