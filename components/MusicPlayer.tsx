@@ -17,7 +17,7 @@ interface MusicPlayerProps {
     isAnyAppOpen: boolean;
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
-    floatingConfig: { width: number; bottom: number; height: number; };
+    floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -404,24 +404,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     };
     
     const playerStyle: React.CSSProperties = useMemo(() => {
-        if (isAnyAppOpen) {
+        if (isAnyAppOpen) { // Docked State
             return {
-                position: 'fixed',
                 width: `${dockedConfig.width}px`,
                 height: `${dockedConfig.height}px`,
                 bottom: `${dockedConfig.bottom}px`,
                 left: `${dockedConfig.left}px`,
                 transform: 'translateX(0)',
-                visibility: 'visible',
             };
-        } else {
-            // When floating, it's part of a flex container, so fixed positioning is not needed.
-            // Visibility is controlled by parent container.
-             return {
-                position: 'relative',
-                width: `${floatingConfig.width}px`,
-                height: `${floatingConfig.height}px`,
-                visibility: floatingConfig.width > 0 ? 'visible' : 'hidden',
+        } else { // Floating State
+            const { width, bottom, height, otherWidgetWidth } = floatingConfig;
+            // This logic perfectly centers the entire widget group
+            const transformX = -otherWidgetWidth / 2 - 8;
+            return {
+                width: `${width}px`,
+                height: `${height}px`,
+                bottom: `${bottom}px`,
+                left: '50%',
+                transform: `translateX(calc(-50% + ${transformX}px))`,
             };
         }
     }, [isAnyAppOpen, dockedConfig, floatingConfig]);
@@ -548,7 +548,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     return (
         <div 
             ref={playerContainerRef}
-            className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]`}
+            className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
             style={{...playerStyle, background: `var(--player-bg)`}}
         >
             {renderPlayerContent()}

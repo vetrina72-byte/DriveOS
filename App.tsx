@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider } from './context/AuthContext';
@@ -16,7 +15,6 @@ import { WeatherData, TempUnit } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
 import SpotifyCallback from './components/SpotifyCallback';
 import { routeStore } from './components/routeStore';
-import DebugOverlay from './components/DebugOverlay';
 import VehicleArrowIcon from './components/VehicleArrowIcon';
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
@@ -48,11 +46,12 @@ const formatTravelTime = (minutes: number | null): string => {
 };
 
 
-const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition }: { 
+const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width }: { 
     isVisible: boolean, 
     isNight: boolean,
     onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
-    currentPosition: { lat: number; lng: number } | null
+    currentPosition: { lat: number; lng: number } | null,
+    width: number,
 }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
@@ -185,7 +184,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
             ref={containerRef}
             className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border} ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             style={{ 
-                width: '430px',
+                width: `${width}px`,
                 height: `${isExpanded ? expandedHeight : baseHeight}px`,
                 background: theme.bg
             }}
@@ -272,13 +271,14 @@ const calculateGeoDistance = (lat1: number, lon1: number, lat2: number, lon2: nu
     return R * c;
 };
 
-const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo, simulatedRemainingDistance }: {
+const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo, simulatedRemainingDistance, width }: {
     target: { lat: number, lng: number, name: string },
     currentPosition: { lat: number, lng: number } | null,
     isNight: boolean,
     onCancel: (message?: string) => void,
     tripInfo: { time: number, distance: number } | null,
     simulatedRemainingDistance: number | null,
+    width: number,
 }) => {
     const [totalDistance, setTotalDistance] = useState<number | null>(null);
     const [remainingDistance, setRemainingDistance] = useState<number | null>(null);
@@ -296,17 +296,17 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         return unsubscribe;
     }, []);
 
-    // Effect to initialize/reset distances when a new trip starts.
-    // This is crucial for ensuring the progress bar starts at 0%.
     useEffect(() => {
         if (target && tripInfo) {
             const totalDistKm = tripInfo.distance / 1000;
             setTotalDistance(totalDistKm);
-            setRemainingDistance(totalDistKm); // Initialize remaining distance to total
-            isNewTrip.current = true; // Flag that a new trip has started
+            setRemainingDistance(totalDistKm);
+            setRemainingTime(tripInfo.time / 60); // Set initial time
+            isNewTrip.current = true;
         } else {
             setTotalDistance(null);
             setRemainingDistance(null);
+            setRemainingTime(null);
         }
     }, [target, tripInfo]);
 
@@ -314,9 +314,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
     useEffect(() => {
         if (!currentPosition || !routeRef.current || totalDistance === null) return;
         
-        // If it's a new trip, the init effect has set the correct starting distance.
-        // We skip this first GPS-based calculation to prevent a "jump" from 0%.
-        // The flag is then reset for all subsequent position updates.
         if (isNewTrip.current) {
             isNewTrip.current = false;
             return;
@@ -325,7 +322,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         let minDistanceSq = Infinity;
         let closestIndex = 0;
         
-        // Find the closest point on the route to the current position
         for (let i = 0; i < routeRef.current.length; i++) {
             const dLat = routeRef.current[i][0] - currentPosition.lat;
             const dLng = routeRef.current[i][1] - currentPosition.lng;
@@ -336,7 +332,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
             }
         }
 
-        // Calculate remaining distance by summing segments from the closest point to the end
         let remDist = 0;
         for (let i = closestIndex; i < routeRef.current.length - 1; i++) {
             remDist += calculateGeoDistance(routeRef.current[i][0], routeRef.current[i][1], routeRef.current[i+1][0], routeRef.current[i+1][1]);
@@ -344,7 +339,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         
         setRemainingDistance(remDist);
 
-        // Update remaining time proportionally
         if (tripInfo?.time && totalDistance > 0) {
             const timeInMinutes = tripInfo.time / 60;
             const remainingTimeCalc = (remDist / totalDistance) * timeInMinutes;
@@ -372,7 +366,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
             return { percent: 0 };
         }
 
-        // Precise percentage calculation: clamp(1 - remaining/total, 0, 1)
         const p = totalDistance > 0 ? 1 - (effectiveRemaining / totalDistance) : 0;
         const clampedP = Math.max(0, Math.min(1, p));
         
@@ -386,12 +379,10 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         return { percent: clampedP };
     }, [totalDistance, remainingDistance, simulatedRemainingDistance]);
 
-    // Effect to enforce arrow opacity and log warnings if it's being overridden.
     useEffect(() => {
         const arrow = arrowIndicatorRef.current;
         if (arrow) {
             arrow.style.opacity = '1';
-            // Check opacity after a short delay to see if another style is overriding it.
             setTimeout(() => {
                 if (arrow) {
                     const currentOpacity = parseFloat(window.getComputedStyle(arrow).opacity);
@@ -401,7 +392,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
                 }
             }, 100);
         }
-    }, [percent]); // Re-run this check whenever the position changes.
+    }, [percent]);
 
     const theme = {
         bg: 'var(--player-bg)',
@@ -412,7 +403,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         <div 
             className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border}`}
             style={{ 
-                width: '430px',
+                width: `${width}px`,
                 height: '113px',
                 background: theme.bg
             }}
@@ -584,12 +575,12 @@ export default function App() {
 
   // New states for Music Player layout
   const [playerDockedWidth, setPlayerDockedWidth] = useState(519);
-  const [playerDockedBottom, setPlayerDockedBottom] = useState(92);
   const [playerDockedLeft, setPlayerDockedLeft] = useState(66);
   const [playerDockedHeight, setPlayerDockedHeight] = useState(113);
-  const [playerFloatingWidth, setPlayerFloatingWidth] = useState(430);
+  const [playerFloatingWidth, setPlayerFloatingWidth] = useState(520);
   const [playerFloatingBottom, setPlayerFloatingBottom] = useState(98);
   const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
+  const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   
   const startTripSimulation = useCallback(() => {
     if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
@@ -933,10 +924,6 @@ export default function App() {
           onClick={handleWrapperClick}
           data-theme={isNight ? 'dark' : 'light'}
         >
-          <DebugOverlay 
-            navigationTarget={navigationTarget}
-            miniMapRoutePropLength={0}
-          />
           <VehicleCanvas 
               isAppOpen={isUIOverlayActive} 
               isNight={isNight}
@@ -1006,24 +993,15 @@ export default function App() {
           />
           
           <div
-            className="fixed z-40 w-full flex items-end justify-center gap-6"
+            className="fixed z-10 w-full flex items-end justify-center"
             style={{
                 bottom: playerFloatingBottom,
-                transition: 'opacity 0.3s ease-in-out',
+                transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
                 opacity: isUIOverlayActive ? 0 : 1,
                 pointerEvents: isUIOverlayActive ? 'none' : 'auto',
+                transform: isUIOverlayActive ? 'none' : `translateX(calc(${playerFloatingWidth / 2}px + 8px))`,
             }}
           >
-              <MusicPlayer 
-                isAnyAppOpen={false} // Always floating style in this container
-                isNight={isNight}
-                dockedConfig={{ width: 0, bottom: 0, left: 0, height: 0 }} // Not used here
-                floatingConfig={{
-                  width: playerFloatingWidth,
-                  bottom: 0, // Positioned by flex container
-                  height: playerFloatingHeight,
-                }}
-              />
               {navigationTarget ? (
                 <NavigationStatus
                   target={navigationTarget}
@@ -1032,6 +1010,7 @@ export default function App() {
                   onCancel={handleCancelNavigation}
                   tripInfo={tripInfo}
                   simulatedRemainingDistance={simulatedRemainingDistance}
+                  width={navigateToolWidth}
                 />
               ) : (
                 <NavigateTool 
@@ -1039,21 +1018,27 @@ export default function App() {
                   isNight={isNight}
                   onSelectDestination={handleSelectDestination}
                   currentPosition={currentPosition}
+                  width={navigateToolWidth}
                 />
               )}
           </div>
 
-          {/* Docked Music Player for when an app is open */}
+          {/* Single Music Player instance for smooth transitions */}
           <MusicPlayer 
             isAnyAppOpen={isUIOverlayActive}
             isNight={isNight}
             dockedConfig={{
               width: playerDockedWidth,
-              bottom: playerDockedBottom,
+              bottom: playerFloatingBottom,
               left: playerDockedLeft,
               height: playerDockedHeight,
             }}
-            floatingConfig={{ width: 0, bottom: 0, height: 0 }} // Not used here
+            floatingConfig={{
+              width: playerFloatingWidth,
+              bottom: playerFloatingBottom,
+              height: playerFloatingHeight,
+              otherWidgetWidth: navigateToolWidth,
+            }}
           />
           
           <MapsContainer 
@@ -1068,7 +1053,9 @@ export default function App() {
           <AppLauncher
               isOpen={isAppLauncherOpen}
           />
-
+          
+          {/* Debug button hidden as requested */}
+          {/*
           <button
             onClick={(e) => { e.stopPropagation(); setIsDebugOpen(p => !p); }}
             className="absolute bottom-24 right-4 z-50 p-3 bg-gray-800/80 rounded-full text-white hover:bg-gray-700 transition"
@@ -1076,6 +1063,7 @@ export default function App() {
           >
             <ICONS.settings className="w-8 h-8" />
           </button>
+          */}
 
           <DebugControls 
               isOpen={isDebugOpen}
@@ -1132,8 +1120,6 @@ export default function App() {
               setSpotifyPlayerBottom={setSpotifyPlayerBottom}
               playerDockedWidth={playerDockedWidth}
               setPlayerDockedWidth={setPlayerDockedWidth}
-              playerDockedBottom={playerDockedBottom}
-              setPlayerDockedBottom={setPlayerDockedBottom}
               playerDockedLeft={playerDockedLeft}
               setPlayerDockedLeft={setPlayerDockedLeft}
               playerDockedHeight={playerDockedHeight}
@@ -1150,6 +1136,8 @@ export default function App() {
               startTripSimulation={startTripSimulation}
               stopTripSimulation={stopTripSimulation}
               isSimulating={simulatedRemainingDistance !== null}
+              navigateToolWidth={navigateToolWidth}
+              setNavigateToolWidth={setNavigateToolWidth}
           />
           
           <footer 

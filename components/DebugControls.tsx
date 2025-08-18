@@ -1,6 +1,3 @@
-
-
-
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -55,8 +52,6 @@ interface DebugControlsProps {
   setSpotifyPlayerBottom: (bottom: number) => void;
   playerDockedWidth: number;
   setPlayerDockedWidth: (width: number) => void;
-  playerDockedBottom: number;
-  setPlayerDockedBottom: (bottom: number) => void;
   playerDockedLeft: number;
   setPlayerDockedLeft: (left: number) => void;
   playerDockedHeight: number;
@@ -79,6 +74,8 @@ interface DebugControlsProps {
   startTripSimulation: () => void;
   stopTripSimulation: () => void;
   isSimulating: boolean;
+  navigateToolWidth: number;
+  setNavigateToolWidth: (width: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -162,8 +159,6 @@ export default function DebugControls({
   setSpotifyPlayerBottom,
   playerDockedWidth,
   setPlayerDockedWidth,
-  playerDockedBottom,
-  setPlayerDockedBottom,
   playerDockedLeft,
   setPlayerDockedLeft,
   playerDockedHeight,
@@ -186,6 +181,8 @@ export default function DebugControls({
   startTripSimulation,
   stopTripSimulation,
   isSimulating,
+  navigateToolWidth,
+  setNavigateToolWidth,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -225,12 +222,12 @@ export default function DebugControls({
     setSpotifyPlayerTop(50);
     setSpotifyPlayerBottom(70);
     setPlayerDockedWidth(519);
-    setPlayerDockedBottom(92);
     setPlayerDockedLeft(66);
     setPlayerDockedHeight(113);
-    setPlayerFloatingWidth(558);
+    setPlayerFloatingWidth(520);
     setPlayerFloatingBottom(98);
     setPlayerFloatingHeight(113);
+    setNavigateToolWidth(340);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -624,10 +621,10 @@ export default function DebugControls({
         </div>
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
-            <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Home Screen Widget Layout</h3>
             
             <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-2">
-                <h4 className="text-sm font-semibold text-zinc-300">Docked State (App Open)</h4>
+                <h4 className="text-sm font-semibold text-zinc-300">Music Player (Docked)</h4>
                 <div>
                   <label htmlFor="docked-width-slider">Width: {playerDockedWidth}px</label>
                   <input id="docked-width-slider" type="range" min="300" max="600" value={playerDockedWidth} onChange={(e) => setPlayerDockedWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
@@ -637,17 +634,13 @@ export default function DebugControls({
                   <input id="docked-height-slider" type="range" min="60" max="150" value={playerDockedHeight} onChange={(e) => setPlayerDockedHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div>
-                  <label htmlFor="docked-bottom-slider">Bottom Offset: {playerDockedBottom}px</label>
-                  <input id="docked-bottom-slider" type="range" min="20" max="200" value={playerDockedBottom} onChange={(e) => setPlayerDockedBottom(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-                </div>
-                <div>
                   <label htmlFor="docked-left-slider">Left Offset: {playerDockedLeft}px</label>
                   <input id="docked-left-slider" type="range" min="0" max="100" value={playerDockedLeft} onChange={(e) => setPlayerDockedLeft(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
             </div>
 
             <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-2">
-                <h4 className="text-sm font-semibold text-zinc-300">Floating State (No App Open)</h4>
+                <h4 className="text-sm font-semibold text-zinc-300">Music Player (Floating)</h4>
                 <div>
                   <label htmlFor="floating-width-slider">Width: {playerFloatingWidth}px</label>
                   <input id="floating-width-slider" type="range" min="400" max="800" value={playerFloatingWidth} onChange={(e) => setPlayerFloatingWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
@@ -659,6 +652,14 @@ export default function DebugControls({
                 <div>
                   <label htmlFor="floating-bottom-slider">Bottom Offset: {playerFloatingBottom}px</label>
                   <input id="floating-bottom-slider" type="range" min="20" max="200" value={playerFloatingBottom} onChange={(e) => setPlayerFloatingBottom(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+            </div>
+
+            <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-2">
+                <h4 className="text-sm font-semibold text-zinc-300">Navigation Tool (Floating)</h4>
+                <div>
+                  <label htmlFor="nav-tool-width-slider">Width: {navigateToolWidth}px</label>
+                  <input id="nav-tool-width-slider" type="range" min="300" max="600" step="1" value={navigateToolWidth} onChange={(e) => setNavigateToolWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
             </div>
         </div>
