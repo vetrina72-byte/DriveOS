@@ -586,7 +586,7 @@ export default function App() {
 
   // Debug UI Colors
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#c0c0c0');
-  const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#666666');
+  const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#ffffff');
   const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
   const widgetBgColor = useMemo(() => {
     const rgb = hexToRgb(widgetBgHex);

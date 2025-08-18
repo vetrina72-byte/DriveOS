@@ -256,7 +256,7 @@ export default function DebugControls({
     setPlayerControlsGap(100);
     setPlayerControlsVerticalPosition(2);
     setDayPlayerButtonColor('#c0c0c0');
-    setNightPlayerButtonColor('#666666');
+    setNightPlayerButtonColor('#ffffff');
     setWidgetBgHex('#ffffff');
   };
   
