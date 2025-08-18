@@ -162,12 +162,12 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     };
 
     const theme = {
-        bg: 'var(--spotify-panel-bg)',
+        bg: 'var(--player-bg)',
         border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
         inputBg: isNight ? 'bg-zinc-700' : 'bg-zinc-100',
         inputText: isNight ? 'text-zinc-100' : 'text-zinc-800',
         placeholderText: isNight ? 'placeholder:text-zinc-500' : 'placeholder:text-zinc-400',
-        buttonText: isNight ? 'text-zinc-200' : 'text-zinc-700',
+        buttonText: isNight ? 'text-zinc-200' : 'text-zinc-600',
         iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
         suggestionHover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10'
     };

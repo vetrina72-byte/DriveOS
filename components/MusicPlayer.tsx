@@ -137,7 +137,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { is
                 bottom: `${position.bottom}px`,
                 left: `${position.left}px`,
                 transform: position.transform,
-                backgroundColor: 'var(--spotify-panel-bg)'
+                backgroundColor: 'var(--player-bg)'
             }}
             className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
         >
@@ -249,7 +249,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
             setPlayerStatus('connecting');
             const player = new window.Spotify.Player({
-                name: 'Tesla Infotainment UI',
+                name: 'DrivingOS',
                 getOAuthToken: cb => { cb(accessToken); },
                 volume: 0.5
             });
@@ -497,7 +497,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const imageUrl = album.images[0]?.url;
             const nextTrack = playerState.track_window.next_tracks[0];
 
-            const activeColor = 'text-green-500';
+            const activeColor = isNight ? 'text-green-500' : 'text-zinc-600';
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
 
             return (
@@ -506,7 +506,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className="flex items-center gap-3 min-w-0">
                             {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
                             <div className="overflow-hidden">
-                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>{trackName}</div>
+                                <div className={`font-semibold text-sm truncate ${playerState.paused ? '' : activeColor}`} style={playerState.paused ? { color: 'var(--text-primary)'} : {}}>{trackName}</div>
                                 <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
                                     {artists.map(a => a.name).join(', ')}
                                 </div>
@@ -542,7 +542,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
                                 <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
-                             <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-green-500' : iconColor}`}>
+                             <button onClick={handleToggleLike} className={`transition ${isLiked ? (isNight ? 'text-green-500' : 'text-zinc-600') : iconColor}`}>
                                 <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
                              </button>
                         </div>
