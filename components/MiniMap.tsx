@@ -1,44 +1,18 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { routeStore } from './routeStore';
+import VehicleArrowIcon from './VehicleArrowIcon';
 
-// Marker SVG as a React component
-const VehicleMarkerIcon = ({ bearing }: { bearing: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    width="28"
-    height="28"
-    style={{ transform: `rotate(${bearing}deg)`, transition: 'transform 0.2s linear', transformOrigin: 'center' }}
-  >
-    <defs>
-        <filter id="marker-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
-            <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-            </feMerge>
-        </filter>
-    </defs>
-    <path 
-        d="M12 2L4.5 20.5L12 17L19.5 20.5L12 2Z" 
-        fill="#EF4444" 
-        stroke="#FFFFFF" 
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        filter="url(#marker-glow)"
-    />
-  </svg>
-);
-
-// Function to create a leaflet icon from the React component
+// Function to create a leaflet icon from the React component - UPDATED
 const createVehicleIcon = (bearing: number): L.DivIcon => {
   return L.divIcon({
-    html: renderToStaticMarkup(<VehicleMarkerIcon bearing={bearing} />),
+    html: renderToStaticMarkup(<VehicleArrowIcon size={52} bearing={bearing} className="transition-transform duration-200 linear" />),
     className: 'vehicle-marker-icon', // custom class for transparent background
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    iconSize: [52, 52],
+    iconAnchor: [26, 26],
   });
 };
 
@@ -55,6 +29,60 @@ const MapUpdater = ({ position, zoom }: { position: { lat: number; lng: number }
             });
         }
     }, [position, zoom, map]);
+    return null;
+};
+
+// Component to manage the route polyline and animated marker imperatively
+const RouteManager = ({ isNight }: { isNight: boolean }) => {
+    const map = useMap();
+    const polylineRef = useRef<L.Polyline | null>(null);
+
+    const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null);
+
+    useEffect(() => {
+        const initialCoords = routeStore.getCoords();
+        console.log('[DEBUG] minimap mounted, routeStore.coords length =', initialCoords?.length);
+        if (initialCoords) {
+             setRouteCoords(initialCoords);
+        }
+
+        const unsubscribe = routeStore.subscribe((coords) => {
+            console.log('[DEBUG] minimap subscribe -> coords len =', coords?.length);
+            setRouteCoords(coords);
+        });
+
+        return () => {
+             unsubscribe();
+        };
+    }, []);
+
+    // Effect for the route polyline
+    useEffect(() => {
+        if (!map) return;
+
+        if (routeCoords && routeCoords.length > 0) {
+            const pathOptions = {
+                color: isNight ? '#60A5FA' : '#3B82F6',
+                weight: 6,
+                opacity: 0.85,
+            };
+
+            if (polylineRef.current) {
+                polylineRef.current.setLatLngs(routeCoords);
+                polylineRef.current.setStyle(pathOptions);
+            } else {
+                polylineRef.current = L.polyline(routeCoords, pathOptions).addTo(map);
+            }
+            console.log('[DEBUG] miniPolyline exists?', !!polylineRef.current);
+        } 
+        else {
+            if (polylineRef.current) {
+                map.removeLayer(polylineRef.current);
+                polylineRef.current = null;
+            }
+        }
+    }, [routeCoords, isNight, map]);
+
     return null;
 };
 
@@ -76,7 +104,6 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
 }) => {
   const markerRef = useRef<L.Marker>(null);
 
-  // Update the marker's icon (and thus rotation) whenever bearing changes
   useEffect(() => {
       if (markerRef.current) {
           markerRef.current.setIcon(createVehicleIcon(bearing));
@@ -84,27 +111,21 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
   }, [bearing]);
 
   const containerStyle = useMemo(() => {
-    // The mask creates a soft-edged circle. It fades from fully opaque in the center
-    // to fully transparent at the edge. The fadeStart and fadeEnd props control
-    // where this transition happens.
     const maskImage = `radial-gradient(circle, rgba(0,0,0,1) ${fadeStart}%, rgba(0,0,0,0) ${fadeEnd}%)`;
-
     return {
       top: `${top}px`,
       right: `${right}px`,
       width: `${size}px`,
       height: `${size}px`,
       maskImage: maskImage,
-      WebkitMaskImage: maskImage, // For Safari compatibility
+      WebkitMaskImage: maskImage,
     };
   }, [top, right, size, fadeStart, fadeEnd]);
 
-  // Don't render anything if we don't have a position yet
   if (!position) {
       return null;
   }
 
-  // Use CARTO "dark_all" for night and Stadia "alidade_smooth" for day.
   const lightThemeProps = {
     url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
   };
@@ -145,6 +166,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
               icon={createVehicleIcon(bearing)}
             />
         )}
+        <RouteManager isNight={isNight} />
         {position && <MapUpdater position={position} zoom={zoom} />}
       </MapContainer>
     </div>

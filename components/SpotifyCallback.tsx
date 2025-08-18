@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 
 const SpotifyCallback: React.FC = () => {
@@ -11,14 +12,14 @@ const SpotifyCallback: React.FC = () => {
       console.log(`POPUP: Codice trovato: ${code}`);
       if (window.opener) {
         console.log("POPUP: Invio messaggio alla finestra principale...");
-        window.opener.postMessage({ type: 'spotifyAuth', code: code }, window.location.origin);
+        window.opener.postMessage({ type: 'spotifyAuth', code: code }, '*');
         console.log("POPUP: Tento di chiudere la finestra.");
         window.close();
       }
     } else if (error) {
       console.log(`POPUP: Spotify ha restituito un errore: ${error}`);
       if (window.opener) {
-        window.opener.postMessage({ type: 'spotifyAuth', error: error }, window.location.origin);
+        window.opener.postMessage({ type: 'spotifyAuth', error: error }, '*');
       }
       window.close();
     }

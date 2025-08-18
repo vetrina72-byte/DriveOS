@@ -1,8 +1,7 @@
 
-
 import React from 'react';
 import { 
-    FiWind, FiThermometer, FiSpeaker, FiPlay, FiPause, FiSkipBack, FiSkipForward, FiSearch, FiHome, FiBriefcase, FiLock, FiUnlock, FiUser, FiMoreHorizontal, FiMonitor, FiTrello, FiSun, FiMoon, FiCalendar, FiMessageSquare, FiGift, FiGlobe, FiMusic, FiVideo, FiUmbrella, FiDroplet
+    FiWind, FiThermometer, FiSpeaker, FiPlay, FiPause, FiSkipBack, FiSkipForward, FiSearch, FiHome, FiBriefcase, FiLock, FiUnlock, FiUser, FiMoreHorizontal, FiMonitor, FiTrello, FiSun, FiMoon, FiCalendar, FiMessageSquare, FiGift, FiGlobe, FiMusic, FiVideo, FiUmbrella, FiDroplet, FiXCircle
 } from 'react-icons/fi';
 import { 
     BsBatteryHalf, BsBatteryFull, BsBatteryCharging, BsFan
@@ -111,6 +110,7 @@ export const ICONS = {
     home: FiHome,
     work: FiBriefcase,
     gps: MdGpsFixed,
+    endTrip: FiXCircle,
 
     // Dock
     apps: MdOutlineApps,

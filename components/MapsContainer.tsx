@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
 const mapHtmlContent = `
@@ -355,9 +356,7 @@ window.pendingNavMessage = null;
 window.teslaNav = null; // Flag to indicate if the main class is instantiated
 
 window.addEventListener('message', (event) => {
-    if (event.origin !== window.location.origin) {
-        return;
-    }
+    // ORIGIN CHECK REMOVED
     if (event.data && event.data.type === 'SET_DESTINATION') {
         if (window.teslaNav) {
             // If nav is ready, process immediately
@@ -490,12 +489,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         async setDestination(coords, name, startNavigating = false) {
+            if (this.destination && this.destination.lat === coords.lat && this.destination.lng === coords.lng) {
+                console.log("Destination is the same. Not recalculating.");
+                if (this.isNavigating) {
+                    this.updateUIVisibility();
+                    this.recenterMap();
+                } else {
+                    this.isViewingRoute = true;
+                    this.updateTripInfoPanel();
+                    this.fitBounds();
+                }
+                return;
+            }
+
             if (!this.currentPosition) {
                 this.showInfoToast("In attesa della posizione GPS...", "loader");
                 this.pendingDestination = { coords, name, startNavigating };
                 return;
             }
-            this.clearRoute();
+
+            this._clearRouteInternals();
             this.destination = coords;
             this.searchInput.value = name;
             this.destinationMarker = document.createElement('div');
@@ -513,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 this.showInfoToast("Impossibile calcolare il percorso", "route-off");
-                this.clearRouteAndUI();
+                this.clearRouteAndNotify();
             }
         }
 
@@ -607,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        initEventListeners() { this.mapModeToggleBtn.addEventListener('click', () => this.setMapMode(this.userSelectedMapMode === 'auto' ? 'satellite' : 'auto')); this.weatherToggleBtn.addEventListener('click', () => this.toggleWeatherLayer()); this.timelapsePlayPauseBtn.addEventListener('click', () => this.playPauseTimelapse()); this.timelapseSlider.addEventListener('input', (e) => { this.stopTimelapse(); this.setTimelapseFrame(parseInt(e.target.value)); this.preloadWeatherFrames(5); }); document.getElementById('compass-btn').addEventListener('click', () => this.toggleCompassMode()); this.recenterBtn.addEventListener('click', () => this.manualRecenter()); this.startTripBtn.addEventListener('click', () => this.startNavigation()); this.cancelTripBtn.addEventListener('click', () => this.clearRouteAndUI()); document.getElementById('end-trip-btn').addEventListener('click', () => this.clearRouteAndUI()); this.searchInput.addEventListener('input', (e) => { const query = e.target.value.trim(); this.clearSearchBtn.style.display = query ? 'flex' : 'none'; if (this.searchDebounce) clearTimeout(this.searchDebounce); if (query.length < 3) { this.hideSearchResults(); this.clearRoute(); return; } this.searchDebounce = setTimeout(() => this.searchLocations(query), 300); }); this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.clearSearchBtn.style.display = 'none'; this.hideSearchResults(); this.clearRoute(); }); this.mapContainer.addEventListener('mousedown', this.handleMouseDown.bind(this)); this.mapContainer.addEventListener('mousemove', this.handleMouseMove.bind(this)); this.mapContainer.addEventListener('mouseup', this.handleMouseUp.bind(this)); this.mapContainer.addEventListener('mouseleave', this.handleMouseUp.bind(this)); this.mapContainer.addEventListener('wheel', this.handleWheel.bind(this), { passive: false }); this.mapContainer.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false }); this.mapContainer.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false }); this.mapContainer.addEventListener('touchend', this.handleTouchEnd.bind(this)); }
+        initEventListeners() { this.mapModeToggleBtn.addEventListener('click', () => this.setMapMode(this.userSelectedMapMode === 'auto' ? 'satellite' : 'auto')); this.weatherToggleBtn.addEventListener('click', () => this.toggleWeatherLayer()); this.timelapsePlayPauseBtn.addEventListener('click', () => this.playPauseTimelapse()); this.timelapseSlider.addEventListener('input', (e) => { this.stopTimelapse(); this.setTimelapseFrame(parseInt(e.target.value)); this.preloadWeatherFrames(5); }); document.getElementById('compass-btn').addEventListener('click', () => this.toggleCompassMode()); this.recenterBtn.addEventListener('click', () => this.manualRecenter()); this.startTripBtn.addEventListener('click', () => this.startNavigation()); this.cancelTripBtn.addEventListener('click', () => this.clearRouteAndNotify()); document.getElementById('end-trip-btn').addEventListener('click', () => this.clearRouteAndNotify()); this.searchInput.addEventListener('input', (e) => { const query = e.target.value.trim(); this.clearSearchBtn.style.display = query ? 'flex' : 'none'; if (this.searchDebounce) clearTimeout(this.searchDebounce); if (query.length < 3) { this.hideSearchResults(); this._clearRouteInternals(); return; } this.searchDebounce = setTimeout(() => this.searchLocations(query), 300); }); this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.clearSearchBtn.style.display = 'none'; this.hideSearchResults(); this._clearRouteInternals(); }); this.mapContainer.addEventListener('mousedown', this.handleMouseDown.bind(this)); this.mapContainer.addEventListener('mousemove', this.handleMouseMove.bind(this)); this.mapContainer.addEventListener('mouseup', this.handleMouseUp.bind(this)); this.mapContainer.addEventListener('mouseleave', this.handleMouseUp.bind(this)); this.mapContainer.addEventListener('wheel', this.handleWheel.bind(this), { passive: false }); this.mapContainer.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false }); this.mapContainer.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false }); this.mapContainer.addEventListener('touchend', this.handleTouchEnd.bind(this)); }
         
         requestRedraw() { if (!this.redrawRequested) { this.redrawRequested = true; requestAnimationFrame(() => { this.weatherNeedsRedraw = true; this.redrawRequested = false; }); } }
         
@@ -910,13 +923,70 @@ document.addEventListener('DOMContentLoaded', () => {
         
         hideSearchResults() { this.searchResultsContainer.classList.add('hidden');}
         
-        async fetchAndSetRoute(startCoords, endCoords) { const url = \`https://api.geoapify.com/v1/routing?waypoints=\${startCoords.lat},\${startCoords.lng}|\${endCoords.lat},\${endCoords.lng}&mode=drive&details=route_details&lang=it&apiKey=\${this.geoapifyApiKey}\`; try { const response = await fetch(url); const data = await response.json(); if (data.features?.length) { const route = data.features[0]; this.routeGeometry = route.geometry.coordinates[0]; this.tripInfo = route.properties; this.requestRedraw(); return true;} return false;} catch (routeError) { console.error("Errore routing:", routeError); return false;}}
+        async fetchAndSetRoute(startCoords, endCoords) {
+            const url = \`https://api.geoapify.com/v1/routing?waypoints=\${startCoords.lat},\${startCoords.lng}|\${endCoords.lat},\${endCoords.lng}&mode=drive&details=route_details&lang=it&apiKey=\${this.geoapifyApiKey}\`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.features?.length) {
+                    const route = data.features[0];
+                    this.routeGeometry = route.geometry.coordinates[0];
+                    this.tripInfo = route.properties;
+                    this.requestRedraw();
+                    try {
+                        window.parent.postMessage({
+                            type: 'ROUTE_UPDATED',
+                            payload: {
+                                geometry: this.routeGeometry,
+                                info: this.tripInfo,
+                                target: {
+                                    lat: endCoords.lat,
+                                    lng: endCoords.lng,
+                                    name: this.searchInput.value
+                                }
+                            }
+                        }, '*');
+                    } catch (e) {
+                        console.error("Map communication error (route update):", e);
+                    }
+                    return true;
+                }
+                return false;
+            } catch (routeError) {
+                console.error("Errore routing:", routeError);
+                return false;
+            }
+        }
         
         startNavigation() { if (!this.routeGeometry) return; this.isNavigating = true; this.isViewingRoute = false; this.currentStepIndex = 0; this.updateUIVisibility(); this.recenterMap(); this.showInfoToast("Navigazione avviata!", "navigation");}
         
-        clearRoute() { this.isNavigating = false; this.isViewingRoute = false; this.currentStepIndex = 0; this.destination = null; this.routeGeometry = null; this.tripInfo = null; if (this.destinationMarker) { this.destinationMarker.remove(); this.destinationMarker = null; } this.updateUIVisibility(); this.requestRedraw();}
+        _clearRouteInternals() {
+            this.isNavigating = false;
+            this.isViewingRoute = false;
+            this.currentStepIndex = 0;
+            this.destination = null;
+            this.routeGeometry = null;
+            this.tripInfo = null;
+            if (this.destinationMarker) {
+                this.destinationMarker.remove();
+                this.destinationMarker = null;
+            }
+            this.updateUIVisibility();
+            this.requestRedraw();
+        }
         
-        clearRouteAndUI() { this.clearRoute(); this.searchInput.value = ''; this.clearSearchBtn.style.display = 'none'; this.showInfoToast("Percorso annullato", "x-circle"); this.recenterMap();}
+        clearRouteAndNotify() { 
+            this._clearRouteInternals(); 
+            this.searchInput.value = ''; 
+            this.clearSearchBtn.style.display = 'none'; 
+            this.showInfoToast("Percorso annullato", "x-circle"); 
+            this.recenterMap();
+            try {
+                window.parent.postMessage({ type: 'ROUTE_CLEARED' }, '*');
+            } catch (e) {
+                console.error("Map communication error (route clear):", e);
+            }
+        }
         
         updateUIVisibility() { if (this.isNavigating) { document.getElementById('search-panel').classList.add('hidden'); this.tripInfoPanel.classList.remove('visible'); this.endTripContainer.classList.remove('hidden');} else { document.getElementById('search-panel').classList.remove('hidden'); this.endTripContainer.classList.add('hidden'); if (this.routeGeometry) { this.tripInfoPanel.classList.add('visible'); } else { this.tripInfoPanel.classList.remove('visible'); }}}
         
@@ -924,7 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         fitBounds() { if (!this.currentPosition || !this.routeGeometry) return; this.isFollowingUser = false; this.isViewingRoute = true; if(this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); const points = [this.currentPosition, ...this.routeGeometry.map(p => ({lng: p[0], lat: p[1]}))]; let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180; points.forEach(p => { if(!p) return; minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat); minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng); }); const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 }; const { offsetWidth, offsetHeight } = this.mapContainer; const dLng = maxLng - minLng, dLat = maxLat - minLat; if (dLng === 0 && dLat === 0) { this.flyTo({ center, zoom: 15 }); return; } const zoomX = dLng > 0 ? Math.log2((offsetWidth - 80) * 360 / (dLng * this.TILE_SIZE)) : this.MAX_ZOOM; const zoomY = dLat > 0 ? Math.log2((offsetHeight - 120) * 180 / (dLat * this.TILE_SIZE)) : this.MAX_ZOOM; const zoom = Math.max(this.MIN_ZOOM, Math.min(zoomX, zoomY, this.MAX_ZOOM - 0.5)); this.flyTo({ center, zoom: zoom - 0.3 }); }
         
-        async recalculateRoute() { if (this.isRecalculating || !this.destination) return; this.isRecalculating = true; this.showInfoToast('Ricalcolo percorso...', 'refresh-cw'); const success = await this.fetchAndSetRoute(this.currentPosition, this.destination); if (success) { this.currentStepIndex = 0; this.updateTripInfoPanel(); this.showInfoToast('Percorso aggiornato!', 'check-circle');} else { this.showInfoToast("Errore nel ricalcolo", "alert-triangle"); this.clearRouteAndUI();} this.isRecalculating = false;}
+        async recalculateRoute() { if (this.isRecalculating || !this.destination) return; this.isRecalculating = true; this.showInfoToast('Ricalcolo percorso...', 'refresh-cw'); const success = await this.fetchAndSetRoute(this.currentPosition, this.destination); if (success) { this.currentStepIndex = 0; this.updateTripInfoPanel(); this.showInfoToast('Percorso aggiornato!', 'check-circle');} else { this.showInfoToast("Errore nel ricalcolo", "alert-triangle"); this.clearRouteAndNotify();} this.isRecalculating = false;}
         
         checkRouteDeviation() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { distance } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (distance > 70) { this.recalculateRoute();}}
         
@@ -947,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.pendingNavMessage = null; // Clear it
     }
     // Signal to parent that the map is ready to receive commands
-    window.parent.postMessage({ type: 'MAP_IFRAME_READY' }, window.location.origin);
+    window.parent.postMessage({ type: 'MAP_IFRAME_READY' }, '*');
 });
 </script>
 
@@ -962,7 +1032,6 @@ export default function MapsContainer({
     searchPanelWidth,
     searchPanelTop,
     navigationTarget,
-    onClearNavigationTarget,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
@@ -970,15 +1039,12 @@ export default function MapsContainer({
     searchPanelWidth: number;
     searchPanelTop: number;
     navigationTarget: { lat: number, lng: number, name: string } | null;
-    onClearNavigationTarget: () => void;
 }) {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const [translateX, setTranslateX] = useState(100);
   const animationFrameId = useRef<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
   const [isIframeReady, setIsIframeReady] = useState(false);
-  const queuedNavigationTarget = useRef<{ lat: number, lng: number, name: string } | null>(null);
 
   const openingBoxSpeed = 4.5;
   const closingBoxSpeed = 8.6;
@@ -997,45 +1063,33 @@ export default function MapsContainer({
 
   const postMessageToIframe = useCallback((message: object) => {
     if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(message, window.location.origin);
+        iframeRef.current.contentWindow.postMessage(message, '*');
     }
   }, []);
 
-  // 1. Listen for the "ready" message from the iframe
+  // Listen for the "ready" message from the iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if (event.data?.type === 'MAP_IFRAME_READY') {
+        // We now check if the map has already been marked as ready.
+        // This prevents state updates if a 'ready' message is somehow sent multiple times.
+        if (event.data?.type === 'MAP_IFRAME_READY' && !isIframeReady) {
             setIsIframeReady(true);
         }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  }, [isIframeReady]); // Dependency added to prevent re-subscribing unnecessarily.
 
-  // 2. Reset ready state when the map is closed to ensure clean state for next open
+
+  // This single, robust effect handles sending the destination to the iframe.
+  // It triggers whenever the map is opened (`isOpen`), a new target is selected (`navigationTarget`),
+  // or the iframe itself becomes ready. This solves the bug where re-selecting the same
+  // destination would not work.
   useEffect(() => {
-    if (!isOpen) {
-      setIsIframeReady(false);
-      queuedNavigationTarget.current = null;
+    if (isOpen && navigationTarget && isIframeReady) {
+        postMessageToIframe({ type: 'SET_DESTINATION', payload: navigationTarget });
     }
-  }, [isOpen]);
-
-  // 3. Handle incoming navigation targets and send them only when the iframe is ready
-  useEffect(() => {
-      // If a new navigation target arrives, queue it up.
-      if (navigationTarget) {
-          queuedNavigationTarget.current = navigationTarget;
-          // Clear the prop in the parent immediately to allow for subsequent navigations.
-          onClearNavigationTarget();
-      }
-
-      // If the iframe is ready and we have a queued target, send the message.
-      if (isIframeReady && queuedNavigationTarget.current) {
-          postMessageToIframe({ type: 'SET_DESTINATION', payload: queuedNavigationTarget.current });
-          queuedNavigationTarget.current = null; // Clear the queue after sending.
-      }
-  }, [navigationTarget, isIframeReady, onClearNavigationTarget, postMessageToIframe]);
+  }, [isOpen, navigationTarget, isIframeReady, postMessageToIframe]);
 
 
   useEffect(() => {

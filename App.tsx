@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider } from './context/AuthContext';
@@ -14,6 +15,9 @@ import MiniMap from './components/MiniMap';
 import { WeatherData, TempUnit } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
 import SpotifyCallback from './components/SpotifyCallback';
+import { routeStore } from './components/routeStore';
+import DebugOverlay from './components/DebugOverlay';
+import VehicleArrowIcon from './components/VehicleArrowIcon';
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
   icon: React.ComponentType<any>, 
@@ -21,18 +25,37 @@ const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 
   label: string, 
   colorClasses?: string 
 }) => (
-  <button onClick={onClick} className={`flex flex-col items-center justify-center w-24 h-full transition-colors ${colorClasses}`} aria-label={label}>
+  <button onClick={onClick} className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${colorClasses}`} aria-label={label}>
     <Icon className="w-8 h-8" />
   </button>
 );
 
-const NavigateTool = ({ isVisible, isNight, onSelectDestination }: { 
+const IconLocationResult = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+        <path d="M12 2C8.13401 2 5 5.13401 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13401 15.866 2 12 2Z" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 11C12.5523 11 13 10.5523 13 10C13 9.44772 12.5523 9 12 9C11.4477 9 11 9.44772 11 10C11 10.5523 11.4477 11 12 11Z" fill="#EF4444"/>
+    </svg>
+);
+
+const formatTravelTime = (minutes: number | null): string => {
+    if (minutes === null || isNaN(minutes)) return '-- min';
+    if (minutes < 60) {
+        return `${Math.round(minutes)} min`;
+    }
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = Math.round(minutes % 60);
+    return `${hours} h ${remainingMinutes} min`;
+};
+
+
+const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition }: { 
     isVisible: boolean, 
     isNight: boolean,
     onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
+    currentPosition: { lat: number; lng: number } | null
 }) => {
     const [query, setQuery] = useState('');
-    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
     const [loading, setLoading] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
@@ -42,24 +65,36 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination }: {
     const GEOAPIFY_API_KEY = '0d2c9c7f72c0477eb3260838db72a383';
 
     const baseHeight = 113;
-    const expandedHeight = 350;
+    const expandedHeight = 400;
+
+    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+        const R = 6371; // Radius of the Earth in km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Distance in km
+    };
 
     const highlightMatch = (text: string | undefined, query: string) => {
         if (!query || !text) {
             return text;
         }
-        // Escape special characters for regex
-        const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        if (escapedQuery.trim() === '') {
-            return text;
-        }
-        const regex = new RegExp(`(${escapedQuery})`, 'gi');
+        const queryParts = query.trim().split(/\s+/).map(part =>
+            part.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+        ).filter(part => part.length > 0);
+
+        if (queryParts.length === 0) return text;
+
+        const regex = new RegExp(`(${queryParts.join('|')})`, 'gi');
         const parts = text.split(regex);
         return (
             <>
                 {parts.map((part, i) =>
-                    // Parts that match the query will be at odd indices
-                    i % 2 === 1 ? (
+                    queryParts.some(q => new RegExp(`^${q}$`, 'i').test(part)) ? (
                         <strong key={i}>{part}</strong>
                     ) : (
                         part
@@ -81,9 +116,19 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination }: {
         setLoading(true);
         searchTimeoutRef.current = window.setTimeout(async () => {
             try {
-                const response = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&lang=it&limit=5&apiKey=${GEOAPIFY_API_KEY}`);
+                const biasParam = currentPosition ? `&bias=proximity:${currentPosition.lng},${currentPosition.lat}` : '';
+                const response = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&lang=it&limit=5&apiKey=${GEOAPIFY_API_KEY}${biasParam}`);
                 const data = await response.json();
-                setSuggestions(data.features || []);
+                const features = data.features || [];
+                const suggestionsWithDistance = features.map((feature: any) => {
+                    let distance = null;
+                    if (currentPosition && feature.properties.lat && feature.properties.lon) {
+                        const { lat, lon } = feature.properties;
+                        distance = calculateDistance(currentPosition.lat, currentPosition.lng, lat, lon);
+                    }
+                    return { feature, distance };
+                });
+                setSuggestions(suggestionsWithDistance);
             } catch (error) {
                 console.error("Autocomplete search failed:", error);
                 setSuggestions([]);
@@ -95,7 +140,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination }: {
         return () => {
             if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         }
-    }, [query]);
+    }, [query, currentPosition]);
 
     useEffect(() => {
         setIsExpanded(isFocused && (loading || suggestions.length > 0));
@@ -113,13 +158,13 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination }: {
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && suggestions.length > 0) {
             e.preventDefault();
-            handleSelect(suggestions[0]);
+            handleSelect(suggestions[0].feature);
         }
     };
     
     const handleSearchClick = () => {
         if (suggestions.length > 0) {
-            handleSelect(suggestions[0]);
+            handleSelect(suggestions[0].feature);
         }
     }
 
@@ -165,23 +210,40 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination }: {
                 
                 <div className={`flex-grow mt-2 overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
                     {loading && <div className="text-center p-2 text-sm text-zinc-400">Ricerca...</div>}
-                    {!loading && suggestions.map((feature) => {
+                    {!loading && suggestions.map(({ feature, distance }) => {
                         const name = feature.properties.name || feature.properties.formatted;
                         const address = feature.properties.address_line2;
+                        const avgSpeed = distance && distance > 200 ? 80 : 45;
+                        const estimatedTime = distance !== null ? (distance / avgSpeed) * 60 : null;
                         return (
                             <button 
                                 key={feature.properties.place_id} 
                                 onMouseDown={() => handleSelect(feature)} 
-                                className={`w-full text-left p-2 rounded-md ${theme.suggestionHover}`}
+                                className={`w-full text-left p-2.5 rounded-lg flex items-center gap-4 ${theme.suggestionHover}`}
                             >
-                                <p className={`font-medium text-sm ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
-                                    {highlightMatch(name, query)}
-                                </p>
-                                {address && (
-                                    <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                                        {highlightMatch(address, query)}
+                                <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                    <IconLocationResult className="w-6 h-6" />
+                                </div>
+                                <div className="flex-grow min-w-0">
+                                    <p className={`font-medium truncate ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
+                                        {highlightMatch(name, query)}
                                     </p>
-                                )}
+                                    {address && (
+                                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                            {highlightMatch(address, query)}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex-shrink-0 text-right">
+                                    <p className={`font-semibold text-sm ${isNight ? 'text-zinc-200' : 'text-zinc-700'}`}>
+                                        {distance?.toFixed(1)} km
+                                    </p>
+                                    {estimatedTime !== null && (
+                                        <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                            ~{formatTravelTime(estimatedTime)}
+                                        </p>
+                                    )}
+                                </div>
                             </button>
                         );
                     })}
@@ -198,6 +260,214 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination }: {
     );
 };
 
+const calculateGeoDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Radius of the Earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo, simulatedRemainingDistance }: {
+    target: { lat: number, lng: number, name: string },
+    currentPosition: { lat: number, lng: number } | null,
+    isNight: boolean,
+    onCancel: (message?: string) => void,
+    tripInfo: { time: number, distance: number } | null,
+    simulatedRemainingDistance: number | null,
+}) => {
+    const [totalDistance, setTotalDistance] = useState<number | null>(null);
+    const [remainingDistance, setRemainingDistance] = useState<number | null>(null);
+    const [remainingTime, setRemainingTime] = useState<number | null>(null);
+    const routeRef = useRef<[number, number][] | null>(null);
+    const trackRef = useRef<HTMLDivElement>(null);
+    const arrowIndicatorRef = useRef<HTMLDivElement>(null);
+    const isNewTrip = useRef(false);
+    const ARROW_SIZE = 44;
+
+    useEffect(() => {
+        const unsubscribe = routeStore.subscribe(coords => {
+            routeRef.current = coords;
+        });
+        return unsubscribe;
+    }, []);
+
+    // Effect to initialize/reset distances when a new trip starts.
+    // This is crucial for ensuring the progress bar starts at 0%.
+    useEffect(() => {
+        if (target && tripInfo) {
+            const totalDistKm = tripInfo.distance / 1000;
+            setTotalDistance(totalDistKm);
+            setRemainingDistance(totalDistKm); // Initialize remaining distance to total
+            isNewTrip.current = true; // Flag that a new trip has started
+        } else {
+            setTotalDistance(null);
+            setRemainingDistance(null);
+        }
+    }, [target, tripInfo]);
+
+    // Effect to update remaining distance based on real-time position.
+    useEffect(() => {
+        if (!currentPosition || !routeRef.current || totalDistance === null) return;
+        
+        // If it's a new trip, the init effect has set the correct starting distance.
+        // We skip this first GPS-based calculation to prevent a "jump" from 0%.
+        // The flag is then reset for all subsequent position updates.
+        if (isNewTrip.current) {
+            isNewTrip.current = false;
+            return;
+        }
+
+        let minDistanceSq = Infinity;
+        let closestIndex = 0;
+        
+        // Find the closest point on the route to the current position
+        for (let i = 0; i < routeRef.current.length; i++) {
+            const dLat = routeRef.current[i][0] - currentPosition.lat;
+            const dLng = routeRef.current[i][1] - currentPosition.lng;
+            const distSq = dLat * dLat + dLng * dLng;
+            if (distSq < minDistanceSq) {
+                minDistanceSq = distSq;
+                closestIndex = i;
+            }
+        }
+
+        // Calculate remaining distance by summing segments from the closest point to the end
+        let remDist = 0;
+        for (let i = closestIndex; i < routeRef.current.length - 1; i++) {
+            remDist += calculateGeoDistance(routeRef.current[i][0], routeRef.current[i][1], routeRef.current[i+1][0], routeRef.current[i+1][1]);
+        }
+        
+        setRemainingDistance(remDist);
+
+        // Update remaining time proportionally
+        if (tripInfo?.time && totalDistance > 0) {
+            const timeInMinutes = tripInfo.time / 60;
+            const remainingTimeCalc = (remDist / totalDistance) * timeInMinutes;
+            setRemainingTime(remainingTimeCalc);
+        } else {
+            setRemainingTime(null);
+        }
+
+        if (remDist < 0.05) { // Arrived (50 meters)
+            onCancel('Sei arrivato a destinazione!');
+        }
+
+    }, [currentPosition, totalDistance, onCancel, tripInfo]);
+
+    const { percent } = useMemo(() => {
+        const track = trackRef.current;
+        if (!track) {
+            return { percent: 0 };
+        }
+        
+        const effectiveRemaining = simulatedRemainingDistance ?? remainingDistance;
+        const hasRouteData = totalDistance !== null && totalDistance > 0 && effectiveRemaining !== null;
+
+        if (!hasRouteData) {
+            return { percent: 0 };
+        }
+
+        // Precise percentage calculation: clamp(1 - remaining/total, 0, 1)
+        const p = totalDistance > 0 ? 1 - (effectiveRemaining / totalDistance) : 0;
+        const clampedP = Math.max(0, Math.min(1, p));
+        
+        console.log(
+            '[NAV_DEBUG]',
+            `rem: ${effectiveRemaining.toFixed(2)}km`,
+            `total: ${totalDistance.toFixed(2)}km`,
+            `perc: ${clampedP.toFixed(3)}`
+        );
+
+        return { percent: clampedP };
+    }, [totalDistance, remainingDistance, simulatedRemainingDistance]);
+
+    // Effect to enforce arrow opacity and log warnings if it's being overridden.
+    useEffect(() => {
+        const arrow = arrowIndicatorRef.current;
+        if (arrow) {
+            arrow.style.opacity = '1';
+            // Check opacity after a short delay to see if another style is overriding it.
+            setTimeout(() => {
+                if (arrow) {
+                    const currentOpacity = parseFloat(window.getComputedStyle(arrow).opacity);
+                    if (currentOpacity < 0.9) {
+                        console.warn(`[NAV_ARROW_OPACITY_WARN] Arrow opacity is unexpectedly low: ${currentOpacity}. Check for conflicting global CSS.`);
+                    }
+                }
+            }, 100);
+        }
+    }, [percent]); // Re-run this check whenever the position changes.
+
+    const theme = {
+        bg: 'var(--player-bg)',
+        border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
+    };
+
+    return (
+        <div 
+            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border}`}
+            style={{ 
+                width: '430px',
+                height: '113px',
+                background: theme.bg
+            }}
+        >
+            <div className="p-4 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                    <div className="flex-grow min-w-0">
+                        <p className={`font-semibold truncate text-lg ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>{target.name}</p>
+                         <div className={`flex items-center gap-3 text-sm font-medium ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                            <span>{formatTravelTime(remainingTime)}</span>
+                            <span className="text-xs">&#9679;</span>
+                            <span>{remainingDistance?.toFixed(1) ?? '--'} km</span>
+                        </div>
+                    </div>
+                     <button onClick={() => onCancel('Navigazione terminata.')} className={`flex-shrink-0 flex items-center gap-2 py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${isNight ? 'bg-red-800/50 hover:bg-red-800/80 text-red-200' : 'bg-red-100 hover:bg-red-200 text-red-700'}`}>
+                        <ICONS.endTrip className="w-5 h-5" />
+                        <span>Termina</span>
+                    </button>
+                </div>
+
+                <div className="relative w-full h-10">
+                    <div 
+                        ref={trackRef} 
+                        className="absolute top-1/2 -translate-y-1/2 w-full h-2.5"
+                    >
+                        <div 
+                            className="w-full h-full rounded-full"
+                            style={{ backgroundColor: isNight ? 'rgba(90, 90, 100, 0.6)' : '#e5e7eb' }} 
+                        />
+                        <div 
+                            className="absolute top-0 left-0 h-full rounded-full bg-blue-500" 
+                            style={{ 
+                                width: `${percent * 100}%`,
+                                transition: 'width 300ms linear'
+                            }}
+                        />
+                    </div>
+                    <div 
+                        ref={arrowIndicatorRef}
+                        className="absolute top-1/2 z-10"
+                        style={{ 
+                            left: `${percent * 100}%`,
+                            transform: `translate(-50%, -50%)`,
+                            opacity: 1,
+                            transition: 'left 300ms linear',
+                        }}
+                        aria-label="Vehicle position indicator"
+                    >
+                        <VehicleArrowIcon size={ARROW_SIZE} bearing={90} />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // Helper Functions for weather data processing
 const degToCompass = (num: number) => {
@@ -283,6 +553,14 @@ export default function App() {
   const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [bearing, setBearing] = useState(0);
   const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [arrivalMessage, setArrivalMessage] = useState<string | null>(null);
+  const arrivalTimeoutRef = useRef<number | null>(null);
+  const [tripInfo, setTripInfo] = useState<{ time: number, distance: number } | null>(null);
+  const [throttledPosition, setThrottledPosition] = useState(currentPosition);
+
+  // States for trip simulation
+  const [simulatedRemainingDistance, setSimulatedRemainingDistance] = useState<number | null>(null);
+  const simulationIntervalRef = useRef<number | null>(null);
 
   const [miniMapTop, setMiniMapTop] = useState(-57);
   const [miniMapRight, setMiniMapRight] = useState(-86);
@@ -290,7 +568,7 @@ export default function App() {
   const [miniMapZoom, setMiniMapZoom] = useState(17);
   const [miniMapFadeStart, setMiniMapFadeStart] = useState(0);
   const [miniMapFadeEnd, setMiniMapFadeEnd] = useState(69);
-
+  
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
 
@@ -313,13 +591,89 @@ export default function App() {
   const [playerFloatingBottom, setPlayerFloatingBottom] = useState(98);
   const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
   
+  const startTripSimulation = useCallback(() => {
+    if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
+    if (!tripInfo) {
+        console.warn("Cannot start simulation: no trip is active.");
+        return;
+    }
+
+    const totalDistKm = tripInfo.distance / 1000;
+    let currentDist = totalDistKm;
+    setSimulatedRemainingDistance(currentDist);
+
+    simulationIntervalRef.current = window.setInterval(() => {
+        // Simulate in 100 steps (e.g., 20 seconds for a full trip)
+        currentDist -= totalDistKm / 100; 
+        if (currentDist <= 0) {
+            currentDist = 0;
+            if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
+        }
+        setSimulatedRemainingDistance(currentDist);
+    }, 200); // Update every 200ms for a smooth animation
+  }, [tripInfo]);
+
+  const stopTripSimulation = useCallback(() => {
+    if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+    }
+    setSimulatedRemainingDistance(null); // Reset to use real data
+  }, []);
+
   const handleSelectDestination = (target: { lat: number, lng: number, name: string }) => {
     setNavigationTarget(target);
     setActiveApp('maps');
   };
+  
+  const handleCancelNavigation = useCallback((message?: string) => {
+    setNavigationTarget(null);
+    setTripInfo(null);
+    routeStore.setRoute(null);
+    if (message) {
+      setArrivalMessage(message);
+      if (arrivalTimeoutRef.current) clearTimeout(arrivalTimeoutRef.current);
+      arrivalTimeoutRef.current = window.setTimeout(() => setArrivalMessage(null), 5000);
+    }
+  }, []);
+
+  // Listener for route updates from the maps iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Logic for handling route clearing, still respecting activeApp context
+      if (event.data?.type === 'ROUTE_CLEARED') {
+          if (activeApp !== 'maps') { return; }
+          handleCancelNavigation();
+      }
+      
+      // Expanded logic for handling route updates
+      if (event.data?.type === 'ROUTE_UPDATED' && event.data.payload) {
+        const { geometry, info, target } = event.data.payload;
+        
+        // Update the route line for the minimap
+        const routeData: [number, number][] = geometry.map((coords: [number, number]) => [coords[1], coords[0]]);
+        routeStore.setRoute(routeData);
+        
+        // Update the trip time/distance info
+        setTripInfo(info);
+
+        if (target) {
+          setNavigationTarget(target);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [activeApp, handleCancelNavigation]);
+
+  const handleCloseMaps = () => {
+    setActiveApp(null);
+  };
 
   useEffect(() => {
-    // This effect ensures the app's time updates every minute when not in debug mode.
     const intervalId = setInterval(() => {
         setCurrentTime(new Date());
     }, 60000);
@@ -363,12 +717,22 @@ export default function App() {
         (error) => {
           console.warn("Geolocation watch error:", error.message);
         },
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
       );
       
       return () => navigator.geolocation.clearWatch(watchId);
     }
   }, []);
+  
+  useEffect(() => {
+      const handler = setTimeout(() => {
+          if (currentPosition) {
+              setThrottledPosition(currentPosition);
+          }
+      }, 250); // ~4 updates per second
+      return () => clearTimeout(handler);
+  }, [currentPosition]);
+
 
   const effectiveTime = useMemo(() => debugTimeOverride || currentTime, [debugTimeOverride, currentTime]);
 
@@ -519,7 +883,7 @@ export default function App() {
                 setWeatherError(userMessage);
                 setWeatherStatus('error');
             },
-            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+            { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
         );
     } else {
         setWeatherError("La geolocalizzazione non è supportata da questo browser.");
@@ -569,6 +933,10 @@ export default function App() {
           onClick={handleWrapperClick}
           data-theme={isNight ? 'dark' : 'light'}
         >
+          <DebugOverlay 
+            navigationTarget={navigationTarget}
+            miniMapRoutePropLength={0}
+          />
           <VehicleCanvas 
               isAppOpen={isUIOverlayActive} 
               isNight={isNight}
@@ -610,6 +978,12 @@ export default function App() {
             offsetY={topBarOffsetY}
           />
 
+          {arrivalMessage && (
+              <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-500/90 text-white font-bold px-6 py-3 rounded-lg shadow-lg animate-fade-in">
+                  {arrivalMessage}
+              </div>
+          )}
+
           <WeatherModal 
               isOpen={isWeatherModalOpen}
               onClose={() => setWeatherModalOpen(false)}
@@ -632,25 +1006,44 @@ export default function App() {
           />
           
           <div
-            className="fixed z-40 flex items-end justify-center gap-6"
+            className="fixed z-40 w-full flex items-end justify-center gap-6"
             style={{
                 bottom: playerFloatingBottom,
-                left: '50%',
-                transform: 'translateX(-50%)',
                 transition: 'opacity 0.3s ease-in-out',
                 opacity: isUIOverlayActive ? 0 : 1,
                 pointerEvents: isUIOverlayActive ? 'none' : 'auto',
             }}
           >
-              <div style={{ width: `${playerFloatingWidth}px`, height: `${playerFloatingHeight}px` }} />
-              <NavigateTool 
-                isVisible={!isUIOverlayActive} 
+              <MusicPlayer 
+                isAnyAppOpen={false} // Always floating style in this container
                 isNight={isNight}
-                onSelectDestination={handleSelectDestination}
+                dockedConfig={{ width: 0, bottom: 0, left: 0, height: 0 }} // Not used here
+                floatingConfig={{
+                  width: playerFloatingWidth,
+                  bottom: 0, // Positioned by flex container
+                  height: playerFloatingHeight,
+                }}
               />
+              {navigationTarget ? (
+                <NavigationStatus
+                  target={navigationTarget}
+                  currentPosition={throttledPosition}
+                  isNight={isNight}
+                  onCancel={handleCancelNavigation}
+                  tripInfo={tripInfo}
+                  simulatedRemainingDistance={simulatedRemainingDistance}
+                />
+              ) : (
+                <NavigateTool 
+                  isVisible={!isUIOverlayActive} 
+                  isNight={isNight}
+                  onSelectDestination={handleSelectDestination}
+                  currentPosition={currentPosition}
+                />
+              )}
           </div>
 
-
+          {/* Docked Music Player for when an app is open */}
           <MusicPlayer 
             isAnyAppOpen={isUIOverlayActive}
             isNight={isNight}
@@ -660,24 +1053,16 @@ export default function App() {
               left: playerDockedLeft,
               height: playerDockedHeight,
             }}
-            floatingConfig={{
-              width: playerFloatingWidth,
-              bottom: playerFloatingBottom,
-              height: playerFloatingHeight,
-            }}
+            floatingConfig={{ width: 0, bottom: 0, height: 0 }} // Not used here
           />
           
           <MapsContainer 
               isOpen={activeApp === 'maps'}
-              onClose={() => {
-                setActiveApp(null);
-                setNavigationTarget(null);
-              }}
+              onClose={handleCloseMaps}
               isNight={isNight}
               searchPanelWidth={mapsSearchPanelWidth}
               searchPanelTop={mapsSearchPanelTop}
               navigationTarget={navigationTarget}
-              onClearNavigationTarget={() => setNavigationTarget(null)}
           />
 
           <AppLauncher
@@ -761,6 +1146,10 @@ export default function App() {
               setPlayerPlaceholderWidth={() => {}}
               playerFloatingHeight={playerFloatingHeight}
               setPlayerFloatingHeight={setPlayerFloatingHeight}
+              tripInfo={tripInfo}
+              startTripSimulation={startTripSimulation}
+              stopTripSimulation={stopTripSimulation}
+              isSimulating={simulatedRemainingDistance !== null}
           />
           
           <footer 

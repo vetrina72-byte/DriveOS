@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -55,10 +56,7 @@ const SpotifyLogin: React.FC = () => {
         console.log("MAIN_APP: Listener di messaggi attivato.");
 
         const handleMessage = (event: MessageEvent) => {
-            if (event.origin !== window.location.origin) {
-                return;
-            }
-
+            // ORIGIN CHECK REMOVED
             if (event.data && event.data.type === 'spotifyAuth') {
                 const { code, error: authError } = event.data;
                 

@@ -403,26 +403,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         });
     };
     
-    const playerStyle = useMemo(() => {
+    const playerStyle: React.CSSProperties = useMemo(() => {
         if (isAnyAppOpen) {
             return {
+                position: 'fixed',
                 width: `${dockedConfig.width}px`,
                 height: `${dockedConfig.height}px`,
                 bottom: `${dockedConfig.bottom}px`,
                 left: `${dockedConfig.left}px`,
                 transform: 'translateX(0)',
+                visibility: 'visible',
             };
         } else {
-            const navToolWidth = 430;
-            const gap = 24; // Corresponds to gap-6 (1.5rem) in Tailwind
-            const totalWidth = floatingConfig.width + navToolWidth + gap;
-            
-            return {
+            // When floating, it's part of a flex container, so fixed positioning is not needed.
+            // Visibility is controlled by parent container.
+             return {
+                position: 'relative',
                 width: `${floatingConfig.width}px`,
                 height: `${floatingConfig.height}px`,
-                bottom: `${floatingConfig.bottom}px`,
-                left: `calc(50% - ${totalWidth / 2}px)`,
-                transform: `translateX(0)`,
+                visibility: floatingConfig.width > 0 ? 'visible' : 'hidden',
             };
         }
     }, [isAnyAppOpen, dockedConfig, floatingConfig]);
@@ -549,7 +548,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
     return (
         <div 
             ref={playerContainerRef}
-            className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
+            className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]`}
             style={{...playerStyle, background: `var(--player-bg)`}}
         >
             {renderPlayerContent()}

@@ -74,6 +74,10 @@ interface DebugControlsProps {
   setNightFrontLightIntensity: (intensity: number) => void;
   nightEnvironmentIntensity: number;
   setNightEnvironmentIntensity: (intensity: number) => void;
+  tripInfo: { time: number, distance: number } | null;
+  startTripSimulation: () => void;
+  stopTripSimulation: () => void;
+  isSimulating: boolean;
 }
 
 const WEATHER_CONDITIONS = [
@@ -177,6 +181,10 @@ export default function DebugControls({
   setNightFrontLightIntensity,
   nightEnvironmentIntensity,
   setNightEnvironmentIntensity,
+  tripInfo,
+  startTripSimulation,
+  stopTripSimulation,
+  isSimulating,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -557,6 +565,27 @@ export default function DebugControls({
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
+        </div>
+        
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Navigation Simulation</h3>
+            <div className="flex gap-2">
+                <button
+                    onClick={startTripSimulation}
+                    disabled={!tripInfo || isSimulating}
+                    className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md font-semibold transition-colors disabled:bg-zinc-600 disabled:cursor-not-allowed"
+                >
+                    Start Simulation
+                </button>
+                <button
+                    onClick={stopTripSimulation}
+                    disabled={!isSimulating}
+                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md font-semibold transition-colors disabled:bg-zinc-600 disabled:cursor-not-allowed"
+                >
+                    Stop Simulation
+                </button>
+            </div>
+            {!tripInfo && <p className="text-xs text-zinc-400 mt-2">Start a trip to enable simulation.</p>}
         </div>
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
