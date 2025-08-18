@@ -76,6 +76,12 @@ interface DebugControlsProps {
   isSimulating: boolean;
   navigateToolWidth: number;
   setNavigateToolWidth: (width: number) => void;
+  playerControlsSize: number;
+  setPlayerControlsSize: (size: number) => void;
+  playerControlsGap: number;
+  setPlayerControlsGap: (gap: number) => void;
+  playerControlsVerticalPosition: number;
+  setPlayerControlsVerticalPosition: (pos: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -183,6 +189,12 @@ export default function DebugControls({
   isSimulating,
   navigateToolWidth,
   setNavigateToolWidth,
+  playerControlsSize,
+  setPlayerControlsSize,
+  playerControlsGap,
+  setPlayerControlsGap,
+  playerControlsVerticalPosition,
+  setPlayerControlsVerticalPosition,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -228,6 +240,9 @@ export default function DebugControls({
     setPlayerFloatingBottom(98);
     setPlayerFloatingHeight(113);
     setNavigateToolWidth(340);
+    setPlayerControlsSize(20);
+    setPlayerControlsGap(80);
+    setPlayerControlsVerticalPosition(-1);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -661,6 +676,22 @@ export default function DebugControls({
                   <label htmlFor="nav-tool-width-slider">Width: {navigateToolWidth}px</label>
                   <input id="nav-tool-width-slider" type="range" min="300" max="600" step="1" value={navigateToolWidth} onChange={(e) => setNavigateToolWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
+            <div>
+              <label htmlFor="player-controls-size">Icon Size: {playerControlsSize}px</label>
+              <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="player-controls-gap">Icon Gap: {playerControlsGap}px</label>
+              <input id="player-controls-gap" type="range" min="8" max="80" value={playerControlsGap} onChange={(e) => setPlayerControlsGap(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
+              <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 

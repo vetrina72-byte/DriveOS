@@ -9,7 +9,6 @@ import MapsContainer from './components/MapsContainer';
 import AppLauncher from './components/AppLauncher';
 import TopStatusBar from './components/TopStatusBar';
 import WeatherModal from './components/WeatherModal';
-import DebugControls from './components/DebugControls';
 import MiniMap from './components/MiniMap';
 import { WeatherData, TempUnit } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
@@ -517,6 +516,35 @@ const initialAppOpenConfig: SceneConfig = {
   modelScale: 0.90,
 };
 
+// --- Hardcoded final values from debug sessions ---
+const topBarScale = 1.0;
+const topBarOffsetY = -7;
+const mapsSearchPanelWidth = 401;
+const mapsSearchPanelTop = 61;
+const miniMapTop = -57;
+const miniMapRight = -86;
+const miniMapSize = 456;
+const miniMapZoom = 17;
+const miniMapFadeStart = 0;
+const miniMapFadeEnd = 69;
+const minOrbitDistance = 9.5;
+const maxOrbitDistance = 18;
+const nightFloorDarkness = 0;
+const nightAmbientIntensity = 0.25;
+const nightFrontLightIntensity = 0.60;
+const nightEnvironmentIntensity = 0.55;
+const spotifyPlayerTop = 50;
+const spotifyPlayerBottom = 70;
+const playerDockedWidth = 519;
+const playerDockedLeft = 66;
+const playerDockedHeight = 113;
+const playerFloatingWidth = 520;
+const playerFloatingBottom = 98;
+const playerFloatingHeight = 113;
+const navigateToolWidth = 340;
+const sunsetArrowYPosition = 1;
+const sunriseArrowYPosition = 5;
+
 export default function App() {
   // Simple routing based on URL path for the Spotify callback
   if (window.location.pathname === '/spotify-callback') {
@@ -529,17 +557,8 @@ export default function App() {
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle');
-  const [isDebugOpen, setIsDebugOpen] = useState(false);
-  const [debugTimeOverride, setDebugTimeOverride] = useState<Date | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [sunsetArrowYPosition, setSunsetArrowYPosition] = useState(1);
-  const [sunriseArrowYPosition, setSunriseArrowYPosition] = useState(5);
-  const [debugWeatherCondition, setDebugWeatherCondition] = useState<string | null>(null);
   const [tempUnit, setTempUnit] = useState<TempUnit>('C');
-  const [topBarScale, setTopBarScale] = useState(1.0);
-  const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
-  const [mapsSearchPanelWidth, setMapsSearchPanelWidth] = useState(401);
-  const [mapsSearchPanelTop, setMapsSearchPanelTop] = useState(61);
   const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [bearing, setBearing] = useState(0);
   const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -551,35 +570,8 @@ export default function App() {
   // States for trip simulation
   const [simulatedRemainingDistance, setSimulatedRemainingDistance] = useState<number | null>(null);
   const simulationIntervalRef = useRef<number | null>(null);
-
-  const [miniMapTop, setMiniMapTop] = useState(-57);
-  const [miniMapRight, setMiniMapRight] = useState(-86);
-  const [miniMapSize, setMiniMapSize] = useState(456);
-  const [miniMapZoom, setMiniMapZoom] = useState(17);
-  const [miniMapFadeStart, setMiniMapFadeStart] = useState(0);
-  const [miniMapFadeEnd, setMiniMapFadeEnd] = useState(69);
   
-  const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
-  const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
-
-  const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(initialAppOpenConfig);
-  const [nightFloorDarkness, setNightFloorDarkness] = useState(0);
-  const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.25);
-  const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.60);
-  const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
-  const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
-  const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(70);
-
   const [navigationTarget, setNavigationTarget] = useState<{ lat: number, lng: number, name: string } | null>(null);
-
-  // New states for Music Player layout
-  const [playerDockedWidth, setPlayerDockedWidth] = useState(519);
-  const [playerDockedLeft, setPlayerDockedLeft] = useState(66);
-  const [playerDockedHeight, setPlayerDockedHeight] = useState(113);
-  const [playerFloatingWidth, setPlayerFloatingWidth] = useState(520);
-  const [playerFloatingBottom, setPlayerFloatingBottom] = useState(98);
-  const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
-  const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   
   const startTripSimulation = useCallback(() => {
     if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
@@ -724,7 +716,7 @@ export default function App() {
   }, [currentPosition]);
 
 
-  const effectiveTime = useMemo(() => debugTimeOverride || currentTime, [debugTimeOverride, currentTime]);
+  const effectiveTime = currentTime;
 
   const { isNight, effectiveWeatherCondition, isHot, isCold } = useMemo(() => {
     const now = effectiveTime;
@@ -763,7 +755,7 @@ export default function App() {
         condition = 'Nuvoloso'; // Fallback condition
     }
     
-    const finalCondition = debugWeatherCondition || condition;
+    const finalCondition = condition;
 
     const nowHourlyData = weatherData?.hourly.find(h => new Date(h.dt * 1000).getHours() === now.getHours());
     const currentTemp = nowHourlyData?.temperature ?? weatherData?.current.temperature ?? 20;
@@ -777,7 +769,7 @@ export default function App() {
         isHot: hot,
         isCold: cold
     };
-  }, [effectiveTime, weatherData, debugWeatherCondition]);
+  }, [effectiveTime, weatherData]);
 
   const fetchWeatherData = useCallback(async (latitude: number, longitude: number) => {
       setWeatherStatus('fetching');
@@ -910,7 +902,6 @@ export default function App() {
   
   const handleWrapperClick = () => {
     if (isAppLauncherOpen) setIsAppLauncherOpen(false);
-    if (isDebugOpen) setIsDebugOpen(false);
   };
 
   const isUIOverlayActive = activeApp !== null;
@@ -928,7 +919,7 @@ export default function App() {
               isNight={isNight}
               minOrbitDistance={minOrbitDistance}
               maxOrbitDistance={maxOrbitDistance}
-              appOpenConfig={appOpenConfig}
+              appOpenConfig={initialAppOpenConfig}
               nightFloorDarkness={nightFloorDarkness}
               nightAmbientIntensity={nightAmbientIntensity}
               nightFrontLightIntensity={nightFrontLightIntensity}
@@ -1051,92 +1042,6 @@ export default function App() {
 
           <AppLauncher
               isOpen={isAppLauncherOpen}
-          />
-          
-          {/* Debug button hidden as requested */}
-          {/*
-          <button
-            onClick={(e) => { e.stopPropagation(); setIsDebugOpen(p => !p); }}
-            className="absolute bottom-24 right-4 z-50 p-3 bg-gray-800/80 rounded-full text-white hover:bg-gray-700 transition"
-            aria-label="Toggle Debug Panel"
-          >
-            <ICONS.settings className="w-8 h-8" />
-          </button>
-          */}
-
-          <DebugControls 
-              isOpen={isDebugOpen}
-              onClose={() => setIsDebugOpen(false)}
-              timeOverride={debugTimeOverride}
-              setTimeOverride={setDebugTimeOverride}
-              sunsetArrowYPosition={sunsetArrowYPosition}
-              setSunsetArrowYPosition={setSunsetArrowYPosition}
-              sunriseArrowYPosition={sunriseArrowYPosition}
-              setSunriseArrowYPosition={setSunriseArrowYPosition}
-              weatherConditionOverride={debugWeatherCondition}
-              setWeatherConditionOverride={setDebugWeatherCondition}
-              effectiveWeatherCondition={effectiveWeatherCondition}
-              isNight={isNight}
-              isHot={isHot}
-              isCold={isCold}
-              topBarScale={topBarScale}
-              setTopBarScale={setTopBarScale}
-              topBarOffsetY={topBarOffsetY}
-              setTopBarOffsetY={setTopBarOffsetY}
-              mapsSearchPanelWidth={mapsSearchPanelWidth}
-              setMapsSearchPanelWidth={setMapsSearchPanelWidth}
-              mapsSearchPanelTop={mapsSearchPanelTop}
-              setMapsSearchPanelTop={setMapsSearchPanelTop}
-              miniMapTop={miniMapTop}
-              setMiniMapTop={setMiniMapTop}
-              miniMapRight={miniMapRight}
-              setMiniMapRight={setMiniMapRight}
-              miniMapSize={miniMapSize}
-              setMiniMapSize={setMiniMapSize}
-              miniMapZoom={miniMapZoom}
-              setMiniMapZoom={setMiniMapZoom}
-              miniMapFadeStart={miniMapFadeStart}
-              setMiniMapFadeStart={setMiniMapFadeStart}
-              miniMapFadeEnd={miniMapFadeEnd}
-              setMiniMapFadeEnd={setMiniMapFadeEnd}
-              minOrbitDistance={minOrbitDistance}
-              setMinOrbitDistance={setMinOrbitDistance}
-              maxOrbitDistance={maxOrbitDistance}
-              setMaxOrbitDistance={setMaxOrbitDistance}
-              appOpenConfig={appOpenConfig}
-              setAppOpenConfig={setAppOpenConfig}
-              nightFloorDarkness={nightFloorDarkness}
-              setNightFloorDarkness={setNightFloorDarkness}
-              nightAmbientIntensity={nightAmbientIntensity}
-              setNightAmbientIntensity={setNightAmbientIntensity}
-              nightFrontLightIntensity={nightFrontLightIntensity}
-              setNightFrontLightIntensity={setNightFrontLightIntensity}
-              nightEnvironmentIntensity={nightEnvironmentIntensity}
-              setNightEnvironmentIntensity={setNightEnvironmentIntensity}
-              spotifyPlayerTop={spotifyPlayerTop}
-              setSpotifyPlayerTop={setSpotifyPlayerTop}
-              spotifyPlayerBottom={spotifyPlayerBottom}
-              setSpotifyPlayerBottom={setSpotifyPlayerBottom}
-              playerDockedWidth={playerDockedWidth}
-              setPlayerDockedWidth={setPlayerDockedWidth}
-              playerDockedLeft={playerDockedLeft}
-              setPlayerDockedLeft={setPlayerDockedLeft}
-              playerDockedHeight={playerDockedHeight}
-              setPlayerDockedHeight={setPlayerDockedHeight}
-              playerFloatingWidth={playerFloatingWidth}
-              setPlayerFloatingWidth={setPlayerFloatingWidth}
-              playerFloatingBottom={playerFloatingBottom}
-              setPlayerFloatingBottom={setPlayerFloatingBottom}
-              playerPlaceholderWidth={0}
-              setPlayerPlaceholderWidth={() => {}}
-              playerFloatingHeight={playerFloatingHeight}
-              setPlayerFloatingHeight={setPlayerFloatingHeight}
-              tripInfo={tripInfo}
-              startTripSimulation={startTripSimulation}
-              stopTripSimulation={stopTripSimulation}
-              isSimulating={simulatedRemainingDistance !== null}
-              navigateToolWidth={navigateToolWidth}
-              setNavigateToolWidth={setNavigateToolWidth}
           />
           
           <footer 

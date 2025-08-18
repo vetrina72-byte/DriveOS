@@ -3,14 +3,15 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiPlay, FiPause, FiSkipBack, FiSkipForward, FiMusic, FiAlertTriangle
+    FiMusic, FiAlertTriangle, FiHeart
 } from 'react-icons/fi';
-import { FaSpotify } from 'react-icons/fa';
+import { 
+    IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
+} from 'react-icons/io5';
 import { 
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
-import { IoMdAddCircleOutline, IoMdHeart } from 'react-icons/io';
-import { HiOutlineQueueList, HiMiniQueueList } from 'react-icons/hi2';
+import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 
 interface MusicPlayerProps {
@@ -22,7 +23,7 @@ interface MusicPlayerProps {
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
 
-const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, isNight: boolean }) => {
+const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const [position, setPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
@@ -87,8 +88,6 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
             const finalPosition = getSeekPosition(upEvent.clientX);
             player.seek(finalPosition);
             
-            // Set isSeeking to false after a short delay to allow the state to sync
-            // from the player_state_changed event first.
             setTimeout(() => setIsSeeking(false), 50);
         };
         
@@ -97,21 +96,19 @@ const ProgressBar = ({ player, state, isNight }: { player: SpotifyPlayer | null,
     }, [player, state.duration]);
     
     const progressPercentage = state.duration > 0 ? (position / state.duration) * 100 : 0;
-    const thumbColor = isNight ? '#FFF' : '#000';
-    const progressBg = isNight ? 'bg-white/30' : 'bg-black/20';
-    const progressFillBg = isNight ? 'bg-white' : 'bg-black';
-
+    
     return (
         <div
             ref={progressRef}
-            className={`w-full h-1.5 rounded-full cursor-pointer relative group ${progressBg}`}
+            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)]"
             onMouseDown={handleMouseDown}
         >
-            <div className={`h-full rounded-full ${progressFillBg}`} style={{ width: `${progressPercentage}%` }} />
-            <div 
-                className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity`}
-                style={{ left: `${progressPercentage}%`, transform: 'translate(-50%, -50%)', backgroundColor: thumbColor }} 
-            />
+            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
+                 <div 
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)]"
+                    style={{ transform: 'translateY(-50%)' }} 
+                />
+            </div>
         </div>
     );
 };
@@ -279,7 +276,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         }
     }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState]);
 
-    // Automatic queue visibility logic
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {
             return;
@@ -299,7 +295,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         prevTrackUri.current = currentTrackUri;
     }, [currentTrackUri, isAutoQueueEnabled]);
 
-    // Animate popover position smoothly
     useEffect(() => {
         const playerEl = playerContainerRef.current;
         if (!showQueue || !playerEl) return;
@@ -310,7 +305,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             const playerRect = playerEl.getBoundingClientRect();
             setPopoverPosition({
                 bottom: window.innerHeight - playerRect.top + 16,
-                left: playerRect.right - 288, // 288 is w-72, width of popover
+                left: playerRect.right - 288,
                 transform: '',
             });
         };
@@ -329,7 +324,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         };
     }, [showQueue]);
 
-    // Effect to manage mounting/unmounting with animation
     useEffect(() => {
         if (queuePopoverTimeoutRef.current) {
             clearTimeout(queuePopoverTimeoutRef.current);
@@ -337,10 +331,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         if (showQueue) {
             setIsQueuePopoverRendered(true);
         } else {
-            // Wait for animation to finish before unmounting
             queuePopoverTimeoutRef.current = setTimeout(() => {
                 setIsQueuePopoverRendered(false);
-            }, 300); // Animation duration (must match CSS)
+            }, 300);
         }
     }, [showQueue]);
 
@@ -358,11 +351,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handleTogglePlay = () => {
-        if (playerRef.current && playerState) {
-            playerState.paused ? playerRef.current.resume() : playerRef.current.pause();
-        }
-    };
+    const handleTogglePlay = () => playerRef.current?.togglePlay();
     const handleNextTrack = () => playerRef.current?.nextTrack();
     const handlePrevTrack = () => playerRef.current?.previousTrack();
 
@@ -383,28 +372,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
 
     const handleToggleShuffle = () => {
         if (!playerState) return;
-        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`, null);
+        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
     };
 
     const handleToggleRepeat = () => {
         if (!playerState) return;
         const nextState = (playerState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
-        apiClient.put(`/me/player/repeat?state=${repeatMode}`, null);
+        apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
     
     const handleToggleAutoQueue = () => {
         setIsAutoQueueEnabled(prev => {
             const newState = !prev;
             if (!newState) {
-                setShowQueue(false); // Hide popover when disabling
+                setShowQueue(false);
             }
             return newState;
         });
     };
     
     const playerStyle: React.CSSProperties = useMemo(() => {
-        if (isAnyAppOpen) { // Docked State
+        if (isAnyAppOpen) {
             return {
                 width: `${dockedConfig.width}px`,
                 height: `${dockedConfig.height}px`,
@@ -412,9 +401,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
                 left: `${dockedConfig.left}px`,
                 transform: 'translateX(0)',
             };
-        } else { // Floating State
+        } else {
             const { width, bottom, height, otherWidgetWidth } = floatingConfig;
-            // This logic perfectly centers the entire widget group
             const transformX = -otherWidgetWidth / 2 - 8;
             return {
                 width: `${width}px`,
@@ -444,16 +432,49 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         }
 
         if (playerStatus === 'connecting' || !isAuthenticated) {
-            const placeholderText = isAuthenticated ? "In attesa della musica..." : "Login to start listening";
+            const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
+
             return (
-                 <div className="flex items-center w-full h-full gap-5 px-4">
-                    <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                       {isAuthenticated ? <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /> : <FaSpotify className={`w-7 h-7 ${isNight ? 'text-green-500' : 'text-green-600'}`} />}
+                <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-3">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                            </div>
+                            <div className="overflow-hidden">
+                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>Connect to listen</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-5">
+                            <button disabled className={disabledIconColor}><PiShuffleBold className="w-5 h-5" /></button>
+                            <button disabled className={disabledIconColor}><PiRepeatBold className="w-5 h-5" /></button>
+                        </div>
                     </div>
-                    <div className="flex-grow overflow-hidden">
-                        <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
-                        <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>
-                            {placeholderText}
+
+                    <div className="w-full py-1">
+                        <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]">
+                            <div className="h-full rounded-full bg-[var(--icon-color-disabled)] relative w-0">
+                                 <div 
+                                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--icon-color-disabled)]"
+                                    style={{ transform: 'translateY(-50%)' }} 
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: 'translateY(-1px)'}}>
+                        <div className="flex-1 flex justify-start">
+                            {/* Empty left spacer */}
+                        </div>
+                        <div className="flex items-center" style={{ gap: '80px' }}>
+                            <button disabled className={disabledIconColor}><IoPlaySkipBackSharp style={{ width: '20px', height: '20px'}} /></button>
+                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: '30px', height: '30px'}} /></button>
+                            <button disabled className={disabledIconColor}><IoPlaySkipForwardSharp style={{ width: '20px', height: '20px'}} /></button>
+                            <button disabled className={disabledIconColor}><FiHeart style={{ width: '18px', height: '18px'}} /></button>
+                        </div>
+                        <div className="flex-1 flex justify-end items-center">
+                            <button disabled className={disabledIconColor}><BsList style={{ width: '20px', height: '20px'}} /></button>
                         </div>
                     </div>
                 </div>
@@ -465,54 +486,59 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             const imageUrl = album.images[0]?.url;
             const nextTrack = playerState.track_window.next_tracks[0];
 
-            const iconColor = isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black';
-            const activeIconColor = isNight ? 'text-green-400' : 'text-green-600';
-            const activeRepeatColor = isNight ? 'text-green-400' : 'text-green-600';
+            const activeColor = 'text-green-500';
+            const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
 
             return (
-                <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-2 relative">
-                    {/* ROW 1: Info & Secondary Controls */}
-                    <div className="flex items-center justify-between gap-4 w-full">
+                <div className="w-full h-full flex flex-col justify-center gap-2 px-4 py-3">
+                    <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            {imageUrl && <img src={imageUrl} alt={album.name} className="w-10 h-10 rounded-md" />}
+                            {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
                             <div className="overflow-hidden">
-                                <div className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)'}}>{trackName}</div>
+                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>{trackName}</div>
                                 <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
                                     {artists.map(a => a.name).join(', ')}
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-5">
-                             <button onClick={handleToggleShuffle} className={`transition ${playerState.shuffle ? activeIconColor : iconColor}`}>
+                            <button onClick={handleToggleShuffle} className={`transition ${playerState.shuffle ? activeColor : iconColor}`}>
                                 <PiShuffleBold className="w-5 h-5" />
                             </button>
-                            <button onClick={handleToggleRepeat} className={`transition ${playerState.repeat_mode !== 0 ? activeRepeatColor : iconColor}`}>
+                            <button onClick={handleToggleRepeat} className={`transition ${playerState.repeat_mode !== 0 ? activeColor : iconColor}`}>
                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                             </button>
                         </div>
                     </div>
 
-                    {/* ROW 2: Progress & Main Controls */}
-                    <div className="w-full">
-                        <ProgressBar player={playerRef.current} state={playerState} isNight={isNight} />
-                        <div className="flex justify-between items-center mt-2">
-                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <FiSkipBack className="w-6 h-6" />
+                    <div className="w-full py-1">
+                        <ProgressBar player={playerRef.current} state={playerState} />
+                    </div>
+                    
+                    <div className="w-full flex justify-between items-center mt-1" style={{ transform: 'translateY(-1px)'}}>
+                        <div className="flex-1 flex justify-start">
+                            {/* Empty left spacer */}
+                        </div>
+                        <div className="flex items-center" style={{ gap: '80px'}}>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`}>
+                                <IoPlaySkipBackSharp style={{ width: '20px', height: '20px'}} />
                             </button>
                             <button onClick={handleTogglePlay} className={`transition ${iconColor}`}>
                                 {playerState.paused 
-                                    ? <FiPlay className="w-8 h-8" /> 
-                                    : <FiPause className="w-8 h-8" />}
+                                    ? <IoPlaySharp style={{ width: '30px', height: '30px'}} /> 
+                                    : <IoPauseSharp style={{ width: '30px', height: '30px'}} />}
                             </button>
-                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
-                                <FiSkipForward className="w-6 h-6" />
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`}>
+                                <IoPlaySkipForwardSharp style={{ width: '20px', height: '20px'}} />
                             </button>
-                             <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-[#1DB954]' : iconColor}`}>
-                                {isLiked ? <IoMdHeart className="w-6 h-6" /> : <IoMdAddCircleOutline className="w-6 h-6" />}
+                             <button onClick={handleToggleLike} className={`transition ${isLiked ? 'text-green-500' : iconColor}`}>
+                                <FiHeart style={{ width: '18px', height: '18px'}} className={`${isLiked ? 'fill-current' : ''}`} />
                              </button>
-                             <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`transition ${isAutoQueueEnabled ? activeIconColor : iconColor}`}>
-                                {isAutoQueueEnabled ? <HiMiniQueueList className="w-6 h-6" /> : <HiOutlineQueueList className="w-6 h-6" />}
-                             </button>
+                        </div>
+                        <div className="flex-1 flex justify-end items-center">
+                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`transition ${isAutoQueueEnabled ? activeColor : iconColor}`}>
+                                <BsList style={{ width: '20px', height: '20px'}} />
+                            </button>
                         </div>
                     </div>
 
@@ -529,7 +555,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
             );
         }
 
-        // If authenticated and ready, but no track is loaded, show a "waiting" state.
         return (
              <div className="flex items-center w-full h-full gap-5 px-4">
                 <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
@@ -549,7 +574,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ isAnyAppOpen, isNight, docked
         <div 
             ref={playerContainerRef}
             className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
-            style={{...playerStyle, background: `var(--spotify-panel-bg)`}}
+            style={{...playerStyle, background: `var(--player-bg)`}}
         >
             {renderPlayerContent()}
         </div>

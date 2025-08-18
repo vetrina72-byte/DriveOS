@@ -36,19 +36,29 @@
   <style>
     :root {
       --spotify-panel-bg: rgba(255, 255, 255, 0.95);
-      --player-bg: #FFFFFF;
+      --player-bg: rgba(255, 255, 255, 0.85);
       --text-primary: #000000;
       --text-secondary: #3f3f46;
       --heading-color: #000000;
       --text-spotify-logo: #1DB954;
+      --progress-bg: #e5e7eb;
+      --progress-fill: #4b5567;
+      --icon-color: #4b5567;
+      --icon-hover: #1f2937;
+      --icon-color-disabled: #d1d5db; /* Light grey for light mode */
     }
 
     [data-theme='dark'] {
       --spotify-panel-bg: rgba(0, 0, 0, 0.95);
-      --player-bg: #000000;
+      --player-bg: rgba(23, 23, 23, 0.85);
       --text-primary: #FFFFFF;
       --text-secondary: #b3b3b3;
       --heading-color: #FFFFFF;
+      --progress-bg: #4b5567;
+      --progress-fill: #d1d5db;
+      --icon-color: #9ca3af;
+      --icon-hover: #ffffff;
+      --icon-color-disabled: #4b5567; /* Darker grey for dark mode */
     }
     
     body, #root {
