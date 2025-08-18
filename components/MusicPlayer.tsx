@@ -23,7 +23,8 @@ interface MusicPlayerProps {
     playerControlsGap: number;
     playerControlsVerticalPosition: number;
     widgetBgColor: string;
-    playerButtonColor: string;
+    dayPlayerButtonColor: string;
+    nightPlayerButtonColor: string;
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -169,7 +170,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     playerControlsGap,
     playerControlsVerticalPosition,
     widgetBgColor,
-    playerButtonColor,
+    dayPlayerButtonColor,
+    nightPlayerButtonColor,
 }) => {
     const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
@@ -503,7 +505,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
             const nextTrack = playerState.track_window.next_tracks[0];
-            const activeColor = !isNight ? playerButtonColor : 'var(--color-accent)';
+            
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const songTitleColor = playerState.paused 
+                ? 'var(--text-primary)'
+                : isNight ? '#c0c0c0' : '#000000';
+
             const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
             
             return (
@@ -512,17 +519,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className="flex items-center gap-3 min-w-0">
                             {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
                             <div className="overflow-hidden">
-                                <div className={`font-semibold text-sm truncate`} style={{ color: playerState.paused ? 'var(--text-primary)' : activeColor}}>{trackName}</div>
+                                <div className={`font-semibold text-sm truncate`} style={{ color: songTitleColor }}>{trackName}</div>
                                 <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
                                     {artists.map(a => a.name).join(', ')}
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-5">
-                            <button onClick={handleToggleShuffle} className={`transition ${iconColor}`} style={{ color: playerState.shuffle ? activeColor : undefined }}>
+                            <button onClick={handleToggleShuffle} className={`transition ${iconColor}`} style={{ color: playerState.shuffle ? buttonActiveColor : undefined }}>
                                 <PiShuffleBold className="w-5 h-5" />
                             </button>
-                            <button onClick={handleToggleRepeat} className={`transition ${iconColor}`} style={{ color: playerState.repeat_mode !== 0 ? activeColor : undefined }}>
+                            <button onClick={handleToggleRepeat} className={`transition ${iconColor}`} style={{ color: playerState.repeat_mode !== 0 ? buttonActiveColor : undefined }}>
                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                             </button>
                         </div>
@@ -537,23 +544,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             {/* Empty left spacer */}
                         </div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
-                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: activeColor }}>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: buttonActiveColor }}>
                                 <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
-                            <button onClick={handleTogglePlay} className={`transition ${iconColor}`} style={{ color: activeColor }}>
+                            <button onClick={handleTogglePlay} className={`transition ${iconColor}`} style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
                                     ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
                                     : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
                             </button>
-                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: activeColor }}>
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition ${iconColor}`} style={{ color: buttonActiveColor }}>
                                 <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                             </button>
-                             <button onClick={handleToggleLike} className={`transition ${iconColor}`} style={{ color: isLiked ? activeColor : undefined }}>
+                             <button onClick={handleToggleLike} className={`transition ${iconColor}`} style={{ color: isLiked ? buttonActiveColor : undefined }}>
                                 <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
                              </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
-                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200 ${iconColor}`} style={{ color: isAutoQueueEnabled ? activeColor : undefined }}>
+                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200 ${iconColor}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : undefined }}>
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>

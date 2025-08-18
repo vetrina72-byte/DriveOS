@@ -46,14 +46,15 @@ const formatTravelTime = (minutes: number | null): string => {
 };
 
 
-const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, playerButtonColor }: { 
+const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, dayPlayerButtonColor, nightPlayerButtonColor }: { 
     isVisible: boolean, 
     isNight: boolean,
     onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
     currentPosition: { lat: number; lng: number } | null,
     width: number,
     widgetBgColor: string;
-    playerButtonColor: string;
+    dayPlayerButtonColor: string;
+    nightPlayerButtonColor: string;
 }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
@@ -246,14 +247,14 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
                     <div className="flex justify-around items-center">
                         <button 
                             className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
-                            style={{ color: !isNight ? playerButtonColor : 'var(--icon-color)' }}
+                            style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                         >
                             <ICONS.home className="w-5 h-5" />
                             <span>Home</span>
                         </button>
                          <button 
                             className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
-                            style={{ color: !isNight ? playerButtonColor : 'var(--icon-color)' }}
+                            style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                          >
                             <ICONS.work className="w-5 h-5" />
                             <span>Work</span>
@@ -584,7 +585,8 @@ export default function App() {
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
 
   // Debug UI Colors
-  const [playerButtonColor, setPlayerButtonColor] = useState('#a49494');
+  const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#c0c0c0');
+  const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#666666');
   const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
   const widgetBgColor = useMemo(() => {
     const rgb = hexToRgb(widgetBgHex);
@@ -1063,7 +1065,8 @@ export default function App() {
                   currentPosition={currentPosition}
                   width={navigateToolWidth}
                   widgetBgColor={widgetBgColor}
-                  playerButtonColor={playerButtonColor}
+                  dayPlayerButtonColor={dayPlayerButtonColor}
+                  nightPlayerButtonColor={nightPlayerButtonColor}
                 />
               )}
           </div>
@@ -1088,7 +1091,8 @@ export default function App() {
             playerControlsGap={playerControlsGap}
             playerControlsVerticalPosition={playerControlsVerticalPosition}
             widgetBgColor={widgetBgColor}
-            playerButtonColor={playerButtonColor}
+            dayPlayerButtonColor={dayPlayerButtonColor}
+            nightPlayerButtonColor={nightPlayerButtonColor}
           />
           
           <MapsContainer 
@@ -1205,8 +1209,10 @@ export default function App() {
             setPlayerControlsGap={setPlayerControlsGap}
             playerControlsVerticalPosition={playerControlsVerticalPosition}
             setPlayerControlsVerticalPosition={setPlayerControlsVerticalPosition}
-            playerButtonColor={playerButtonColor}
-            setPlayerButtonColor={setPlayerButtonColor}
+            dayPlayerButtonColor={dayPlayerButtonColor}
+            setDayPlayerButtonColor={setDayPlayerButtonColor}
+            nightPlayerButtonColor={nightPlayerButtonColor}
+            setNightPlayerButtonColor={setNightPlayerButtonColor}
             widgetBgHex={widgetBgHex}
             setWidgetBgHex={setWidgetBgHex}
         />

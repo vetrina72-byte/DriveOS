@@ -82,8 +82,10 @@ interface DebugControlsProps {
   setPlayerControlsGap: (gap: number) => void;
   playerControlsVerticalPosition: number;
   setPlayerControlsVerticalPosition: (pos: number) => void;
-  playerButtonColor: string;
-  setPlayerButtonColor: (color: string) => void;
+  dayPlayerButtonColor: string;
+  setDayPlayerButtonColor: (color: string) => void;
+  nightPlayerButtonColor: string;
+  setNightPlayerButtonColor: (color: string) => void;
   widgetBgHex: string;
   setWidgetBgHex: (color: string) => void;
 }
@@ -199,8 +201,10 @@ export default function DebugControls({
   setPlayerControlsGap,
   playerControlsVerticalPosition,
   setPlayerControlsVerticalPosition,
-  playerButtonColor,
-  setPlayerButtonColor,
+  dayPlayerButtonColor,
+  setDayPlayerButtonColor,
+  nightPlayerButtonColor,
+  setNightPlayerButtonColor,
   widgetBgHex,
   setWidgetBgHex,
 }: DebugControlsProps) {
@@ -251,7 +255,8 @@ export default function DebugControls({
     setPlayerControlsSize(18);
     setPlayerControlsGap(100);
     setPlayerControlsVerticalPosition(2);
-    setPlayerButtonColor('#a49494');
+    setDayPlayerButtonColor('#c0c0c0');
+    setNightPlayerButtonColor('#666666');
     setWidgetBgHex('#ffffff');
   };
   
@@ -708,12 +713,22 @@ export default function DebugControls({
         <div className="pt-2 mt-2 border-t border-zinc-700">
             <h3 className="text-md font-semibold text-zinc-200 mb-2">UI Colors</h3>
             <div className="flex items-center justify-between">
-              <label htmlFor="player-button-color" className="font-medium text-zinc-300">Player Button Color</label>
+              <label htmlFor="player-button-color-day" className="font-medium text-zinc-300">Player Button Color (Day)</label>
               <input
-                id="player-button-color"
+                id="player-button-color-day"
                 type="color"
-                value={playerButtonColor}
-                onChange={(e) => setPlayerButtonColor(e.target.value)}
+                value={dayPlayerButtonColor}
+                onChange={(e) => setDayPlayerButtonColor(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
+            </div>
+             <div className="flex items-center justify-between mt-2">
+              <label htmlFor="player-button-color-night" className="font-medium text-zinc-300">Player Button Color (Night)</label>
+              <input
+                id="player-button-color-night"
+                type="color"
+                value={nightPlayerButtonColor}
+                onChange={(e) => setNightPlayerButtonColor(e.target.value)}
                 className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
               />
             </div>
