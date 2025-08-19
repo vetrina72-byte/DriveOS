@@ -67,15 +67,32 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         setIsLoading(true);
         setError(null);
         try {
-            const [artistRes, topTracksRes] = await Promise.all([
-                apiClient.get(`/artists/${artistId}`),
-                apiClient.get(`/artists/${artistId}/top-tracks?market=IT`)
+            // Chiamata per i dettagli dell'artista (rimane uguale)
+            const artistDetailsPromise = apiClient.get(`/artists/${artistId}`);
+    
+            // Chiamata per le top tracks (con logica di fallback)
+            const topTracksPromise = apiClient.get(`/artists/${artistId}/top-tracks?market=IT`)
+              .catch((err: any) => {
+                console.warn("Chiamata per il mercato IT fallita con errore:", err.response?.status, ". Tento con la chiamata globale.");
+                // Se la prima chiamata fallisce, ne tentiamo un'altra senza il mercato
+                if (err.response?.status === 500) {
+                  return apiClient.get(`/artists/${artistId}/top-tracks`);
+                }
+                // Se l'errore è un altro, lo rigettiamo
+                throw err;
+              });
+    
+            const [artistResponse, topTracksResponse] = await Promise.all([
+              artistDetailsPromise,
+              topTracksPromise
             ]);
-            setArtist(artistRes.data);
-            setTracks(topTracksRes.data.tracks);
-        } catch (err) {
-            console.error(`Failed to fetch artist details`, err);
-            setError('Spiacenti, non è stato possibile caricare i dettagli. Potrebbe esserci un problema temporaneo.');
+    
+            setArtist(artistResponse.data);
+            setTracks(topTracksResponse.data.tracks);
+    
+        } catch (err: any) {
+            console.error("Errore definitivo nel caricare i dettagli dell'artista:", err);
+            setError("Impossibile caricare i dettagli dell'artista in questo momento.");
         } finally {
             setIsLoading(false);
         }
