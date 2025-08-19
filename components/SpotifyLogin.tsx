@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -26,7 +25,9 @@ const SpotifyLogin: React.FC = () => {
           'user-read-recently-played',
           'playlist-read-private',
           'playlist-read-collaborative',
-          'user-top-read'
+          'user-top-read',
+          'user-follow-read',
+          'user-follow-modify'
         ].join(' ');
 
         const authUrl = new URL("https://accounts.spotify.com/authorize");
