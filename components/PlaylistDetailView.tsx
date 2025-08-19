@@ -65,12 +65,12 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const [tracks, setTracks] = useState<Track[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { playerState } = useAuth();
+    const [isLiked, setIsLiked] = useState(false);
+    const { playerState, user } = useAuth();
 
     const isLikedSongs = itemId === 'liked-songs';
     const isPlayingContext = playerState && !playerState.paused && (playerState.context.uri === details?.uri || isLikedSongs);
     const currentTrackId = playerState?.track_window.current_track?.id;
-
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -111,6 +111,59 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
 
         fetchDetails();
     }, [itemId, itemType, isLikedSongs]);
+
+    useEffect(() => {
+        if (!details || !user) return;
+    
+        const checkStatus = async () => {
+            try {
+                if (isLikedSongs) {
+                    setIsLiked(true);
+                    return;
+                }
+                if (itemType === 'album') {
+                    const { data } = await apiClient.get(`/me/albums/contains?ids=${details.id}`);
+                    setIsLiked(data[0]);
+                } else if (itemType === 'playlist') {
+                    if (details.owner.id === user.id) {
+                        setIsLiked(true);
+                        return;
+                    }
+                    const { data } = await apiClient.get(`/playlists/${details.id}/followers/contains?ids=${user.id}`);
+                    setIsLiked(data[0]);
+                }
+            } catch (e) {
+                console.error("Failed to check like/follow status", e);
+            }
+        };
+        checkStatus();
+    }, [details, user, itemType, isLikedSongs]);
+
+    const handleToggleLike = async () => {
+        if (!details || !user || (itemType === 'playlist' && details.owner.id === user.id) || isLikedSongs) return;
+    
+        const shouldLike = !isLiked;
+        setIsLiked(shouldLike); // Optimistic update
+    
+        try {
+            if (itemType === 'album') {
+                if (shouldLike) {
+                    await apiClient.put(`/me/albums?ids=${details.id}`);
+                } else {
+                    await apiClient.delete(`/me/albums?ids=${details.id}`);
+                }
+            } else if (itemType === 'playlist') {
+                if (shouldLike) {
+                    await apiClient.put(`/playlists/${details.id}/followers`);
+                } else {
+                    await apiClient.delete(`/playlists/${details.id}/followers`);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to toggle like", e);
+            setIsLiked(!shouldLike); // Revert on error
+        }
+    };
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -170,9 +223,19 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     <span className="text-sm font-bold uppercase">{details.type === 'show' ? 'Podcast' : details.type}</span>
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{details.name}</h1>
                     {sanitizedSubText && <p className={`text-sm ${theme.textSecondary} line-clamp-2`}>{sanitizedSubText}</p>}
-                    <button onClick={handlePlay} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
-                        <FiPlay className="w-7 h-7 ml-1" />
-                    </button>
+                     <div className="flex items-center gap-4 mt-4">
+                        <button onClick={handlePlay} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+                            <FiPlay className="w-7 h-7 ml-1" />
+                        </button>
+                        <button
+                            onClick={handleToggleLike}
+                            disabled={isLikedSongs || (details.owner?.id === user?.id)}
+                            className="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label={isLiked ? `Rimuovi dai preferiti` : `Aggiungi ai preferiti`}
+                        >
+                            <FiHeart className={`w-8 h-8 transition-all ${isLiked ? 'fill-current text-green-400' : ''}`} />
+                        </button>
+                    </div>
                 </div>
             </header>
 
