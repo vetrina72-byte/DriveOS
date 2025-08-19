@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
@@ -17,6 +18,7 @@ import RecentlyPlayedView from './RecentlyPlayedView';
 import ShowDetailView from './ShowDetailView';
 import GenresView from './GenresView';
 import CategoryPlaylistsView from './CategoryPlaylistsView';
+import NewReleasesView from './NewReleasesView';
 
 
 export type ViewType = 
@@ -32,7 +34,8 @@ export type ViewType =
     | 'albums'
     | 'podcasts'
     | 'genres'
-    | 'categoryPlaylists';
+    | 'categoryPlaylists'
+    | 'new-releases';
 
 export interface ViewState {
   type: ViewType;
@@ -105,7 +108,12 @@ const SpotifyPlayer = ({
         if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist' || item.type === 'show') {
             changeView({ type: item.type, id: item.id });
         } else if (item.type === 'category') {
-            changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
+            // Handle special categories that link to full views, not just playlist searches
+            if (item.id === 'new-releases') {
+                changeView({ type: 'new-releases' });
+            } else {
+                changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
+            }
         } else if (item.type === 'track') {
             if (item.context?.uri) {
                 // If the track has context (album/playlist), play the context starting from this track
@@ -167,7 +175,7 @@ const SpotifyPlayer = ({
         }
 
         if (isAuthenticated && user) {
-            const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists', 'search'].includes(view.type);
+            const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists', 'search', 'new-releases'].includes(view.type);
             return (
                 <div className="flex flex-col w-full h-full">
                     <TopNavBar 
@@ -186,6 +194,7 @@ const SpotifyPlayer = ({
                     {view.type === 'recently-played' && <RecentlyPlayedView isNight={isNight} onPlay={play} />}
                     {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={play} />}
                     {view.type === 'genres' && <GenresView isNight={isNight} onSelectItem={handleSelectItem} />}
+                    {view.type === 'new-releases' && <NewReleasesView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'categoryPlaylists' && <CategoryPlaylistsView categoryId={view.id!} title={view.title!} isNight={isNight} onSelectItem={handleSelectItem} onBack={handleBack} />}
 
                     {(view.type === 'playlist' || view.type === 'album') && (

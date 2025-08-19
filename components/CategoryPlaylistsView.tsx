@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
@@ -12,6 +13,10 @@ interface CategoryPlaylistsViewProps {
     onBack: () => void;
 }
 
+// List of special category IDs that have curated playlists and work with the /browse/categories endpoint
+// but do not work with the genre-based search endpoint.
+const SPECIAL_PLAYLIST_CATEGORIES = ['toplists', '0JQ5DAqbMKF2JckPAnMAhA'];
+
 const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryId, title, isNight, onSelectItem, onBack }) => {
     const [playlists, setPlaylists] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -23,25 +28,34 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
             setError(null);
             setPlaylists([]); // Clear previous results
             try {
-                // Use the search endpoint with a genre filter instead of the obsolete category endpoint
-                const searchQuery = `genre:"${title}"`;
-                const response = await apiClient.get(`/search`, {
-                    params: {
-                        q: searchQuery,
-                        type: 'playlist',
-                        market: 'IT',
-                        limit: 50,
-                    }
-                });
+                let response;
                 
-                if (response.data?.playlists?.items && response.data.playlists.items.length > 0) {
+                // For special curated categories like "Charts" or "Made For You", use the direct endpoint.
+                if (SPECIAL_PLAYLIST_CATEGORIES.includes(categoryId)) {
+                     response = await apiClient.get(`/browse/categories/${categoryId}/playlists`, {
+                        params: { country: 'IT', limit: 50 }
+                    });
+                } else {
+                    // For standard genres, use the search endpoint as the old category endpoint is obsolete for them.
+                    const searchQuery = `genre:"${title}"`;
+                    response = await apiClient.get(`/search`, {
+                        params: {
+                            q: searchQuery,
+                            type: 'playlist',
+                            market: 'IT',
+                            limit: 50,
+                        }
+                    });
+                }
+                
+                if (response.data?.playlists?.items) {
                     setPlaylists(response.data.playlists.items);
                 } else {
                     // If no items, playlists array remains empty, triggering the "not found" message
                     setPlaylists([]);
                 }
             } catch (err: any) {
-                 console.error(`Failed to search for playlists in category "${title}"`, err);
+                 console.error(`Failed to fetch playlists for category "${title}" (ID: ${categoryId})`, err);
                  setError('Could not load playlists for this category.');
             } finally {
                 setLoading(false);
@@ -64,13 +78,16 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
         return <div className="flex-grow flex justify-center items-center text-red-400">{error}</div>;
     }
 
+    // CRITICAL FIX: The API can return `null` in the items array. Filter them out before mapping to prevent crashes.
+    const validPlaylists = playlists.filter(Boolean);
+
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             <h2 className={`text-3xl font-bold mb-6 ${textColor}`}>{title}</h2>
 
-            {playlists.length > 0 ? (
+            {validPlaylists.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                    {playlists.map((playlist, index) => (
+                    {validPlaylists.map((playlist, index) => (
                         <PlaylistItem 
                             key={`cat-playlist-${playlist.id}-${index}`} 
                             item={playlist} 
