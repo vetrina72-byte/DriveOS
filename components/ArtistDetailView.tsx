@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiMusic } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
@@ -62,26 +63,27 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
-    useEffect(() => {
-        const fetchDetails = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const [artistRes, topTracksRes] = await Promise.all([
-                    apiClient.get(`/artists/${artistId}`),
-                    apiClient.get(`/artists/${artistId}/top-tracks?market=IT`)
-                ]);
-                setArtist(artistRes.data);
-                setTracks(topTracksRes.data.tracks);
-            } catch (err) {
-                console.error(`Failed to fetch artist details`, err);
-                setError(`Could not load artist details.`);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchDetails();
+    const fetchDetails = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [artistRes, topTracksRes] = await Promise.all([
+                apiClient.get(`/artists/${artistId}`),
+                apiClient.get(`/artists/${artistId}/top-tracks?market=IT`)
+            ]);
+            setArtist(artistRes.data);
+            setTracks(topTracksRes.data.tracks);
+        } catch (err) {
+            console.error(`Failed to fetch artist details`, err);
+            setError('Si è verificato un errore nel caricare i dati. Riprova.');
+        } finally {
+            setLoading(false);
+        }
     }, [artistId]);
+
+    useEffect(() => {
+        fetchDetails();
+    }, [fetchDetails]);
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -90,11 +92,29 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     };
 
     if (loading) {
-        return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${theme.textSecondary}`} /></div>;
+        const loadingIndicatorText = isNight ? 'text-zinc-400' : 'text-zinc-600';
+        return (
+            <div className="flex-grow flex flex-col justify-center items-center">
+                <FiLoader className={`animate-spin text-4xl ${loadingIndicatorText}`} />
+                <p className={`mt-4 ${loadingIndicatorText}`}>Caricamento...</p>
+            </div>
+        );
     }
 
-    if (error || !artist) {
-        return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Artist not found.'}</div>;
+    if (error) {
+        const errorButtonClasses = isNight
+            ? 'mt-4 px-4 py-2 bg-blue-500/50 hover:bg-blue-500/70 text-white rounded-md transition-colors'
+            : 'mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors';
+        return (
+          <div className="flex-grow flex flex-col justify-center items-center text-center p-4">
+            <p className="text-red-400">{error}</p>
+            <button onClick={fetchDetails} className={errorButtonClasses}>Riprova</button>
+          </div>
+        );
+    }
+
+    if (!artist) {
+        return <div className="flex-grow flex justify-center items-center text-red-400">Artist not found.</div>;
     }
     
     const trackUris = tracks.map(t => t.uri);
