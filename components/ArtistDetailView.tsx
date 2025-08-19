@@ -72,32 +72,68 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         setIsLoading(true);
         setError(null);
         try {
-            const [
-                artistRes,
-                followingStatusRes,
-                topTracksRes,
-                albumsRes,
-                singlesRes
-            ] = await Promise.all([
+            // Step 1: Fetch critical artist and follow info. If this fails, the whole page fails.
+            const [artistRes, followingStatusRes] = await Promise.all([
                 apiClient.get(`/artists/${artistId}`),
-                apiClient.get(`/me/following/contains?type=artist&ids=${artistId}`),
-                apiClient.get(`/artists/${artistId}/top-tracks?market=IT`),
-                apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20`),
-                apiClient.get(`/artists/${artistId}/albums?include_groups=single&limit=20`)
+                apiClient.get(`/me/following/contains?type=artist&ids=${artistId}`)
             ]);
-    
             setArtist(artistRes.data);
             setIsFollowing(followingStatusRes.data[0]);
-            setTopTracks(topTracksRes.data.tracks.slice(0, 5)); // Only show top 5
-            setAlbums(albumsRes.data.items.filter((album: any, index: number, self: any[]) =>
-                index === self.findIndex((a) => a.name === album.name)
-            ));
-            setSingles(singlesRes.data.items.filter((single: any, index: number, self: any[]) =>
-                index === self.findIndex((s) => s.name === single.name)
-            ));
     
+            // Step 2: Try to fetch top tracks (Plan A & B)
+            try {
+                // Plan A: with market
+                const topTracksRes = await apiClient.get(`/artists/${artistId}/top-tracks?market=IT`);
+                setTopTracks(topTracksRes.data.tracks.slice(0, 5));
+                
+                // If top tracks succeed, fetch albums/singles for the rest of the page
+                const [albumsRes, singlesRes] = await Promise.all([
+                    apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20`),
+                    apiClient.get(`/artists/${artistId}/albums?include_groups=single&limit=20`)
+                ]);
+                setAlbums(albumsRes.data.items.filter((album: any, index: number, self: any[]) => index === self.findIndex((a) => a.name === album.name)));
+                setSingles(singlesRes.data.items.filter((single: any, index: number, self: any[]) => index === self.findIndex((s) => s.name === single.name)));
+    
+            } catch (topTracksError: any) {
+                console.warn("Top tracks (market=IT) failed:", topTracksError.message);
+                // Plan B: global top tracks
+                try {
+                    const topTracksGlobalRes = await apiClient.get(`/artists/${artistId}/top-tracks`);
+                    setTopTracks(topTracksGlobalRes.data.tracks.slice(0, 5));
+    
+                    // If this succeeds, still fetch albums/singles
+                    const [albumsRes, singlesRes] = await Promise.all([
+                        apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20`),
+                        apiClient.get(`/artists/${artistId}/albums?include_groups=single&limit=20`)
+                    ]);
+                    setAlbums(albumsRes.data.items.filter((album: any, index: number, self: any[]) => index === self.findIndex((a) => a.name === album.name)));
+                    setSingles(singlesRes.data.items.filter((single: any, index: number, self: any[]) => index === self.findIndex((s) => s.name === single.name)));
+    
+                } catch (topTracksGlobalError: any) {
+                    console.warn("Top tracks (global) also failed:", topTracksGlobalError.message);
+                    
+                    // Plan C: Fetch albums/singles as the only content
+                    try {
+                        setTopTracks([]); // No top tracks to show
+                        const [albumsRes, singlesRes] = await Promise.all([
+                            apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20`),
+                            apiClient.get(`/artists/${artistId}/albums?include_groups=single&limit=20`)
+                        ]);
+                        const fetchedAlbums = albumsRes.data.items.filter((album: any, index: number, self: any[]) => index === self.findIndex((a) => a.name === album.name));
+                        const fetchedSingles = singlesRes.data.items.filter((single: any, index: number, self: any[]) => index === self.findIndex((s) => s.name === single.name));
+                        
+                        setAlbums(fetchedAlbums);
+                        setSingles(fetchedSingles);
+                    } catch (albumError: any) {
+                         // This is the final failure point. Re-throw to be caught by the outer block.
+                        console.error("Plan C (albums) also failed:", albumError.message);
+                        throw albumError;
+                    }
+                }
+            }
         } catch (err: any) {
-            console.error("Error loading artist details:", err);
+            // This outer catch handles critical failures from step 1 or the final fallback failure from step 2.
+            console.error("Failed to load artist details after all fallbacks:", err);
             setError("Impossibile caricare i dettagli dell'artista in questo momento.");
         } finally {
             setIsLoading(false);
