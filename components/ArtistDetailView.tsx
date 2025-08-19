@@ -56,7 +56,7 @@ const formatDuration = (ms: number) => {
 const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, onPlay }) => {
     const [artist, setArtist] = useState<Artist | null>(null);
     const [tracks, setTracks] = useState<Track[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { playerState } = useAuth();
 
@@ -64,7 +64,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const currentTrackId = playerState?.track_window.current_track?.id;
 
     const fetchDetails = useCallback(async () => {
-        setLoading(true);
+        setIsLoading(true);
         setError(null);
         try {
             const [artistRes, topTracksRes] = await Promise.all([
@@ -77,7 +77,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
             console.error(`Failed to fetch artist details`, err);
             setError('Si è verificato un errore nel caricare i dati. Riprova.');
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     }, [artistId]);
 
@@ -91,7 +91,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
     };
 
-    if (loading) {
+    if (isLoading) {
         const loadingIndicatorText = isNight ? 'text-zinc-400' : 'text-zinc-600';
         return (
             <div className="flex-grow flex flex-col justify-center items-center">
