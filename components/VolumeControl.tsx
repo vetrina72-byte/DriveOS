@@ -71,9 +71,13 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
 
     const handleVolumeChange = (newVolume: number) => {
         setVolume(newVolume);
-        if (isSliderVisible) {
-            resetAutoCloseTimer();
+        // If the slider is not visible, make it visible.
+        // This will handle the case when arrow buttons are clicked.
+        if (!isSliderVisible) {
+            setIsSliderVisible(true);
         }
+        // Always reset the auto-close timer on any volume interaction.
+        resetAutoCloseTimer();
     };
 
     const thumbSize = sliderThickness * 1.75;

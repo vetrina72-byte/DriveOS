@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiMic } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiMic, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 
 interface Show {
@@ -59,22 +59,36 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { playerState } = useAuth();
+    
+    const [offset, setOffset] = useState(0);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const limit = 50;
 
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window.current_track?.id;
+    
+    useEffect(() => {
+        setOffset(0);
+    }, [showId]);
 
     useEffect(() => {
         const fetchDetails = async () => {
             setLoading(true);
             setError(null);
             try {
-                // Fetch show details and episodes in parallel
-                const [showRes, episodesRes] = await Promise.all([
-                    apiClient.get(`/shows/${showId}`),
-                    apiClient.get(`/shows/${showId}/episodes?limit=50`)
-                ]);
-                setShow(showRes.data);
-                setEpisodes(episodesRes.data.items);
+                if (offset === 0) {
+                    const [showRes, episodesRes] = await Promise.all([
+                        apiClient.get(`/shows/${showId}`),
+                        apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`)
+                    ]);
+                    setShow(showRes.data);
+                    setEpisodes(episodesRes.data.items);
+                    setHasNextPage(episodesRes.data.next !== null);
+                } else {
+                    const episodesRes = await apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`);
+                    setEpisodes(episodesRes.data.items);
+                    setHasNextPage(episodesRes.data.next !== null);
+                }
             } catch (err) {
                 console.error(`Failed to fetch show details`, err);
                 setError(`Could not load show details.`);
@@ -84,7 +98,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         };
 
         fetchDetails();
-    }, [showId]);
+    }, [showId, offset]);
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -95,7 +109,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         placeholderIcon: isNight ? 'text-zinc-500' : 'text-zinc-600',
     };
 
-    if (loading) {
+    if (loading && offset === 0) {
         return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${theme.textSecondary}`} /></div>;
     }
 
@@ -105,13 +119,30 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     
     const sanitizedShowDescription = show.description.replace(/<[^>]*>?/gm, '');
 
+    const PaginationControls = () => {
+        const buttonClasses = `px-4 py-2 rounded-md font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isNight ? 'bg-white/10 hover:bg-white/20' : 'bg-black/10 hover:bg-black/20'}`;
+    
+        return (
+            <div className="flex justify-center items-center gap-4">
+                <button onClick={() => setOffset(prev => Math.max(0, prev - limit))} disabled={offset === 0 || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                    <FiChevronLeft className="w-5 h-5"/>
+                    Precedente
+                </button>
+                <button onClick={() => setOffset(prev => prev + limit)} disabled={!hasNextPage || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                    Successivo
+                    <FiChevronRight className="w-5 h-5"/>
+                </button>
+            </div>
+        );
+    };
+
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             {/* Header */}
             <header className="flex items-end gap-6 mb-6 pt-4">
                 <img src={show.images[0].url} alt={show.name} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
                 <div className="flex flex-col gap-3 self-end">
-                    <span className="text-sm font-bold uppercase">Podcast</span>
+                    <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Podcast</span>
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{show.name}</h1>
                     <p className={`text-lg font-semibold ${theme.textPrimary}`}>{show.publisher}</p>
                 </div>
@@ -120,7 +151,10 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             <p className={`mb-6 ${theme.textSecondary}`}>{sanitizedShowDescription}</p>
 
             {/* Episode List Header */}
-            <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Episodi</h2>
+            <div className="flex justify-between items-center mb-4">
+                <h2 className={`text-2xl font-bold ${theme.textPrimary}`}>Episodi</h2>
+                <PaginationControls />
+            </div>
             
             {/* Episode List */}
             <div className="flex flex-col gap-2">
@@ -159,6 +193,10 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                         </div>
                     );
                 })}
+            </div>
+
+            <div className="mt-6">
+                <PaginationControls />
             </div>
         </div>
     );
