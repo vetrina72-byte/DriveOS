@@ -607,6 +607,7 @@ export default function App() {
   }, []);
 
   const [activeApp, setActiveApp] = useState<string | null>(null);
+  const [isMapsLayered, setIsMapsLayered] = useState(false);
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [isWeatherModalOpen, setWeatherModalOpen] = useState(false);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
@@ -707,7 +708,7 @@ export default function App() {
   }, [activeApp, handleCancelNavigation]);
 
   const handleCloseMaps = () => {
-    setActiveApp(null);
+    toggleApp('maps');
   };
 
   useEffect(() => {
@@ -946,8 +947,22 @@ export default function App() {
   };
   
   const toggleApp = (appName: string) => {
-    setActiveApp(prevApp => (prevApp === appName ? null : appName));
-    setIsAppLauncherOpen(false); // Ensure launcher is closed if an app is toggled from the dock
+    setIsAppLauncherOpen(false); // Always close launcher
+
+    if (appName === 'spotify' && activeApp === 'maps') {
+        // SPECIAL CASE: Maps is open, open Spotify ON TOP.
+        setActiveApp('spotify');
+        setIsMapsLayered(true);
+    } else if (appName === 'spotify' && activeApp === 'spotify' && isMapsLayered) {
+        // SPECIAL CASE: Closing Spotify when Maps is layered underneath.
+        setActiveApp('maps');
+        setIsMapsLayered(false);
+    } else {
+        // REGULAR BEHAVIOR for all other cases
+        // This also resets layering when opening maps over spotify, or closing an app.
+        setIsMapsLayered(false);
+        setActiveApp(prevApp => (prevApp === appName ? null : appName));
+    }
   };
 
   const toggleLauncher = (e: React.MouseEvent) => {
@@ -1029,14 +1044,6 @@ export default function App() {
               sunriseArrowYPosition={sunriseArrowYPosition}
               tempUnit={tempUnit}
           />
-
-          <SpotifyApp 
-              isOpen={activeApp === 'spotify'} 
-              onClose={() => setActiveApp(null)} 
-              isNight={isNight}
-              spotifyPlayerTop={spotifyPlayerTop}
-              spotifyPlayerBottom={spotifyPlayerBottom}
-          />
           
           <div
             className="fixed z-10 w-full flex items-end justify-center"
@@ -1096,14 +1103,22 @@ export default function App() {
             dayPlayerButtonColor={dayPlayerButtonColor}
             nightPlayerButtonColor={nightPlayerButtonColor}
           />
-          
+
           <MapsContainer 
-              isOpen={activeApp === 'maps'}
+              isOpen={activeApp === 'maps' || isMapsLayered}
               onClose={handleCloseMaps}
               isNight={isNight}
               searchPanelWidth={mapsSearchPanelWidth}
               searchPanelTop={mapsSearchPanelTop}
               navigationTarget={navigationTarget}
+          />
+          
+          <SpotifyApp 
+              isOpen={activeApp === 'spotify'} 
+              onClose={() => toggleApp('spotify')} 
+              isNight={isNight}
+              spotifyPlayerTop={spotifyPlayerTop}
+              spotifyPlayerBottom={spotifyPlayerBottom}
           />
 
           <AppLauncher

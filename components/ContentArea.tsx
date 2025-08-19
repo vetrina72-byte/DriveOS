@@ -92,8 +92,9 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
 const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
   const { user, refreshTrigger } = useAuth();
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
   
   // States for each curated section
   const [continueListeningItems, setContinueListeningItems] = useState<SpotifyItem[]>([]);
@@ -108,7 +109,9 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   
   const fetchData = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    if (!hasFetchedOnce) {
+        setLoading(true);
+    }
     setError(null);
 
     // Reset states to ensure fresh data on re-fetch
@@ -188,14 +191,13 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
         setError("Could not load content. Please try again later.");
     } finally {
         setLoading(false);
+        setHasFetchedOnce(true);
     }
-}, [user]);
+}, [user, hasFetchedOnce]);
 
   useEffect(() => {
       if (user && startFetching) {
           fetchData();
-      } else {
-          setLoading(!startFetching);
       }
   }, [user, startFetching, fetchData, refreshTrigger]);
   
