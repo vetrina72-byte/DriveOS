@@ -11,10 +11,6 @@ interface CategoryPlaylistsViewProps {
     onBack: () => void;
 }
 
-// List of special category IDs that have curated playlists and work with the /browse/categories endpoint
-// but do not work with the genre-based search endpoint.
-const SPECIAL_PLAYLIST_CATEGORIES = ['toplists', '0JQ5DAqbMKF2JckPAnMAhA'];
-
 const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryId, title, isNight, onSelectItem, onBack }) => {
     const [playlists, setPlaylists] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -37,25 +33,13 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 setPlaylists([]);
             }
             try {
-                let response;
+                // The correct way to get playlists for a category is always this endpoint.
+                // The previous search-based method was unreliable.
+                const response = await apiClient.get(`/browse/categories/${categoryId}/playlists`, {
+                    params: { country: 'IT', limit, offset }
+                });
                 
-                if (SPECIAL_PLAYLIST_CATEGORIES.includes(categoryId)) {
-                     response = await apiClient.get(`/browse/categories/${categoryId}/playlists`, {
-                        params: { country: 'IT', limit, offset }
-                    });
-                } else {
-                    const searchQuery = `genre:"${title}"`;
-                    response = await apiClient.get(`/search`, {
-                        params: {
-                            q: searchQuery,
-                            type: 'playlist',
-                            market: 'IT',
-                            limit,
-                            offset,
-                        }
-                    });
-                }
-                
+                // The response for this endpoint might be different from search. It should have `response.data.playlists.items`.
                 if (response.data?.playlists?.items) {
                     setPlaylists(response.data.playlists.items);
                     setHasNextPage(response.data.playlists.next !== null);
@@ -65,7 +49,15 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 }
             } catch (err: any) {
                  console.error(`Failed to fetch playlists for category "${title}" (ID: ${categoryId})`, err);
-                 setError('Could not load playlists for this category.');
+                 // Provide a more specific error message if the API returns a 404 or other known issues.
+                 const spotifyError = err.response?.data?.error;
+                 if (spotifyError?.status === 404) {
+                     setError(`Non ci sono playlist disponibili per "${title}".`);
+                 } else {
+                     setError('Could not load playlists for this category.');
+                 }
+                 setPlaylists([]);
+                 setHasNextPage(false);
             } finally {
                 setLoading(false);
             }
