@@ -10,6 +10,9 @@ interface Show {
     description: string;
     images: { url: string }[];
     uri: string;
+    episodes: {
+        total: number;
+    }
 }
 
 interface Episode {
@@ -60,45 +63,63 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     const [error, setError] = useState<string | null>(null);
     const { playerState } = useAuth();
     
-    const [offset, setOffset] = useState(0);
-    const [hasNextPage, setHasNextPage] = useState(false);
+    const [totalEpisodes, setTotalEpisodes] = useState(0);
+    const [currentPage, setCurrentPage] = useState(1);
     const limit = 50;
 
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window.current_track?.id;
     
     useEffect(() => {
-        setOffset(0);
+        setShow(null);
+        setEpisodes([]);
+        setTotalEpisodes(0);
+        setCurrentPage(1);
+        setLoading(true);
+
+        const fetchShowInfo = async () => {
+            try {
+                const showRes = await apiClient.get(`/shows/${showId}`);
+                setShow(showRes.data);
+                setTotalEpisodes(showRes.data.episodes.total);
+            } catch (err) {
+                setError('Could not load show details.');
+                console.error(err);
+                setLoading(false);
+            }
+        };
+        fetchShowInfo();
     }, [showId]);
 
     useEffect(() => {
-        const fetchDetails = async () => {
+        if (totalEpisodes === 0) {
+            if (show) { // Show is loaded but has 0 episodes
+                setLoading(false);
+            }
+            return;
+        }
+
+        const fetchEpisodes = async () => {
             setLoading(true);
             setError(null);
+
+            const totalPages = Math.ceil(totalEpisodes / limit);
+            const pageToFetch = totalPages - currentPage;
+            const offset = Math.max(0, pageToFetch * limit);
+
             try {
-                if (offset === 0) {
-                    const [showRes, episodesRes] = await Promise.all([
-                        apiClient.get(`/shows/${showId}`),
-                        apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`)
-                    ]);
-                    setShow(showRes.data);
-                    setEpisodes(episodesRes.data.items);
-                    setHasNextPage(episodesRes.data.next !== null);
-                } else {
-                    const episodesRes = await apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`);
-                    setEpisodes(episodesRes.data.items);
-                    setHasNextPage(episodesRes.data.next !== null);
-                }
+                const episodesRes = await apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`);
+                setEpisodes(episodesRes.data.items.reverse());
             } catch (err) {
-                console.error(`Failed to fetch show details`, err);
-                setError(`Could not load show details.`);
+                setError('Could not load episodes.');
+                console.error(err);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchDetails();
-    }, [showId, offset]);
+        fetchEpisodes();
+    }, [showId, currentPage, totalEpisodes, show]);
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -109,26 +130,41 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         placeholderIcon: isNight ? 'text-zinc-500' : 'text-zinc-600',
     };
 
-    if (loading && offset === 0) {
+    if (loading && episodes.length === 0) {
         return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${theme.textSecondary}`} /></div>;
     }
 
     if (error || !show) {
         return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Show not found.'}</div>;
     }
+
+    const handlePlayShow = () => {
+        if (episodes.length > 0) {
+            onPlay({ uris: episodes.map(e => e.uri) });
+        }
+    };
+    
+    const handlePlayEpisode = (index: number) => {
+        const urisToPlay = episodes.slice(index).map(e => e.uri);
+        if (urisToPlay.length > 0) {
+            onPlay({ uris: urisToPlay });
+        }
+    };
     
     const sanitizedShowDescription = show.description.replace(/<[^>]*>?/gm, '');
 
     const PaginationControls = () => {
         const buttonClasses = `px-4 py-2 rounded-md font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isNight ? 'bg-white/10 hover:bg-white/20' : 'bg-black/10 hover:bg-black/20'}`;
+        const totalPages = Math.ceil(totalEpisodes / limit);
     
         return (
             <div className="flex justify-center items-center gap-4">
-                <button onClick={() => setOffset(prev => Math.max(0, prev - limit))} disabled={offset === 0 || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
                     <FiChevronLeft className="w-5 h-5"/>
                     Precedente
                 </button>
-                <button onClick={() => setOffset(prev => prev + limit)} disabled={!hasNextPage || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                 <span className={theme.textSecondary}>Pagina {currentPage} di {totalPages > 0 ? totalPages : 1}</span>
+                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage >= totalPages || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
                     Successivo
                     <FiChevronRight className="w-5 h-5"/>
                 </button>
@@ -153,7 +189,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             {/* Episode List Header */}
             <div className="flex justify-between items-center mb-4">
                 <h2 className={`text-2xl font-bold ${theme.textPrimary}`}>Episodi</h2>
-                <PaginationControls />
+                {totalEpisodes > limit && <PaginationControls />}
             </div>
             
             {/* Episode List */}
@@ -165,7 +201,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                     return (
                         <div 
                             key={`${episode.id}-${index}`}
-                            onClick={() => onPlay({ uris: [episode.uri] })}
+                            onClick={() => handlePlayEpisode(index)}
                             className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                         >
                             {episode.images?.[0]?.url ? (
@@ -187,7 +223,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                                     <span>{formatDuration(episode.duration_ms)}</span>
                                 </div>
                             </div>
-                            <button onClick={(e) => { e.stopPropagation(); onPlay({ uris: [episode.uri] }); }} className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0">
+                            <button onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }} className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0">
                                 <FiPlay className="w-5 h-5 ml-0.5" />
                             </button>
                         </div>
@@ -195,9 +231,11 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                 })}
             </div>
 
-            <div className="mt-6">
-                <PaginationControls />
-            </div>
+            {totalEpisodes > limit && (
+                <div className="mt-6">
+                    <PaginationControls />
+                </div>
+            )}
         </div>
     );
 };
