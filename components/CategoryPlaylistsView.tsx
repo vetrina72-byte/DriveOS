@@ -96,8 +96,23 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     }
 
     const validPlaylists = playlists.filter(Boolean);
+
+    const PaginationControls = () => {
+        const buttonClasses = `px-4 py-2 rounded-md font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isNight ? 'bg-white/10 hover:bg-white/20' : 'bg-black/10 hover:bg-black/20'}`;
     
-    const buttonClasses = `px-4 py-2 rounded-md font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isNight ? 'bg-white/10 hover:bg-white/20' : 'bg-black/10 hover:bg-black/20'}`;
+        return (
+            <div className="flex justify-center items-center gap-4">
+                <button onClick={handlePrev} disabled={offset === 0} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                    <FiChevronLeft className="w-5 h-5"/>
+                    Precedente
+                </button>
+                <button onClick={handleNext} disabled={!hasNextPage} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                    Successivo
+                    <FiChevronRight className="w-5 h-5"/>
+                </button>
+            </div>
+        );
+    };
 
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar flex flex-col">
@@ -105,6 +120,9 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
 
             {validPlaylists.length > 0 ? (
                 <>
+                    <div className="mb-6">
+                        <PaginationControls />
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                         {validPlaylists.map((playlist, index) => (
                             <PlaylistItem 
@@ -115,15 +133,8 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                             />
                         ))}
                     </div>
-                     <div className="mt-8 flex justify-center items-center gap-4">
-                        <button onClick={handlePrev} disabled={offset === 0} className={buttonClasses}>
-                            <FiChevronLeft className="w-5 h-5"/>
-                            Precedente
-                        </button>
-                        <button onClick={handleNext} disabled={!hasNextPage} className={buttonClasses}>
-                            Successivo
-                            <FiChevronRight className="w-5 h-5"/>
-                        </button>
+                     <div className="mt-8">
+                        <PaginationControls />
                     </div>
                 </>
             ) : (

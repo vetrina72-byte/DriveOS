@@ -3,7 +3,6 @@ import apiClient from '../api';
 import { FiPlay, FiLoader, FiMusic, FiAlertTriangle } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
-import ContentCarousel from './ContentCarousel';
 
 interface Artist {
     id: string;
@@ -13,7 +12,7 @@ interface Artist {
 }
 
 interface Track {
-    id: string;
+    id:string;
     name: string;
     artists: { name: string }[];
     album: { name: string; images: { url: string }[] };
@@ -22,8 +21,9 @@ interface Track {
     explicit: boolean;
 }
 
-interface Album extends SpotifyItem {
-    type: 'album';
+interface DiscographyItem extends SpotifyItem {
+    album_type: 'album' | 'single' | 'compilation';
+    release_date: string;
 }
 
 
@@ -63,8 +63,7 @@ const formatDuration = (ms: number) => {
 const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, onPlay, onSelectItem }) => {
     const [artist, setArtist] = useState<Artist | null>(null);
     const [tracks, setTracks] = useState<Track[]>([]);
-    const [albums, setAlbums] = useState<Album[]>([]);
-    const [singles, setSingles] = useState<Album[]>([]);
+    const [discography, setDiscography] = useState<DiscographyItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { playerState } = useAuth();
@@ -76,20 +75,17 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         setIsLoading(true);
         setError(null);
         setTracks([]);
-        setAlbums([]);
-        setSingles([]);
+        setDiscography([]);
 
         try {
             const [
                 artistRes,
                 topTracksRes,
-                albumsRes,
-                singlesRes,
+                discographyRes,
             ] = await Promise.allSettled([
                 apiClient.get(`/artists/${artistId}`),
                 apiClient.get(`/artists/${artistId}/top-tracks?market=IT`),
-                apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20&market=IT`),
-                apiClient.get(`/artists/${artistId}/albums?include_groups=single,appears_on&limit=20&market=IT`),
+                apiClient.get(`/artists/${artistId}/albums?include_groups=album,single,appears_on,compilation&limit=50&market=IT`),
             ]);
 
             if (artistRes.status === 'rejected') {
@@ -102,18 +98,10 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                 setTracks(topTracksRes.value.data.tracks);
             }
 
-            const albumItems: Album[] = albumsRes.status === 'fulfilled' && albumsRes.value.data.items ? albumsRes.value.data.items : [];
-            const singleItems: Album[] = singlesRes.status === 'fulfilled' && singlesRes.value.data.items ? singlesRes.value.data.items : [];
-
-            // De-duplicate using Map based on item ID
-            const uniqueAlbums = [...new Map(albumItems.map((item) => [item.id, item])).values()];
-            const uniqueSingles = [...new Map(singleItems.map((item) => [item.id, item])).values()];
-            
-            const albumIds = new Set(uniqueAlbums.map(a => a.id));
-            const filteredSingles = uniqueSingles.filter(s => !albumIds.has(s.id));
-
-            setAlbums(uniqueAlbums);
-            setSingles(filteredSingles);
+            if (discographyRes.status === 'fulfilled' && discographyRes.value.data.items) {
+                 const uniqueItems = [...new Map((discographyRes.value.data.items as DiscographyItem[]).filter(Boolean).map((item) => [item.id, item])).values()];
+                 setDiscography(uniqueItems);
+            }
 
         } catch (err: any) {
             console.error("Error loading artist details:", err);
@@ -221,24 +209,25 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                 </div>
             )}
 
-            {albums.length > 0 && (
-                <ContentCarousel 
-                    title="Album"
-                    items={albums}
-                    isNight={isNight}
-                    onSelectItem={onSelectItem}
-                    keyPrefix={`artist-albums-${artistId}`}
-                />
-            )}
-
-            {singles.length > 0 && (
-                <ContentCarousel 
-                    title="Singoli ed EP"
-                    items={singles}
-                    isNight={isNight}
-                    onSelectItem={onSelectItem}
-                    keyPrefix={`artist-singles-${artistId}`}
-                />
+            {discography.length > 0 && (
+                <section className="px-6 mt-8">
+                    <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Discografia</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                        {discography.map((item, index) => {
+                            const releaseType = item.album_type.charAt(0).toUpperCase() + item.album_type.slice(1);
+                            const year = new Date(item.release_date).getFullYear();
+                            const description = `${releaseType} • ${year}`;
+                            return (
+                                <PlaylistItem 
+                                    key={`discography-${item.id}-${index}`} 
+                                    item={{...item, description, type: 'album'}}
+                                    isNight={isNight} 
+                                    onSelectItem={onSelectItem} 
+                                />
+                            );
+                        })}
+                    </div>
+                </section>
             )}
         </div>
     );
