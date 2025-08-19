@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
-import { FiLoader } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import apiClient from '../api';
 
@@ -12,6 +11,25 @@ const getGreeting = () => {
   if (hour < 18) return "Buon pomeriggio";
   return "Buonasera";
 };
+
+const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
+    const bgColor = isNight ? 'bg-white/5' : 'bg-black/5';
+    return (
+        <div className="mb-8 px-6 animate-pulse">
+            <div className={`h-8 w-1/3 rounded-md mb-4 ${bgColor}`}></div>
+            <div className="flex gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className={`flex-shrink-0 w-44`}>
+                        <div className={`w-full aspect-square rounded-md ${bgColor}`}></div>
+                        <div className={`h-4 w-full rounded-md mt-3 ${bgColor}`}></div>
+                        <div className={`h-3 w-2/3 rounded-md mt-2 ${bgColor}`}></div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 
 const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
     const unifiedList: SpotifyItem[] = [];
@@ -114,17 +132,6 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
     }
     setError(null);
 
-    // Reset states to ensure fresh data on re-fetch
-    setContinueListeningItems([]);
-    setNewReleases([]);
-    setUserPlaylists([]);
-    setMadeForYouPlaylists([]);
-    setTopArtists([]);
-    setChartsPlaylists([]);
-    setGenresCategories([]);
-    setRecommendedShows([]);
-
-
     try {
       const randomOffset = Math.floor(Math.random() * 20);
       const madeForYouCategoryId = '0JQ5DAqbMKF2JckPAnMAhA';
@@ -205,7 +212,14 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const greeting = getGreeting();
 
   if (loading) {
-      return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${themeColor}`} /></div>;
+      return (
+          <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
+              <h1 className="text-3xl font-bold mb-8 px-6 text-transparent animate-pulse bg-gray-600/20 w-1/2 rounded-md h-9">.</h1>
+              <SkeletonCarousel isNight={isNight} />
+              <SkeletonCarousel isNight={isNight} />
+              <SkeletonCarousel isNight={isNight} />
+          </div>
+      );
   }
 
   if (error) {
@@ -222,28 +236,44 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       </h1>
       
       {continueListeningItems.length > 0 && (
-          <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
+          <div key={`${refreshTrigger}-cl`} className="animate-fadeInUp" style={{ animationDelay: '100ms' }}>
+              <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
+          </div>
       )}
        {madeForYouPlaylists.length > 0 && (
-          <ContentCarousel title="Le playlist create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
+          <div key={`${refreshTrigger}-mfy`} className="animate-fadeInUp" style={{ animationDelay: '150ms' }}>
+              <ContentCarousel title="Le playlist create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
+          </div>
       )}
       {userPlaylists.length > 0 && (
-          <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
+          <div key={`${refreshTrigger}-up`} className="animate-fadeInUp" style={{ animationDelay: '200ms' }}>
+              <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
+          </div>
       )}
       {chartsPlaylists.length > 0 && (
-          <ContentCarousel title="Classifiche" items={chartsPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
+           <div key={`${refreshTrigger}-ch`} className="animate-fadeInUp" style={{ animationDelay: '250ms' }}>
+              <ContentCarousel title="Classifiche" items={chartsPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
+          </div>
       )}
       {topArtists.length > 0 && (
-          <ContentCarousel title="I tuoi artisti del momento" items={topArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
+          <div key={`${refreshTrigger}-ta`} className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
+              <ContentCarousel title="I tuoi artisti del momento" items={topArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
+          </div>
       )}
       {newReleases.length > 0 && (
-          <ContentCarousel title="Nuove uscite" items={newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
+          <div key={`${refreshTrigger}-nr`} className="animate-fadeInUp" style={{ animationDelay: '350ms' }}>
+              <ContentCarousel title="Nuove uscite" items={newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
+          </div>
       )}
       {recommendedShows.length > 0 && (
-          <ContentCarousel title="Podcast consigliati" items={recommendedShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
+           <div key={`${refreshTrigger}-rs`} className="animate-fadeInUp" style={{ animationDelay: '400ms' }}>
+              <ContentCarousel title="Podcast consigliati" items={recommendedShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
+          </div>
       )}
       {genresCategories.length > 0 && (
-          <ContentCarousel title="Esplora per generi e mood" items={genresCategories} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
+          <div key={`${refreshTrigger}-gc`} className="animate-fadeInUp" style={{ animationDelay: '450ms' }}>
+              <ContentCarousel title="Esplora per generi e mood" items={genresCategories} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
+          </div>
       )}
     </div>
   );

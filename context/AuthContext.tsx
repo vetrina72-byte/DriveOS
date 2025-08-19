@@ -80,10 +80,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const refreshHomePage = useCallback(() => {
-        // Add a small delay to give Spotify's API time to update "recently played"
-        setTimeout(() => {
-            setRefreshTrigger(prev => prev + 1);
-        }, 1000);
+        setRefreshTrigger(prev => prev + 1);
     }, []);
     
     useEffect(() => {
