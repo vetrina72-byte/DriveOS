@@ -1,9 +1,10 @@
+
+
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiMusic, FiAlertTriangle } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
-import ContentCarousel from './ContentCarousel';
 
 interface Artist {
     id: string;
@@ -21,6 +22,11 @@ interface Track {
     uri: string;
     explicit: boolean;
 }
+
+interface Album extends SpotifyItem {
+    type: 'album';
+}
+
 
 interface ArtistDetailViewProps {
     artistId: string;
@@ -57,12 +63,10 @@ const formatDuration = (ms: number) => {
 
 const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, onPlay, onSelectItem }) => {
     const [artist, setArtist] = useState<Artist | null>(null);
-    const [topTracks, setTopTracks] = useState<Track[]>([]);
-    const [albums, setAlbums] = useState<SpotifyItem[]>([]);
-    const [singles, setSingles] = useState<SpotifyItem[]>([]);
+    const [tracks, setTracks] = useState<Track[]>([]);
+    const [albums, setAlbums] = useState<Album[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isFollowing, setIsFollowing] = useState(false);
     const { playerState } = useAuth();
 
     const isPlayingContext = playerState && !playerState.paused;
@@ -71,96 +75,51 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const fetchDetails = useCallback(async () => {
         setIsLoading(true);
         setError(null);
+        setTracks([]);
+        setAlbums([]);
         try {
-            // Step 1: Fetch critical artist and follow info. If this fails, the whole page fails.
-            const [artistRes, followingStatusRes] = await Promise.all([
-                apiClient.get(`/artists/${artistId}`),
-                apiClient.get(`/me/following/contains?type=artist&ids=${artistId}`)
-            ]);
-            setArtist(artistRes.data);
-            setIsFollowing(followingStatusRes.data[0]);
+            const artistDetailsPromise = apiClient.get(`/artists/${artistId}`);
     
-            // Step 2: Try to fetch top tracks (Plan A & B)
-            try {
-                // Plan A: with market
-                const topTracksRes = await apiClient.get(`/artists/${artistId}/top-tracks?market=IT`);
-                setTopTracks(topTracksRes.data.tracks.slice(0, 5));
-                
-                // If top tracks succeed, fetch albums/singles for the rest of the page
-                const [albumsRes, singlesRes] = await Promise.all([
-                    apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20`),
-                    apiClient.get(`/artists/${artistId}/albums?include_groups=single&limit=20`)
-                ]);
-                setAlbums(albumsRes.data.items.filter((album: any, index: number, self: any[]) => index === self.findIndex((a) => a.name === album.name)));
-                setSingles(singlesRes.data.items.filter((single: any, index: number, self: any[]) => index === self.findIndex((s) => s.name === single.name)));
-    
-            } catch (topTracksError: any) {
-                console.warn("Top tracks (market=IT) failed:", topTracksError.message);
-                // Plan B: global top tracks
-                try {
-                    const topTracksGlobalRes = await apiClient.get(`/artists/${artistId}/top-tracks`);
-                    setTopTracks(topTracksGlobalRes.data.tracks.slice(0, 5));
-    
-                    // If this succeeds, still fetch albums/singles
-                    const [albumsRes, singlesRes] = await Promise.all([
-                        apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20`),
-                        apiClient.get(`/artists/${artistId}/albums?include_groups=single&limit=20`)
-                    ]);
-                    setAlbums(albumsRes.data.items.filter((album: any, index: number, self: any[]) => index === self.findIndex((a) => a.name === album.name)));
-                    setSingles(singlesRes.data.items.filter((single: any, index: number, self: any[]) => index === self.findIndex((s) => s.name === single.name)));
-    
-                } catch (topTracksGlobalError: any) {
-                    console.warn("Top tracks (global) also failed:", topTracksGlobalError.message);
-                    
-                    // Plan C: Fetch albums/singles as the only content
-                    try {
-                        setTopTracks([]); // No top tracks to show
-                        const [albumsRes, singlesRes] = await Promise.all([
-                            apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20`),
-                            apiClient.get(`/artists/${artistId}/albums?include_groups=single&limit=20`)
-                        ]);
-                        const fetchedAlbums = albumsRes.data.items.filter((album: any, index: number, self: any[]) => index === self.findIndex((a) => a.name === album.name));
-                        const fetchedSingles = singlesRes.data.items.filter((single: any, index: number, self: any[]) => index === self.findIndex((s) => s.name === single.name));
-                        
-                        setAlbums(fetchedAlbums);
-                        setSingles(fetchedSingles);
-                    } catch (albumError: any) {
-                         // This is the final failure point. Re-throw to be caught by the outer block.
-                        console.error("Plan C (albums) also failed:", albumError.message);
-                        throw albumError;
-                    }
+            const contentPromise = apiClient.get(`/artists/${artistId}/top-tracks?market=IT`)
+              .catch((err: any) => {
+                console.warn("Top tracks for IT failed. Falling back to global.", err.response?.status);
+                if (err.response) {
+                  return apiClient.get(`/artists/${artistId}/top-tracks`);
                 }
+                throw err;
+              })
+              .catch((err: any) => {
+                console.warn("Global top tracks failed. Falling back to albums.", err.response?.status);
+                if (err.response) {
+                  return apiClient.get(`/artists/${artistId}/albums?include_groups=album,single&limit=20`);
+                }
+                throw err;
+              });
+    
+            const [artistResponse, contentResponse] = await Promise.all([
+              artistDetailsPromise,
+              contentPromise
+            ]);
+    
+            setArtist(artistResponse.data);
+    
+            if (contentResponse.data.tracks) {
+                setTracks(contentResponse.data.tracks);
+            } else if (contentResponse.data.items) {
+                setAlbums(contentResponse.data.items);
             }
+    
         } catch (err: any) {
-            // This outer catch handles critical failures from step 1 or the final fallback failure from step 2.
-            console.error("Failed to load artist details after all fallbacks:", err);
+            console.error("Final error loading artist details:", err);
             setError("Impossibile caricare i dettagli dell'artista in questo momento.");
         } finally {
             setIsLoading(false);
         }
     }, [artistId]);
-    
+
     useEffect(() => {
         fetchDetails();
     }, [fetchDetails]);
-
-    const handleFollowToggle = async () => {
-        if (!artist) return;
-    
-        const shouldFollow = !isFollowing;
-        setIsFollowing(shouldFollow); // Optimistic update
-    
-        try {
-            if (shouldFollow) {
-                await apiClient.put(`/me/following?type=artist&ids=${artist.id}`);
-            } else {
-                await apiClient.delete(`/me/following?type=artist&ids=${artist.id}`);
-            }
-        } catch (e) {
-            console.error("Failed to toggle follow", e);
-            setIsFollowing(!shouldFollow); // Revert on error
-        }
-    };
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -195,11 +154,11 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         return <div className="flex-grow flex justify-center items-center text-red-400">Artist not found.</div>;
     }
     
-    const trackUris = topTracks.map(t => t.uri);
+    const trackUris = tracks.map(t => t.uri);
 
     return (
-        <div className="flex-grow overflow-y-auto pb-6">
-            <header className="flex items-end gap-6 mb-6 pt-4 px-6">
+        <div className="flex-grow overflow-y-auto px-6 pb-6">
+            <header className="flex items-end gap-6 mb-6 pt-4">
                 {artist.images?.[0]?.url ? (
                     <img src={artist.images[0].url} alt={artist.name} className="w-48 h-48 rounded-full object-cover shadow-2xl" />
                 ) : (
@@ -210,81 +169,67 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                 <div className="flex flex-col gap-3">
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{artist.name}</h1>
                     <p className={`text-sm ${theme.textSecondary}`}>{formatFollowers(artist.followers.total)} followers</p>
-                    <div className="flex items-center gap-4 mt-4">
-                        {topTracks.length > 0 && (
-                            <button onClick={() => onPlay({ uris: trackUris })} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
-                                <FiPlay className="w-7 h-7 ml-1" />
-                            </button>
-                        )}
-                        <button
-                            onClick={handleFollowToggle}
-                            className="p-2 text-gray-400 hover:text-white transition-colors"
-                            aria-label={isFollowing ? 'Smetti di seguire' : 'Segui'}
-                        >
-                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400' : ''}`} />
+                    {tracks.length > 0 && (
+                        <button onClick={() => onPlay({ uris: trackUris })} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+                            <FiPlay className="w-7 h-7 ml-1" />
                         </button>
-                    </div>
+                    )}
                 </div>
             </header>
 
-            <main className="flex flex-col gap-8">
-                {topTracks.length > 0 && (
-                    <section className="px-6">
-                        <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
-                        <div className="flex flex-col">
-                            {topTracks.map((track, index) => {
-                                const isPlaying = isPlayingContext && track.id === currentTrackId;
-                                const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+            {tracks.length > 0 && (
+                <>
+                    <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
+                    <div className="flex flex-col">
+                        {tracks.map((track, index) => {
+                            const isPlaying = isPlayingContext && track.id === currentTrackId;
+                            const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
-                                return (
-                                    <div 
-                                        key={track.id + index}
-                                        onClick={() => onPlay({ uris: trackUris, offset: { position: index } })}
-                                        className={`flex items-center gap-4 p-2 rounded-md cursor-pointer ${theme.hover}`}
-                                    >
-                                        <div className="w-8 text-center font-medium">
-                                            {isPlaying ? (
-                                                <AnimatedEqualizer className={`mx-auto ${activeColor}`} />
-                                            ) : (
-                                                <span className={theme.textSecondary}>{index + 1}</span>
-                                            )}
-                                        </div>
-                                        <img 
-                                          src={track.album.images?.[2]?.url || track.album.images?.[0]?.url} 
-                                          alt={track.album.name} 
-                                          className="w-10 h-10 rounded flex-shrink-0 object-cover" 
-                                        />
-                                        <div className="flex-grow flex flex-col overflow-hidden">
-                                            <span className={`truncate font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
-                                        </div>
-                                        <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
+                            return (
+                                <div 
+                                    key={track.id + index}
+                                    onClick={() => onPlay({ uris: trackUris, offset: { position: index } })}
+                                    className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                                >
+                                    <div className="w-8 text-center font-medium">
+                                        {isPlaying ? (
+                                            <AnimatedEqualizer className={`mx-auto ${activeColor}`} />
+                                        ) : (
+                                            <span className={theme.textSecondary}>{index + 1}</span>
+                                        )}
                                     </div>
-                                )
-                            })}
-                        </div>
-                    </section>
-                )}
+                                    <img 
+                                      src={track.album.images?.[2]?.url || track.album.images?.[0]?.url} 
+                                      alt={track.album.name} 
+                                      className="w-10 h-10 rounded flex-shrink-0 object-cover" 
+                                    />
+                                    <div className="flex-grow flex flex-col overflow-hidden">
+                                        <span className={`truncate font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
+                                        {track.explicit && <span className="text-xs text-zinc-400">Explicit</span>}
+                                    </div>
+                                    <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </>
+            )}
 
-                {albums.length > 0 && (
-                     <ContentCarousel 
-                        title="Album"
-                        items={albums}
-                        isNight={isNight}
-                        onSelectItem={onSelectItem}
-                        keyPrefix="artist-albums"
-                    />
-                )}
-
-                {singles.length > 0 && (
-                    <ContentCarousel
-                        title="Singoli ed EP"
-                        items={singles}
-                        isNight={isNight}
-                        onSelectItem={onSelectItem}
-                        keyPrefix="artist-singles"
-                    />
-                )}
-            </main>
+            {albums.length > 0 && (
+                 <>
+                    <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Album e Singoli</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                        {albums.map((album, index) => (
+                             <PlaylistItem 
+                                key={`artist-album-${album.id}-${index}`} 
+                                item={album} 
+                                isNight={isNight} 
+                                onSelectItem={onSelectItem} 
+                             />
+                        ))}
+                    </div>
+                </>
+            )}
         </div>
     );
 };
