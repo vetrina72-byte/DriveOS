@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
@@ -210,6 +211,7 @@ const SpotifyPlayer = ({
                             artistId={view.id!}
                             isNight={isNight}
                             onPlay={play}
+                            onSelectItem={handleSelectItem}
                         />
                     )}
                      {view.type === 'show' && (
