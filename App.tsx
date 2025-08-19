@@ -585,10 +585,14 @@ export default function App() {
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
-  const [volumeIconSize, setVolumeIconSize] = useState(24);
-  const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(27);
-  const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-104);
-  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(50);
+  const [volumeIconSize, setVolumeIconSize] = useState(30);
+  const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
+  const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-128);
+  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(100);
+  const [volumeSliderWidth, setVolumeSliderWidth] = useState(177);
+  const [volumeSliderThickness, setVolumeSliderThickness] = useState(6);
+  const [volumeSliderPopupWidth, setVolumeSliderPopupWidth] = useState(247);
+  const [volumeSliderPopupHeight, setVolumeSliderPopupHeight] = useState(40);
 
   // Debug UI Colors
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
@@ -1157,7 +1161,15 @@ export default function App() {
             </div>
             <div className="flex-1 flex justify-end">
                 <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
-                    <VolumeControl iconSize={volumeIconSize} sliderOffsetY={volumeSliderOffsetY} sliderOffsetX={volumeSliderOffsetX}/>
+                    <VolumeControl 
+                        iconSize={volumeIconSize} 
+                        sliderOffsetY={volumeSliderOffsetY} 
+                        sliderOffsetX={volumeSliderOffsetX}
+                        sliderWidth={volumeSliderWidth}
+                        sliderThickness={volumeSliderThickness}
+                        sliderPopupWidth={volumeSliderPopupWidth}
+                        sliderPopupHeight={volumeSliderPopupHeight}
+                    />
                 </div>
             </div>
           </footer>
@@ -1255,6 +1267,14 @@ export default function App() {
             setVolumeSliderOffsetX={setVolumeSliderOffsetX}
             volumeControlMarginRight={volumeControlMarginRight}
             setVolumeControlMarginRight={setVolumeControlMarginRight}
+            volumeSliderWidth={volumeSliderWidth}
+            setVolumeSliderWidth={setVolumeSliderWidth}
+            volumeSliderThickness={volumeSliderThickness}
+            setVolumeSliderThickness={setVolumeSliderThickness}
+            volumeSliderPopupWidth={volumeSliderPopupWidth}
+            setVolumeSliderPopupWidth={setVolumeSliderPopupWidth}
+            volumeSliderPopupHeight={volumeSliderPopupHeight}
+            setVolumeSliderPopupHeight={setVolumeSliderPopupHeight}
         />
         </div>
       </AuthProvider>

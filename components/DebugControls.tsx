@@ -96,6 +96,14 @@ interface DebugControlsProps {
   setVolumeSliderOffsetX: (offset: number) => void;
   volumeControlMarginRight: number;
   setVolumeControlMarginRight: (margin: number) => void;
+  volumeSliderWidth: number;
+  setVolumeSliderWidth: (width: number) => void;
+  volumeSliderThickness: number;
+  setVolumeSliderThickness: (thickness: number) => void;
+  volumeSliderPopupWidth: number;
+  setVolumeSliderPopupWidth: (width: number) => void;
+  volumeSliderPopupHeight: number;
+  setVolumeSliderPopupHeight: (height: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -223,6 +231,14 @@ export default function DebugControls({
   setVolumeSliderOffsetX,
   volumeControlMarginRight,
   setVolumeControlMarginRight,
+  volumeSliderWidth,
+  setVolumeSliderWidth,
+  volumeSliderThickness,
+  setVolumeSliderThickness,
+  volumeSliderPopupWidth,
+  setVolumeSliderPopupWidth,
+  volumeSliderPopupHeight,
+  setVolumeSliderPopupHeight,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -274,10 +290,14 @@ export default function DebugControls({
     setDayPlayerButtonColor('#454545');
     setNightPlayerButtonColor('#ffffff');
     setWidgetBgHex('#ffffff');
-    setVolumeIconSize(24);
-    setVolumeSliderOffsetY(27);
-    setVolumeSliderOffsetX(-104);
-    setVolumeControlMarginRight(50);
+    setVolumeIconSize(30);
+    setVolumeSliderOffsetY(36);
+    setVolumeSliderOffsetX(-128);
+    setVolumeControlMarginRight(100);
+    setVolumeSliderWidth(177);
+    setVolumeSliderThickness(6);
+    setVolumeSliderPopupWidth(247);
+    setVolumeSliderPopupHeight(40);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -731,7 +751,23 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="volume-control-margin">Control Right Margin: {volumeControlMarginRight}px</label>
-              <input id="volume-control-margin" type="range" min="0" max="50" value={volumeControlMarginRight} onChange={(e) => setVolumeControlMarginRight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="volume-control-margin" type="range" min="0" max="100" value={volumeControlMarginRight} onChange={(e) => setVolumeControlMarginRight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="volume-slider-width">Slider Length: {volumeSliderWidth}px</label>
+              <input id="volume-slider-width" type="range" min="80" max="200" value={volumeSliderWidth} onChange={(e) => setVolumeSliderWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="volume-slider-thickness">Slider Thickness: {volumeSliderThickness}px</label>
+              <input id="volume-slider-thickness" type="range" min="4" max="16" value={volumeSliderThickness} onChange={(e) => setVolumeSliderThickness(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+                <label htmlFor="volume-popup-width">Popup Width: {volumeSliderPopupWidth}px</label>
+                <input id="volume-popup-width" type="range" min="100" max="300" value={volumeSliderPopupWidth} onChange={(e) => setVolumeSliderPopupWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+                <label htmlFor="volume-popup-height">Popup Height: {volumeSliderPopupHeight}px</label>
+                <input id="volume-popup-height" type="range" min="30" max="100" value={volumeSliderPopupHeight} onChange={(e) => setVolumeSliderPopupHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 

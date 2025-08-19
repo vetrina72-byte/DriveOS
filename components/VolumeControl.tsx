@@ -7,9 +7,13 @@ interface VolumeControlProps {
     iconSize: number;
     sliderOffsetY: number;
     sliderOffsetX: number;
+    sliderWidth: number;
+    sliderThickness: number;
+    sliderPopupWidth: number;
+    sliderPopupHeight: number;
 }
 
-const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, sliderOffsetX }) => {
+const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, sliderOffsetX, sliderWidth, sliderThickness, sliderPopupWidth, sliderPopupHeight }) => {
     const { volume, setVolume, isMuted } = useAuth();
     const [isSliderVisible, setIsSliderVisible] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -72,6 +76,9 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
         }
     };
 
+    const thumbSize = sliderThickness * 1.75;
+    const thumbMarginTop = (thumbSize - sliderThickness) / -2;
+
     return (
         <div ref={containerRef} className="relative flex items-center gap-1 text-gray-400">
             {isSliderVisible && (
@@ -83,7 +90,13 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
                         marginBottom: `${sliderOffsetY}px`,
                     }}
                 >
-                    <div className="volume-slider-popup-container">
+                    <div 
+                        className="volume-slider-popup-container"
+                        style={{
+                            width: `${sliderPopupWidth}px`,
+                            height: `${sliderPopupHeight}px`,
+                        }}
+                    >
                         <input
                             type="range"
                             min="0"
@@ -93,7 +106,13 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
                             onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
                             className="volume-slider"
                             aria-label="Volume slider"
-                            style={{ '--volume-progress': `${volume * 100}%` } as React.CSSProperties}
+                            style={{
+                                '--volume-progress': `${volume * 100}%`,
+                                '--volume-track-height': `${sliderThickness}px`,
+                                '--volume-thumb-size': `${thumbSize}px`,
+                                '--volume-thumb-margin-top': `${thumbMarginTop}px`,
+                                width: `${sliderWidth}px`,
+                            } as React.CSSProperties}
                         />
                     </div>
                 </div>
