@@ -22,7 +22,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     // Effect to reset offset when category changes
     useEffect(() => {
         setOffset(0);
-    }, [categoryId, title]);
+    }, [title]);
 
     useEffect(() => {
         const fetchPlaylists = async () => {
@@ -33,13 +33,14 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 setPlaylists([]);
             }
             try {
-                // The correct way to get playlists for a category is always this endpoint.
-                // The previous search-based method was unreliable.
-                const response = await apiClient.get(`/browse/categories/${categoryId}/playlists`, {
-                    params: { country: 'IT', limit, offset }
-                });
+                // Switched from /browse/categories/{id}/playlists to the /search endpoint
+                // as requested to fix 404 errors on certain categories. The category name (title)
+                // is used as the search query.
+                const encodedCategoryName = encodeURIComponent(title);
+                const response = await apiClient.get(
+                    `/search?q=genre:"${encodedCategoryName}"&type=playlist&limit=${limit}&offset=${offset}`
+                );
                 
-                // The response for this endpoint might be different from search. It should have `response.data.playlists.items`.
                 if (response.data?.playlists?.items) {
                     setPlaylists(response.data.playlists.items);
                     setHasNextPage(response.data.playlists.next !== null);
@@ -48,14 +49,8 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                     setHasNextPage(false);
                 }
             } catch (err: any) {
-                 console.error(`Failed to fetch playlists for category "${title}" (ID: ${categoryId})`, err);
-                 // Provide a more specific error message if the API returns a 404 or other known issues.
-                 const spotifyError = err.response?.data?.error;
-                 if (spotifyError?.status === 404) {
-                     setError(`Non ci sono playlist disponibili per "${title}".`);
-                 } else {
-                     setError('Could not load playlists for this category.');
-                 }
+                 console.error(`Failed to fetch playlists for category "${title}"`, err);
+                 setError('Could not load playlists for this category.');
                  setPlaylists([]);
                  setHasNextPage(false);
             } finally {
@@ -63,10 +58,10 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
             }
         };
 
-        if (categoryId && title) {
+        if (title) {
             fetchPlaylists();
         }
-    }, [categoryId, title, offset, limit]);
+    }, [title, offset, limit]);
 
     const handlePrev = () => {
         setOffset(prev => Math.max(0, prev - limit));
@@ -79,7 +74,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
     const textColor = isNight ? 'text-white' : 'text-black';
 
-    if (loading) {
+    if (loading && offset === 0) { // Only show full loader on initial page load
         return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${themeColor}`} /></div>;
     }
 
@@ -87,6 +82,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
         return <div className="flex-grow flex justify-center items-center text-red-400">{error}</div>;
     }
 
+    // Filter out any null items from the results to prevent crashes
     const validPlaylists = playlists.filter(Boolean);
 
     const PaginationControls = () => {
@@ -94,11 +90,11 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     
         return (
             <div className="flex justify-center items-center gap-4">
-                <button onClick={handlePrev} disabled={offset === 0} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                <button onClick={handlePrev} disabled={offset === 0 || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
                     <FiChevronLeft className="w-5 h-5"/>
                     Precedente
                 </button>
-                <button onClick={handleNext} disabled={!hasNextPage} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
+                <button onClick={handleNext} disabled={!hasNextPage || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
                     Successivo
                     <FiChevronRight className="w-5 h-5"/>
                 </button>
