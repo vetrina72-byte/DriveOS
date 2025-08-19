@@ -16,35 +16,42 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     const [playlists, setPlaylists] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isEmpty, setIsEmpty] = useState(false);
 
     useEffect(() => {
         const fetchPlaylists = async () => {
             setLoading(true);
             setError(null);
-            setIsEmpty(false);
             setPlaylists([]); // Clear previous results
             try {
-                const response = await apiClient.get(`/browse/categories/${categoryId}/playlists`, {
-                    params: { 
-                        country: 'IT',
-                        limit: 50 
+                // Use the search endpoint with a genre filter instead of the obsolete category endpoint
+                const searchQuery = `genre:"${title}"`;
+                const response = await apiClient.get(`/search`, {
+                    params: {
+                        q: searchQuery,
+                        type: 'playlist',
+                        market: 'IT',
+                        limit: 50,
                     }
                 });
+                
                 if (response.data?.playlists?.items && response.data.playlists.items.length > 0) {
                     setPlaylists(response.data.playlists.items);
                 } else {
-                    setIsEmpty(true);
+                    // If no items, playlists array remains empty, triggering the "not found" message
+                    setPlaylists([]);
                 }
             } catch (err: any) {
-                 console.error(`Failed to fetch playlists for category ${categoryId}`, err);
+                 console.error(`Failed to search for playlists in category "${title}"`, err);
                  setError('Could not load playlists for this category.');
             } finally {
                 setLoading(false);
             }
         };
-        fetchPlaylists();
-    }, [categoryId]);
+
+        if (categoryId && title) {
+            fetchPlaylists();
+        }
+    }, [categoryId, title]);
 
     const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
     const textColor = isNight ? 'text-white' : 'text-black';
@@ -74,7 +81,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 </div>
             ) : (
                 <div className={`text-center mt-10 text-lg ${themeColor}`}>
-                    Spiacenti, non abbiamo trovato playlist per questa categoria. Prova con un altro genere!
+                    {`Nessuna playlist trovata per il genere "${title}".`}
                 </div>
             )}
         </div>
