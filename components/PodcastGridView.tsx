@@ -14,9 +14,34 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
             setLoading(true);
             setError(null);
             try {
-                const response = await apiClient.get('/me/shows?limit=50');
-                // The API returns SavedShowObjects, we need to map to the show property
-                setShows(response.data.items.map((item: any) => item.show));
+                // First, get the list of saved shows. This response contains simplified show objects.
+                const savedShowsResponse = await apiClient.get('/me/shows?limit=50');
+                const savedItems = savedShowsResponse.data.items;
+
+                if (!savedItems || savedItems.length === 0) {
+                    setShows([]);
+                    setLoading(false);
+                    return;
+                }
+
+                // Extract the IDs of the shows to fetch their full details.
+                const showIds = savedItems.map((item: any) => item.show.id).filter(Boolean);
+
+                if (showIds.length === 0) {
+                    setShows([]);
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch the full details for all shows in a single batch request.
+                // This provides access to higher resolution images than the simplified objects.
+                const fullShowsResponse = await apiClient.get(`/shows?ids=${showIds.join(',')}`);
+                
+                // The API returns a `shows` array. Filter out any null entries for shows that might not have been found.
+                const fullShows = fullShowsResponse.data.shows.filter(Boolean);
+                
+                setShows(fullShows);
+
             } catch (err) {
                 console.error('Failed to fetch podcasts/shows', err);
                 setError('Could not load your podcasts.');
