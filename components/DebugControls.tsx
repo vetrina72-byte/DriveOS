@@ -88,6 +88,14 @@ interface DebugControlsProps {
   setNightPlayerButtonColor: (color: string) => void;
   widgetBgHex: string;
   setWidgetBgHex: (color: string) => void;
+  volumeIconSize: number;
+  setVolumeIconSize: (size: number) => void;
+  volumeSliderOffsetY: number;
+  setVolumeSliderOffsetY: (offset: number) => void;
+  volumeSliderOffsetX: number;
+  setVolumeSliderOffsetX: (offset: number) => void;
+  volumeControlMarginRight: number;
+  setVolumeControlMarginRight: (margin: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -207,6 +215,14 @@ export default function DebugControls({
   setNightPlayerButtonColor,
   widgetBgHex,
   setWidgetBgHex,
+  volumeIconSize,
+  setVolumeIconSize,
+  volumeSliderOffsetY,
+  setVolumeSliderOffsetY,
+  volumeSliderOffsetX,
+  setVolumeSliderOffsetX,
+  volumeControlMarginRight,
+  setVolumeControlMarginRight,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -258,6 +274,10 @@ export default function DebugControls({
     setDayPlayerButtonColor('#454545');
     setNightPlayerButtonColor('#ffffff');
     setWidgetBgHex('#ffffff');
+    setVolumeIconSize(24);
+    setVolumeSliderOffsetY(27);
+    setVolumeSliderOffsetX(-104);
+    setVolumeControlMarginRight(50);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -271,6 +291,7 @@ export default function DebugControls({
 
   return (
     <div 
+      id="debug-panel"
       className="absolute bottom-36 right-4 z-50 bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto"
       onClick={stopPropagation}
       role="dialog"
@@ -691,6 +712,26 @@ export default function DebugControls({
                   <label htmlFor="nav-tool-width-slider">Width: {navigateToolWidth}px</label>
                   <input id="nav-tool-width-slider" type="range" min="300" max="600" step="1" value={navigateToolWidth} onChange={(e) => setNavigateToolWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Volume Control Layout</h3>
+            <div>
+              <label htmlFor="volume-icon-size">Icon Size: {volumeIconSize}px</label>
+              <input id="volume-icon-size" type="range" min="16" max="48" value={volumeIconSize} onChange={(e) => setVolumeIconSize(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="volume-slider-offset">Slider Vertical Offset: {volumeSliderOffsetY}px</label>
+              <input id="volume-slider-offset" type="range" min="0" max="50" value={volumeSliderOffsetY} onChange={(e) => setVolumeSliderOffsetY(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+             <div className="mt-2">
+              <label htmlFor="volume-slider-offset-x">Slider Horizontal Offset: {volumeSliderOffsetX}px</label>
+              <input id="volume-slider-offset-x" type="range" min="-200" max="200" value={volumeSliderOffsetX} onChange={(e) => setVolumeSliderOffsetX(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="volume-control-margin">Control Right Margin: {volumeControlMarginRight}px</label>
+              <input id="volume-control-margin" type="range" min="0" max="50" value={volumeControlMarginRight} onChange={(e) => setVolumeControlMarginRight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 

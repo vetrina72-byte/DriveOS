@@ -173,7 +173,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     dayPlayerButtonColor,
     nightPlayerButtonColor,
 }) => {
-    const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState } = useAuth();
+    const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -191,6 +191,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
     const currentTrackUri = playerState?.track_window.current_track?.uri;
+    const internalVolumeUpdate = useRef(false);
+
+    // Effect to update SDK when context volume changes (e.g., from UI)
+    useEffect(() => {
+        if (playerRef.current && typeof volume === 'number') {
+            if (internalVolumeUpdate.current) {
+                internalVolumeUpdate.current = false;
+                return;
+            }
+            playerRef.current.setVolume(volume).catch(e => console.error("Failed to set Spotify volume", e));
+        }
+    }, [volume]);
 
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
@@ -271,7 +283,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 setDeviceId(null);
                 setPlayerStatus('connecting');
             });
-            player.on('player_state_changed', _setPlayerState);
+            
+            player.on('player_state_changed', (state) => {
+                _setPlayerState(state);
+                player.getVolume().then(sdkVolume => {
+                    if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
+                        internalVolumeUpdate.current = true; // Flag this as an SDK-initiated update
+                        setVolume(sdkVolume);
+                    }
+                });
+            });
 
             const handleError = (error: { message: string }) => {
                 console.error("Spotify Player Error:", error.message);
@@ -291,7 +312,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState]);
+    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume]);
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {

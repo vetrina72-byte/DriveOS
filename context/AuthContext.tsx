@@ -18,9 +18,12 @@ interface AuthState {
     isLoading: boolean;
     error: string | null;
     playerState: SpotifyPlayerState | null;
+    volume: number;
+    isMuted: boolean;
+    lastVolume: number;
 }
 
-interface AuthContextType extends AuthState {
+interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
     login: (authCode?: string | null, error?: string) => Promise<void>;
     logout: () => void;
     clearError: () => void;
@@ -28,6 +31,8 @@ interface AuthContextType extends AuthState {
     setDeviceId: (id: string | null) => void;
     refreshTrigger: number;
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
+    setVolume: (level: number) => void;
+    toggleMute: () => void;
 }
 
 interface PlayOptions {
@@ -50,6 +55,9 @@ const initialState: AuthState = {
     isLoading: true,
     error: null,
     playerState: null,
+    volume: 1,
+    isMuted: false,
+    lastVolume: 1,
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -81,6 +89,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const refreshHomePage = useCallback(() => {
         setRefreshTrigger(prev => prev + 1);
+    }, []);
+
+    const setVolume = useCallback((level: number) => {
+        const newVolume = Math.max(0, Math.min(1, level));
+        setState(s => {
+            if (s.volume === newVolume) return s;
+            return {
+                ...s,
+                volume: newVolume,
+                isMuted: newVolume === 0,
+                ...(newVolume > 0 && { lastVolume: newVolume }),
+            };
+        });
+    }, []);
+
+    const toggleMute = useCallback(() => {
+        setState(s => {
+            const newMuted = !s.isMuted;
+            const newVolume = newMuted ? 0 : (s.lastVolume > 0 ? s.lastVolume : 0.5);
+            return {
+                ...s,
+                volume: newVolume,
+                isMuted: newVolume === 0,
+            };
+        });
     }, []);
     
     useEffect(() => {
@@ -189,7 +222,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute }}>
             {children}
         </AuthContext.Provider>
     );

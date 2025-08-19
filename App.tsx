@@ -16,6 +16,7 @@ import SpotifyCallback from './components/SpotifyCallback';
 import { routeStore } from './components/routeStore';
 import VehicleArrowIcon from './components/VehicleArrowIcon';
 import DebugControls from './components/DebugControls';
+import VolumeControl from './components/VolumeControl';
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
   icon: React.ComponentType<any>, 
@@ -584,6 +585,10 @@ export default function App() {
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
+  const [volumeIconSize, setVolumeIconSize] = useState(24);
+  const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(27);
+  const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-104);
+  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(50);
 
   // Debug UI Colors
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
@@ -1126,25 +1131,35 @@ export default function App() {
           />
           
           <footer 
-            className="absolute bottom-0 left-0 right-0 h-20 bg-black z-30 flex justify-center items-center"
+            className="absolute bottom-0 left-0 right-0 h-20 bg-black z-30 flex justify-between items-center px-8"
             aria-label="Application Dock"
           >
-            <DockButton 
-              icon={ICONS.spotify} 
-              onClick={(e) => { e.stopPropagation(); toggleApp('spotify'); }} 
-              label="Open Spotify"
-              colorClasses="text-green-500 hover:text-green-400"
-            />
-            <DockButton 
-              icon={ICONS.maps} 
-              onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
-              label="Open Maps"
-            />
-            <DockButton 
-              icon={ICONS.apps} 
-              onClick={toggleLauncher}
-              label="Open App Launcher"
-            />
+            <div className="flex-1">
+                {/* Left side spacer */}
+            </div>
+            <div className="flex justify-center items-center gap-4">
+                <DockButton 
+                  icon={ICONS.spotify} 
+                  onClick={(e) => { e.stopPropagation(); toggleApp('spotify'); }} 
+                  label="Open Spotify"
+                  colorClasses="text-green-500 hover:text-green-400"
+                />
+                <DockButton 
+                  icon={ICONS.maps} 
+                  onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
+                  label="Open Maps"
+                />
+                <DockButton 
+                  icon={ICONS.apps} 
+                  onClick={toggleLauncher}
+                  label="Open App Launcher"
+                />
+            </div>
+            <div className="flex-1 flex justify-end">
+                <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
+                    <VolumeControl iconSize={volumeIconSize} sliderOffsetY={volumeSliderOffsetY} sliderOffsetX={volumeSliderOffsetX}/>
+                </div>
+            </div>
           </footer>
           
           <DebugControls
@@ -1232,6 +1247,14 @@ export default function App() {
             setNightPlayerButtonColor={setNightPlayerButtonColor}
             widgetBgHex={widgetBgHex}
             setWidgetBgHex={setWidgetBgHex}
+            volumeIconSize={volumeIconSize}
+            setVolumeIconSize={setVolumeIconSize}
+            volumeSliderOffsetY={volumeSliderOffsetY}
+            setVolumeSliderOffsetY={setVolumeSliderOffsetY}
+            volumeSliderOffsetX={volumeSliderOffsetX}
+            setVolumeSliderOffsetX={setVolumeSliderOffsetX}
+            volumeControlMarginRight={volumeControlMarginRight}
+            setVolumeControlMarginRight={setVolumeControlMarginRight}
         />
         </div>
       </AuthProvider>
