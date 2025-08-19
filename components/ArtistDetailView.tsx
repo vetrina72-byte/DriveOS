@@ -3,6 +3,7 @@ import apiClient from '../api';
 import { FiPlay, FiLoader, FiMusic, FiAlertTriangle } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
+import ContentCarousel from './ContentCarousel';
 
 interface Artist {
     id: string;
@@ -63,6 +64,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const [artist, setArtist] = useState<Artist | null>(null);
     const [tracks, setTracks] = useState<Track[]>([]);
     const [albums, setAlbums] = useState<Album[]>([]);
+    const [singles, setSingles] = useState<Album[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { playerState } = useAuth();
@@ -75,40 +77,46 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         setError(null);
         setTracks([]);
         setAlbums([]);
+        setSingles([]);
+
         try {
-            const artistDetailsPromise = apiClient.get(`/artists/${artistId}`);
-    
-            const contentPromise = apiClient.get(`/artists/${artistId}/top-tracks?market=IT`)
-              .catch((err: any) => {
-                console.warn("Top tracks for IT failed. Falling back to global.", err.response?.status);
-                if (err.response) {
-                  return apiClient.get(`/artists/${artistId}/top-tracks`);
-                }
-                throw err;
-              })
-              .catch((err: any) => {
-                console.warn("Global top tracks failed. Falling back to albums.", err.response?.status);
-                if (err.response) {
-                  return apiClient.get(`/artists/${artistId}/albums?include_groups=album,single&limit=20`);
-                }
-                throw err;
-              });
-    
-            const [artistResponse, contentResponse] = await Promise.all([
-              artistDetailsPromise,
-              contentPromise
+            const [
+                artistRes,
+                topTracksRes,
+                albumsRes,
+                singlesRes,
+            ] = await Promise.allSettled([
+                apiClient.get(`/artists/${artistId}`),
+                apiClient.get(`/artists/${artistId}/top-tracks?market=IT`),
+                apiClient.get(`/artists/${artistId}/albums?include_groups=album&limit=20&market=IT`),
+                apiClient.get(`/artists/${artistId}/albums?include_groups=single,appears_on&limit=20&market=IT`),
             ]);
-    
-            setArtist(artistResponse.data);
-    
-            if (contentResponse.data.tracks) {
-                setTracks(contentResponse.data.tracks);
-            } else if (contentResponse.data.items) {
-                setAlbums(contentResponse.data.items);
+
+            if (artistRes.status === 'rejected') {
+                console.error("Failed to fetch artist details:", artistRes.reason);
+                throw new Error("Impossibile caricare i dati dell'artista.");
             }
-    
+            setArtist(artistRes.value.data);
+
+            if (topTracksRes.status === 'fulfilled' && topTracksRes.value.data.tracks) {
+                setTracks(topTracksRes.value.data.tracks);
+            }
+
+            const albumItems: Album[] = albumsRes.status === 'fulfilled' && albumsRes.value.data.items ? albumsRes.value.data.items : [];
+            const singleItems: Album[] = singlesRes.status === 'fulfilled' && singlesRes.value.data.items ? singlesRes.value.data.items : [];
+
+            // De-duplicate using Map based on item ID
+            const uniqueAlbums = [...new Map(albumItems.map((item) => [item.id, item])).values()];
+            const uniqueSingles = [...new Map(singleItems.map((item) => [item.id, item])).values()];
+            
+            const albumIds = new Set(uniqueAlbums.map(a => a.id));
+            const filteredSingles = uniqueSingles.filter(s => !albumIds.has(s.id));
+
+            setAlbums(uniqueAlbums);
+            setSingles(filteredSingles);
+
         } catch (err: any) {
-            console.error("Final error loading artist details:", err);
+            console.error("Error loading artist details:", err);
             setError("Impossibile caricare i dettagli dell'artista in questo momento.");
         } finally {
             setIsLoading(false);
@@ -155,8 +163,8 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const trackUris = tracks.map(t => t.uri);
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6">
-            <header className="flex items-end gap-6 mb-6 pt-4">
+        <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
+            <header className="flex items-end gap-6 mb-6 pt-4 px-6">
                 {artist.images?.[0]?.url ? (
                     <img src={artist.images[0].url} alt={artist.name} className="w-48 h-48 rounded-full object-cover shadow-2xl" />
                 ) : (
@@ -176,10 +184,10 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
             </header>
 
             {tracks.length > 0 && (
-                <>
+                <div className="px-6">
                     <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
                     <div className="flex flex-col">
-                        {tracks.map((track, index) => {
+                        {tracks.slice(0, 5).map((track, index) => {
                             const isPlaying = isPlayingContext && track.id === currentTrackId;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
@@ -210,23 +218,27 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                             )
                         })}
                     </div>
-                </>
+                </div>
             )}
 
             {albums.length > 0 && (
-                 <>
-                    <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Album e Singoli</h2>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                        {albums.map((album, index) => (
-                             <PlaylistItem 
-                                key={`artist-album-${album.id}-${index}`} 
-                                item={album} 
-                                isNight={isNight} 
-                                onSelectItem={onSelectItem} 
-                             />
-                        ))}
-                    </div>
-                </>
+                <ContentCarousel 
+                    title="Album"
+                    items={albums}
+                    isNight={isNight}
+                    onSelectItem={onSelectItem}
+                    keyPrefix={`artist-albums-${artistId}`}
+                />
+            )}
+
+            {singles.length > 0 && (
+                <ContentCarousel 
+                    title="Singoli ed EP"
+                    items={singles}
+                    isNight={isNight}
+                    onSelectItem={onSelectItem}
+                    keyPrefix={`artist-singles-${artistId}`}
+                />
             )}
         </div>
     );
