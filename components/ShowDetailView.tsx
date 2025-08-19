@@ -124,13 +124,13 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             
             {/* Episode List */}
             <div className="flex flex-col gap-2">
-                {episodes.map((episode) => {
+                {episodes.filter(Boolean).map((episode, index) => {
                     const isPlaying = isPlayingContext && episode.id === currentTrackId;
                     const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
                     return (
                         <div 
-                            key={episode.id}
+                            key={`${episode.id}-${index}`}
                             onClick={() => onPlay({ uris: [episode.uri] })}
                             className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                         >
@@ -146,7 +146,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                                     {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
                                     <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.name}</span>
                                 </div>
-                                <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description.replace(/<[^>]*>?/gm, '')}</span>
+                                <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description?.replace(/<[^>]*>?/gm, '')}</span>
                                 <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
                                     <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                                     <span>•</span>
