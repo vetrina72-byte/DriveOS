@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiMusic } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiMusic, FiAlertTriangle } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 
 interface Artist {
@@ -75,7 +75,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
             setTracks(topTracksRes.data.tracks);
         } catch (err) {
             console.error(`Failed to fetch artist details`, err);
-            setError('Si è verificato un errore nel caricare i dati. Riprova.');
+            setError('Spiacenti, non è stato possibile caricare i dettagli. Potrebbe esserci un problema temporaneo.');
         } finally {
             setIsLoading(false);
         }
@@ -96,18 +96,19 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         return (
             <div className="flex-grow flex flex-col justify-center items-center">
                 <FiLoader className={`animate-spin text-4xl ${loadingIndicatorText}`} />
-                <p className={`mt-4 ${loadingIndicatorText}`}>Caricamento...</p>
+                <p className={`mt-4 ${loadingIndicatorText}`}>Caricamento dettagli artista...</p>
             </div>
         );
     }
 
     if (error) {
         const errorButtonClasses = isNight
-            ? 'mt-4 px-4 py-2 bg-blue-500/50 hover:bg-blue-500/70 text-white rounded-md transition-colors'
-            : 'mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors';
+            ? 'mt-6 px-6 py-2 bg-blue-500/60 hover:bg-blue-500/80 text-white rounded-full font-semibold transition-colors'
+            : 'mt-6 px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full font-semibold transition-colors';
         return (
           <div className="flex-grow flex flex-col justify-center items-center text-center p-4">
-            <p className="text-red-400">{error}</p>
+            <FiAlertTriangle className="w-12 h-12 text-red-500 mb-4" />
+            <p className={`font-semibold ${theme.textPrimary}`}>{error}</p>
             <button onClick={fetchDetails} className={errorButtonClasses}>Riprova</button>
           </div>
         );
