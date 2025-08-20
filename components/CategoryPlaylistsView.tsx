@@ -33,13 +33,20 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 setPlaylists([]);
             }
             try {
-                // Switched from /browse/categories/{id}/playlists to the /search endpoint
-                // as requested to fix 404 errors on certain categories. The category name (title)
-                // is used as the search query.
                 const encodedCategoryName = encodeURIComponent(title);
-                const response = await apiClient.get(
+                
+                // First attempt: search by genre tag
+                let response = await apiClient.get(
                     `/search?q=genre:"${encodedCategoryName}"&type=playlist&limit=${limit}&offset=${offset}`
                 );
+                
+                // Fallback logic: if genre search yields no results, try a general text search
+                if (response.data?.playlists?.items?.length === 0) {
+                    console.log(`Genre search for "${title}" returned no results. Trying fallback search.`);
+                    response = await apiClient.get(
+                        `/search?q="${encodedCategoryName}"&type=playlist&limit=${limit}&offset=${offset}`
+                    );
+                }
                 
                 if (response.data?.playlists?.items) {
                     setPlaylists(response.data.playlists.items);

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
@@ -21,7 +19,13 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
                         limit: 50,
                     }
                 });
-                const mappedCategories = response.data.categories.items.map((cat: any) => ({
+
+                const categoriesToExclude = ["Realizzato per te", "Nuove uscite", "Sanremo", "Classifiche", "Allenamento", "Cucina e cena"];
+                const filteredCategories = response.data.categories.items.filter(
+                    (category: any) => !categoriesToExclude.includes(category.name)
+                );
+
+                const mappedCategories = filteredCategories.map((cat: any) => ({
                     id: cat.id,
                     name: cat.name,
                     uri: cat.href,
