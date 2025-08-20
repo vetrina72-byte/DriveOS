@@ -199,7 +199,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                             className="p-2 transition-colors"
                             aria-label={isFollowing ? 'Smetti di seguire' : 'Segui'}
                         >
-                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400' : 'text-gray-400 hover:text-white'}`} />
+                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400 hover:text-green-400' : 'text-gray-400 hover:text-white'}`} />
                         </button>
                     </div>
                 </div>
