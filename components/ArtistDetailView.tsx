@@ -196,10 +196,10 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                         )}
                         <button
                             onClick={handleToggleFollow}
-                            className="p-2 text-gray-400 hover:text-white transition-colors"
+                            className="p-2 transition-colors"
                             aria-label={isFollowing ? 'Smetti di seguire' : 'Segui'}
                         >
-                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400' : 'text-gray-400'}`} />
+                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400' : 'text-gray-400 hover:text-white'}`} />
                         </button>
                     </div>
                 </div>
