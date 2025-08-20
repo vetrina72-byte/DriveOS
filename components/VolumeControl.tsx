@@ -8,12 +8,12 @@ interface VolumeControlProps {
     sliderOffsetY: number;
     sliderOffsetX: number;
     sliderWidth: number;
-    sliderThickness: number;
+    volumeSliderThickness: number;
     sliderPopupWidth: number;
     sliderPopupHeight: number;
 }
 
-const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, sliderOffsetX, sliderWidth, sliderThickness, sliderPopupWidth, sliderPopupHeight }) => {
+const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, sliderOffsetX, sliderWidth, volumeSliderThickness, sliderPopupWidth, sliderPopupHeight }) => {
     const { volume, setVolume, isMuted } = useAuth();
     const [isSliderVisible, setIsSliderVisible] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -80,8 +80,8 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
         resetAutoCloseTimer();
     };
 
-    const thumbSize = sliderThickness * 1.75;
-    const thumbMarginTop = (thumbSize - sliderThickness) / -2;
+    const thumbSize = volumeSliderThickness * 1.75;
+    const thumbMarginTop = (thumbSize - volumeSliderThickness) / -2;
 
     return (
         <div ref={containerRef} className="relative flex items-center gap-1 text-gray-400">
@@ -112,7 +112,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
                             aria-label="Volume slider"
                             style={{
                                 '--volume-progress': `${volume * 100}%`,
-                                '--volume-track-height': `${sliderThickness}px`,
+                                '--volume-track-height': `${volumeSliderThickness}px`,
                                 '--volume-thumb-size': `${thumbSize}px`,
                                 '--volume-thumb-margin-top': `${thumbMarginTop}px`,
                                 width: `${sliderWidth}px`,

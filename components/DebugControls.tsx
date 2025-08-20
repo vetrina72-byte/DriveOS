@@ -104,6 +104,10 @@ interface DebugControlsProps {
   setVolumeSliderPopupWidth: (width: number) => void;
   volumeSliderPopupHeight: number;
   setVolumeSliderPopupHeight: (height: number) => void;
+  appLauncherWidth: number;
+  setAppLauncherWidth: (width: number) => void;
+  appLauncherHeight: number;
+  setAppLauncherHeight: (height: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -239,6 +243,10 @@ export default function DebugControls({
   setVolumeSliderPopupWidth,
   volumeSliderPopupHeight,
   setVolumeSliderPopupHeight,
+  appLauncherWidth,
+  setAppLauncherWidth,
+  appLauncherHeight,
+  setAppLauncherHeight,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -298,6 +306,8 @@ export default function DebugControls({
     setVolumeSliderThickness(6);
     setVolumeSliderPopupWidth(247);
     setVolumeSliderPopupHeight(40);
+    setAppLauncherWidth(37);
+    setAppLauncherHeight(286);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -442,6 +452,18 @@ export default function DebugControls({
             onChange={(e) => setMapsSearchPanelTop(parseInt(e.target.value, 10))}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
           />
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">App Launcher Layout</h3>
+            <div>
+              <label htmlFor="app-launcher-width">Width: {appLauncherWidth}%</label>
+              <input id="app-launcher-width" type="range" min="20" max="95" step="1" value={appLauncherWidth} onChange={(e) => setAppLauncherWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="app-launcher-height">Height: {appLauncherHeight}px</label>
+              <input id="app-launcher-height" type="range" min="50" max="300" step="1" value={appLauncherHeight} onChange={(e) => setAppLauncherHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
         </div>
 
         <div className="pt-2 mt-2 border-t border-zinc-700">

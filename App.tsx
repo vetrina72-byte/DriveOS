@@ -17,6 +17,19 @@ import { routeStore } from './components/routeStore';
 import VehicleArrowIcon from './components/VehicleArrowIcon';
 import DebugControls from './components/DebugControls';
 import VolumeControl from './components/VolumeControl';
+import { FiMinus } from 'react-icons/fi';
+
+interface AppDefinition {
+  id: string;
+  icon: React.ComponentType<any>;
+  label: string;
+  colorClasses?: string;
+}
+
+const ALL_APPS: AppDefinition[] = [
+  { id: 'spotify', icon: ICONS.spotify, label: 'Spotify', colorClasses: 'text-green-500 hover:text-green-400' },
+  { id: 'maps', icon: ICONS.maps, label: 'Maps' },
+];
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
   icon: React.ComponentType<any>, 
@@ -593,6 +606,8 @@ export default function App() {
   const [volumeSliderThickness, setVolumeSliderThickness] = useState(6);
   const [volumeSliderPopupWidth, setVolumeSliderPopupWidth] = useState(247);
   const [volumeSliderPopupHeight, setVolumeSliderPopupHeight] = useState(40);
+  const [appLauncherWidth, setAppLauncherWidth] = useState(37); // percentage
+  const [appLauncherHeight, setAppLauncherHeight] = useState(286); // pixels
 
   // Debug UI Colors
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
@@ -603,6 +618,21 @@ export default function App() {
     // Maintain the translucent look
     return rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.85)` : 'rgba(23, 23, 23, 0.85)';
   }, [widgetBgHex]);
+
+  // App Customization State
+  const [isCustomizing, setIsCustomizing] = useState(false);
+  const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
+  const [launcherApps, setLauncherApps] = useState<string[]>([]);
+
+  const moveAppToLauncher = (appId: string) => {
+    setDockApps(prev => prev.filter(id => id !== appId));
+    setLauncherApps(prev => [...prev, appId]);
+  };
+
+  const moveAppToDock = (appId: string) => {
+    setLauncherApps(prev => prev.filter(id => id !== appId));
+    setDockApps(prev => [...prev, appId]);
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -957,6 +987,7 @@ export default function App() {
   
   const toggleApp = (appName: string) => {
     setIsAppLauncherOpen(false); // Always close launcher
+    setIsCustomizing(false); // Exit customizing when an app is opened
 
     if (appName === 'spotify' && activeApp === 'maps') {
         // SPECIAL CASE: Maps is open, open Spotify ON TOP.
@@ -976,11 +1007,18 @@ export default function App() {
 
   const toggleLauncher = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent this click from being caught by the wrapper
-    setIsAppLauncherOpen(prev => !prev);
+    const newLauncherState = !isAppLauncherOpen;
+    setIsAppLauncherOpen(newLauncherState);
+    if (!newLauncherState) {
+        setIsCustomizing(false); // Always exit customizing when launcher closes
+    }
   };
   
   const handleWrapperClick = () => {
-    if (isAppLauncherOpen) setIsAppLauncherOpen(false);
+    if (isAppLauncherOpen) {
+        setIsAppLauncherOpen(false);
+        setIsCustomizing(false);
+    }
   };
 
   const isUIOverlayActive = activeApp !== null;
@@ -1132,7 +1170,31 @@ export default function App() {
 
           <AppLauncher
               isOpen={isAppLauncherOpen}
+              width={appLauncherWidth}
+              height={appLauncherHeight}
+              apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)}
+              isCustomizing={isCustomizing}
+              onCustomizeClick={moveAppToDock}
+              onAppLaunch={toggleApp}
+              isNight={isNight}
           />
+
+          {isAppLauncherOpen && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsCustomizing(prev => !prev);
+              }}
+              className={`fixed left-1/2 -translate-x-1/2 z-40 px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg
+                ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'}
+                ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+              style={{
+                bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)`, // 6rem from bottom to launcher, plus its height, plus 0.75rem space
+              }}
+            >
+              {isCustomizing ? 'Fine' : 'Personalizza'}
+            </button>
+          )}
           
           <footer 
             className="absolute bottom-0 left-0 right-0 h-20 bg-black z-30 flex justify-between items-center px-8"
@@ -1142,17 +1204,43 @@ export default function App() {
                 {/* Left side spacer */}
             </div>
             <div className="flex justify-center items-center gap-4">
-                <DockButton 
-                  icon={ICONS.spotify} 
-                  onClick={(e) => { e.stopPropagation(); toggleApp('spotify'); }} 
-                  label="Open Spotify"
-                  colorClasses="text-green-500 hover:text-green-400"
-                />
-                <DockButton 
-                  icon={ICONS.maps} 
-                  onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
-                  label="Open Maps"
-                />
+                {dockApps.map(appId => {
+                  const app = ALL_APPS.find(a => a.id === appId);
+                  if (!app) return null;
+
+                  const effectiveColorClasses = app.colorClasses || 'text-gray-400 hover:text-white';
+                  
+                  return (
+                    <div key={app.id} className="relative group">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isCustomizing) {
+                            return; // No action on main icon when customizing
+                          }
+                          toggleApp(app.id);
+                        }}
+                        className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out ${isCustomizing ? 'customizing-jiggle cursor-default' : 'hover:scale-110'} ${effectiveColorClasses}`}
+                        aria-label={app.label}
+                      >
+                        <app.icon className="w-10 h-10" />
+                      </button>
+                      {isCustomizing && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveAppToLauncher(app.id);
+                          }}
+                          className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer"
+                          aria-label={`Sposta ${app.label} nel launcher`}
+                        >
+                          <FiMinus className="w-4 h-4 text-white" strokeWidth={3}/>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
                 <DockButton 
                   icon={ICONS.apps} 
                   onClick={toggleLauncher}
@@ -1166,7 +1254,7 @@ export default function App() {
                         sliderOffsetY={volumeSliderOffsetY} 
                         sliderOffsetX={volumeSliderOffsetX}
                         sliderWidth={volumeSliderWidth}
-                        sliderThickness={volumeSliderThickness}
+                        volumeSliderThickness={volumeSliderThickness}
                         sliderPopupWidth={volumeSliderPopupWidth}
                         sliderPopupHeight={volumeSliderPopupHeight}
                     />
@@ -1275,6 +1363,10 @@ export default function App() {
             setVolumeSliderPopupWidth={setVolumeSliderPopupWidth}
             volumeSliderPopupHeight={volumeSliderPopupHeight}
             setVolumeSliderPopupHeight={setVolumeSliderPopupHeight}
+            appLauncherWidth={appLauncherWidth}
+            setAppLauncherWidth={setAppLauncherWidth}
+            appLauncherHeight={appLauncherHeight}
+            setAppLauncherHeight={setAppLauncherHeight}
         />
         </div>
       </AuthProvider>
