@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiMusic, FiAlertTriangle } from 'react-icons/fi';
+import { FiPlay, FiLoader, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 
@@ -66,6 +67,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const [discography, setDiscography] = useState<DiscographyItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isFollowing, setIsFollowing] = useState(false);
     const { playerState } = useAuth();
 
     const isPlayingContext = playerState && !playerState.paused;
@@ -82,10 +84,12 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                 artistRes,
                 topTracksRes,
                 discographyRes,
+                followingStatusRes,
             ] = await Promise.allSettled([
                 apiClient.get(`/artists/${artistId}`),
                 apiClient.get(`/artists/${artistId}/top-tracks?market=IT`),
                 apiClient.get(`/artists/${artistId}/albums?include_groups=album,single,appears_on,compilation&limit=50&market=IT`),
+                apiClient.get(`/me/following/contains?type=artist&ids=${artistId}`),
             ]);
 
             if (artistRes.status === 'rejected') {
@@ -102,6 +106,10 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                  const uniqueItems = [...new Map((discographyRes.value.data.items as DiscographyItem[]).filter(Boolean).map((item) => [item.id, item])).values()];
                  setDiscography(uniqueItems);
             }
+            
+            if (followingStatusRes.status === 'fulfilled' && followingStatusRes.value.data) {
+                setIsFollowing(followingStatusRes.value.data[0]);
+            }
 
         } catch (err: any) {
             console.error("Error loading artist details:", err);
@@ -114,6 +122,23 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     useEffect(() => {
         fetchDetails();
     }, [fetchDetails]);
+
+    const handleToggleFollow = async () => {
+        if (!artist) return;
+        const shouldFollow = !isFollowing;
+        setIsFollowing(shouldFollow); // Optimistic UI update
+    
+        try {
+            if (shouldFollow) {
+                await apiClient.put(`/me/following?type=artist&ids=${artistId}`);
+            } else {
+                await apiClient.delete(`/me/following?type=artist&ids=${artistId}`);
+            }
+        } catch (e) {
+            console.error("Failed to toggle follow status", e);
+            setIsFollowing(!shouldFollow); // Revert on error
+        }
+    };
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -163,11 +188,20 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                 <div className="flex flex-col gap-3">
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{artist.name}</h1>
                     <p className={`text-sm ${theme.textSecondary}`}>{formatFollowers(artist.followers.total)} followers</p>
-                    {tracks.length > 0 && (
-                        <button onClick={() => onPlay({ uris: trackUris })} className="mt-4 bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
-                            <FiPlay className="w-7 h-7 ml-1" />
+                    <div className="flex items-center gap-4 mt-4">
+                        {tracks.length > 0 && (
+                            <button onClick={() => onPlay({ uris: trackUris })} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+                                <FiPlay className="w-7 h-7 ml-1" />
+                            </button>
+                        )}
+                        <button
+                            onClick={handleToggleFollow}
+                            className="p-2 text-gray-400 hover:text-white transition-colors"
+                            aria-label={isFollowing ? 'Smetti di seguire' : 'Segui'}
+                        >
+                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400' : ''}`} />
                         </button>
-                    )}
+                    </div>
                 </div>
             </header>
 
