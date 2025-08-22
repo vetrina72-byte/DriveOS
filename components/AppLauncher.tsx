@@ -48,7 +48,7 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
                 {apps.length > 0 ? (
                     <div className="flex flex-wrap gap-6 justify-center items-start">
                         {apps.map(app => (
-                            <div key={app.id} className="relative group">
+                            <div key={app.id} className="relative">
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -56,9 +56,12 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
                                             onAppLaunch(app.id);
                                         }
                                     }}
-                                    className={`flex flex-col items-center justify-center w-24 h-24 transition-transform duration-200 ${isCustomizing ? 'customizing-jiggle cursor-default' : 'cursor-pointer'}`}
+                                    className={`flex flex-col items-center justify-center w-24 h-24 transition-transform duration-200 group gap-2 ${isCustomizing ? 'customizing-jiggle cursor-default' : 'cursor-pointer'}`}
                                 >
-                                    <app.icon className={`w-10 h-10 transition-transform group-hover:scale-110 ${app.colorClasses || (isNight ? 'text-gray-200' : 'text-gray-800')}`} />
+                                    <app.icon className={`w-10 h-10 transition-transform group-hover:scale-110 ${app.colorClasses || (isNight ? 'text-gray-200' : 'text-zinc-800')}`} />
+                                    <span className="text-xs font-semibold truncate w-full px-1 text-center text-white">
+                                        {app.label}
+                                    </span>
                                 </button>
                                 {isCustomizing && (
                                     <button
@@ -66,7 +69,7 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
                                         e.stopPropagation();
                                         onCustomizeClick(app.id);
                                       }}
-                                      className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer"
+                                      className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer"
                                       aria-label={`Sposta ${app.label} sulla barra`}
                                     >
                                         <FiPlus className="w-4 h-4 text-white" strokeWidth={3}/>

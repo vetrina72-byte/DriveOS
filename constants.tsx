@@ -10,7 +10,7 @@ import {
     GiCarDoor, GiCarSeat, GiGearStick, GiSteeringWheel 
 } from 'react-icons/gi';
 import { 
-    MdAcUnit, MdOutlineTheaters, MdOutlinePhone, MdOutlineApps, MdBluetooth, MdWifi, MdGpsFixed, MdOutlineSettings, MdFlashOn, MdFlashOff, MdOutlineMic, MdEvStation, MdRadio
+    MdAcUnit, MdOutlinePhone, MdOutlineApps, MdBluetooth, MdWifi, MdGpsFixed, MdOutlineSettings, MdFlashOn, MdFlashOff, MdOutlineMic, MdEvStation, MdRadio
 } from 'react-icons/md';
 import { 
     PiFanFill, PiSeatbeltFill, PiCarSimpleBold 
@@ -72,6 +72,34 @@ const MapsIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
+const TheaterIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+        <defs>
+            <linearGradient id="clapperBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#404040"/>
+                <stop offset="100%" stopColor="#262626"/>
+            </linearGradient>
+            <filter id="playButtonShadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0.5" dy="1" stdDeviation="1" floodColor="#000000" floodOpacity="0.5"/>
+            </filter>
+        </defs>
+        {/* Main Body */}
+        <path d="M22 6.389H2V20.833C2 21.416 2.473 21.889 3.056 21.889H20.944C21.527 21.889 22 21.416 22 20.833V6.389Z" fill="url(#clapperBodyGrad)"/>
+        {/* Clapper Top Part */}
+        <g fill="#A3A3A3">
+            <path d="M20.944 3.111L3.056 3.111C2.473 3.111 2 3.584 2 4.167L2 5.278L22 5.278L22 4.167C22 3.584 21.527 3.111 20.944 3.111Z"/>
+            <path d="M4.694 3.111L6.361 1H7.75L6.083 3.111H4.694Z"/>
+            <path d="M9.139 3.111L10.806 1H12.194L10.528 3.111H9.139Z"/>
+            <path d="M13.583 3.111L15.25 1H16.639L14.972 3.111H13.583Z"/>
+            <path d="M18.028 3.111L19.694 1H21.083L19.417 3.111H18.028Z"/>
+        </g>
+        {/* Play Button */}
+        <g filter="url(#playButtonShadow)">
+            <path d="M9.5 15.5V9.5L15.5 12.5L9.5 15.5Z" fill="#FFFFFF"/>
+        </g>
+    </svg>
+);
+
 
 export const ICONS = {
     // Weather
@@ -115,7 +143,7 @@ export const ICONS = {
     // Dock
     apps: MdOutlineApps,
     climate: FiThermometer,
-    theater: MdOutlineTheaters,
+    theater: TheaterIcon,
     phone: MdOutlinePhone,
     settings: MdOutlineSettings,
     car: PiCarSimpleBold,

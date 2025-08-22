@@ -22,7 +22,8 @@
     "cors": "https://esm.sh/cors@^2.8.5",
     "axios": "https://esm.sh/axios@^1.11.0",
     "express": "https://esm.sh/express@^5.1.0",
-    "react-dom": "https://esm.sh/react-dom@^19.1.1"
+    "react-dom": "https://esm.sh/react-dom@^19.1.1",
+    "framer-motion": "https://esm.sh/framer-motion@^11.3.11"
   }
 }
 </script>
@@ -341,6 +342,144 @@
     }
     .customizing-jiggle {
       animation: jiggle 0.2s ease-in-out infinite;
+    }
+    @keyframes subtle-lighting {
+      0%, 100% { background-size: 100% 100%; }
+      50% { background-size: 110% 110%; }
+    }
+    
+    /* --- THEATER LAYOUT STYLES (UNIFIED) --- */
+    .theater-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem;
+      overflow-y: auto;
+      transition: background-color 0.3s ease-in-out, background-image 0.3s ease-in-out;
+    }
+
+    .theater-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .driveos-title {
+      font-size: 1.5rem;
+      font-weight: 300;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+    }
+
+    .theater-title {
+      font-size: 3rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .services-grid {
+      width: 100%;
+      max-width: 56rem; /* 896px */
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem;
+      perspective: 1000px;
+    }
+
+    .service-button {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border-radius: 1rem; /* Tailwind rounded-2xl */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      transition: all 0.3s ease-out;
+      transform-style: preserve-3d;
+      -webkit-tap-highlight-color: transparent; /* For mobile */
+    }
+
+    /* --- THEATER THEME STYLES (CONDITIONAL) --- */
+
+    /* Light Theme */
+    [data-theme='light'] .theater-container {
+      background: linear-gradient(180deg, #F0F2F5 0%, #E6E8EB 100%);
+    }
+
+    [data-theme='light'] .driveos-title,
+    [data-theme='light'] .theater-title {
+      color: #4A5568;
+    }
+    
+    [data-theme='light'] .service-button {
+      background-color: #EDEFF3;
+      box-shadow: 10px 10px 20px #bfc3c9, -10px -10px 20px #ffffff;
+    }
+    
+    [data-theme='light'] .service-button:hover {
+      box-shadow: 12px 12px 24px #bfc3c9, -12px -12px 24px #ffffff, 0 0 20px -2px var(--glow-color);
+    }
+    
+    [data-theme='light'] .service-button:active {
+       box-shadow: inset 10px 10px 20px #bfc3c9, inset -10px -10px 20px #ffffff;
+    }
+
+    /* Dark Theme */
+    [data-theme='dark'] .theater-container {
+      background-color: #000000;
+      background-image: radial-gradient(ellipse 70% 90% at 50% top, rgba(220, 220, 240, 0.15) 0%, transparent 75%);
+      background-repeat: no-repeat;
+    }
+    
+    [data-theme='dark'] .driveos-title {
+      background-image: linear-gradient(to bottom, #FFFFFF, #A0A0A0);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 10px rgba(200, 200, 220, 0.2);
+    }
+
+    [data-theme='dark'] .theater-title {
+      background-image: linear-gradient(to bottom, #FFFFFF, #B0B0B0);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 15px rgba(200, 200, 220, 0.3);
+    }
+
+    [data-theme='dark'] .service-button {
+      background-color: #000;
+      background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 30%);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+    }
+    
+    [data-theme='dark'] .service-button:hover {
+      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.7), 0 0 25px -5px var(--glow-color);
+    }
+    
+    [data-theme='dark'] .service-button::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border-radius: 1rem; /* Matches parent */
+      padding: 1px; /* The "border" thickness */
+      background: linear-gradient(
+        160deg,
+        rgba(255, 255, 255, 0.35), /* Top-left highlight */
+        rgba(255, 255, 255, 0.15), /* Top-right highlight */
+        transparent 50%       /* Fade out towards the bottom */
+      );
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none; /* Ensure it doesn't block interactions */
     }
   </style>
 </head>

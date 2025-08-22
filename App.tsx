@@ -18,6 +18,8 @@ import VehicleArrowIcon from './components/VehicleArrowIcon';
 import DebugControls from './components/DebugControls';
 import VolumeControl from './components/VolumeControl';
 import { FiMinus } from 'react-icons/fi';
+import TheaterApp from './components/Theater';
+import { AnimatePresence } from 'framer-motion';
 
 interface AppDefinition {
   id: string;
@@ -29,6 +31,7 @@ interface AppDefinition {
 const ALL_APPS: AppDefinition[] = [
   { id: 'spotify', icon: ICONS.spotify, label: 'Spotify', colorClasses: 'text-green-500 hover:text-green-400' },
   { id: 'maps', icon: ICONS.maps, label: 'Maps' },
+  { id: 'theater', icon: ICONS.theater, label: 'Theater' },
 ];
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
@@ -622,7 +625,8 @@ export default function App() {
   // App Customization State
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
-  const [launcherApps, setLauncherApps] = useState<string[]>([]);
+  const [launcherApps, setLauncherApps] = useState<string[]>(['theater']);
+  const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
 
   const moveAppToLauncher = (appId: string) => {
     setDockApps(prev => prev.filter(id => id !== appId));
@@ -988,6 +992,11 @@ export default function App() {
   const toggleApp = (appName: string) => {
     setIsAppLauncherOpen(false); // Always close launcher
     setIsCustomizing(false); // Exit customizing when an app is opened
+    
+    const willBeActive = activeApp !== appName;
+    if (willBeActive && !dockApps.includes(appName)) {
+        setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
+    }
 
     if (appName === 'spotify' && activeApp === 'maps') {
         // SPECIAL CASE: Maps is open, open Spotify ON TOP.
@@ -1021,7 +1030,9 @@ export default function App() {
     }
   };
 
-  const isUIOverlayActive = activeApp !== null;
+  const isUIOverlayActive = activeApp !== null || isAppLauncherOpen;
+  
+  const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
   return (
     <VehicleProvider>
@@ -1167,6 +1178,18 @@ export default function App() {
               spotifyPlayerTop={spotifyPlayerTop}
               spotifyPlayerBottom={spotifyPlayerBottom}
           />
+          
+          <AnimatePresence>
+            {activeApp === 'theater' && (
+              <TheaterApp
+                onClose={() => toggleApp('theater')}
+                isNight={isNight}
+                spotifyPlayerTop={spotifyPlayerTop}
+                spotifyPlayerBottom={spotifyPlayerBottom}
+              />
+            )}
+          </AnimatePresence>
+
 
           <AppLauncher
               isOpen={isAppLauncherOpen}
@@ -1211,13 +1234,11 @@ export default function App() {
                   const effectiveColorClasses = app.colorClasses || 'text-gray-400 hover:text-white';
                   
                   return (
-                    <div key={app.id} className="relative group">
+                    <div key={app.id} className="relative flex flex-col items-center">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (isCustomizing) {
-                            return; // No action on main icon when customizing
-                          }
+                          if (isCustomizing) return;
                           toggleApp(app.id);
                         }}
                         className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out ${isCustomizing ? 'customizing-jiggle cursor-default' : 'hover:scale-110'} ${effectiveColorClasses}`}
@@ -1225,13 +1246,13 @@ export default function App() {
                       >
                         <app.icon className="w-10 h-10" />
                       </button>
+                       {activeApp === app.id && !isCustomizing && (
+                          <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
+                       )}
                       {isCustomizing && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            moveAppToLauncher(app.id);
-                          }}
-                          className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); moveAppToLauncher(app.id); }}
+                          className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer"
                           aria-label={`Sposta ${app.label} nel launcher`}
                         >
                           <FiMinus className="w-4 h-4 text-white" strokeWidth={3}/>
@@ -1240,12 +1261,43 @@ export default function App() {
                     </div>
                   );
                 })}
+                
+                <div className="relative flex flex-col items-center">
+                    <DockButton 
+                      icon={ICONS.apps} 
+                      onClick={toggleLauncher}
+                      label="Open App Launcher"
+                    />
+                     {isAppLauncherOpen && !isCustomizing && (
+                        <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
+                     )}
+                </div>
 
-                <DockButton 
-                  icon={ICONS.apps} 
-                  onClick={toggleLauncher}
-                  label="Open App Launcher"
-                />
+                {recentAppsToShow.length > 0 && (
+                  <>
+                    <div className="w-px h-8 bg-gray-600" />
+                    {recentAppsToShow.map(appId => {
+                        const app = ALL_APPS.find(a => a.id === appId);
+                        if (!app) return null;
+                        const effectiveColorClasses = app.colorClasses || 'text-gray-400 hover:text-white';
+                        return (
+                           <div key={`recent-${app.id}`} className="relative flex flex-col items-center">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); toggleApp(app.id); }}
+                                    className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${effectiveColorClasses}`}
+                                    aria-label={app.label}
+                                >
+                                    <app.icon className="w-10 h-10" />
+                                </button>
+                                {activeApp === app.id && !isCustomizing && (
+                                    <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
+                                )}
+                            </div>
+                        );
+                    })}
+                  </>
+                )}
+
             </div>
             <div className="flex-1 flex justify-end">
                 <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
