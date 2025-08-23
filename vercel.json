@@ -1,8 +1,3 @@
 {
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/server.js"
-    }
-  ]
+  "//": "This file's rewrite rule is no longer necessary. Vercel automatically routes requests to the /api directory to the corresponding serverless functions. This file can be safely deleted."
 }
