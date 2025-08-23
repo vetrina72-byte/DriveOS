@@ -13,7 +13,7 @@ const SpotifyLogin: React.FC = () => {
         clearError();
 
         const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
-        const redirectUri = 'http://localhost:5173/spotify-callback';
+        const redirectUri = import.meta.env.VITE_REDIRECT_URI;
         const scope = [
           'streaming',
           'user-read-email',
@@ -29,6 +29,12 @@ const SpotifyLogin: React.FC = () => {
           'user-follow-read',
           'user-follow-modify'
         ].join(' ');
+
+        if (!redirectUri) {
+          console.error("VITE_REDIRECT_URI is not defined. Please set it in your environment variables.");
+          login(null, "Client-side configuration error: Redirect URI is missing.");
+          return;
+        }
 
         const authUrl = new URL("https://accounts.spotify.com/authorize");
         authUrl.search = new URLSearchParams({

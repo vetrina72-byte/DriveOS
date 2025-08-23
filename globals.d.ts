@@ -1,4 +1,3 @@
-
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.
 
@@ -131,6 +130,22 @@ declare global {
     Spotify: {
         Player: new (options: SpotifyPlayerOptions) => SpotifyPlayer;
     };
+  }
+
+  // --- Electron <webview> Tag Typings ---
+  namespace JSX {
+    interface IntrinsicElements {
+      // Define the webview tag as a valid JSX element
+      webview: React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLWebViewElement> & {
+          src: string;
+          useragent?: string;
+          partition?: string;
+          webpreferences?: string;
+        },
+        HTMLWebViewElement
+      >;
+    }
   }
 }
 

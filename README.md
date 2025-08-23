@@ -24,12 +24,13 @@ This contains everything you need to run your app locally.
 This project includes a small Node.js server to handle the Spotify authentication flow securely.
 
 1.  **Create an environment file**: Create a file named `.env` in the root of the project.
-2.  **Add credentials**: Add your Spotify application credentials to the `.env` file. You can get these from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2.  **Add credentials**: Add your Spotify application credentials and the local redirect URI to the `.env` file. You can get the client ID and secret from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 
     ```
     # .env
     SPOTIFY_CLIENT_ID=ecc9e126d442404b92e8081c7d95ecca
     SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET
+    VITE_REDIRECT_URI=http://localhost:5173/spotify-callback
     ```
 
 3.  **Run the server**: In a **separate terminal window**, start the backend server:
@@ -39,3 +40,5 @@ This project includes a small Node.js server to handle the Spotify authenticatio
 
 4.  **Configure Spotify Redirect URI**: In your Spotify Developer Dashboard, go to your application's settings and make sure you have added the following URL to your "Redirect URIs":
     `http://localhost:5173/spotify-callback`
+
+    For production (e.g., on Vercel), you will need to set these same environment variables in your deployment settings, replacing the `VITE_REDIRECT_URI` with your production URL.

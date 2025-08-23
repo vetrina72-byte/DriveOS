@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
-import { motion, Variants } from 'framer-motion';
+import React, { useRef, useState } from 'react';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
+import WebAppViewer from './WebAppViewer';
 
 // A self-contained component for the service button with 3D hover effects.
 const ServiceButton = ({ service, isNight, onClick }: { 
@@ -160,16 +161,18 @@ const Theater = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
+    const [activeWebAppUrl, setActiveWebAppUrl] = useState<string | null>(null);
 
-    const handleServiceClick = (serviceName: string) => {
-        console.log(`${serviceName} clicked`);
+    const handleServiceClick = (url: string) => {
+        setActiveWebAppUrl(url);
     };
 
     const services = [
-        { name: 'Netflix', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', logoClassName: 'w-36', glowColor: '#E50914' },
-        { name: 'Hulu', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f9/Hulu_logo_%282018%29.svg', logoClassName: 'w-32', glowColor: '#1CE783' },
+        { name: 'Netflix', url: 'https://www.netflix.com', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', logoClassName: 'w-36', glowColor: '#E50914' },
+        { name: 'Hulu', url: 'https://www.hulu.com', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f9/Hulu_logo_%282018%29.svg', logoClassName: 'w-32', glowColor: '#1CE783' },
         { 
             name: 'YouTube', 
+            url: 'https://www.youtube.com',
             logoUrl: {
                 light: 'https://upload.wikimedia.org/wikipedia/commons/b/b8/YouTube_Logo_2017.svg',
                 dark: 'https://upload.wikimedia.org/wikipedia/commons/5/54/YouTube_dark_logo_2017.svg'
@@ -177,9 +180,10 @@ const Theater = ({
             logoClassName: 'w-40',
             glowColor: '#FF0000'
         },
-        { name: 'Twitch', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d3/Twitch_Glitch_Logo_Purple.svg', logoClassName: 'w-28', glowColor: '#9146FF' },
+        { name: 'Twitch', url: 'https://www.twitch.tv', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d3/Twitch_Glitch_Logo_Purple.svg', logoClassName: 'w-28', glowColor: '#9146FF' },
         { 
           name: 'Disney+',
+          url: 'https://www.disneyplus.com',
           logoUrl: {
             light: 'https://upload.wikimedia.org/wikipedia/commons/6/64/Disney%2B_2024.svg',
             dark: 'https://upload.wikimedia.org/wikipedia/commons/7/77/Disney_Plus_logo.svg'
@@ -187,69 +191,77 @@ const Theater = ({
           logoClassName: 'w-36',
           glowColor: '#3951DB'
         },
-        { name: 'Prime Video', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/90/Prime_Video_logo_%282024%29.svg', logoClassName: 'w-36', glowColor: '#00A8E1' }
+        { name: 'Prime Video', url: 'https://www.primevideo.com', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/90/Prime_Video_logo_%282024%29.svg', logoClassName: 'w-36', glowColor: '#00A8E1' }
     ];
 
     return (
-        <motion.div
-            variants={panelVariant}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
-            style={{
-                top: `${spotifyPlayerTop}px`,
-                bottom: `${spotifyPlayerBottom}px`,
-            }}
-            aria-hidden={false}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="theater-app-title"
-            onClick={(e) => e.stopPropagation()}
-        >
+        <>
             <motion.div
-              className="theater-container"
-              variants={contentVariant}
+                variants={panelVariant}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
+                style={{
+                    top: `${spotifyPlayerTop}px`,
+                    bottom: `${spotifyPlayerBottom}px`,
+                }}
+                aria-hidden={!!activeWebAppUrl}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="theater-app-title"
+                onClick={(e) => e.stopPropagation()}
             >
-                <motion.header 
-                    className="theater-header"
-                    initial="initial"
-                    animate="animate"
-                    variants={{ animate: { transition: { delayChildren: 1.5 }}}}
+                <motion.div
+                className="theater-container"
+                variants={contentVariant}
                 >
-                     <motion.h1 
-                        id="theater-app-title" 
-                        className="driveos-title"
-                        variants={driveOsHeaderVariant}
-                     >
-                        DRIVE OS
-                    </motion.h1>
-                    <motion.h2
-                        variants={otherElementsVariant}
-                        className="theater-title"
+                    <motion.header 
+                        className="theater-header"
+                        initial="initial"
+                        animate="animate"
+                        variants={{ animate: { transition: { delayChildren: 1.5 }}}}
                     >
-                        THEATER
-                    </motion.h2>
-                </motion.header>
+                        <motion.h1 
+                            id="theater-app-title" 
+                            className="driveos-title"
+                            variants={driveOsHeaderVariant}
+                        >
+                            DRIVE OS
+                        </motion.h1>
+                        <motion.h2
+                            variants={otherElementsVariant}
+                            className="theater-title"
+                        >
+                            THEATER
+                        </motion.h2>
+                    </motion.header>
 
-                <motion.main 
-                    variants={gridContainerVariant}
-                    initial="initial"
-                    animate="animate"
-                    className="services-grid"
-                >
-                    {services.map((service) => (
-                        <motion.div key={service.name} variants={otherElementsVariant}>
-                            <ServiceButton
-                                service={service}
-                                isNight={isNight}
-                                onClick={() => handleServiceClick(service.name)}
-                            />
-                        </motion.div>
-                    ))}
-                </motion.main>
+                    <motion.main 
+                        variants={gridContainerVariant}
+                        initial="initial"
+                        animate="animate"
+                        className="services-grid"
+                    >
+                        {services.map((service) => (
+                            <motion.div key={service.name} variants={otherElementsVariant}>
+                                <ServiceButton
+                                    service={service}
+                                    isNight={isNight}
+                                    onClick={() => handleServiceClick(service.url)}
+                                />
+                            </motion.div>
+                        ))}
+                    </motion.main>
+                </motion.div>
             </motion.div>
-        </motion.div>
+
+            <AnimatePresence>
+                {activeWebAppUrl && (
+                    <WebAppViewer url={activeWebAppUrl} onClose={() => setActiveWebAppUrl(null)} />
+                )}
+            </AnimatePresence>
+        </>
     );
 };
 

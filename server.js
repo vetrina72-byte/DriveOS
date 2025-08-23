@@ -17,7 +17,7 @@ app.use(express.json()); // To parse JSON request bodies
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 // This must exactly match the Redirect URI used in the frontend and in your Spotify Developer Dashboard
-const REDIRECT_URI = 'http://localhost:5173/spotify-callback';
+const REDIRECT_URI = process.env.VITE_REDIRECT_URI;
 
 app.post('/api/exchange-token', async (req, res) => {
   const { code } = req.body;
@@ -29,6 +29,11 @@ app.post('/api/exchange-token', async (req, res) => {
   if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
     console.error('SERVER ERROR: Spotify credentials are not configured in the .env file.');
     return res.status(500).json({ error: 'Server configuration error.' });
+  }
+
+  if (!REDIRECT_URI) {
+    console.error('SERVER ERROR: VITE_REDIRECT_URI is not configured in the .env file for the server.');
+    return res.status(500).json({ error: 'Server configuration error: Missing Redirect URI.' });
   }
 
   // The 'Authorization' header requires a Base64 encoded string of "client_id:client_secret"
