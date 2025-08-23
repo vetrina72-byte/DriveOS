@@ -43,7 +43,7 @@ apiClient.interceptors.response.use(
       
       try {
         // Call our backend to get a new access token
-        const { data } = await axios.post('http://localhost:8888/api/refresh-token', { refreshToken });
+        const { data } = await axios.post('/api/refresh-token', { refreshToken });
 
         const newAccessToken = data.access_token;
 

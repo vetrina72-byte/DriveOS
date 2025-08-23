@@ -1,127 +1,38 @@
 import express from 'express';
 import cors from 'cors';
-import axios from 'axios';
 import 'dotenv/config';
+// Import handlers from the new api directory
+import exchangeTokenHandler from './api/exchange-token.js';
+import refreshTokenHandler from './api/refresh-token.js';
 
 const app = express();
-// The port for the backend server, should be different from the frontend.
 const port = 8888;
 
-// Middlewares
-// Allow requests only from the frontend app's origin
-app.use(cors({ origin: 'http://localhost:5173' })); 
-app.use(express.json()); // To parse JSON request bodies
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+  'https://drive-os-hc1q.vercel.app'
+].filter(Boolean);
 
-// --- Environment Variables ---
-// These must be set in your .env file
-const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
-const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-// This must exactly match the Redirect URI used in the frontend and in your Spotify Developer Dashboard
-const REDIRECT_URI = process.env.VITE_REDIRECT_URI;
-
-app.post('/api/exchange-token', async (req, res) => {
-  const { code } = req.body;
-
-  if (!code) {
-    return res.status(400).json({ error: 'Authorization code is missing' });
-  }
-
-  if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
-    console.error('SERVER ERROR: Spotify credentials are not configured in the .env file.');
-    return res.status(500).json({ error: 'Server configuration error.' });
-  }
-
-  if (!REDIRECT_URI) {
-    console.error('SERVER ERROR: VITE_REDIRECT_URI is not configured in the .env file for the server.');
-    return res.status(500).json({ error: 'Server configuration error: Missing Redirect URI.' });
-  }
-
-  // The 'Authorization' header requires a Base64 encoded string of "client_id:client_secret"
-  const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
-  
-  // The body of the request must be in 'application/x-www-form-urlencoded' format
-  const params = new URLSearchParams();
-  params.append('grant_type', 'authorization_code');
-  params.append('code', code);
-  params.append('redirect_uri', REDIRECT_URI);
-
-  try {
-    const spotifyResponse = await axios.post(
-      'https://accounts.spotify.com/api/token',
-      params,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': authHeader,
-        },
-      }
-    );
-    
-    // Success: send the tokens from Spotify back to the React client
-    res.json(spotifyResponse.data);
-
-  } catch (error) {
-    console.error('Error exchanging token with Spotify:', error.response ? error.response.data : error.message);
-    const status = error.response?.status || 500;
-    const details = error.response?.data || { message: 'An unknown error occurred' };
-    res.status(status).json({
-      error: 'Failed to exchange token with Spotify',
-      details,
-    });
-  }
-});
-
-// New endpoint for refreshing the access token
-app.post('/api/refresh-token', async (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(400).json({ error: 'Refresh token is missing' });
-  }
-
-  const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
-
-  const params = new URLSearchParams();
-  params.append('grant_type', 'refresh_token');
-  params.append('refresh_token', refreshToken);
-
-  try {
-    const spotifyResponse = await axios.post(
-      'https://accounts.spotify.com/api/token',
-      params,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': authHeader,
-        },
-      }
-    );
-    
-    // Spotify returns a new access token. It might also return a new refresh token.
-    // For simplicity, we are only returning the new access_token.
-    res.json({
-      access_token: spotifyResponse.data.access_token,
-    });
-
-  } catch (error) {
-    console.error('Error refreshing token with Spotify:', error.response ? error.response.data : error.message);
-    const status = error.response?.status || 500;
-    const details = error.response?.data || { message: 'An unknown error occurred while refreshing token' };
-    // Send a specific status if the refresh token is invalid
-    if (error.response?.data?.error === 'invalid_grant') {
-      return res.status(401).json({ error: 'Invalid refresh token', details });
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin '${origin}' not allowed by CORS`));
     }
-    res.status(status).json({
-      error: 'Failed to refresh token with Spotify',
-      details,
-    });
   }
-});
+}));
+app.use(express.json());
 
+// Route requests to the imported handlers
+app.post('/api/exchange-token', exchangeTokenHandler);
+app.post('/api/refresh-token', refreshTokenHandler);
 
 app.listen(port, () => {
-  console.log(`Spotify auth backend server running at http://localhost:${port}`);
-  if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
-      console.warn('WARNING: SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET is not set in the .env file. The server will not be able to authenticate with Spotify.');
+  console.log(`Local dev server running at http://localhost:${port}`);
+  console.log('This server uses the same logic as the Vercel Serverless Functions.');
+  if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+      console.warn('WARNING: SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET is not set. Authentication will fail.');
   }
 });
