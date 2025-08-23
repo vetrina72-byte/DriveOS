@@ -148,7 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
-            const response = await axios.post('http://localhost:8888/api/exchange-token', { code: authCode });
+            const response = await axios.post('/api/exchange-token', { code: authCode });
             const { access_token, refresh_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
 

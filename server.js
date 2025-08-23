@@ -7,9 +7,25 @@ const app = express();
 // The port for the backend server, should be different from the frontend.
 const port = 8888;
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  // Vercel sets the VERCEL_URL env var for preview and production deployments.
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+  // Fallback for the specific production URL if VERCEL_URL is not available.
+  'https://drive-os-hc1q.vercel.app'
+].filter(Boolean); // Filter out undefined if VERCEL_URL is not set
+
 // Middlewares
-// Allow requests only from the frontend app's origin
-app.use(cors({ origin: 'http://localhost:5173' })); 
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin '${origin}' not allowed by CORS`));
+    }
+  }
+}));
 app.use(express.json()); // To parse JSON request bodies
 
 // --- Environment Variables ---
