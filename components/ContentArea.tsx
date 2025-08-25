@@ -124,6 +124,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [chartsPlaylists, setChartsPlaylists] = useState<SpotifyItem[]>([]);
   const [genresCategories, setGenresCategories] = useState<SpotifyItem[]>([]);
   const [recommendedShows, setRecommendedShows] = useState<SpotifyItem[]>([]);
+  const [partyPlaylists, setPartyPlaylists] = useState<SpotifyItem[]>([]);
 
   
   const fetchData = useCallback(async () => {
@@ -138,17 +139,24 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       const madeForYouCategoryId = '0JQ5DAqbMKF2JckPAnMAhA';
       
       const promises = [
-        apiClient.get('/me/player/recently-played?limit=50'), // For Continue Listening
-        apiClient.get('/me/playlists?limit=10'), // For User Playlists
-        apiClient.get('/me/top/artists?time_range=medium_term&limit=10'), // For Top Artists
-        apiClient.get(`/browse/categories/${madeForYouCategoryId}/playlists?country=IT&limit=10`), // For Made For You
-        apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'), // For Charts
-        apiClient.get(`/browse/new-releases?country=IT&limit=10&offset=${randomOffset}`), // For New Releases
-        apiClient.get('/browse/categories?country=IT&limit=20'), // For Genres
-        apiClient.get('/search?q=podcast&type=show&market=IT&limit=10') // For Podcasts
+        apiClient.get('/me/player/recently-played?limit=50'), // 0: For Continue Listening
+        apiClient.get('/me/playlists?limit=10'), // 1: For User Playlists
+        apiClient.get('/me/top/artists?time_range=medium_term&limit=10'), // 2: For Top Artists
+        apiClient.get(`/browse/categories/${madeForYouCategoryId}/playlists?country=IT&limit=10`), // 3: For Made For You
+        apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'), // 4: For Charts
+        apiClient.get(`/browse/new-releases?country=IT&limit=10&offset=${randomOffset}`), // 5: For New Releases
+        apiClient.get('/browse/categories?country=IT&limit=20'), // 6: For Genres
+        apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'), // 7: For Podcasts
+        apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'), // 8: For Party Playlists
       ];
 
       const results = await Promise.allSettled(promises);
+      
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            console.log(`API call at index ${index} failed:`, result.reason.response?.data || result.reason.message);
+        }
+      });
 
       const [
           recentlyPlayedRes,
@@ -158,7 +166,8 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           chartsRes,
           newReleasesRes,
           genresRes,
-          showsRes
+          showsRes,
+          partyPlaylistsRes
       ] = results;
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
@@ -176,6 +185,9 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       }
       if (chartsRes.status === 'fulfilled' && chartsRes.value.data.playlists) {
           setChartsPlaylists(chartsRes.value.data.playlists.items);
+      }
+       if (partyPlaylistsRes.status === 'fulfilled' && partyPlaylistsRes.value.data.playlists) {
+          setPartyPlaylists(partyPlaylistsRes.value.data.playlists.items);
       }
       if (newReleasesRes.status === 'fulfilled' && newReleasesRes.value.data.albums) {
           setNewReleases(newReleasesRes.value.data.albums.items);
@@ -255,6 +267,17 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
            <div key={`${refreshTrigger}-ch`} className="animate-fadeInUp" style={{ animationDelay: '250ms' }}>
               <ContentCarousel title="Classifiche" items={chartsPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
           </div>
+      )}
+      {partyPlaylists.length > 0 && (
+        <div key={`${refreshTrigger}-pp`} className="animate-fadeInUp" style={{ animationDelay: '280ms' }}>
+            <ContentCarousel 
+                title="Musica da cantare" 
+                items={partyPlaylists} 
+                isNight={isNight} 
+                onSelectItem={onSelectItem} 
+                keyPrefix="party-playlists" 
+            />
+        </div>
       )}
       {topArtists.length > 0 && (
           <div key={`${refreshTrigger}-ta`} className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
