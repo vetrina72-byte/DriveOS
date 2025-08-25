@@ -1,7 +1,31 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 const likedSongsItem: SpotifyItem = {
     id: 'liked-songs',
@@ -51,11 +75,18 @@ const PlaylistListView = ({ isNight, onSelectItem }: { isNight: boolean, onSelec
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6">
             <h2 className={`text-3xl font-bold mb-6 ${isNight ? 'text-white' : 'text-black'}`}>Le tue Playlist</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+            <motion.div
+              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
                 {playlists.map((playlist, index) => (
-                    <PlaylistItem key={`playlist-list-${playlist.id}-${index}`} item={playlist} isNight={isNight} onSelectItem={onSelectItem} />
+                    <motion.div variants={itemVariants} key={`playlist-list-${playlist.id}-${index}`}>
+                      <PlaylistItem item={playlist} isNight={isNight} onSelectItem={onSelectItem} />
+                    </motion.div>
                 ))}
-            </div>
+            </motion.div>
         </div>
     );
 };

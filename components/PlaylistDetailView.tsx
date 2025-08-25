@@ -1,8 +1,32 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import { useAuth } from '../context/AuthContext';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 export type ItemType = 'playlist' | 'album';
 
@@ -249,7 +273,12 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             </div>
 
             {/* Track List */}
-            <div className="mt-2">
+            <motion.div
+              className="mt-2"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
                 {tracks.map((track, index) => {
                     if (!track) return null;
                     const imageUrl = itemType === 'album' ? details.images?.[0]?.url : track.album?.images?.[0]?.url;
@@ -258,8 +287,9 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
                     return (
-                        <div 
+                        <motion.div
                             key={`${track.id}-${index}`}
+                            variants={itemVariants}
                             onClick={() => handleTrackPlay(track.uri, index)}
                             className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                         >
@@ -287,10 +317,10 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                                 {albumName}
                             </div>
                             <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
-                        </div>
+                        </motion.div>
                     );
                 })}
-            </div>
+            </motion.div>
         </div>
     );
 };

@@ -1,7 +1,31 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiMic, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 interface Show {
     id: string;
@@ -193,14 +217,20 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             </div>
             
             {/* Episode List */}
-            <div className="flex flex-col gap-2">
+            <motion.div
+              className="flex flex-col gap-2"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
                 {episodes.filter(Boolean).map((episode, index) => {
                     const isPlaying = isPlayingContext && episode.id === currentTrackId;
                     const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
                     return (
-                        <div 
+                        <motion.div
                             key={`${episode.id}-${index}`}
+                            variants={itemVariants}
                             onClick={() => handlePlayEpisode(index)}
                             className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                         >
@@ -226,10 +256,10 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                             <button onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }} className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0">
                                 <FiPlay className="w-5 h-5 ml-0.5" />
                             </button>
-                        </div>
+                        </motion.div>
                     );
                 })}
-            </div>
+            </motion.div>
 
             {totalEpisodes > limit && (
                 <div className="mt-6">

@@ -1,9 +1,31 @@
 
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 interface PlayHistoryObject {
     track: SpotifyItem;
@@ -80,7 +102,12 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             <h2 className={`text-3xl font-bold mb-6 ${theme.textPrimary}`}>Ascoltati di recente</h2>
-            <div className="flex flex-col">
+            <motion.div
+              className="flex flex-col"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
                 {history.map(({ track, context }, index) => {
                     let contextText = track.artists?.map(a => a.name).join(', ');
                     if (context && contextDetails.has(context.uri)) {
@@ -90,8 +117,9 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
                     }
 
                     return (
-                        <div 
+                        <motion.div
                             key={`${track.id}-${index}`}
+                            variants={itemVariants}
                             onClick={() => onPlay({ uris: [track.uri] })}
                             className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                         >
@@ -104,10 +132,10 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
                                 <span className={`truncate font-medium ${theme.textPrimary}`}>{track.name}</span>
                                 <span className={`text-sm truncate ${theme.textSecondary}`}>{contextText}</span>
                             </div>
-                        </div>
+                        </motion.div>
                     );
                 })}
-            </div>
+            </motion.div>
         </div>
     );
 };

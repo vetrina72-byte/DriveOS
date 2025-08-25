@@ -2,6 +2,29 @@
 import React, { useRef } from 'react';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: SpotifyItem[], isNight: boolean, onSelectItem: (item: SpotifyItem) => void, keyPrefix: string }) => {
   const validItems = Array.isArray(items) ? items.filter(item => item && item.id) : [];
@@ -43,11 +66,19 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
           <FiChevronRight className={`w-6 h-6 ${buttonIconColor}`} />
       </button>
 
-      <div ref={scrollRef} className="spotify-carousel gap-4 px-6">
+      <motion.div
+        ref={scrollRef}
+        className="spotify-carousel gap-4 px-6"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {validItems.map((item, index) => (
-          <PlaylistItem key={`${keyPrefix}-${item.id || index}`} item={item} isNight={isNight} onSelectItem={onSelectItem} />
+          <motion.div variants={itemVariants} key={`${keyPrefix}-${item.id || index}`}>
+            <PlaylistItem item={item} isNight={isNight} onSelectItem={onSelectItem} />
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </section>
   );
 };

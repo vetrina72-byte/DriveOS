@@ -1,9 +1,34 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader, FiPlay } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import ContentCarousel from './ContentCarousel';
 import { useAuth } from '../context/AuthContext';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
+
 
 interface SearchResults {
     tracks?: { items: SpotifyItem[] };
@@ -99,7 +124,12 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
         <div className="flex-grow overflow-y-auto px-6 pb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {topResult && (
-                    <div className="md:col-span-1">
+                    <motion.div
+                      className="md:col-span-1"
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ ease: "easeOut", duration: 0.3 }}
+                    >
                         <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Miglior risultato</h2>
                         <div onClick={() => onSelectItem(topResult)} className={`p-4 rounded-lg transition-colors duration-200 cursor-pointer flex flex-col gap-4 ${isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'}`}>
                             {topResult.album?.images?.[0] && (
@@ -119,16 +149,26 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                 <FiPlay className="w-7 h-7 ml-1" />
                             </button>
                         </div>
-                    </div>
+                    </motion.div>
                 )}
                 {trackResults.length > 0 && (
                      <div className="md:col-span-1">
                         <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Brani</h2>
-                        <div className="flex flex-col gap-2">
+                        <motion.div
+                          className="flex flex-col gap-2"
+                          variants={containerVariants}
+                          initial="hidden"
+                          animate="visible"
+                        >
                              {trackResults.map((track, index) => {
                                 const isPlaying = isPlayingContext && track.id === currentTrackId;
                                 return (
-                                    <div key={track.id} onClick={() => onPlay({ uris: trackUris, offset: { position: index + 1 } })} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${theme.hover}`}>
+                                    <motion.div
+                                      key={track.id}
+                                      variants={itemVariants}
+                                      onClick={() => onPlay({ uris: trackUris, offset: { position: index + 1 } })}
+                                      className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${theme.hover}`}
+                                    >
                                         <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>
                                         <div className="flex-grow overflow-hidden">
                                             <div className="flex items-center gap-2">
@@ -137,10 +177,10 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                             </div>
                                             <p className={`text-xs truncate ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</p>
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 );
                              })}
-                        </div>
+                        </motion.div>
                      </div>
                 )}
             </div>

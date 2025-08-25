@@ -1,7 +1,31 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 interface CategoryPlaylistsViewProps {
     categoryId: string;
@@ -118,16 +142,22 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                     <div className="mb-6">
                         <PaginationControls />
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                    <motion.div
+                      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="visible"
+                    >
                         {validPlaylists.map((playlist, index) => (
-                            <PlaylistItem 
-                                key={`cat-playlist-${playlist.id}-${index}`} 
-                                item={playlist} 
-                                isNight={isNight} 
-                                onSelectItem={onSelectItem} 
-                            />
+                            <motion.div variants={itemVariants} key={`cat-playlist-${playlist.id}-${index}`}>
+                              <PlaylistItem 
+                                  item={playlist} 
+                                  isNight={isNight} 
+                                  onSelectItem={onSelectItem} 
+                              />
+                            </motion.div>
                         ))}
-                    </div>
+                    </motion.div>
                      <div className="mt-8">
                         <PaginationControls />
                     </div>

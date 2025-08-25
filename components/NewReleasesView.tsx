@@ -3,6 +3,29 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 const NewReleasesView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem: (item: SpotifyItem) => void }) => {
     const [albums, setAlbums] = useState<SpotifyItem[]>([]);
@@ -46,11 +69,18 @@ const NewReleasesView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             <h2 className={`text-3xl font-bold mb-6 ${isNight ? 'text-white' : 'text-black'}`}>Nuove Uscite</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+            <motion.div
+              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
                 {albums.map((album, index) => (
-                    <PlaylistItem key={`new-release-${album.id}-${index}`} item={album} isNight={isNight} onSelectItem={onSelectItem} />
+                    <motion.div variants={itemVariants} key={`new-release-${album.id}-${index}`}>
+                      <PlaylistItem item={album} isNight={isNight} onSelectItem={onSelectItem} />
+                    </motion.div>
                 ))}
-            </div>
+            </motion.div>
         </div>
     );
 };

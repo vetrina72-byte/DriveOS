@@ -4,6 +4,29 @@ import apiClient from '../api';
 import { FiPlay, FiLoader, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
+import { motion, Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      ease: "easeOut",
+      duration: 0.3
+    }
+  }
+};
 
 interface Artist {
     id: string;
@@ -208,14 +231,20 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
             {tracks.length > 0 && (
                 <div className="px-6">
                     <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
-                    <div className="flex flex-col">
+                    <motion.div
+                      className="flex flex-col"
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="visible"
+                    >
                         {tracks.slice(0, 5).map((track, index) => {
                             const isPlaying = isPlayingContext && track.id === currentTrackId;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
                             return (
-                                <div 
+                                <motion.div
                                     key={track.id + index}
+                                    variants={itemVariants}
                                     onClick={() => onPlay({ uris: trackUris, offset: { position: index } })}
                                     className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                                 >
@@ -236,31 +265,37 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                                         {track.explicit && <span className="text-xs text-zinc-400">Explicit</span>}
                                     </div>
                                     <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
-                                </div>
+                                </motion.div>
                             )
                         })}
-                    </div>
+                    </motion.div>
                 </div>
             )}
 
             {discography.length > 0 && (
                 <section className="px-6 mt-8">
                     <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Discografia</h2>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                    <motion.div
+                      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="visible"
+                    >
                         {discography.map((item, index) => {
                             const releaseType = item.album_type.charAt(0).toUpperCase() + item.album_type.slice(1);
                             const year = new Date(item.release_date).getFullYear();
                             const description = `${releaseType} • ${year}`;
                             return (
-                                <PlaylistItem 
-                                    key={`discography-${item.id}-${index}`} 
-                                    item={{...item, description, type: 'album'}}
-                                    isNight={isNight} 
-                                    onSelectItem={onSelectItem} 
-                                />
+                                <motion.div variants={itemVariants} key={`discography-${item.id}-${index}`}>
+                                  <PlaylistItem 
+                                      item={{...item, description, type: 'album'}}
+                                      isNight={isNight} 
+                                      onSelectItem={onSelectItem} 
+                                  />
+                                </motion.div>
                             );
                         })}
-                    </div>
+                    </motion.div>
                 </section>
             )}
         </div>
