@@ -4,6 +4,10 @@ const apiClient = axios.create({
   baseURL: 'https://api.spotify.com/v1' // NESSUNO SLASH ALLA FINE
 });
 
+// A queue to hold requests while the token is being refreshed
+let failedQueue: { resolve: (value?: any) => void; reject: (reason?: any) => void; }[] = [];
+let isRefreshing = false;
+
 // Interceptor to add the token to every request
 apiClient.interceptors.request.use(
   (config) => {
@@ -25,44 +29,57 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // If the error is 401 and we haven't already retried this request
-    if (error.response.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      const refreshToken = localStorage.getItem('spotify_refresh_token');
-
-      if (!refreshToken) {
-        // If there's no refresh token, we can't do anything.
-        // Force logout and reload.
-        console.error("No refresh token available. Logging out.");
-        localStorage.removeItem('spotify_access_token');
-        localStorage.removeItem('spotify_refresh_token');
-        localStorage.removeItem('spotify_expires_in');
-        window.location.reload();
-        return Promise.reject(error);
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // If a refresh is already in progress, queue this request
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+        .then(token => {
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          return apiClient(originalRequest);
+        });
       }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
       
       try {
-        // Call our backend to get a new access token
-        const { data } = await axios.post('/api/refresh-token', { refreshToken });
+        // Call our backend to get a new access token using the HttpOnly cookie
+        const { data } = await axios.post('http://localhost:8888/api/refresh-token', {}, {
+          withCredentials: true, // This is crucial to send the cookie
+        });
 
-        const newAccessToken = data.access_token;
+        const { access_token: newAccessToken, expires_in } = data;
+        const expiresAt = Date.now() + expires_in * 1000;
 
-        // Save the new token
+        // Save the new token and expiry
         localStorage.setItem('spotify_access_token', newAccessToken);
+        localStorage.setItem('spotify_expires_in', String(expiresAt));
 
-        // Update the header of the original request and retry it
+        // Update the default header for subsequent requests
         apiClient.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
         originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
         
+        // Retry all queued requests with the new token
+        failedQueue.forEach(prom => prom.resolve(newAccessToken));
+        failedQueue = [];
+        
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // The refresh failed (e.g., refresh token expired)
+        // The refresh failed (e.g., refresh token expired or was revoked)
         console.error("Token refresh failed. Logging out.", refreshError);
+        failedQueue.forEach(prom => prom.reject(refreshError));
+        failedQueue = [];
+        
+        // Force logout
         localStorage.removeItem('spotify_access_token');
-        localStorage.removeItem('spotify_refresh_token');
         localStorage.removeItem('spotify_expires_in');
-        window.location.reload();
+        window.location.href = '/'; // Redirect to home to force re-login
+
         return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 

@@ -30,15 +30,6 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      },
-      server: {
-        proxy: {
-          // Proxy API requests to the backend server during development
-          '/api': {
-            target: 'http://localhost:8888', // Your backend server address
-            changeOrigin: true, // Recommended for virtual hosted sites
-          },
-        },
-      },
+      }
     };
 });
