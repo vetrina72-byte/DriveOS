@@ -12,39 +12,6 @@ const getGreeting = () => {
   return "Buonasera";
 };
 
-const genreImageMap: Record<string, string> = {
-    'pop': 'https://images.pexels.com/photos/167636/pexels-photo-167636.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'rock': 'https://images.pexels.com/photos/167491/pexels-photo-167491.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'hiphop': 'https://images.pexels.com/photos/894156/pexels-photo-894156.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'dance': 'https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'latin': 'https://images.pexels.com/photos/2085739/pexels-photo-2085739.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'indie_alt': 'https://images.pexels.com/photos/33597/guitar-classical-guitar-acoustic-guitar-electric-guitar.jpg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'mood': 'https://images.pexels.com/photos/1423600/pexels-photo-1423600.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'party': 'https://images.pexels.com/photos/1190297/pexels-photo-1190297.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'gaming': 'https://images.pexels.com/photos/4009626/pexels-photo-4009626.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'chill': 'https://images.pexels.com/photos/1563256/pexels-photo-1563256.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'decades': 'https://images.pexels.com/photos/1626481/pexels-photo-1626481.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'rnb': 'https://images.pexels.com/photos/3775164/pexels-photo-3775164.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'jazz': 'https://images.pexels.com/photos/164936/pexels-photo-164936.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'classical': 'https://images.pexels.com/photos/164789/pexels-photo-164789.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'metal': 'https://images.pexels.com/photos/167635/pexels-photo-167635.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'k-pop': 'https://images.pexels.com/photos/787961/pexels-photo-787961.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'country': 'https://images.pexels.com/photos/1484516/pexels-photo-1484516.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'folk_acoustic': 'https://images.pexels.com/photos/1654883/pexels-photo-1654883.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'blues': 'https://images.pexels.com/photos/164821/pexels-photo-164821.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'romance': 'https://images.pexels.com/photos/3171837/pexels-photo-3171837.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'soul': 'https://images.pexels.com/photos/3756785/pexels-photo-3756785.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'funk': 'https://images.pexels.com/photos/258602/pexels-photo-258602.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'focus': 'https://images.pexels.com/photos/5439433/pexels-photo-5439433.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'workout': 'https://images.pexels.com/photos/1954524/pexels-photo-1954524.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'sleep': 'https://images.pexels.com/photos/935743/pexels-photo-935743.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'default': 'https://images.pexels.com/photos/374631/pexels-photo-374631.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'
-};
-
-const getGenreImage = (categoryId: string): string => {
-    return genreImageMap[categoryId] || genreImageMap['default'];
-};
-
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     const bgColor = isNight ? 'bg-white/5' : 'bg-black/5';
     return (
@@ -245,13 +212,23 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           setNewReleases(newReleasesRes.value.data.albums.items);
       }
       if (genresRes.status === 'fulfilled' && genresRes.value.data.categories) {
-           const mappedCategories = genresRes.value.data.categories.items.map((cat: any) => ({
-                id: cat.id,
-                name: cat.name,
-                uri: cat.href,
-                type: 'category',
-                customImageUrl: getGenreImage(cat.id),
-            }));
+           const mappedCategories = genresRes.value.data.categories.items.map((cat: any) => {
+                // Sanitize the name to create better search terms for Unsplash.
+                const searchKeywords = cat.name.toLowerCase()
+                    .replace(/ & /g, ' and ') // Replace "&" with "and"
+                    .replace(/[/ ]/g, '-');    // Replace slashes and spaces with hyphens
+                
+                // Construct the dynamic image URL.
+                const imageUrl = `https://source.unsplash.com/400x400/?${searchKeywords},music`;
+                
+                return {
+                    id: cat.id,
+                    name: cat.name,
+                    uri: cat.href,
+                    type: 'category',
+                    customImageUrl: imageUrl,
+                };
+            });
           setGenresCategories(mappedCategories);
       }
       if (showsRes.status === 'fulfilled' && showsRes.value.data.shows) {
