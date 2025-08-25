@@ -25,6 +25,8 @@ const SpotifyLogin: React.FC = () => {
           'user-read-recently-played',
           'playlist-read-private',
           'playlist-read-collaborative',
+          'playlist-modify-public',
+          'playlist-modify-private',
           'user-top-read',
           'user-follow-read',
           'user-follow-modify'

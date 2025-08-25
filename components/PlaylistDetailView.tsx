@@ -244,7 +244,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     </div>
                 )}
                 <div className="flex flex-col gap-3">
-                    <span className="text-sm font-bold uppercase">{details.type === 'show' ? 'Podcast' : details.type}</span>
+                    <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>{details.type === 'show' ? 'Podcast' : details.type}</span>
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{details.name}</h1>
                     {sanitizedSubText && <p className={`text-sm ${theme.textSecondary} line-clamp-2`}>{sanitizedSubText}</p>}
                      <div className="flex items-center gap-4 mt-4">
