@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { FiMusic, FiMic, FiUser, FiHeart } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
@@ -22,6 +21,8 @@ export interface SpotifyItem {
     display_name: string;
     id: string;
   };
+  // This property is specific to category items from the API
+  icons?: { url: string }[];
 }
 
 const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: SpotifyItem, isNight: boolean, onSelectItem: (item: SpotifyItem) => void, contextInfo?: string }) => {
@@ -56,13 +57,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   const descriptionText = getContextualDescription();
   const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
 
-  const imageUrl =
-    item.type === 'track'
-        ? item.album?.images?.[0]?.url
-        : Array.isArray(item.images) && item.images.length > 0
-        ? item.images[0].url
-        : undefined;
-
+  const imageUrl = item.images?.[0]?.url || item.album?.images?.[0]?.url || item.icons?.[0]?.url;
 
   // Special rendering for the "Liked Songs" playlist
   if (item.id === 'liked-songs') {
@@ -82,6 +77,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
       case 'artist': return <FiUser className={`w-10 h-10 ${placeholderIconColor}`} />;
       case 'show': return <FiMic className={`w-10 h-10 ${placeholderIconColor}`} />;
       case 'playlist': return <FaSpotify className={`w-10 h-10 ${placeholderIconColor}`} />;
+      case 'category': return <FiMusic className={`w-10 h-10 ${placeholderIconColor}`} />;
       default: return <FiMusic className={`w-10 h-10 ${placeholderIconColor}`} />;
     }
   }
