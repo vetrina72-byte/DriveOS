@@ -46,7 +46,7 @@ apiClient.interceptors.response.use(
       
       try {
         // Call our backend to get a new access token using the HttpOnly cookie
-        const { data } = await axios.post('http://localhost:8888/api/refresh-token', {}, {
+        const { data } = await axios.post('/api/refresh-token', {}, {
           withCredentials: true, // This is crucial to send the cookie
         });
 

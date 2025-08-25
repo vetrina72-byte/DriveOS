@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_expires_in');
         // Call backend to clear the HttpOnly cookie
-        axios.post('http://localhost:8888/api/logout', {}, { withCredentials: true }).catch(err => {
+        axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
         setState(initialState);
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             try {
                 // We don't need to check for a stored access token. We directly ask the backend
                 // to refresh, which will succeed if a valid HttpOnly cookie exists.
-                const { data } = await axios.post('http://localhost:8888/api/refresh-token', {}, { withCredentials: true });
+                const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
                 const { access_token, expires_in } = data;
                 const expiresAt = Date.now() + expires_in * 1000;
                 
@@ -132,7 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         try {
             // The backend now handles setting the refresh token in an HttpOnly cookie.
-            const response = await axios.post('http://localhost:8888/api/exchange-token', { code: authCode }, { withCredentials: true });
+            const response = await axios.post('/api/exchange-token', { code: authCode }, { withCredentials: true });
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
 
