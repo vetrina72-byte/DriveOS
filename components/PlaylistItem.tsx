@@ -23,7 +23,6 @@ export interface SpotifyItem {
   };
   // This property is specific to category items from the API
   icons?: { url: string }[];
-  customImageUrl?: string;
 }
 
 const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: SpotifyItem, isNight: boolean, onSelectItem: (item: SpotifyItem) => void, contextInfo?: string }) => {
@@ -32,32 +31,6 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
   const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
-
-  // NEW: Render a special card for genres with custom images
-  if (item.type === 'category' && item.customImageUrl) {
-    return (
-        <div
-            onClick={() => onSelectItem(item)}
-            className="relative w-44 h-56 rounded-lg overflow-hidden cursor-pointer group shadow-lg flex-shrink-0"
-        >
-            <div
-                className="absolute inset-0 bg-cover bg-center transition-transform duration-300 ease-in-out group-hover:scale-110"
-                style={{ backgroundImage: `url(${item.customImageUrl})` }}
-                aria-hidden="true"
-            />
-            <div
-                className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"
-                aria-hidden="true"
-            />
-            <div className="relative h-full flex items-end justify-start p-3">
-                <h3 className="text-white text-lg font-bold break-words" style={{ textShadow: '0 2px 5px rgba(0,0,0,0.6)' }}>
-                    {item.name}
-                </h3>
-            </div>
-        </div>
-    );
-  }
-
 
   const getContextualDescription = (): string => {
     if (contextInfo) return contextInfo;

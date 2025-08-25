@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
@@ -48,23 +49,13 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
                     (category: any) => !categoriesToExclude.includes(category.name)
                 );
 
-                const mappedCategories = filteredCategories.map((cat: any) => {
-                    // Sanitize the name to create better search terms for Unsplash.
-                    const searchKeywords = cat.name.toLowerCase()
-                        .replace(/ & /g, ' and ') // Replace "&" with "and"
-                        .replace(/[/ ]/g, '-');    // Replace slashes and spaces with hyphens
-                    
-                    // Construct the dynamic image URL.
-                    const imageUrl = `https://source.unsplash.com/400x400/?${searchKeywords},music`;
-
-                    return {
-                        id: cat.id,
-                        name: cat.name,
-                        uri: cat.href,
-                        type: 'category',
-                        customImageUrl: imageUrl,
-                    };
-                });
+                const mappedCategories = filteredCategories.map((cat: any) => ({
+                    id: cat.id,
+                    name: cat.name,
+                    uri: cat.href,
+                    images: cat.icons,
+                    type: 'category',
+                }));
                 setCategories(mappedCategories);
             } catch (err) {
                 console.error('Failed to fetch categories', err);
@@ -98,7 +89,7 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
                 {categories.map((category, index) => (
                      <motion.div variants={itemVariants} key={`genre-${category.id}-${index}`}>
                        <PlaylistItem 
-                          item={category} 
+                          item={{...category, description: 'Genere'}} 
                           isNight={isNight} 
                           onSelectItem={onSelectItem}
                        />

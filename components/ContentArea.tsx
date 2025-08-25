@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
@@ -212,23 +213,13 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           setNewReleases(newReleasesRes.value.data.albums.items);
       }
       if (genresRes.status === 'fulfilled' && genresRes.value.data.categories) {
-           const mappedCategories = genresRes.value.data.categories.items.map((cat: any) => {
-                // Sanitize the name to create better search terms for Unsplash.
-                const searchKeywords = cat.name.toLowerCase()
-                    .replace(/ & /g, ' and ') // Replace "&" with "and"
-                    .replace(/[/ ]/g, '-');    // Replace slashes and spaces with hyphens
-                
-                // Construct the dynamic image URL.
-                const imageUrl = `https://source.unsplash.com/400x400/?${searchKeywords},music`;
-                
-                return {
-                    id: cat.id,
-                    name: cat.name,
-                    uri: cat.href,
-                    type: 'category',
-                    customImageUrl: imageUrl,
-                };
-            });
+           const mappedCategories = genresRes.value.data.categories.items.map((cat: any) => ({
+                id: cat.id,
+                name: cat.name,
+                uri: cat.href,
+                images: cat.icons,
+                type: 'category',
+            }));
           setGenresCategories(mappedCategories);
       }
       if (showsRes.status === 'fulfilled' && showsRes.value.data.shows) {
