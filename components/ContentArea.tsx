@@ -124,11 +124,6 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [chartsPlaylists, setChartsPlaylists] = useState<SpotifyItem[]>([]);
   const [genresCategories, setGenresCategories] = useState<SpotifyItem[]>([]);
   const [recommendedShows, setRecommendedShows] = useState<SpotifyItem[]>([]);
-  const [userMixes, setUserMixes] = useState<SpotifyItem[]>([]);
-  const [partyPlaylists, setPartyPlaylists] = useState<SpotifyItem[]>([]);
-  const [artistRadioTracks, setArtistRadioTracks] = useState<SpotifyItem[]>([]);
-  const [genreStations, setGenreStations] = useState<SpotifyItem[]>([]);
-  const [userShows, setUserShows] = useState<SpotifyItem[]>([]);
 
   
   const fetchData = useCallback(async () => {
@@ -143,16 +138,14 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       const madeForYouCategoryId = '0JQ5DAqbMKF2JckPAnMAhA';
       
       const promises = [
-        apiClient.get('/me/player/recently-played?limit=50'),
-        apiClient.get('/me/playlists?limit=50'), // Increased limit for mixes
-        apiClient.get('/me/top/artists?time_range=medium_term&limit=10'),
-        apiClient.get(`/browse/categories/${madeForYouCategoryId}/playlists?country=IT&limit=10`),
-        apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'),
-        apiClient.get(`/browse/new-releases?country=IT&limit=10&offset=${randomOffset}`),
-        apiClient.get('/browse/categories?country=IT&limit=20'),
-        apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'),
-        apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'),
-        apiClient.get('/me/shows?limit=10')
+        apiClient.get('/me/player/recently-played?limit=50'), // For Continue Listening
+        apiClient.get('/me/playlists?limit=10'), // For User Playlists
+        apiClient.get('/me/top/artists?time_range=medium_term&limit=10'), // For Top Artists
+        apiClient.get(`/browse/categories/${madeForYouCategoryId}/playlists?country=IT&limit=10`), // For Made For You
+        apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'), // For Charts
+        apiClient.get(`/browse/new-releases?country=IT&limit=10&offset=${randomOffset}`), // For New Releases
+        apiClient.get('/browse/categories?country=IT&limit=20'), // For Genres
+        apiClient.get('/search?q=podcast&type=show&market=IT&limit=10') // For Podcasts
       ];
 
       const results = await Promise.allSettled(promises);
@@ -165,9 +158,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           chartsRes,
           newReleasesRes,
           genresRes,
-          showsRes,
-          partyPlaylistsRes,
-          userShowsRes
+          showsRes
       ] = results;
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
@@ -175,27 +166,10 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           setContinueListeningItems(processedItems);
       }
       if (userPlaylistsRes.status === 'fulfilled' && userPlaylistsRes.value.data.items) {
-          const allPlaylists = userPlaylistsRes.value.data.items;
-          setUserPlaylists(allPlaylists.slice(0, 10));
-          const mixes = allPlaylists.filter(p => p.name.toLowerCase().includes('mix'));
-          setUserMixes(mixes);
+          setUserPlaylists(userPlaylistsRes.value.data.items);
       }
       if (topArtistsRes.status === 'fulfilled' && topArtistsRes.value.data.items) {
-          const fetchedTopArtists = topArtistsRes.value.data.items;
-          setTopArtists(fetchedTopArtists);
-          if (fetchedTopArtists.length > 0) {
-              const topArtistId = fetchedTopArtists[0].id;
-              apiClient.get(`/recommendations?seed_artists=${topArtistId}&limit=10&market=IT`).then(res => {
-                  setArtistRadioTracks(res.data.tracks);
-              }).catch(e => console.error("Failed to fetch artist recommendations", e));
-              
-              const genres = [...new Set(fetchedTopArtists.flatMap((artist: any) => artist.genres))].slice(0, 4);
-              if (genres.length > 0) {
-                  apiClient.get(`/recommendations?seed_genres=${genres.join(',')}&limit=10&market=IT`).then(res => {
-                      setGenreStations(res.data.tracks);
-                  }).catch(e => console.error("Failed to fetch genre recommendations", e));
-              }
-          }
+          setTopArtists(topArtistsRes.value.data.items);
       }
        if (madeForYouRes.status === 'fulfilled' && madeForYouRes.value.data.playlists) {
           setMadeForYouPlaylists(madeForYouRes.value.data.playlists.items);
@@ -219,21 +193,10 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       if (showsRes.status === 'fulfilled' && showsRes.value.data.shows) {
           setRecommendedShows(showsRes.value.data.shows.items);
       }
-      if (partyPlaylistsRes.status === 'fulfilled' && partyPlaylistsRes.value.data.playlists) {
-          setPartyPlaylists(partyPlaylistsRes.value.data.playlists.items);
-      }
-      if (userShowsRes.status === 'fulfilled' && userShowsRes.value.data.items) {
-          setUserShows(userShowsRes.value.data.items.map((item: any) => item.show));
-      }
 
     } catch (err: any) {
         console.error("Critical error fetching home content:", err);
         setError("Could not load content. Please try again later.");
-        setUserMixes([]);
-        setPartyPlaylists([]);
-        setArtistRadioTracks([]);
-        setGenreStations([]);
-        setUserShows([]);
     } finally {
         setLoading(false);
         setHasFetchedOnce(true);
@@ -288,53 +251,28 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
               <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
           </div>
       )}
-      {userMixes.length > 0 && (
-        <div key={`${refreshTrigger}-um`} className="animate-fadeInUp" style={{ animationDelay: '250ms' }}>
-            <ContentCarousel title="I tuoi mix preferiti" items={userMixes} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-mixes" />
-        </div>
-      )}
-      {partyPlaylists.length > 0 && (
-        <div key={`${refreshTrigger}-pp`} className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
-            <ContentCarousel title="Musica da cantare" items={partyPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="party-playlists" />
-        </div>
-      )}
       {chartsPlaylists.length > 0 && (
-           <div key={`${refreshTrigger}-ch`} className="animate-fadeInUp" style={{ animationDelay: '350ms' }}>
-              <ContentCarousel title="100% Hit" items={chartsPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
+           <div key={`${refreshTrigger}-ch`} className="animate-fadeInUp" style={{ animationDelay: '250ms' }}>
+              <ContentCarousel title="Classifiche" items={chartsPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
           </div>
       )}
       {topArtists.length > 0 && (
-          <div key={`${refreshTrigger}-ta`} className="animate-fadeInUp" style={{ animationDelay: '400ms' }}>
+          <div key={`${refreshTrigger}-ta`} className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
               <ContentCarousel title="I tuoi artisti del momento" items={topArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
           </div>
       )}
-      {artistRadioTracks.length > 0 && topArtists.length > 0 && (
-        <div key={`${refreshTrigger}-art`} className="animate-fadeInUp" style={{ animationDelay: '450ms' }}>
-            <ContentCarousel title={`Radio di ${topArtists[0].name}`} items={artistRadioTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="artist-radio" />
-        </div>
-      )}
-      {genreStations.length > 0 && (
-        <div key={`${refreshTrigger}-gs`} className="animate-fadeInUp" style={{ animationDelay: '500ms' }}>
-            <ContentCarousel title="Stazioni consigliate" items={genreStations} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genre-stations" />
-        </div>
-      )}
       {newReleases.length > 0 && (
-          <div key={`${refreshTrigger}-nr`} className="animate-fadeInUp" style={{ animationDelay: '550ms' }}>
+          <div key={`${refreshTrigger}-nr`} className="animate-fadeInUp" style={{ animationDelay: '350ms' }}>
               <ContentCarousel title="Nuove uscite" items={newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
           </div>
       )}
-      {userShows.length > 0 && (
-           <div key={`${refreshTrigger}-us`} className="animate-fadeInUp" style={{ animationDelay: '600ms' }}>
-              <ContentCarousel title="Episodi che potrebbero piacerti" items={userShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-shows" />
-          </div>
-      )}
       {recommendedShows.length > 0 && (
-           <div key={`${refreshTrigger}-rs`} className="animate-fadeInUp" style={{ animationDelay: '650ms' }}>
+           <div key={`${refreshTrigger}-rs`} className="animate-fadeInUp" style={{ animationDelay: '400ms' }}>
               <ContentCarousel title="Podcast consigliati" items={recommendedShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
           </div>
       )}
       {genresCategories.length > 0 && (
-          <div key={`${refreshTrigger}-gc`} className="animate-fadeInUp" style={{ animationDelay: '700ms' }}>
+          <div key={`${refreshTrigger}-gc`} className="animate-fadeInUp" style={{ animationDelay: '450ms' }}>
               <ContentCarousel title="Esplora per generi e mood" items={genresCategories} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
           </div>
       )}
