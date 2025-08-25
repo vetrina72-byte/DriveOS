@@ -125,6 +125,11 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [genresCategories, setGenresCategories] = useState<SpotifyItem[]>([]);
   const [recommendedShows, setRecommendedShows] = useState<SpotifyItem[]>([]);
   const [partyPlaylists, setPartyPlaylists] = useState<SpotifyItem[]>([]);
+  // New states for the added carousels
+  const [topTracks, setTopTracks] = useState<SpotifyItem[]>([]);
+  const [artistRadio, setArtistRadio] = useState<SpotifyItem[]>([]);
+  const [trackRecommendations, setTrackRecommendations] = useState<SpotifyItem[]>([]);
+  const [savedAlbums, setSavedAlbums] = useState<SpotifyItem[]>([]);
 
   
   const fetchData = useCallback(async () => {
@@ -148,6 +153,9 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
         apiClient.get('/browse/categories?country=IT&limit=20'), // 6: For Genres
         apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'), // 7: For Podcasts
         apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'), // 8: For Party Playlists
+        // New API calls
+        apiClient.get('/me/top/tracks?limit=20&time_range=long_term'), // 9: For "Un tuffo nel passato"
+        apiClient.get('/me/albums?limit=10'), // 10: For "I tuoi album salvati"
       ];
 
       const results = await Promise.allSettled(promises);
@@ -167,7 +175,10 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           newReleasesRes,
           genresRes,
           showsRes,
-          partyPlaylistsRes
+          partyPlaylistsRes,
+          // New results
+          topTracksRes,
+          savedAlbumsRes,
       ] = results;
 
       if (recentlyPlayedRes.status === 'fulfilled' && recentlyPlayedRes.value.data.items) {
@@ -178,7 +189,15 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           setUserPlaylists(userPlaylistsRes.value.data.items);
       }
       if (topArtistsRes.status === 'fulfilled' && topArtistsRes.value.data.items) {
-          setTopArtists(topArtistsRes.value.data.items);
+          const artists = topArtistsRes.value.data.items;
+          setTopArtists(artists);
+          // DEPENDENT CALL: Artist Radio
+          if (artists.length > 0) {
+              const topArtistId = artists[0].id;
+              apiClient.get(`/recommendations?seed_artists=${topArtistId}&limit=20`)
+                  .then(res => setArtistRadio(res.data.tracks.filter(Boolean)))
+                  .catch(e => console.error("Failed to fetch artist radio", e));
+          }
       }
        if (madeForYouRes.status === 'fulfilled' && madeForYouRes.value.data.playlists) {
           setMadeForYouPlaylists(madeForYouRes.value.data.playlists.items);
@@ -204,6 +223,23 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       }
       if (showsRes.status === 'fulfilled' && showsRes.value.data.shows) {
           setRecommendedShows(showsRes.value.data.shows.items);
+      }
+      
+      // Handle new results
+      if (topTracksRes.status === 'fulfilled' && topTracksRes.value.data.items) {
+          const tracks = topTracksRes.value.data.items;
+          setTopTracks(tracks);
+          // DEPENDENT CALL: Track Recommendations
+          if (tracks.length >= 2) {
+              const seedTrackIds = tracks.slice(0, 2).map((track: SpotifyItem) => track.id).join(',');
+              apiClient.get(`/recommendations?seed_tracks=${seedTrackIds}&limit=20`)
+                  .then(res => setTrackRecommendations(res.data.tracks.filter(Boolean)))
+                  .catch(e => console.error("Failed to fetch track recommendations", e));
+          }
+      }
+      if (savedAlbumsRes.status === 'fulfilled' && savedAlbumsRes.value.data.items) {
+          const albums = savedAlbumsRes.value.data.items.map((item: any) => item.album).filter(Boolean);
+          setSavedAlbums(albums);
       }
 
     } catch (err: any) {
@@ -297,6 +333,27 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
       {genresCategories.length > 0 && (
           <div key={`${refreshTrigger}-gc`} className="animate-fadeInUp" style={{ animationDelay: '450ms' }}>
               <ContentCarousel title="Esplora per generi e mood" items={genresCategories} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
+          </div>
+      )}
+      {/* --- NEW SECTIONS START HERE --- */}
+      {topTracks.length > 0 && (
+          <div key={`${refreshTrigger}-top-tracks`} className="animate-fadeInUp" style={{ animationDelay: '500ms' }}>
+              <ContentCarousel title="Un tuffo nel passato" items={topTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-tracks" />
+          </div>
+      )}
+      {artistRadio.length > 0 && topArtists.length > 0 && (
+          <div key={`${refreshTrigger}-artist-radio`} className="animate-fadeInUp" style={{ animationDelay: '550ms' }}>
+              <ContentCarousel title={`Radio di ${topArtists[0].name}`} items={artistRadio} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="artist-radio" />
+          </div>
+      )}
+      {trackRecommendations.length > 0 && (
+          <div key={`${refreshTrigger}-track-recs`} className="animate-fadeInUp" style={{ animationDelay: '600ms' }}>
+              <ContentCarousel title="Potrebbe piacerti anche" items={trackRecommendations} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="track-recs" />
+          </div>
+      )}
+      {savedAlbums.length > 0 && (
+          <div key={`${refreshTrigger}-saved-albums`} className="animate-fadeInUp" style={{ animationDelay: '650ms' }}>
+              <ContentCarousel title="I tuoi album salvati" items={savedAlbums} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="saved-albums" />
           </div>
       )}
     </div>
