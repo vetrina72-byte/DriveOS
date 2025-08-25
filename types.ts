@@ -72,3 +72,12 @@ export interface WeatherData {
     };
     lastUpdated: Date;
 }
+
+export interface WeatherParams {
+  rainDensity: number; // 0-1
+  rainSpeed: number;
+  snowDensity: number; // 0-1
+  hailDensity: number; // 0-1
+  fogNear: number;
+  fogFar: number;
+}

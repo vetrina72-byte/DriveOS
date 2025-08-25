@@ -89,7 +89,7 @@ const RouteManager = ({ isNight }: { isNight: boolean }) => {
 const STADIA_API_KEY = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
 
 // Main MiniMap component
-const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, isNight, onClick }: {
+const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, isNight, effectiveWeatherCondition, onClick }: {
     isVisible: boolean;
     position: { lat: number; lng: number } | null;
     bearing: number;
@@ -100,6 +100,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
     fadeStart: number;
     fadeEnd: number;
     isNight: boolean;
+    effectiveWeatherCondition: string;
     onClick: (e: React.MouseEvent) => void;
 }) => {
   const markerRef = useRef<L.Marker>(null);
@@ -135,7 +136,9 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
     subdomains: 'abcd',
   };
 
-  const themeProps = isNight ? darkThemeProps : lightThemeProps;
+  const isGloomyDay = !isNight && /pioggia|temporale|rovescio/i.test(effectiveWeatherCondition.toLowerCase());
+  const useDarkTheme = isNight || isGloomyDay;
+  const themeProps = useDarkTheme ? darkThemeProps : lightThemeProps;
 
   return (
     <div 
@@ -166,7 +169,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
               icon={createVehicleIcon(bearing)}
             />
         )}
-        <RouteManager isNight={isNight} />
+        <RouteManager isNight={useDarkTheme} />
         {position && <MapUpdater position={position} zoom={zoom} />}
       </MapContainer>
     </div>

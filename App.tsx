@@ -10,7 +10,7 @@ import AppLauncher from './components/AppLauncher';
 import TopStatusBar from './components/TopStatusBar';
 import WeatherModal from './components/WeatherModal';
 import MiniMap from './components/MiniMap';
-import { WeatherData, TempUnit } from './types';
+import { WeatherData, TempUnit, WeatherParams } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
 import SpotifyCallback from './components/SpotifyCallback';
 import { routeStore } from './components/routeStore';
@@ -33,6 +33,41 @@ const ALL_APPS: AppDefinition[] = [
   { id: 'maps', icon: ICONS.maps, label: 'Maps' },
   { id: 'theater', icon: ICONS.theater, label: 'Theater' },
 ];
+
+const weatherConfig: Record<string, WeatherParams> = {
+  // Clear conditions, minimal fog
+  'Cielo sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
+  'Prevalentemente sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 45, fogFar: 140 },
+  'Parzialmente nuvoloso': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 35, fogFar: 120 },
+  'Coperto': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 25, fogFar: 80 },
+
+  // Precipitation
+  'Pioggerella': { rainDensity: 0.2, rainSpeed: 5, snowDensity: 0, hailDensity: 0, fogNear: 20, fogFar: 60 },
+  'Pioggia leggera': { rainDensity: 0.4, rainSpeed: 8, snowDensity: 0, hailDensity: 0, fogNear: 18, fogFar: 50 },
+  'Pioggia': { rainDensity: 0.7, rainSpeed: 11, snowDensity: 0, hailDensity: 0, fogNear: 15, fogFar: 40 },
+  'Pioggia forte': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
+  'Rovescio': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
+  'Temporale': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, hailDensity: 0, fogNear: 8, fogFar: 25 },
+
+  // Frozen Precipitation
+  'Neve leggera': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.4, hailDensity: 0, fogNear: 15, fogFar: 40 },
+  'Neve': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.7, hailDensity: 0, fogNear: 12, fogFar: 35 },
+  'Neve forte': { rainDensity: 0, rainSpeed: 0, snowDensity: 1.0, hailDensity: 0, fogNear: 8, fogFar: 25 },
+  'Grandine': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 1.0, fogNear: 12, fogFar: 35 },
+
+  // Obscuration
+  'Nebbia': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 1, fogFar: 20 },
+  
+  // Special / Time-based
+  'Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
+  'Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
+  'Cloudy Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
+  'Cloudy Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
+  'Partly Cloudy Night': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 40, fogFar: 120 },
+
+  // Default fallback
+  'Default': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
+};
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
   icon: React.ComponentType<any>, 
@@ -546,6 +581,32 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   } : null;
 }
 
+export type SceneColors = {
+  [time: string]: {
+    [condition: string]: { sky: string; floor: string };
+  };
+};
+
+export const initialSceneColors: SceneColors = {
+  day: {
+    'Cielo sereno': { sky: '#ffffff', floor: '#ffffff' },
+    'Pioggia': { sky: '#595b5f', floor: '#3e4041' },
+    'Temporale': { sky: '#454b59', floor: '#222222' },
+    'Neve': { sky: '#ababab', floor: '#eeeeee' },
+    'Grandine': { sky: '#a1a1aa', floor: '#d4d4d8' },
+    'Nebbia': { sky: '#b0b8c0', floor: '#b0b8c0' },
+  },
+  night: {
+    'Cielo sereno': { sky: '#000000', floor: '#000000' },
+    'Pioggia': { sky: '#000000', floor: '#000000' },
+    'Temporale': { sky: '#000000', floor: '#000000' },
+    'Neve': { sky: '#000000', floor: '#000000' },
+    'Grandine': { sky: '#000000', floor: '#000000' },
+    'Nebbia': { sky: '#000000', floor: '#000000' },
+  }
+};
+
+
 export default function App() {
   // Simple routing based on URL path for the Spotify callback
   if (window.location.pathname === '/spotify-callback') {
@@ -582,11 +643,13 @@ export default function App() {
       modelRot: { x: 0, y: -0.09, z: 0.0 },
       modelScale: 0.78,
   });
-  const [nightFloorDarkness, setNightFloorDarkness] = useState(0);
+  const [sceneColors, setSceneColors] = useState<SceneColors>(initialSceneColors);
   const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.25);
   const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.60);
   const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
+  const [dayFogNear, setDayFogNear] = useState(13);
+  const [dayFogFar, setDayFogFar] = useState(52);
 
   // Spotify Player & Home Widgets
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
@@ -870,6 +933,14 @@ export default function App() {
     };
   }, [effectiveTime, weatherData, weatherConditionOverride]);
 
+  const targetWeatherParams = useMemo(() => {
+    return weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'];
+  }, [effectiveWeatherCondition]);
+
+  const isGloomyDay = useMemo(() => {
+    return !isNight && /pioggia|temporale|rovescio/i.test(effectiveWeatherCondition);
+  }, [isNight, effectiveWeatherCondition]);
+
   const fetchWeatherData = useCallback(async (latitude: number, longitude: number) => {
       setWeatherStatus('fetching');
       setWeatherError(null);
@@ -1040,7 +1111,7 @@ export default function App() {
         <div 
           className="relative w-screen h-screen bg-black select-none overflow-hidden"
           onClick={handleWrapperClick}
-          data-theme={isNight ? 'dark' : 'light'}
+          data-theme={isNight || isGloomyDay ? 'dark' : 'light'}
         >
           <VehicleCanvas 
               isAppOpen={isUIOverlayActive} 
@@ -1048,11 +1119,15 @@ export default function App() {
               minOrbitDistance={minOrbitDistance}
               maxOrbitDistance={maxOrbitDistance}
               appOpenConfig={appOpenConfig}
-              nightFloorDarkness={nightFloorDarkness}
+              sceneColors={sceneColors}
               nightAmbientIntensity={nightAmbientIntensity}
               nightFrontLightIntensity={nightFrontLightIntensity}
               nightEnvironmentIntensity={nightEnvironmentIntensity}
               onInteractionChange={setIsCanvasInteracting}
+              effectiveWeatherCondition={effectiveWeatherCondition}
+              dayFogNear={dayFogNear}
+              dayFogFar={dayFogFar}
+              targetWeatherParams={targetWeatherParams}
           />
 
           <MiniMap 
@@ -1060,6 +1135,7 @@ export default function App() {
               position={currentPosition} 
               bearing={bearing}
               isNight={isNight}
+              effectiveWeatherCondition={effectiveWeatherCondition}
               top={miniMapTop}
               right={miniMapRight}
               size={miniMapSize}
@@ -1117,7 +1193,7 @@ export default function App() {
                 <NavigationStatus
                   target={navigationTarget}
                   currentPosition={throttledPosition}
-                  isNight={isNight}
+                  isNight={isNight || isGloomyDay}
                   onCancel={handleCancelNavigation}
                   tripInfo={tripInfo}
                   simulatedRemainingDistance={simulatedRemainingDistance}
@@ -1127,7 +1203,7 @@ export default function App() {
               ) : (
                 <NavigateTool 
                   isVisible={!isUIOverlayActive} 
-                  isNight={isNight}
+                  isNight={isNight || isGloomyDay}
                   onSelectDestination={handleSelectDestination}
                   currentPosition={currentPosition}
                   width={navigateToolWidth}
@@ -1142,6 +1218,7 @@ export default function App() {
           <MusicPlayer 
             isAnyAppOpen={isUIOverlayActive}
             isNight={isNight}
+            isGloomyDay={isGloomyDay}
             dockedConfig={{
               width: playerDockedWidth,
               bottom: playerFloatingBottom,
@@ -1355,8 +1432,8 @@ export default function App() {
             setMaxOrbitDistance={setMaxOrbitDistance}
             appOpenConfig={appOpenConfig}
             setAppOpenConfig={setAppOpenConfig}
-            nightFloorDarkness={nightFloorDarkness}
-            setNightFloorDarkness={setNightFloorDarkness}
+            sceneColors={sceneColors}
+            setSceneColors={setSceneColors}
             spotifyPlayerTop={spotifyPlayerTop}
             setSpotifyPlayerTop={setSpotifyPlayerTop}
             spotifyPlayerBottom={spotifyPlayerBottom}
@@ -1419,6 +1496,10 @@ export default function App() {
             setAppLauncherWidth={setAppLauncherWidth}
             appLauncherHeight={appLauncherHeight}
             setAppLauncherHeight={setAppLauncherHeight}
+            dayFogNear={dayFogNear}
+            setDayFogNear={setDayFogNear}
+            dayFogFar={dayFogFar}
+            setDayFogFar={setDayFogFar}
         />
         </div>
       </AuthProvider>

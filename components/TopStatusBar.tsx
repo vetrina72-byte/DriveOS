@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useEffect } from 'react';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { WeatherData, TempUnit } from '../types';
@@ -131,7 +132,9 @@ export default function TopStatusBar({
 
   const temperatureText = convertAndFormatTemp(weatherData?.current.temperature, tempUnit);
   
-  const textColor = isNight ? 'text-gray-200' : 'text-gray-800';
+  const lowerCond = weatherCondition.toLowerCase();
+  const isGloomyDay = !isNight && (lowerCond.includes('pioggia') || lowerCond.includes('temporale') || lowerCond.includes('rovescio'));
+  const textColor = (isNight || isGloomyDay) ? 'text-white' : 'text-gray-800';
 
   return (
     <header 

@@ -1,11 +1,11 @@
-
-
-import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo } from 'react';
+import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
 import * as THREE from 'three';
-// The DebugControls component is no longer rendered.
 import { VolumetricHeadlight } from './VolumetricHeadlight';
+import WeatherEffects from './WeatherEffects';
+import type { SceneColors } from '../App';
+import type { WeatherParams } from '../types';
 
 // URL del modello GLTF
 const MODEL_URL = 'https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/cybertruck/model.gltf';
@@ -212,8 +212,6 @@ function SceneController({
       ctrl.target.lerp(tgt, damp);
 
       // --- Unified Spherical Lerp for camera animation ---
-      // This ensures the camera always moves around the car, not through it,
-      // by interpolating its spherical coordinates (radius, phi, theta) instead of its cartesian (x,y,z) ones.
       const targetPosition = new THREE.Vector3(
         activeConfig.cameraPos.x,
         activeConfig.cameraPos.y,
@@ -221,30 +219,25 @@ function SceneController({
       );
       const offset = new THREE.Vector3().subVectors(targetPosition, tgt);
 
-      // Target spherical coordinates
       const targetRadius = offset.length();
       const targetPhi = Math.acos(offset.y / targetRadius);
       const targetTheta = Math.atan2(offset.x, offset.z);
 
-      // Current spherical coordinates from OrbitControls
       const currentRadius = ctrl.getDistance();
       const currentPhi = ctrl.getPolarAngle();
       const currentTheta = ctrl.getAzimuthalAngle();
       
-      // Interpolate each spherical coordinate towards the target
       const newRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, damp);
       const newPhi = THREE.MathUtils.lerp(currentPhi, targetPhi, damp);
       
-      // Handle theta wrapping for the shortest rotation path
       let deltaTheta = targetTheta - currentTheta;
       if (deltaTheta > Math.PI) deltaTheta -= 2 * Math.PI;
       if (deltaTheta < -Math.PI) deltaTheta += 2 * Math.PI;
       const newTheta = currentTheta + deltaTheta * damp;
       
-      // Calculate the new camera position from the interpolated spherical coordinates
       const newPosition = new THREE.Vector3()
         .setFromSphericalCoords(newRadius, newPhi, newTheta)
-        .add(ctrl.target); // Add the interpolated target back to get the final world position
+        .add(ctrl.target);
 
       camera.position.copy(newPosition);
     }
@@ -294,7 +287,11 @@ function EnvironmentController({
   nightAmbientIntensity,
   nightFrontLightIntensity,
   nightEnvironmentIntensity,
-  nightFloorDarkness,
+  weatherCondition,
+  dayFogNear,
+  dayFogFar,
+  sceneColors,
+  targetWeatherParams,
 }: {
   isNight: boolean;
   floorRef: React.RefObject<THREE.Mesh>;
@@ -304,77 +301,132 @@ function EnvironmentController({
   nightAmbientIntensity: number;
   nightFrontLightIntensity: number;
   nightEnvironmentIntensity: number;
-  nightFloorDarkness: number;
+  weatherCondition: string;
+  dayFogNear: number;
+  dayFogFar: number;
+  sceneColors: SceneColors;
+  targetWeatherParams: WeatherParams;
 }) {
   const { scene } = useThree();
   const targetSky = useRef(new THREE.Color()).current;
   const targetFloor = useRef(new THREE.Color()).current;
-  const environmentRotationY = 0;
 
-  // Day values
+  // Default Day Values
   const dayAmbientIntensity = 0.8;
   const dayFrontLightIntensity = 0.8;
   const dayDirectionalIntensity = 0.8;
   const dayEnvironmentIntensity = 2.5;
   
   useEffect(() => {
-    scene.background = new THREE.Color('#ffffff');
-    scene.fog = new THREE.Fog('#ffffff', 18, 35);
+    if (!scene.background) {
+        scene.background = new THREE.Color('#ffffff');
+    }
   }, [scene]);
+
+  const getWeatherKey = useCallback((condition: string): string => {
+    const lowerCond = condition.toLowerCase();
+    if (lowerCond.includes('temporale')) return 'Temporale';
+    if (lowerCond.includes('pioggia') || lowerCond.includes('rovescio') || lowerCond.includes('pioggerella')) return 'Pioggia';
+    if (lowerCond.includes('grandine')) return 'Grandine';
+    if (lowerCond.includes('neve')) return 'Neve';
+    if (lowerCond.includes('nebbia')) return 'Nebbia';
+    return 'Cielo sereno';
+  }, []);
 
   useFrame((_, delta) => {
     const t = 1 - Math.exp(-1.5 * delta);
-    targetSky.set(isNight ? '#000000' : '#ffffff');
+    
+    const weatherKey = getWeatherKey(weatherCondition);
+    const timeKey = isNight ? 'night' : 'day';
+    const colors = sceneColors[timeKey][weatherKey] || sceneColors[timeKey]['Cielo sereno'];
+    
+    targetSky.set(colors.sky);
+    targetFloor.set(colors.floor);
 
-    // This logic removes the "focus mode" completely, as requested.
-    // The floor appearance now only depends on isNight and the debug controls.
-    if (isNight) {
-        // nightFloorDarkness is a value from 0 (black) to 50 (dark grey)
-        const hex = Math.round(nightFloorDarkness).toString(16).padStart(2, '0');
-        targetFloor.set(`#${hex}${hex}${hex}`);
-    } else {
-        targetFloor.set('#ffffff');
-    }
-    
-    if (scene.background instanceof THREE.Color) scene.background.lerp(targetSky, t);
-    if (scene.fog) scene.fog.color.lerp(targetSky, t);
-
-    const floorMat = floorRef.current!.material as any;
-    floorMat.color.lerp(targetFloor, t);
-    
-    // Mirror effect is now independent of app state (focus mode).
-    const targetMirror = isNight ? 0 : 0.8;
-    floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror, targetMirror, t);
-    
     let targetAmbientIntensity: number, 
         targetFrontLightIntensity: number, 
         targetDirectionalIntensity: number, 
-        targetEnvIntensity: number;
+        targetEnvIntensity: number, 
+        targetMirror: number;
+    let targetFog: { near: number; far: number } | null = null;
+    
+    const isOvercast = /temporale|pioggia|rovescio|grandine|neve|nebbia/i.test(weatherKey);
 
     if (isNight) {
         targetAmbientIntensity = nightAmbientIntensity;
         targetFrontLightIntensity = nightFrontLightIntensity;
-        targetDirectionalIntensity = 0; // The sun is off
+        targetDirectionalIntensity = 0;
         targetEnvIntensity = nightEnvironmentIntensity;
-    } else { // Day mode
+        targetMirror = 0;
+        targetFog = { near: 15, far: 70 }; // Blending fog for all night conditions
+    } else {
+        // Default DAY values
         targetAmbientIntensity = dayAmbientIntensity;
         targetFrontLightIntensity = dayFrontLightIntensity;
         targetDirectionalIntensity = dayDirectionalIntensity;
         targetEnvIntensity = dayEnvironmentIntensity;
-    }
+        targetMirror = 0.8;
+        
+        // Use debug controls for clear day, otherwise use weather config
+        const fogNear = isOvercast ? targetWeatherParams.fogNear : dayFogNear;
+        const fogFar = isOvercast ? targetWeatherParams.fogFar : dayFogFar;
+        targetFog = { near: fogNear, far: fogFar };
 
-    if (ambientLightRef.current) {
-        ambientLightRef.current.intensity = THREE.MathUtils.lerp(ambientLightRef.current.intensity, targetAmbientIntensity, t);
+        // DAY WEATHER OVERRIDES for lighting
+        if (weatherKey === 'Temporale') {
+            targetAmbientIntensity *= 0.5;
+            targetDirectionalIntensity = 0.1;
+            targetEnvIntensity = 0.6;
+            targetMirror = 0;
+        } else if (weatherKey === 'Pioggia') {
+            targetAmbientIntensity *= 0.4;
+            targetDirectionalIntensity *= 0.1;
+            targetEnvIntensity *= 0.5;
+            targetMirror = 0;
+        } else if (weatherKey === 'Grandine') {
+            targetAmbientIntensity *= 0.5;
+            targetDirectionalIntensity *= 0.2;
+            targetEnvIntensity *= 0.6;
+            targetMirror = 0.1;
+        } else if (weatherKey === 'Neve') {
+            targetAmbientIntensity *= 0.8;
+            targetDirectionalIntensity *= 0.4;
+            targetEnvIntensity *= 1.2;
+            targetMirror = 0.2;
+        } else if (weatherKey === 'Nebbia') {
+            targetAmbientIntensity *= 0.6;
+            targetDirectionalIntensity *= 0.2;
+            targetEnvIntensity *= 0.8;
+            targetMirror = 0.1;
+        }
     }
-    if (frontLightRef.current) {
-        frontLightRef.current.intensity = THREE.MathUtils.lerp(frontLightRef.current.intensity, targetFrontLightIntensity, t);
-    }
-    if (directionalLightRef.current) {
-        directionalLightRef.current.intensity = THREE.MathUtils.lerp(directionalLightRef.current.intensity, targetDirectionalIntensity, t);
-    }
-
+    
+    // --- LERP VALUES TO APPLY ---
+    if (scene.background instanceof THREE.Color) scene.background.lerp(targetSky, t);
+    
+    const floorMat = floorRef.current!.material as any;
+    floorMat.color.lerp(targetFloor, t);
+    floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror, targetMirror, t);
+    
+    if (ambientLightRef.current) ambientLightRef.current.intensity = THREE.MathUtils.lerp(ambientLightRef.current.intensity, targetAmbientIntensity, t);
+    if (frontLightRef.current) frontLightRef.current.intensity = THREE.MathUtils.lerp(frontLightRef.current.intensity, targetFrontLightIntensity, t);
+    if (directionalLightRef.current) directionalLightRef.current.intensity = THREE.MathUtils.lerp(directionalLightRef.current.intensity, targetDirectionalIntensity, t);
     scene.environmentIntensity = THREE.MathUtils.lerp(scene.environmentIntensity, targetEnvIntensity, t);
-    scene.environmentRotation.y = THREE.MathUtils.lerp(scene.environmentRotation.y, environmentRotationY, t);
+    
+    // FOG MUST BE APPLIED LAST
+    if (targetFog) {
+        if (!scene.fog) {
+            scene.fog = new THREE.Fog(targetSky, targetFog.near, targetFog.far);
+        }
+        const fog = scene.fog as THREE.Fog;
+        fog.color.copy(scene.background as THREE.Color);
+        fog.near = THREE.MathUtils.lerp(fog.near, targetFog.near, t);
+        fog.far = THREE.MathUtils.lerp(fog.far, targetFog.far, t);
+    } else {
+        if (scene.fog) {
+            scene.fog = null;
+        }
+    }
   });
 
   return null;
@@ -386,11 +438,15 @@ interface VehicleCanvasProps {
   minOrbitDistance: number;
   maxOrbitDistance: number;
   appOpenConfig: SceneConfig;
-  nightFloorDarkness: number;
+  sceneColors: SceneColors;
   nightAmbientIntensity: number;
   nightFrontLightIntensity: number;
   nightEnvironmentIntensity: number;
   onInteractionChange?: (isInteracting: boolean) => void;
+  effectiveWeatherCondition: string;
+  dayFogNear: number;
+  dayFogFar: number;
+  targetWeatherParams: WeatherParams;
 }
 
 export default function VehicleCanvas({
@@ -399,11 +455,15 @@ export default function VehicleCanvas({
   minOrbitDistance,
   maxOrbitDistance,
   appOpenConfig: appOpenConfigFromProps,
-  nightFloorDarkness,
+  sceneColors,
   nightAmbientIntensity,
   nightFrontLightIntensity,
   nightEnvironmentIntensity,
   onInteractionChange,
+  effectiveWeatherCondition,
+  dayFogNear,
+  dayFogFar,
+  targetWeatherParams,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -417,10 +477,10 @@ export default function VehicleCanvas({
   const beamEndWidth = 2.60;
   const beamStartHeight = 0.03;
   const beamEndHeight = 0.01;
-  const beamAngle = 2.92; // PITCH
-  const beamRoll = 0; // ROLL
+  const beamAngle = 2.92;
+  const beamRoll = 0;
   const beamIntensity = 0.5;
-  const beamFade = 3.30; // Falloff
+  const beamFade = 3.30;
   const headlightPosition = { x: 0.85, y: 1.09, z: 2.47 };
   
   const shadowPosition = { x: 0, y: 0.01, z: 0 };
@@ -438,9 +498,6 @@ export default function VehicleCanvas({
   const [runtimeAppOpenConfig, setRuntimeAppOpenConfig] = useState<SceneConfig>(appOpenConfigFromProps);
 
   useEffect(() => {
-    // This effect ensures that any temporary changes (like from dragging the model)
-    // are reset to the master configuration from the props whenever the app is opened
-    // or when the master configuration itself is changed via debug controls.
     if (isAppOpen) {
       setRuntimeAppOpenConfig(appOpenConfigFromProps);
     }
@@ -475,7 +532,6 @@ export default function VehicleCanvas({
               <shadowMaterial transparent opacity={shadowOpacity} />
             </mesh>
             
-            {/* Headlight style is fixed to 'bar' */}
             <VolumetricHeadlight
               position={[0, headlightPosition.y, headlightPosition.z]}
               beamLength={beamLength}
@@ -492,6 +548,7 @@ export default function VehicleCanvas({
           </group>
 
           <MemoizedEnvironment />
+          <WeatherEffects targetParams={targetWeatherParams} />
         </Suspense>
 
         <ambientLight ref={ambientLightRef} />
@@ -570,7 +627,11 @@ export default function VehicleCanvas({
           nightAmbientIntensity={nightAmbientIntensity}
           nightFrontLightIntensity={nightFrontLightIntensity}
           nightEnvironmentIntensity={nightEnvironmentIntensity}
-          nightFloorDarkness={nightFloorDarkness}
+          weatherCondition={effectiveWeatherCondition}
+          dayFogNear={dayFogNear}
+          dayFogFar={dayFogFar}
+          sceneColors={sceneColors}
+          targetWeatherParams={targetWeatherParams}
         />
       </Canvas>
     </>

@@ -2,6 +2,8 @@ import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { SceneConfig } from './VehicleCanvas';
+import type { SceneColors } from '../App';
+import { initialSceneColors } from '../App';
 
 interface DebugControlsProps {
   isOpen: boolean;
@@ -44,8 +46,8 @@ interface DebugControlsProps {
   setMaxOrbitDistance: (distance: number) => void;
   appOpenConfig: SceneConfig;
   setAppOpenConfig: React.Dispatch<React.SetStateAction<SceneConfig>>;
-  nightFloorDarkness: number;
-  setNightFloorDarkness: (darkness: number) => void;
+  sceneColors: SceneColors;
+  setSceneColors: React.Dispatch<React.SetStateAction<SceneColors>>;
   spotifyPlayerTop: number;
   setSpotifyPlayerTop: (top: number) => void;
   spotifyPlayerBottom: number;
@@ -108,6 +110,10 @@ interface DebugControlsProps {
   setAppLauncherWidth: (width: number) => void;
   appLauncherHeight: number;
   setAppLauncherHeight: (height: number) => void;
+  dayFogNear: number;
+  setDayFogNear: (val: number) => void;
+  dayFogFar: number;
+  setDayFogFar: (val: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -183,8 +189,8 @@ export default function DebugControls({
   setMaxOrbitDistance,
   appOpenConfig,
   setAppOpenConfig,
-  nightFloorDarkness,
-  setNightFloorDarkness,
+  sceneColors,
+  setSceneColors,
   spotifyPlayerTop,
   setSpotifyPlayerTop,
   spotifyPlayerBottom,
@@ -247,6 +253,10 @@ export default function DebugControls({
   setAppLauncherWidth,
   appLauncherHeight,
   setAppLauncherHeight,
+  dayFogNear,
+  setDayFogNear,
+  dayFogFar,
+  setDayFogFar,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -279,7 +289,7 @@ export default function DebugControls({
     setMinOrbitDistance(9.5);
     setMaxOrbitDistance(18);
     setAppOpenConfig(DEFAULT_APP_OPEN_CONFIG);
-    setNightFloorDarkness(0);
+    setSceneColors(initialSceneColors);
     setNightAmbientIntensity(0.25);
     setNightFrontLightIntensity(0.60);
     setNightEnvironmentIntensity(0.55);
@@ -306,6 +316,8 @@ export default function DebugControls({
     setVolumeSliderThickness(6);
     setVolumeSliderPopupWidth(247);
     setVolumeSliderPopupHeight(40);
+    setDayFogNear(13);
+    setDayFogFar(52);
     setAppLauncherWidth(37);
     setAppLauncherHeight(286);
   };
@@ -317,6 +329,19 @@ export default function DebugControls({
     } else {
       setWeatherConditionOverride(value);
     }
+  };
+
+  const handleColorChange = (time: string, condition: string, property: 'sky' | 'floor', value: string) => {
+    setSceneColors(prev => ({
+      ...prev,
+      [time]: {
+        ...prev[time],
+        [condition]: {
+          ...prev[time][condition],
+          [property]: value
+        }
+      }
+    }));
   };
 
   return (
@@ -401,7 +426,7 @@ export default function DebugControls({
             max="2.0"
             step="0.05"
             value={topBarScale}
-            onChange={(e) => setTopBarScale(parseFloat(e.target.value))}
+            onChange={(e) => setTopBarScale(Number(e.target.value))}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
           />
         </div>
@@ -573,7 +598,7 @@ export default function DebugControls({
                 max="10"
                 step="0.5"
                 value={minOrbitDistance}
-                onChange={(e) => setMinOrbitDistance(parseFloat(e.target.value))}
+                onChange={(e) => setMinOrbitDistance(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -595,22 +620,37 @@ export default function DebugControls({
         </div>
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Scene Environment Colors</h3>
+            {(Object.keys(sceneColors) as Array<keyof SceneColors>).map(time => (
+              <div key={time} className="pl-2 border-l-2 border-zinc-600 mb-3 mt-2">
+                <h4 className="capitalize text-sm font-semibold text-zinc-300 mb-2">{time}</h4>
+                {Object.keys(sceneColors[time]).map(condition => (
+                  <div key={`${time}-${condition}`} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-x-3 gap-y-1 mb-2">
+                    <label htmlFor={`${time}-${condition}-sky`} className="font-medium text-zinc-300 text-xs justify-self-start col-span-4">{condition}</label>
+                    <label htmlFor={`${time}-${condition}-sky`} className="font-medium text-zinc-400 text-xs justify-self-end">Sky:</label>
+                    <input
+                      id={`${time}-${condition}-sky`}
+                      type="color"
+                      value={sceneColors[time][condition].sky}
+                      onChange={e => handleColorChange(time, condition, 'sky', e.target.value)}
+                      className="w-8 h-8 p-0 bg-transparent rounded-md border-none cursor-pointer"
+                    />
+                    <label htmlFor={`${time}-${condition}-floor`} className="font-medium text-zinc-400 text-xs justify-self-end">Floor:</label>
+                    <input
+                      id={`${time}-${condition}-floor`}
+                      type="color"
+                      value={sceneColors[time][condition].floor}
+                      onChange={e => handleColorChange(time, condition, 'floor', e.target.value)}
+                      className="w-8 h-8 p-0 bg-transparent rounded-md border-none cursor-pointer"
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
             <h3 className="text-md font-semibold text-zinc-200 mb-2">3D Scene Visuals (Night)</h3>
-            <div>
-              <label htmlFor="night-floor-darkness-slider" className="block font-medium text-zinc-300 mb-2">
-                Floor Darkness: {nightFloorDarkness}
-              </label>
-              <input
-                id="night-floor-darkness-slider"
-                type="range"
-                min="0"
-                max="50"
-                step="1"
-                value={nightFloorDarkness}
-                onChange={(e) => setNightFloorDarkness(parseInt(e.target.value, 10))}
-                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
              <div className="mt-2">
               <label htmlFor="night-ambient-slider" className="block font-medium text-zinc-300 mb-2">
                 Ambient Light: {nightAmbientIntensity.toFixed(2)}
@@ -622,7 +662,7 @@ export default function DebugControls({
                 max="2"
                 step="0.05"
                 value={nightAmbientIntensity}
-                onChange={(e) => setNightAmbientIntensity(parseFloat(e.target.value))}
+                onChange={(e) => setNightAmbientIntensity(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -637,7 +677,7 @@ export default function DebugControls({
                 max="5"
                 step="0.1"
                 value={nightFrontLightIntensity}
-                onChange={(e) => setNightFrontLightIntensity(parseFloat(e.target.value))}
+                onChange={(e) => setNightFrontLightIntensity(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -652,7 +692,41 @@ export default function DebugControls({
                 max="3"
                 step="0.05"
                 value={nightEnvironmentIntensity}
-                onChange={(e) => setNightEnvironmentIntensity(parseFloat(e.target.value))}
+                onChange={(e) => setNightEnvironmentIntensity(Number(e.target.value))}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">3D Scene Fog (Day)</h3>
+            <div>
+              <label htmlFor="day-fog-near-slider" className="block font-medium text-zinc-300 mb-2">
+                Fog Near: {dayFogNear}
+              </label>
+              <input
+                id="day-fog-near-slider"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={dayFogNear}
+                onChange={(e) => setDayFogNear(parseInt(e.target.value, 10))}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+            <div className="mt-2">
+              <label htmlFor="day-fog-far-slider" className="block font-medium text-zinc-300 mb-2">
+                Fog Far: {dayFogFar}
+              </label>
+              <input
+                id="day-fog-far-slider"
+                type="range"
+                min="0"
+                max="200"
+                step="1"
+                value={dayFogFar}
+                onChange={(e) => setDayFogFar(parseInt(e.target.value, 10))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -848,25 +922,25 @@ export default function DebugControls({
             
             <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-1">
               <h4 className="text-sm font-semibold text-zinc-300">Camera Position</h4>
-              <label>X: {appOpenConfig.cameraPos.x.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraPos.x} onChange={(e) => setAppOpenConfig(c => ({...c, cameraPos: {...c.cameraPos, x: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Y: {appOpenConfig.cameraPos.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraPos.y} onChange={(e) => setAppOpenConfig(c => ({...c, cameraPos: {...c.cameraPos, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Z: {appOpenConfig.cameraPos.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraPos.z} onChange={(e) => setAppOpenConfig(c => ({...c, cameraPos: {...c.cameraPos, z: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>X: {appOpenConfig.cameraPos.x.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraPos.x} onChange={(e) => setAppOpenConfig(c => ({...c, cameraPos: {...c.cameraPos, x: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Y: {appOpenConfig.cameraPos.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraPos.y} onChange={(e) => setAppOpenConfig(c => ({...c, cameraPos: {...c.cameraPos, y: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Z: {appOpenConfig.cameraPos.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraPos.z} onChange={(e) => setAppOpenConfig(c => ({...c, cameraPos: {...c.cameraPos, z: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
 
             <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-1">
               <h4 className="text-sm font-semibold text-zinc-300">Camera Target</h4>
-              <label>X: {appOpenConfig.cameraTarget.x.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraTarget.x} onChange={(e) => setAppOpenConfig(c => ({...c, cameraTarget: {...c.cameraTarget, x: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Y: {appOpenConfig.cameraTarget.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraTarget.y} onChange={(e) => setAppOpenConfig(c => ({...c, cameraTarget: {...c.cameraTarget, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Z: {appOpenConfig.cameraTarget.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraTarget.z} onChange={(e) => setAppOpenConfig(c => ({...c, cameraTarget: {...c.cameraTarget, z: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>X: {appOpenConfig.cameraTarget.x.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraTarget.x} onChange={(e) => setAppOpenConfig(c => ({...c, cameraTarget: {...c.cameraTarget, x: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Y: {appOpenConfig.cameraTarget.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraTarget.y} onChange={(e) => setAppOpenConfig(c => ({...c, cameraTarget: {...c.cameraTarget, y: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Z: {appOpenConfig.cameraTarget.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.cameraTarget.z} onChange={(e) => setAppOpenConfig(c => ({...c, cameraTarget: {...c.cameraTarget, z: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
 
             <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-1">
               <h4 className="text-sm font-semibold text-zinc-300">Model Transform</h4>
-              <label>Pos X: {appOpenConfig.modelPos.x.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.x} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, x: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Pos Y: {appOpenConfig.modelPos.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Pos Z: {appOpenConfig.modelPos.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.z} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, z: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Rot Y: {appOpenConfig.modelRot.y.toFixed(2)}</label><input type="range" min="-3.14" max="3.14" step="0.01" value={appOpenConfig.modelRot.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelRot: {...c.modelRot, y: parseFloat(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-              <label>Scale: {appOpenConfig.modelScale.toFixed(2)}</label><input type="range" min="0.1" max="2.0" step="0.01" value={appOpenConfig.modelScale} onChange={(e) => setAppOpenConfig(c => ({...c, modelScale: parseFloat(e.target.value)}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Pos X: {appOpenConfig.modelPos.x.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.x} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, x: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Pos Y: {appOpenConfig.modelPos.y.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, y: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Pos Z: {appOpenConfig.modelPos.z.toFixed(2)}</label><input type="range" min="-10" max="10" step="0.01" value={appOpenConfig.modelPos.z} onChange={(e) => setAppOpenConfig(c => ({...c, modelPos: {...c.modelPos, z: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Rot Y: {appOpenConfig.modelRot.y.toFixed(2)}</label><input type="range" min="-3.14" max="3.14" step="0.01" value={appOpenConfig.modelRot.y} onChange={(e) => setAppOpenConfig(c => ({...c, modelRot: {...c.modelRot, y: Number(e.target.value)}}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label>Scale: {appOpenConfig.modelScale.toFixed(2)}</label><input type="range" min="0.1" max="2.0" step="0.01" value={appOpenConfig.modelScale} onChange={(e) => setAppOpenConfig(c => ({...c, modelScale: Number(e.target.value)}))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
