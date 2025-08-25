@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { FiMusic, FiMic, FiUser, FiHeart } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
@@ -55,9 +56,12 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   const descriptionText = getContextualDescription();
   const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
 
-  const imageUrl = item.type === 'track'
-    ? item.album?.images?.[0]?.url
-    : item.images?.[0]?.url;
+  const imageUrl =
+    item.type === 'track'
+        ? item.album?.images?.[0]?.url
+        : Array.isArray(item.images) && item.images.length > 0
+        ? item.images[0].url
+        : undefined;
 
 
   // Special rendering for the "Liked Songs" playlist
