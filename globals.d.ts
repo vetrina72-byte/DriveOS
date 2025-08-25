@@ -1,18 +1,5 @@
-/// <reference types="vite/client" />
-
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.
-
-// Manual definition for Vite's import.meta.env to fix TypeScript errors
-// when `vite/client` types are not automatically picked up.
-interface ImportMetaEnv {
-  readonly VITE_REDIRECT_URI: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
 
 // --- Web Speech API ---
 
@@ -136,6 +123,15 @@ export interface SpotifyPlayer {
 
 
 declare global {
+  // Manual definition for Vite's import.meta.env
+  interface ImportMetaEnv {
+    readonly VITE_REDIRECT_URI: string;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+
   interface Window {
     SpeechRecognition: SpeechRecognitionStatic;
     webkitSpeechRecognition: SpeechRecognitionStatic;
