@@ -36,37 +36,37 @@ const ALL_APPS: AppDefinition[] = [
 
 const weatherConfig: Record<string, WeatherParams> = {
   // Clear conditions, minimal fog
-  'Cielo sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
-  'Prevalentemente sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 45, fogFar: 140 },
-  'Parzialmente nuvoloso': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 35, fogFar: 120 },
-  'Coperto': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 25, fogFar: 80 },
+  'Cielo sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
+  'Prevalentemente sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 45, fogFar: 140 },
+  'Parzialmente nuvoloso': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 35, fogFar: 120 },
+  'Coperto': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 25, fogFar: 80 },
 
   // Precipitation
-  'Pioggerella': { rainDensity: 0.2, rainSpeed: 5, snowDensity: 0, hailDensity: 0, fogNear: 20, fogFar: 60 },
-  'Pioggia leggera': { rainDensity: 0.4, rainSpeed: 8, snowDensity: 0, hailDensity: 0, fogNear: 18, fogFar: 50 },
-  'Pioggia': { rainDensity: 0.7, rainSpeed: 11, snowDensity: 0, hailDensity: 0, fogNear: 15, fogFar: 40 },
-  'Pioggia forte': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
-  'Rovescio': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
-  'Temporale': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, hailDensity: 0, fogNear: 8, fogFar: 25 },
+  'Pioggerella': { rainDensity: 0.2, rainSpeed: 5, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 20, fogFar: 60 },
+  'Pioggia leggera': { rainDensity: 0.4, rainSpeed: 8, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 18, fogFar: 50 },
+  'Pioggia': { rainDensity: 0.7, rainSpeed: 11, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 15, fogFar: 40 },
+  'Pioggia forte': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
+  'Rovescio': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
+  'Temporale': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 8, fogFar: 25 },
 
   // Frozen Precipitation
-  'Neve leggera': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.4, hailDensity: 0, fogNear: 15, fogFar: 40 },
-  'Neve': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.7, hailDensity: 0, fogNear: 12, fogFar: 35 },
-  'Neve forte': { rainDensity: 0, rainSpeed: 0, snowDensity: 1.0, hailDensity: 0, fogNear: 8, fogFar: 25 },
-  'Grandine': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 1.0, fogNear: 12, fogFar: 35 },
+  'Neve leggera': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.4, snowSpeed: 1.5, hailDensity: 0, fogNear: 15, fogFar: 40 },
+  'Neve': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.7, snowSpeed: 3.0, hailDensity: 0, fogNear: 12, fogFar: 35 },
+  'Neve forte': { rainDensity: 0, rainSpeed: 0, snowDensity: 1.0, snowSpeed: 6.0, hailDensity: 0, fogNear: 8, fogFar: 25 },
+  'Grandine': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 1.0, fogNear: 12, fogFar: 35 },
 
   // Obscuration
-  'Nebbia': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 1, fogFar: 20 },
+  'Nebbia': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 1, fogFar: 20 },
   
   // Special / Time-based
-  'Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
-  'Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
-  'Cloudy Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
-  'Cloudy Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
-  'Partly Cloudy Night': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 40, fogFar: 120 },
+  'Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
+  'Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
+  'Cloudy Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
+  'Cloudy Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
+  'Partly Cloudy Night': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 120 },
 
   // Default fallback
-  'Default': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
+  'Default': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
 };
 
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 

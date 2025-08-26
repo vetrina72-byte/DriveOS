@@ -77,6 +77,7 @@ export interface WeatherParams {
   rainDensity: number; // 0-1
   rainSpeed: number;
   snowDensity: number; // 0-1
+  snowSpeed: number;
   hailDensity: number; // 0-1
   fogNear: number;
   fogFar: number;

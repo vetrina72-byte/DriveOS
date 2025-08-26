@@ -483,11 +483,13 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">App Launcher Layout</h3>
             <div>
               <label htmlFor="app-launcher-width">Width: {appLauncherWidth}%</label>
-              <input id="app-launcher-width" type="range" min="20" max="95" step="1" value={appLauncherWidth} onChange={(e) => setAppLauncherWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              {/* FIX: Use Number() to safely convert input value, as parseInt has stricter typing that can cause issues here. */}
+              <input id="app-launcher-width" type="range" min="20" max="95" step="1" value={appLauncherWidth} onChange={(e) => setAppLauncherWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="app-launcher-height">Height: {appLauncherHeight}px</label>
-              <input id="app-launcher-height" type="range" min="50" max="300" step="1" value={appLauncherHeight} onChange={(e) => setAppLauncherHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              {/* FIX: Use Number() to safely convert input value, as parseInt has stricter typing that can cause issues here. */}
+              <input id="app-launcher-height" type="range" min="50" max="300" step="1" value={appLauncherHeight} onChange={(e) => setAppLauncherHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
@@ -871,7 +873,8 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
             <div>
               <label htmlFor="player-controls-size">Icon Size: {playerControlsSize}px</label>
-              <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              {/* FIX: Use Number() to safely convert input value, as parseInt can cause type errors. */}
+              <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-gap">Icon Gap: {playerControlsGap}px</label>
@@ -879,7 +882,8 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
-              <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              {/* FIX: Use Number() to safely convert input value, as parseInt can cause type errors. */}
+              <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
