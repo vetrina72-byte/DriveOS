@@ -154,7 +154,7 @@ function SceneController({
         lastPos.current.x = x;
         setAppOpenConfig(prev => ({
             ...prev,
-            modelRot: { ...prev.modelRot, y: prev.modelRot.y + dx * 0.005 },
+            modelRot: { ...prev.modelRot, y: prev.modelRot.y + dx * 0.0012 },
         }));
     };
 
@@ -605,7 +605,7 @@ export default function VehicleCanvas({
           minDistance={minOrbitDistance}
           maxDistance={maxOrbitDistance}
           minPolarAngle={Math.PI / 3.5}
-          maxPolarAngle={Math.PI / 1.9}
+          maxPolarAngle={Math.PI / 2 - 0.05}
           autoRotate={false}
         />
 

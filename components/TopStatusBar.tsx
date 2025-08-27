@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect } from 'react';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { WeatherData, TempUnit } from '../types';
@@ -24,6 +20,7 @@ export default function TopStatusBar({
   setTempUnit,
   scale,
   offsetY,
+  mapStyle,
 }: { 
   isNight: boolean, 
   onWeatherClick: () => void, 
@@ -37,6 +34,7 @@ export default function TopStatusBar({
   setTempUnit: React.Dispatch<React.SetStateAction<TempUnit>>,
   scale: number,
   offsetY: number,
+  mapStyle: string,
 }) {
   const [use24HourFormat, setUse24HourFormat] = useState(false);
   const [timeParts, setTimeParts] = useState<TimeParts>({ time: '', ampm: null });
@@ -134,7 +132,9 @@ export default function TopStatusBar({
   
   const lowerCond = weatherCondition.toLowerCase();
   const isGloomyDay = !isNight && (lowerCond.includes('pioggia') || lowerCond.includes('temporale') || lowerCond.includes('rovescio'));
-  const textColor = (isNight || isGloomyDay) ? 'text-white' : 'text-gray-800';
+  const isSatellite = mapStyle === 'satellite';
+  const textColor = (isNight || isGloomyDay || isSatellite) ? 'text-white' : 'text-gray-800';
+  const shadowClass = isSatellite ? 'text-shadow' : '';
 
   return (
     <header 
@@ -143,7 +143,7 @@ export default function TopStatusBar({
       style={{ transform: `translateY(${offsetY}px)` }}
     >
       <div
-        className={`flex items-center text-lg font-medium transition-colors duration-300 pt-1.5 ${textColor} gap-3`}
+        className={`flex items-center text-lg font-medium transition-colors duration-300 pt-1.5 ${textColor} ${shadowClass} gap-3`}
         style={{
             transform: `scale(${scale})`,
             transformOrigin: 'center top'

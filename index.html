@@ -40,7 +40,7 @@
   <style>
     :root {
       --spotify-panel-bg: rgba(247, 247, 247, 0.95);
-      --player-bg: rgba(247, 247, 247, 0.92);
+      --player-bg: rgb(247, 247, 247);
       --text-primary: #000000;
       --text-secondary: #3f3f46;
       --heading-color: #000000;
@@ -58,7 +58,7 @@
 
     [data-theme='dark'] {
       --spotify-panel-bg: rgba(0, 0, 0, 0.95);
-      --player-bg: rgba(23, 23, 23, 0.85);
+      --player-bg: rgb(23, 23, 23);
       --text-primary: #f7f7f7;
       --text-secondary: #b3b3b3;
       --heading-color: #f7f7f7;
@@ -98,7 +98,7 @@
     @keyframes drift {
       0% { transform: translateX(-5px); }
       50% { transform: translateX(5px); }
-      100% { transform: translateX(-5px); }
+      100% { translateX(-5px); }
     }
     @keyframes pulse-glow {
       0%, 100% {
@@ -248,8 +248,8 @@
     .music-player {
       position: fixed;
       z-index: 10;
-      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-      will-change: width, height, bottom, left, transform;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform, opacity, width, height, left;
     }
 
     .spotify-app-panel {
@@ -483,6 +483,14 @@
       -webkit-mask-composite: xor;
       mask-composite: exclude;
       pointer-events: none; /* Ensure it doesn't block interactions */
+    }
+    .text-shadow {
+      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
+    [data-theme='dark'] #home-search-input {
+      background-color: var(--player-bg);
+      color: var(--text-primary);
+      border: none;
     }
   </style>
 </head>

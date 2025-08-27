@@ -62,8 +62,6 @@ interface DebugControlsProps {
   setPlayerFloatingWidth: (width: number) => void;
   playerFloatingBottom: number;
   setPlayerFloatingBottom: (bottom: number) => void;
-  playerPlaceholderWidth: number;
-  setPlayerPlaceholderWidth: (width: number) => void;
   playerFloatingHeight: number;
   setPlayerFloatingHeight: (height: number) => void;
   nightAmbientIntensity: number;
@@ -205,8 +203,6 @@ export default function DebugControls({
   setPlayerFloatingWidth,
   playerFloatingBottom,
   setPlayerFloatingBottom,
-  playerPlaceholderWidth,
-  setPlayerPlaceholderWidth,
   playerFloatingHeight,
   setPlayerFloatingHeight,
   nightAmbientIntensity,
@@ -267,7 +263,8 @@ export default function DebugControls({
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
 
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const hour = parseInt(e.target.value, 10);
+    // FIX: Replaced parseInt with Number for consistency and to avoid potential typing issues.
+    const hour = Number(e.target.value);
     const newDate = new Date();
     newDate.setHours(hour, 0, 0, 0);
     setTimeOverride(newDate);

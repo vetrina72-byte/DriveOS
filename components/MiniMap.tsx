@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -33,7 +32,7 @@ const MapUpdater = ({ position, zoom }: { position: { lat: number; lng: number }
 };
 
 // Component to manage the route polyline and animated marker imperatively
-const RouteManager = ({ isNight }: { isNight: boolean }) => {
+const RouteManager = ({ useDarkTheme }: { useDarkTheme: boolean }) => {
     const map = useMap();
     const polylineRef = useRef<L.Polyline | null>(null);
 
@@ -62,7 +61,7 @@ const RouteManager = ({ isNight }: { isNight: boolean }) => {
 
         if (routeCoords && routeCoords.length > 0) {
             const pathOptions = {
-                color: isNight ? '#60A5FA' : '#3B82F6',
+                color: useDarkTheme ? '#60A5FA' : '#3B82F6',
                 weight: 6,
                 opacity: 0.85,
             };
@@ -81,7 +80,7 @@ const RouteManager = ({ isNight }: { isNight: boolean }) => {
                 polylineRef.current = null;
             }
         }
-    }, [routeCoords, isNight, map]);
+    }, [routeCoords, useDarkTheme, map]);
 
     return null;
 };
@@ -89,7 +88,7 @@ const RouteManager = ({ isNight }: { isNight: boolean }) => {
 const STADIA_API_KEY = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
 
 // Main MiniMap component
-const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, isNight, effectiveWeatherCondition, onClick }: {
+const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, useDarkTheme, onClick }: {
     isVisible: boolean;
     position: { lat: number; lng: number } | null;
     bearing: number;
@@ -99,8 +98,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
     zoom: number;
     fadeStart: number;
     fadeEnd: number;
-    isNight: boolean;
-    effectiveWeatherCondition: string;
+    useDarkTheme: boolean;
     onClick: (e: React.MouseEvent) => void;
 }) => {
   const markerRef = useRef<L.Marker>(null);
@@ -132,12 +130,9 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
   };
 
   const darkThemeProps = {
-    url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png`,
-    subdomains: 'abcd',
+    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
   };
 
-  const isGloomyDay = !isNight && /pioggia|temporale|rovescio/i.test(effectiveWeatherCondition.toLowerCase());
-  const useDarkTheme = isNight || isGloomyDay;
   const themeProps = useDarkTheme ? darkThemeProps : lightThemeProps;
 
   return (
@@ -169,7 +164,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
               icon={createVehicleIcon(bearing)}
             />
         )}
-        <RouteManager isNight={useDarkTheme} />
+        <RouteManager useDarkTheme={useDarkTheme} />
         {position && <MapUpdater position={position} zoom={zoom} />}
       </MapContainer>
     </div>

@@ -117,6 +117,8 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     const containerRef = useRef<HTMLDivElement>(null);
 
     const GEOAPIFY_API_KEY = '0d2c9c7f72c0477eb3260838db72a383';
+    const HOME_COORDS = { lat: 41.8902, lng: 12.4922, name: 'Home' }; // Colosseum
+    const WORK_COORDS = { lat: 41.8986, lng: 12.4768, name: 'Work' }; // Pantheon
 
     const baseHeight = 113;
     const expandedHeight = 400;
@@ -219,7 +221,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     const theme = {
         bg: 'var(--player-bg)',
         border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
-        inputBg: isNight ? 'bg-zinc-700' : 'bg-zinc-100',
+        inputBg: isNight ? 'bg-zinc-900' : 'bg-zinc-100',
         inputText: isNight ? 'text-zinc-100' : 'text-zinc-800',
         placeholderText: isNight ? 'placeholder:text-zinc-500' : 'placeholder:text-zinc-400',
         iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
@@ -298,6 +300,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
                 <div className={`flex-shrink-0 mt-auto pt-2 border-t ${theme.border}`}>
                     <div className="flex justify-around items-center">
                         <button 
+                            onClick={() => onSelectDestination(HOME_COORDS)}
                             className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                         >
@@ -305,6 +308,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
                             <span>Home</span>
                         </button>
                          <button 
+                            onClick={() => onSelectDestination(WORK_COORDS)}
                             className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                          >
@@ -681,8 +685,8 @@ export default function App() {
   const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
   const widgetBgColor = useMemo(() => {
     const rgb = hexToRgb(widgetBgHex);
-    // Maintain the translucent look
-    return rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.85)` : 'rgba(23, 23, 23, 0.85)';
+    // Solid background color
+    return rgb ? `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})` : 'rgb(255, 255, 255)';
   }, [widgetBgHex]);
 
   // App Customization State
@@ -734,6 +738,7 @@ export default function App() {
   const simulationIntervalRef = useRef<number | null>(null);
   
   const [navigationTarget, setNavigationTarget] = useState<{ lat: number, lng: number, name: string } | null>(null);
+  const [mapStyle, setMapStyle] = useState('dark');
   
   const startTripSimulation = useCallback(() => {
     if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
@@ -804,6 +809,10 @@ export default function App() {
         if (target) {
           setNavigationTarget(target);
         }
+      }
+      
+      if (event.data?.type === 'MAP_STYLE_CHANGED') {
+        setMapStyle(event.data.payload.style);
       }
     };
 
@@ -934,9 +943,9 @@ export default function App() {
   }, [effectiveTime, weatherData, weatherConditionOverride]);
 
   const isGloomyDay = useMemo(() => {
-    if (isNight) return false; // Only applies to daytime
-    const darkWeatherConditions = ['Temporale', 'Rovescio'];
-    return darkWeatherConditions.includes(effectiveWeatherCondition);
+    if (isNight) return false;
+    const condition = effectiveWeatherCondition.toLowerCase();
+    return condition.includes('temporale') || condition.includes('pioggia') || condition.includes('rovescio') || condition.includes('grandine');
   }, [isNight, effectiveWeatherCondition]);
 
   const useDarkTheme = isNight || isGloomyDay;
@@ -1138,8 +1147,7 @@ export default function App() {
               isVisible={!isUIOverlayActive && !isCanvasInteracting} 
               position={currentPosition} 
               bearing={bearing}
-              isNight={useDarkTheme}
-              effectiveWeatherCondition={effectiveWeatherCondition}
+              useDarkTheme={useDarkTheme}
               top={miniMapTop}
               right={miniMapRight}
               size={miniMapSize}
@@ -1162,6 +1170,7 @@ export default function App() {
             setTempUnit={setTempUnit}
             scale={topBarScale}
             offsetY={topBarOffsetY}
+            mapStyle={mapStyle}
           />
 
           {arrivalMessage && (
@@ -1381,7 +1390,7 @@ export default function App() {
             </div>
             <div className="flex-1 flex justify-end">
                 <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
-                    {/* FIX: Corrected prop names passed to VolumeControl to match state variable names. */}
+                    {/* FIX: Corrected prop name from 'sliderThickness' to 'volumeSliderThickness' to match the VolumeControl component's props interface. */}
                     <VolumeControl 
                         iconSize={volumeIconSize} 
                         sliderOffsetY={volumeSliderOffsetY} 
@@ -1452,8 +1461,6 @@ export default function App() {
             setPlayerFloatingWidth={setPlayerFloatingWidth}
             playerFloatingBottom={playerFloatingBottom}
             setPlayerFloatingBottom={setPlayerFloatingBottom}
-            playerPlaceholderWidth={0} // Not used, can be removed if not needed by debug controls
-            setPlayerPlaceholderWidth={() => {}} // Not used
             playerFloatingHeight={playerFloatingHeight}
             setPlayerFloatingHeight={setPlayerFloatingHeight}
             nightAmbientIntensity={nightAmbientIntensity}
@@ -1504,7 +1511,8 @@ export default function App() {
             setDayFogNear={setDayFogNear}
             dayFogFar={dayFogFar}
             setDayFogFar={setDayFogFar}
-        />
+          />
+
         </div>
       </AuthProvider>
     </VehicleProvider>
