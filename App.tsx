@@ -610,7 +610,6 @@ export const initialSceneColors: SceneColors = {
   }
 };
 
-export type MiniMapStyle = 'light' | 'dark' | 'dark-matter';
 
 export default function App() {
   // Simple routing based on URL path for the Spotify callback
@@ -951,16 +950,6 @@ export default function App() {
 
   const useDarkTheme = isNight || isGloomyDay;
 
-  const miniMapStyle: MiniMapStyle = useMemo(() => {
-    if (isGloomyDay || (isNight && /pioggia|temporale|rovescio|grandine|neve|nebbia/i.test(effectiveWeatherCondition))) {
-        return 'dark';
-    }
-    if (isNight) {
-        return 'dark-matter';
-    }
-    return 'light';
-  }, [isNight, isGloomyDay, effectiveWeatherCondition]);
-
   const targetWeatherParams = useMemo(() => {
     return weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'];
   }, [effectiveWeatherCondition]);
@@ -1158,7 +1147,7 @@ export default function App() {
               isVisible={!isUIOverlayActive && !isCanvasInteracting} 
               position={currentPosition} 
               bearing={bearing}
-              mapStyle={miniMapStyle}
+              useDarkTheme={useDarkTheme}
               top={miniMapTop}
               right={miniMapRight}
               size={miniMapSize}

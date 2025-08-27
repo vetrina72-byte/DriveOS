@@ -870,8 +870,8 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
             <div>
               <label htmlFor="player-controls-size">Icon Size: {playerControlsSize}px</label>
-              {/* FIX: Replaced parseInt with Number for type safety and consistency. */}
-              <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              {/* FIX: Using parseInt with a radix to ensure the value from the range input is correctly interpreted as a base-10 integer. */}
+              <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-gap">Icon Gap: {playerControlsGap}px</label>
@@ -879,8 +879,8 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
-              {/* FIX: Replaced parseInt with Number for type safety and consistency. */}
-              <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              {/* FIX: Using parseInt with a radix to ensure the value from the range input is correctly interpreted as a base-10 integer. */}
+              <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
