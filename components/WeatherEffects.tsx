@@ -287,8 +287,8 @@ const Hail = ({ targetDensity }: { targetDensity: number }) => {
 };
 
 
-export default function WeatherEffects({ targetParams }: { targetParams: WeatherParams }) {
-    const isThunderstorm = targetParams.rainDensity > 0.8 && targetParams.rainSpeed > 10;
+export default function WeatherEffects({ targetParams, effectiveWeatherCondition }: { targetParams: WeatherParams; effectiveWeatherCondition: string; }) {
+    const isThunderstorm = effectiveWeatherCondition === 'Temporale';
     
     return (
         <>

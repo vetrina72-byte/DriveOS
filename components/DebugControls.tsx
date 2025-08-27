@@ -442,7 +442,7 @@ export default function DebugControls({
             max="100"
             step="1"
             value={topBarOffsetY}
-            onChange={(e) => setTopBarOffsetY(parseInt(e.target.value, 10))}
+            onChange={(e) => setTopBarOffsetY(Number(e.target.value))}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
           />
         </div>
@@ -458,7 +458,7 @@ export default function DebugControls({
             max="500"
             step="1"
             value={mapsSearchPanelWidth}
-            onChange={(e) => setMapsSearchPanelWidth(parseInt(e.target.value, 10))}
+            onChange={(e) => setMapsSearchPanelWidth(Number(e.target.value))}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
           />
         </div>
@@ -474,7 +474,7 @@ export default function DebugControls({
             max="100"
             step="1"
             value={mapsSearchPanelTop}
-            onChange={(e) => setMapsSearchPanelTop(parseInt(e.target.value, 10))}
+            onChange={(e) => setMapsSearchPanelTop(Number(e.target.value))}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
           />
         </div>
@@ -506,7 +506,7 @@ export default function DebugControls({
                 max="600"
                 step="1"
                 value={miniMapTop}
-                onChange={(e) => setMiniMapTop(parseInt(e.target.value, 10))}
+                onChange={(e) => setMiniMapTop(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -521,7 +521,7 @@ export default function DebugControls({
                 max="1000"
                 step="1"
                 value={miniMapRight}
-                onChange={(e) => setMiniMapRight(parseInt(e.target.value, 10))}
+                onChange={(e) => setMiniMapRight(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -536,7 +536,7 @@ export default function DebugControls({
                 max="500"
                 step="1"
                 value={miniMapSize}
-                onChange={(e) => setMiniMapSize(parseInt(e.target.value, 10))}
+                onChange={(e) => setMiniMapSize(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -551,7 +551,7 @@ export default function DebugControls({
                 max="20"
                 step="1"
                 value={miniMapZoom}
-                onChange={(e) => setMiniMapZoom(parseInt(e.target.value, 10))}
+                onChange={(e) => setMiniMapZoom(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -566,7 +566,7 @@ export default function DebugControls({
                 max="100"
                 step="1"
                 value={miniMapFadeStart}
-                onChange={(e) => setMiniMapFadeStart(parseInt(e.target.value, 10))}
+                onChange={(e) => setMiniMapFadeStart(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -581,7 +581,7 @@ export default function DebugControls({
                 max="100"
                 step="1"
                 value={miniMapFadeEnd}
-                onChange={(e) => setMiniMapFadeEnd(parseInt(e.target.value, 10))}
+                onChange={(e) => setMiniMapFadeEnd(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -615,7 +615,7 @@ export default function DebugControls({
                 max="40"
                 step="1"
                 value={maxOrbitDistance}
-                onChange={(e) => setMaxOrbitDistance(parseInt(e.target.value, 10))}
+                onChange={(e) => setMaxOrbitDistance(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -713,7 +713,7 @@ export default function DebugControls({
                 max="100"
                 step="1"
                 value={dayFogNear}
-                onChange={(e) => setDayFogNear(parseInt(e.target.value, 10))}
+                onChange={(e) => setDayFogNear(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -728,7 +728,7 @@ export default function DebugControls({
                 max="200"
                 step="1"
                 value={dayFogFar}
-                onChange={(e) => setDayFogFar(parseInt(e.target.value, 10))}
+                onChange={(e) => setDayFogFar(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -768,7 +768,7 @@ export default function DebugControls({
                 max="200"
                 step="1"
                 value={spotifyPlayerTop}
-                onChange={(e) => setSpotifyPlayerTop(parseInt(e.target.value, 10))}
+                onChange={(e) => setSpotifyPlayerTop(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -783,7 +783,7 @@ export default function DebugControls({
                 max="300"
                 step="1"
                 value={spotifyPlayerBottom}
-                onChange={(e) => setSpotifyPlayerBottom(parseInt(e.target.value, 10))}
+                onChange={(e) => setSpotifyPlayerBottom(Number(e.target.value))}
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
@@ -796,15 +796,15 @@ export default function DebugControls({
                 <h4 className="text-sm font-semibold text-zinc-300">Music Player (Docked)</h4>
                 <div>
                   <label htmlFor="docked-width-slider">Width: {playerDockedWidth}px</label>
-                  <input id="docked-width-slider" type="range" min="300" max="600" value={playerDockedWidth} onChange={(e) => setPlayerDockedWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="docked-width-slider" type="range" min="300" max="600" value={playerDockedWidth} onChange={(e) => setPlayerDockedWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div>
                   <label htmlFor="docked-height-slider">Height: {playerDockedHeight}px</label>
-                  <input id="docked-height-slider" type="range" min="60" max="150" value={playerDockedHeight} onChange={(e) => setPlayerDockedHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="docked-height-slider" type="range" min="60" max="150" value={playerDockedHeight} onChange={(e) => setPlayerDockedHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div>
                   <label htmlFor="docked-left-slider">Left Offset: {playerDockedLeft}px</label>
-                  <input id="docked-left-slider" type="range" min="0" max="100" value={playerDockedLeft} onChange={(e) => setPlayerDockedLeft(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="docked-left-slider" type="range" min="0" max="100" value={playerDockedLeft} onChange={(e) => setPlayerDockedLeft(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
             </div>
 
@@ -812,15 +812,15 @@ export default function DebugControls({
                 <h4 className="text-sm font-semibold text-zinc-300">Music Player (Floating)</h4>
                 <div>
                   <label htmlFor="floating-width-slider">Width: {playerFloatingWidth}px</label>
-                  <input id="floating-width-slider" type="range" min="400" max="800" value={playerFloatingWidth} onChange={(e) => setPlayerFloatingWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="floating-width-slider" type="range" min="400" max="800" value={playerFloatingWidth} onChange={(e) => setPlayerFloatingWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div>
                   <label htmlFor="floating-height-slider">Height: {playerFloatingHeight}px</label>
-                  <input id="floating-height-slider" type="range" min="60" max="150" value={playerFloatingHeight} onChange={(e) => setPlayerFloatingHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="floating-height-slider" type="range" min="60" max="150" value={playerFloatingHeight} onChange={(e) => setPlayerFloatingHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div>
                   <label htmlFor="floating-bottom-slider">Bottom Offset: {playerFloatingBottom}px</label>
-                  <input id="floating-bottom-slider" type="range" min="20" max="200" value={playerFloatingBottom} onChange={(e) => setPlayerFloatingBottom(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="floating-bottom-slider" type="range" min="20" max="200" value={playerFloatingBottom} onChange={(e) => setPlayerFloatingBottom(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
             </div>
 
@@ -828,7 +828,7 @@ export default function DebugControls({
                 <h4 className="text-sm font-semibold text-zinc-300">Navigation Tool (Floating)</h4>
                 <div>
                   <label htmlFor="nav-tool-width-slider">Width: {navigateToolWidth}px</label>
-                  <input id="nav-tool-width-slider" type="range" min="300" max="600" step="1" value={navigateToolWidth} onChange={(e) => setNavigateToolWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="nav-tool-width-slider" type="range" min="300" max="600" step="1" value={navigateToolWidth} onChange={(e) => setNavigateToolWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
             </div>
         </div>
@@ -837,35 +837,35 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Volume Control Layout</h3>
             <div>
               <label htmlFor="volume-icon-size">Icon Size: {volumeIconSize}px</label>
-              <input id="volume-icon-size" type="range" min="16" max="48" value={volumeIconSize} onChange={(e) => setVolumeIconSize(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="volume-icon-size" type="range" min="16" max="48" value={volumeIconSize} onChange={(e) => setVolumeIconSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="volume-slider-offset">Slider Vertical Offset: {volumeSliderOffsetY}px</label>
-              <input id="volume-slider-offset" type="range" min="0" max="50" value={volumeSliderOffsetY} onChange={(e) => setVolumeSliderOffsetY(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="volume-slider-offset" type="range" min="0" max="50" value={volumeSliderOffsetY} onChange={(e) => setVolumeSliderOffsetY(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
              <div className="mt-2">
               <label htmlFor="volume-slider-offset-x">Slider Horizontal Offset: {volumeSliderOffsetX}px</label>
-              <input id="volume-slider-offset-x" type="range" min="-200" max="200" value={volumeSliderOffsetX} onChange={(e) => setVolumeSliderOffsetX(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="volume-slider-offset-x" type="range" min="-200" max="200" value={volumeSliderOffsetX} onChange={(e) => setVolumeSliderOffsetX(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="volume-control-margin">Control Right Margin: {volumeControlMarginRight}px</label>
-              <input id="volume-control-margin" type="range" min="0" max="100" value={volumeControlMarginRight} onChange={(e) => setVolumeControlMarginRight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="volume-control-margin" type="range" min="0" max="100" value={volumeControlMarginRight} onChange={(e) => setVolumeControlMarginRight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="volume-slider-width">Slider Length: {volumeSliderWidth}px</label>
-              <input id="volume-slider-width" type="range" min="80" max="200" value={volumeSliderWidth} onChange={(e) => setVolumeSliderWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="volume-slider-width" type="range" min="80" max="200" value={volumeSliderWidth} onChange={(e) => setVolumeSliderWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="volume-slider-thickness">Slider Thickness: {volumeSliderThickness}px</label>
-              <input id="volume-slider-thickness" type="range" min="4" max="16" value={volumeSliderThickness} onChange={(e) => setVolumeSliderThickness(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="volume-slider-thickness" type="range" min="4" max="16" value={volumeSliderThickness} onChange={(e) => setVolumeSliderThickness(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
                 <label htmlFor="volume-popup-width">Popup Width: {volumeSliderPopupWidth}px</label>
-                <input id="volume-popup-width" type="range" min="100" max="300" value={volumeSliderPopupWidth} onChange={(e) => setVolumeSliderPopupWidth(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                <input id="volume-popup-width" type="range" min="100" max="300" value={volumeSliderPopupWidth} onChange={(e) => setVolumeSliderPopupWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
                 <label htmlFor="volume-popup-height">Popup Height: {volumeSliderPopupHeight}px</label>
-                <input id="volume-popup-height" type="range" min="30" max="100" value={volumeSliderPopupHeight} onChange={(e) => setVolumeSliderPopupHeight(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                <input id="volume-popup-height" type="range" min="30" max="100" value={volumeSliderPopupHeight} onChange={(e) => setVolumeSliderPopupHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
@@ -873,16 +873,16 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
             <div>
               <label htmlFor="player-controls-size">Icon Size: {playerControlsSize}px</label>
-              {/* FIX: Use Number() to safely convert input value, as parseInt can cause type errors. */}
+              {/* FIX: Use Number() to cast range input value to a number. parseInt() is unsafe here as it doesn't handle non-string values gracefully and can cause type errors. */}
               <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-gap">Icon Gap: {playerControlsGap}px</label>
-              <input id="player-controls-gap" type="range" min="8" max="120" value={playerControlsGap} onChange={(e) => setPlayerControlsGap(parseInt(e.target.value, 10))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <input id="player-controls-gap" type="range" min="8" max="120" value={playerControlsGap} onChange={(e) => setPlayerControlsGap(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
-              {/* FIX: Use Number() to safely convert input value, as parseInt can cause type errors. */}
+              {/* FIX: Use Number() to cast range input value to a number. parseInt() is unsafe here as it doesn't handle non-string values gracefully and can cause type errors. */}
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>

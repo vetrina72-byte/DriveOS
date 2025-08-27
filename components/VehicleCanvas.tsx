@@ -548,7 +548,7 @@ export default function VehicleCanvas({
           </group>
 
           <MemoizedEnvironment />
-          <WeatherEffects targetParams={targetWeatherParams} />
+          <WeatherEffects targetParams={targetWeatherParams} effectiveWeatherCondition={effectiveWeatherCondition} />
         </Suspense>
 
         <ambientLight ref={ambientLightRef} />

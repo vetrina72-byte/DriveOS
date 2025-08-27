@@ -590,7 +590,7 @@ export type SceneColors = {
 export const initialSceneColors: SceneColors = {
   day: {
     'Cielo sereno': { sky: '#ffffff', floor: '#ffffff' },
-    'Pioggia': { sky: '#595b5f', floor: '#3e4041' },
+    'Pioggia': { sky: '#595b5f', floor: '#8a8a8a' },
     'Temporale': { sky: '#454b59', floor: '#222222' },
     'Neve': { sky: '#ababab', floor: '#eeeeee' },
     'Grandine': { sky: '#a1a1aa', floor: '#d4d4d8' },
@@ -938,7 +938,9 @@ export default function App() {
   }, [effectiveWeatherCondition]);
 
   const isGloomyDay = useMemo(() => {
-    return !isNight && /pioggia|temporale|rovescio/i.test(effectiveWeatherCondition);
+    if (isNight) return false; // Only applies to daytime
+    const darkWeatherConditions = ['Temporale', 'Pioggia forte', 'Rovescio', 'Neve forte', 'Nebbia'];
+    return darkWeatherConditions.includes(effectiveWeatherCondition);
   }, [isNight, effectiveWeatherCondition]);
 
   const fetchWeatherData = useCallback(async (latitude: number, longitude: number) => {
