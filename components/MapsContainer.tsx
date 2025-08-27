@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
 const mapHtmlContent = `
@@ -250,6 +249,29 @@ border-radius: 50%;
 border: 2px solid var(--tesla-blue);
 box-shadow: 0 0 5px rgba(0,0,0,0.5);
 }
+#current-street-container {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1001;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    max-width: 300px;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#current-street-container.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
 </style>
 </head>
 <body>
@@ -348,6 +370,9 @@ box-shadow: 0 0 5px rgba(0,0,0,0.5);
             </div>
         </div>
     </div>
+    <div id="current-street-container">
+        <span id="street-name-text"></span>
+    </div>
 </div>
 
 <script>
@@ -403,6 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.timelapsePlayPauseBtn = document.getElementById('timelapse-play-pause-btn');
             this.timelapseSlider = document.getElementById('timelapse-slider');
             this.timelapseLabel = document.getElementById('timelapse-label');
+            this.currentStreetContainer = document.getElementById('current-street-container');
+            this.streetNameText = document.getElementById('street-name-text');
 
             this.imageCache = {};
             this.weatherImageCache = {};
@@ -473,6 +500,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.wasInHeadingUpMode = false;
             this.externalTheme = null;
             this.pendingDestination = null;
+            this.lastReverseGeocodeTime = 0;
+            this.REVERSE_GEOCODE_INTERVAL = 10000; // 10 seconds
 
             this.init();
         }
@@ -769,6 +798,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (save) {
                 localStorage.setItem('teslaNavMapMode', this.userSelectedMapMode);
             }
+            
+            // Communicate style change to parent
+            try {
+                window.parent.postMessage({ type: 'MAP_STYLE_CHANGED', payload: { style: newProvider } }, '*');
+            } catch (e) { console.error("Map communication error (style change):", e); }
+            
+            // Update current street view style
+            const isSatellite = newProvider === 'satellite';
+            this.currentStreetContainer.style.background = isSatellite ? 'rgba(0,0,0,0.7)' : 'rgba(10, 10, 10, 0.92)';
+            this.currentStreetContainer.style.backdropFilter = isSatellite ? 'blur(5px)' : 'blur(25px)';
+            this.currentStreetContainer.style.border = isSatellite ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid var(--tesla-border)';
+            this.currentStreetContainer.style.color = '#FFFFFF';
         }
         
         loadMapMode() { const savedMode = localStorage.getItem('teslaNavMapMode') || 'auto'; this.setMapMode(savedMode, false); }
@@ -852,6 +893,29 @@ document.addEventListener('DOMContentLoaded', () => {
         
         toggleCompassMode() { const newMode = this.compassMode === 'heading-up' ? 'north-up' : 'heading-up'; this.setCompassMode(newMode); this.showInfoToast(newMode === 'heading-up' ? 'Modalità Heading Up' : 'Modalità North Up', newMode === 'heading-up' ? 'navigation' : 'navigation-off'); }
         
+        async updateCurrentStreet(lat, lng) {
+            try {
+                const response = await fetch(\`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${lat}&lon=\${lng}&zoom=18&addressdetails=1\`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+                const road = data.address?.road;
+                const suburb = data.address?.suburb;
+                const city = data.address?.city || data.address?.town || data.address?.village;
+
+                let streetText = road || suburb;
+                
+                if (streetText) {
+                    this.streetNameText.textContent = streetText;
+                    this.currentStreetContainer.classList.add('visible');
+                } else {
+                    this.currentStreetContainer.classList.remove('visible');
+                }
+            } catch (e) {
+                console.error("Reverse geocoding failed", e);
+                this.currentStreetContainer.classList.remove('visible');
+            }
+        }
+
         handlePositionUpdate(position) {
             const newPos = { lat: position.coords.latitude, lng: position.coords.longitude };
             if (this.currentPosition) {
@@ -861,6 +925,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             this.currentPosition = newPos;
+
+            const now = Date.now();
+            if (now - this.lastReverseGeocodeTime > this.REVERSE_GEOCODE_INTERVAL) {
+                this.lastReverseGeocodeTime = now;
+                this.updateCurrentStreet(newPos.lat, newPos.lng);
+            }
 
             if (this.pendingDestination) {
                 const { coords, name, startNavigating } = this.pendingDestination;
