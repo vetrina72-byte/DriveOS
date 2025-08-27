@@ -86,9 +86,10 @@ const RouteManager = ({ useDarkTheme }: { useDarkTheme: boolean }) => {
 };
 
 const STADIA_API_KEY = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
+const MAPTILER_API_KEY = 'T3ITqSa4x2w9qQOiIENK';
 
 // Main MiniMap component
-const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, useDarkTheme, onClick }: {
+const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, isNight, useDarkTheme, onClick }: {
     isVisible: boolean;
     position: { lat: number; lng: number } | null;
     bearing: number;
@@ -98,6 +99,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
     zoom: number;
     fadeStart: number;
     fadeEnd: number;
+    isNight: boolean;
     useDarkTheme: boolean;
     onClick: (e: React.MouseEvent) => void;
 }) => {
@@ -124,16 +126,21 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
   if (!position) {
       return null;
   }
-
-  const lightThemeProps = {
-    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
+  
+  const nightThemeProps = {
+    url: `https://api.maptiler.com/maps/darkmatter/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`,
+    attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
   };
 
   const darkThemeProps = {
     url: `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
   };
 
-  const themeProps = useDarkTheme ? darkThemeProps : lightThemeProps;
+  const lightThemeProps = {
+    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
+  };
+
+  const themeProps = isNight ? nightThemeProps : (useDarkTheme ? darkThemeProps : lightThemeProps);
 
   return (
     <div 

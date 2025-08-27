@@ -24,13 +24,14 @@ This contains everything you need to run your app locally.
 This project includes a small Node.js server to handle the Spotify authentication flow securely.
 
 1.  **Create an environment file**: Create a file named `.env` in the root of the project.
-2.  **Add credentials**: Add your Spotify application credentials and the local redirect URI to the `.env` file. You can get the client ID and secret from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2.  **Add credentials**: Add your Spotify application credentials and the local redirect URI to the `.env` file. You can get the client ID and secret from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). You will also need an API key from [MapTiler](https://www.maptiler.com/cloud/) for the "Dark Matter" night map style.
 
     ```
     # .env
     SPOTIFY_CLIENT_ID=ecc9e126d442404b92e8081c7d95ecca
     SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET
     VITE_REDIRECT_URI=http://localhost:5173/spotify-callback
+    MAPTILER_API_KEY=YOUR_MAPTILER_API_KEY
     ```
 
 3.  **Run the server**: In a **separate terminal window**, start the backend server:

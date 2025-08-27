@@ -1114,7 +1114,7 @@ export default function App() {
     }
   };
 
-  const isUIOverlayActive = activeApp !== null || isAppLauncherOpen;
+  const isUIOverlayActive = activeApp !== null;
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
@@ -1144,9 +1144,10 @@ export default function App() {
           />
 
           <MiniMap 
-              isVisible={!isUIOverlayActive && !isCanvasInteracting} 
+              isVisible={!isUIOverlayActive && !isCanvasInteracting && !isAppLauncherOpen} 
               position={currentPosition} 
               bearing={bearing}
+              isNight={isNight}
               useDarkTheme={useDarkTheme}
               top={miniMapTop}
               right={miniMapRight}
@@ -1197,8 +1198,8 @@ export default function App() {
             style={{
                 bottom: playerFloatingBottom,
                 transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                opacity: isUIOverlayActive ? 0 : 1,
-                pointerEvents: isUIOverlayActive ? 'none' : 'auto',
+                opacity: isUIOverlayActive || isAppLauncherOpen ? 0 : 1,
+                pointerEvents: isUIOverlayActive || isAppLauncherOpen ? 'none' : 'auto',
                 transform: isUIOverlayActive ? 'none' : `translateX(calc(${playerFloatingWidth / 2}px + 8px))`,
             }}
           >
