@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { routeStore } from './routeStore';
 import VehicleArrowIcon from './VehicleArrowIcon';
+import type { MiniMapStyle } from '../App';
 
 // Function to create a leaflet icon from the React component - UPDATED
 const createVehicleIcon = (bearing: number): L.DivIcon => {
@@ -32,7 +33,7 @@ const MapUpdater = ({ position, zoom }: { position: { lat: number; lng: number }
 };
 
 // Component to manage the route polyline and animated marker imperatively
-const RouteManager = ({ useDarkTheme }: { useDarkTheme: boolean }) => {
+const RouteManager = ({ mapStyle }: { mapStyle: MiniMapStyle }) => {
     const map = useMap();
     const polylineRef = useRef<L.Polyline | null>(null);
 
@@ -61,7 +62,7 @@ const RouteManager = ({ useDarkTheme }: { useDarkTheme: boolean }) => {
 
         if (routeCoords && routeCoords.length > 0) {
             const pathOptions = {
-                color: useDarkTheme ? '#60A5FA' : '#3B82F6',
+                color: mapStyle === 'light' ? '#3B82F6' : '#60A5FA',
                 weight: 6,
                 opacity: 0.85,
             };
@@ -80,7 +81,7 @@ const RouteManager = ({ useDarkTheme }: { useDarkTheme: boolean }) => {
                 polylineRef.current = null;
             }
         }
-    }, [routeCoords, useDarkTheme, map]);
+    }, [routeCoords, mapStyle, map]);
 
     return null;
 };
@@ -88,7 +89,7 @@ const RouteManager = ({ useDarkTheme }: { useDarkTheme: boolean }) => {
 const STADIA_API_KEY = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
 
 // Main MiniMap component
-const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, useDarkTheme, onClick }: {
+const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, mapStyle, onClick }: {
     isVisible: boolean;
     position: { lat: number; lng: number } | null;
     bearing: number;
@@ -98,7 +99,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
     zoom: number;
     fadeStart: number;
     fadeEnd: number;
-    useDarkTheme: boolean;
+    mapStyle: MiniMapStyle;
     onClick: (e: React.MouseEvent) => void;
 }) => {
   const markerRef = useRef<L.Marker>(null);
@@ -125,15 +126,18 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
       return null;
   }
 
-  const lightThemeProps = {
-    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
-  };
+  const themeProps = useMemo(() => {
+      switch (mapStyle) {
+          case 'dark-matter':
+              return { url: `https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}` };
+          case 'dark':
+              return { url: `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}` };
+          case 'light':
+          default:
+              return { url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}` };
+      }
+  }, [mapStyle]);
 
-  const darkThemeProps = {
-    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
-  };
-
-  const themeProps = useDarkTheme ? darkThemeProps : lightThemeProps;
 
   return (
     <div 
@@ -164,7 +168,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
               icon={createVehicleIcon(bearing)}
             />
         )}
-        <RouteManager useDarkTheme={useDarkTheme} />
+        <RouteManager mapStyle={mapStyle} />
         {position && <MapUpdater position={position} zoom={zoom} />}
       </MapContainer>
     </div>
