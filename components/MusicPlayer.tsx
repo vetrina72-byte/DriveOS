@@ -17,7 +17,6 @@ import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals'
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
     isNight: boolean;
-    isGloomyDay: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
     floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };
     playerControlsSize: number;
@@ -165,7 +164,6 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { is
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
     isAnyAppOpen, 
     isNight, 
-    isGloomyDay,
     dockedConfig, 
     floatingConfig, 
     playerControlsSize,
@@ -190,7 +188,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const queueButtonRef = useRef<HTMLButtonElement>(null);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
-    const useDarkTheme = isNight || isGloomyDay;
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
     const currentTrackUri = playerState?.track_window.current_track?.uri;
@@ -454,11 +451,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 transform: `translateX(calc(-50% + ${transformX}px))`,
             };
         }
-        baseStyle.background = !useDarkTheme ? widgetBgColor : 'var(--player-bg)';
+        baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
         return baseStyle;
-    }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, useDarkTheme]);
+    }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
 
-    const themeClasses = useDarkTheme 
+    const themeClasses = isNight 
         ? 'border-zinc-700/80' 
         : 'border-zinc-300';
     
@@ -482,8 +479,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${useDarkTheme ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                                <FiMusic className={`w-7 h-7 ${useDarkTheme ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                            <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                             </div>
                             <div className="overflow-hidden">
                                 <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
@@ -530,10 +527,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const imageUrl = album.images[0]?.url;
             const nextTrack = playerState.track_window.next_tracks[0];
             
-            const buttonActiveColor = useDarkTheme ? nightPlayerButtonColor : dayPlayerButtonColor;
-            const inactiveButtonColor = useDarkTheme ? '#464646' : '#b0b0b0';
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
             
-            const songTitleColor = useDarkTheme 
+            const songTitleColor = isNight 
               ? '#f7f7f7'
               : (playerState.paused ? '#454545' : '#000000');
 
@@ -607,8 +604,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         return (
              <div className="flex items-center w-full h-full gap-5 px-4">
-                <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${useDarkTheme ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                    <FiMusic className={`w-7 h-7 ${useDarkTheme ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                    <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                 </div>
                 <div className="flex-grow overflow-hidden">
                     <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Niente in riproduzione</div>

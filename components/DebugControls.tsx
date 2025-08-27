@@ -873,7 +873,7 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
             <div>
               <label htmlFor="player-controls-size">Icon Size: {playerControlsSize}px</label>
-              {/* FIX: Use Number() to cast range input value to a number. parseInt() is unsafe here as it doesn't handle non-string values gracefully and can cause type errors. */}
+              {/* FIX: Use Number() to cast range input value to a number. parseInt() can cause type errors. */}
               <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
@@ -882,7 +882,7 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
-              {/* FIX: Use Number() to cast range input value to a number. parseInt() is unsafe here as it doesn't handle non-string values gracefully and can cause type errors. */}
+              {/* FIX: Use Number() to cast range input value to a number. parseInt() can cause type errors. */}
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>

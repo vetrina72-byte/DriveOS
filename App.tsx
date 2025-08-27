@@ -933,15 +933,17 @@ export default function App() {
     };
   }, [effectiveTime, weatherData, weatherConditionOverride]);
 
+  const isGloomyDay = useMemo(() => {
+    if (isNight) return false; // Only applies to daytime
+    const darkWeatherConditions = ['Temporale', 'Rovescio'];
+    return darkWeatherConditions.includes(effectiveWeatherCondition);
+  }, [isNight, effectiveWeatherCondition]);
+
+  const useDarkTheme = isNight || isGloomyDay;
+
   const targetWeatherParams = useMemo(() => {
     return weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'];
   }, [effectiveWeatherCondition]);
-
-  const isGloomyDay = useMemo(() => {
-    if (isNight) return false; // Only applies to daytime
-    const darkWeatherConditions = ['Temporale', 'Pioggia forte', 'Rovescio', 'Neve forte', 'Nebbia'];
-    return darkWeatherConditions.includes(effectiveWeatherCondition);
-  }, [isNight, effectiveWeatherCondition]);
 
   const fetchWeatherData = useCallback(async (latitude: number, longitude: number) => {
       setWeatherStatus('fetching');
@@ -1113,7 +1115,7 @@ export default function App() {
         <div 
           className="relative w-screen h-screen bg-black select-none overflow-hidden"
           onClick={handleWrapperClick}
-          data-theme={isNight || isGloomyDay ? 'dark' : 'light'}
+          data-theme={useDarkTheme ? 'dark' : 'light'}
         >
           <VehicleCanvas 
               isAppOpen={isUIOverlayActive} 
@@ -1136,7 +1138,7 @@ export default function App() {
               isVisible={!isUIOverlayActive && !isCanvasInteracting} 
               position={currentPosition} 
               bearing={bearing}
-              isNight={isNight}
+              isNight={useDarkTheme}
               effectiveWeatherCondition={effectiveWeatherCondition}
               top={miniMapTop}
               right={miniMapRight}
@@ -1148,7 +1150,7 @@ export default function App() {
           />
 
           <TopStatusBar 
-            isNight={isNight} 
+            isNight={useDarkTheme} 
             onWeatherClick={handleWeatherClick}
             weatherData={weatherData}
             weatherCondition={effectiveWeatherCondition}
@@ -1171,7 +1173,7 @@ export default function App() {
           <WeatherModal 
               isOpen={isWeatherModalOpen}
               onClose={() => setWeatherModalOpen(false)}
-              isNight={isNight}
+              isNight={useDarkTheme}
               status={weatherStatus}
               data={weatherData}
               error={weatherError}
@@ -1195,7 +1197,7 @@ export default function App() {
                 <NavigationStatus
                   target={navigationTarget}
                   currentPosition={throttledPosition}
-                  isNight={isNight || isGloomyDay}
+                  isNight={useDarkTheme}
                   onCancel={handleCancelNavigation}
                   tripInfo={tripInfo}
                   simulatedRemainingDistance={simulatedRemainingDistance}
@@ -1205,7 +1207,7 @@ export default function App() {
               ) : (
                 <NavigateTool 
                   isVisible={!isUIOverlayActive} 
-                  isNight={isNight || isGloomyDay}
+                  isNight={useDarkTheme}
                   onSelectDestination={handleSelectDestination}
                   currentPosition={currentPosition}
                   width={navigateToolWidth}
@@ -1219,8 +1221,7 @@ export default function App() {
           {/* Single Music Player instance for smooth transitions */}
           <MusicPlayer 
             isAnyAppOpen={isUIOverlayActive}
-            isNight={isNight}
-            isGloomyDay={isGloomyDay}
+            isNight={useDarkTheme}
             dockedConfig={{
               width: playerDockedWidth,
               bottom: playerFloatingBottom,
@@ -1244,7 +1245,7 @@ export default function App() {
           <MapsContainer 
               isOpen={activeApp === 'maps' || isMapsLayered}
               onClose={handleCloseMaps}
-              isNight={isNight}
+              isNight={useDarkTheme}
               searchPanelWidth={mapsSearchPanelWidth}
               searchPanelTop={mapsSearchPanelTop}
               navigationTarget={navigationTarget}
@@ -1253,7 +1254,7 @@ export default function App() {
           <SpotifyApp 
               isOpen={activeApp === 'spotify'} 
               onClose={() => toggleApp('spotify')} 
-              isNight={isNight}
+              isNight={useDarkTheme}
               spotifyPlayerTop={spotifyPlayerTop}
               spotifyPlayerBottom={spotifyPlayerBottom}
           />
@@ -1262,7 +1263,7 @@ export default function App() {
             {activeApp === 'theater' && (
               <TheaterApp
                 onClose={() => toggleApp('theater')}
-                isNight={isNight}
+                isNight={useDarkTheme}
                 spotifyPlayerTop={spotifyPlayerTop}
                 spotifyPlayerBottom={spotifyPlayerBottom}
               />
@@ -1278,7 +1279,7 @@ export default function App() {
               isCustomizing={isCustomizing}
               onCustomizeClick={moveAppToDock}
               onAppLaunch={toggleApp}
-              isNight={isNight}
+              isNight={useDarkTheme}
           />
 
           {isAppLauncherOpen && (
@@ -1380,6 +1381,7 @@ export default function App() {
             </div>
             <div className="flex-1 flex justify-end">
                 <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
+                    {/* FIX: Corrected prop names passed to VolumeControl to match state variable names. */}
                     <VolumeControl 
                         iconSize={volumeIconSize} 
                         sliderOffsetY={volumeSliderOffsetY} 
