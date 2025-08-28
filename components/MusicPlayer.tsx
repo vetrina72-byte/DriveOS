@@ -173,7 +173,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     dayPlayerButtonColor,
     nightPlayerButtonColor,
 }) => {
-    const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume } = useAuth();
+    const { accessToken, isAuthReady, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -239,7 +239,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, []);
 
     useEffect(() => {
-        if (!accessToken) {
+        // Guard clause: Do not initialize the player until the auth context is ready.
+        if (!isAuthReady) {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
@@ -263,6 +264,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         document.body.appendChild(script);
 
         window.onSpotifyWebPlaybackSDKReady = () => {
+            // Check again for token and existing player instance
             if (playerRef.current || !accessToken) return;
 
             setPlayerStatus('connecting');
@@ -312,7 +314,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume]);
+    }, [isAuthReady, accessToken, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume]);
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {
