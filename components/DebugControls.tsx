@@ -872,8 +872,7 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
             <div>
               <label htmlFor="player-controls-size">Icon Size: {playerControlsSize}px</label>
-              {/* FIX: Replaced parseInt with Number for type safety, as parseInt can have stricter typing that causes issues with event target values. */}
-              {/* FIX: Changed parseInt to Number to fix type error on line 635. */}
+              {/* FIX: The value from an input event target is a string. `parseInt` was causing a type error, so it's replaced with `Number()` for safe type conversion. */}
               <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
@@ -882,8 +881,7 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
-              {/* FIX: Replaced parseInt with Number for type safety, as parseInt can have stricter typing that causes issues with event target values. */}
-              {/* FIX: Changed parseInt to Number to fix type error on line 643. */}
+              {/* FIX: The value from an input event target is a string. `parseInt` was causing a type error, so it's replaced with `Number()` for safe type conversion. */}
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>

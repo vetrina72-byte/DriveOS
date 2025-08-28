@@ -11,6 +11,7 @@ interface SpotifyUser {
 
 interface AuthState {
     accessToken: string | null;
+    expiresAt: number | null;
     user: SpotifyUser | null;
     isAuthenticated: boolean;
     isLoading: boolean;
@@ -46,6 +47,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const initialState: AuthState = {
     accessToken: null,
+    expiresAt: null,
     user: null,
     isAuthenticated: false,
     isLoading: true,
@@ -63,7 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
-        localStorage.removeItem('spotify_expires_in');
+        localStorage.removeItem('spotify_expires_at');
         // Call backend to clear the HttpOnly cookie
         axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
@@ -71,6 +73,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setState(initialState);
         setState(s => ({...s, isLoading: false}));
     }, []);
+
+    const silentRefreshToken = useCallback(async () => {
+        console.log("Proactively refreshing Spotify token...");
+        try {
+            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+            const { access_token, expires_in } = data;
+            const newExpiresAt = Date.now() + expires_in * 1000;
+            
+            localStorage.setItem('spotify_access_token', access_token);
+            localStorage.setItem('spotify_expires_at', String(newExpiresAt));
+            apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+            
+            setState(s => ({
+                ...s,
+                accessToken: access_token,
+                expiresAt: newExpiresAt,
+            }));
+            console.log("Token proactively refreshed.");
+        } catch (err) {
+            console.error("Silent token refresh failed. Logging out.", err);
+            logout(); // If silent refresh fails, the session is likely invalid.
+        }
+    }, [logout]);
+    
+    // Proactive token refresh timer
+    useEffect(() => {
+        let refreshTimeout: ReturnType<typeof setTimeout>;
+
+        if (state.isAuthenticated && state.expiresAt) {
+            const now = Date.now();
+            // Refresh 2 minutes before expiry
+            const timeoutDuration = state.expiresAt - now - 120000; 
+
+            if (timeoutDuration > 0) {
+                refreshTimeout = setTimeout(silentRefreshToken, timeoutDuration);
+                console.log(`Spotify token refresh scheduled in ${Math.round(timeoutDuration / 60000)} minutes.`);
+            } else {
+                // If we are already in the buffer zone, refresh now.
+                // This can happen if the page was inactive (e.g., hibernated laptop).
+                silentRefreshToken();
+            }
+        }
+
+        // Cleanup function to clear the timer
+        return () => {
+            if (refreshTimeout) {
+                clearTimeout(refreshTimeout);
+            }
+        };
+    }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
         setState(s => ({ ...s, playerState: newState }));
@@ -96,12 +148,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const expiresAt = Date.now() + expires_in * 1000;
                 
                 localStorage.setItem('spotify_access_token', access_token);
-                localStorage.setItem('spotify_expires_in', String(expiresAt));
+                localStorage.setItem('spotify_expires_at', String(expiresAt));
                 apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
                 
                 const user = await fetchUserInfo();
                 if (user) {
-                    setState(s => ({...s, accessToken: access_token, user, isAuthenticated: true}));
+                    setState(s => ({...s, accessToken: access_token, expiresAt, user, isAuthenticated: true}));
                 } else {
                     throw new Error("Failed to fetch user info after token refresh.");
                 }
@@ -137,7 +189,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const expiresAt = Date.now() + expires_in * 1000;
 
             localStorage.setItem('spotify_access_token', access_token);
-            localStorage.setItem('spotify_expires_in', String(expiresAt));
+            localStorage.setItem('spotify_expires_at', String(expiresAt));
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
             const userData = await fetchUserInfo();
@@ -145,6 +197,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 setState(s => ({
                     ...s,
                     accessToken: access_token,
+                    expiresAt,
                     user: userData,
                     isAuthenticated: true,
                     isLoading: false,
