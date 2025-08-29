@@ -192,6 +192,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentTrackId = playerState?.track_window.current_track?.id;
     const currentTrackUri = playerState?.track_window.current_track?.uri;
     const internalVolumeUpdate = useRef(false);
+    const volumeRef = useRef(volume);
+    useEffect(() => {
+        volumeRef.current = volume;
+    }, [volume]);
 
     // Effect to update SDK when context volume changes (e.g., from UI)
     useEffect(() => {
@@ -239,9 +243,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, []);
 
     useEffect(() => {
-        // DEFINITIVE GUARD CLAUSE:
-        // Do not initialize the player until auth is ready AND we have a token.
-        // This prevents all race conditions.
+        // Guard clause: don't do anything until auth is ready and we have a token.
         if (!isAuthReady || !accessToken) {
             if (playerRef.current) {
                 playerRef.current.disconnect();
@@ -251,55 +253,57 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             _setPlayerState(null);
             return;
         }
-
+    
         const scriptId = 'spotify-sdk';
-        if (document.getElementById(scriptId) && window.Spotify && !playerRef.current) {
-             window.onSpotifyWebPlaybackSDKReady();
-             return;
-        }
-        if (document.getElementById(scriptId)) return;
-
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://sdk.scdn.co/spotify-player.js';
-        script.async = true;
-        document.body.appendChild(script);
-
-        window.onSpotifyWebPlaybackSDKReady = () => {
-            if (playerRef.current || !accessToken) return;
-
+    
+        // This function creates a new player instance. It will be called when the SDK is ready
+        // or when the access token changes.
+        const initializePlayer = () => {
+            if (!accessToken) return; // Re-check accessToken inside closure
+    
+            // Disconnect any existing player. This is CRITICAL for token refreshes.
+            if (playerRef.current) {
+                playerRef.current.disconnect();
+            }
+    
             setPlayerStatus('connecting');
             const player = new window.Spotify.Player({
                 name: 'DrivingOS',
                 getOAuthToken: cb => {
-                    // At this point, accessToken is guaranteed to be fresh.
+                    // DEBUG LOG: Confirm which token is being provided to the SDK.
+                    console.warn(`%c[PLAYER] SDK chiede token. Fornisco token che finisce con: ...${accessToken?.slice(-4)}`, 'color: orange;');
                     cb(accessToken);
                 },
                 volume: 0.5
             });
-
+    
             player.on('ready', async ({ device_id }) => {
                 console.log('Player ready. Starting audio unlock and sync procedure.');
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
                 await startAndSyncPlayer(player, device_id);
             });
-
+    
             player.on('not_ready', () => {
                 setDeviceId(null);
                 setPlayerStatus('connecting');
             });
-            
+    
             player.on('player_state_changed', (state) => {
                 _setPlayerState(state);
                 player.getVolume().then(sdkVolume => {
-                    if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
-                        internalVolumeUpdate.current = true;
-                        setVolume(sdkVolume);
+                    // FIX: The custom `setVolume` hook does not accept a functional update.
+                    // To avoid a stale closure on `volume`, we use a ref (`volumeRef`) to hold the latest volume
+                    // and compare against that before updating, preventing an infinite loop with the sync effect.
+                    if (typeof sdkVolume === 'number') {
+                        if (sdkVolume !== volumeRef.current) {
+                            internalVolumeUpdate.current = true;
+                            setVolume(sdkVolume);
+                        }
                     }
                 });
             });
-
+    
             const handleError = (error: { message: string }) => {
                 console.error("Spotify Player Error:", error.message);
                 setPlayerStatus('error');
@@ -307,18 +311,32 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             player.on('initialization_error', handleError);
             player.on('authentication_error', handleError);
             player.on('account_error', handleError);
-
+    
             player.connect();
             playerRef.current = player;
         };
-        
+    
+        // Logic to load the SDK script if it's not already there.
+        if (!window.Spotify) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://sdk.scdn.co/spotify-player.js';
+            script.async = true;
+            document.body.appendChild(script);
+            window.onSpotifyWebPlaybackSDKReady = initializePlayer;
+        } else {
+            // If SDK is already loaded, just create the new player instance.
+            initializePlayer();
+        }
+    
+        // Cleanup function: disconnects the player when dependencies change or component unmounts.
         return () => {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
             }
-        }
-    }, [isAuthReady, accessToken, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume]);
+        };
+    }, [isAuthReady, accessToken, setDeviceId, _setPlayerState, setVolume, startAndSyncPlayer]);
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {

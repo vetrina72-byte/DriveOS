@@ -98,6 +98,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const { access_token, expires_in } = data;
             const newExpiresAt = Date.now() + expires_in * 1000;
             
+            console.log(`%c[AUTH] REFRESH COMPLETATO. Nuovo token finisce con: ...${access_token.slice(-4)}`, 'color: green; font-weight: bold;');
+            
             localStorage.setItem('spotify_access_token', access_token);
             localStorage.setItem('spotify_expires_at', String(newExpiresAt));
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
