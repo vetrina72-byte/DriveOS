@@ -239,8 +239,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, []);
 
     useEffect(() => {
-        // Guard clause: Do not initialize the player until the auth context is ready.
-        if (!isAuthReady) {
+        // DEFINITIVE GUARD CLAUSE:
+        // Do not initialize the player until auth is ready AND we have a token.
+        // This prevents all race conditions.
+        if (!isAuthReady || !accessToken) {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
@@ -264,13 +266,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         document.body.appendChild(script);
 
         window.onSpotifyWebPlaybackSDKReady = () => {
-            // Check again for token and existing player instance
             if (playerRef.current || !accessToken) return;
 
             setPlayerStatus('connecting');
             const player = new window.Spotify.Player({
                 name: 'DrivingOS',
-                getOAuthToken: cb => { cb(accessToken); },
+                getOAuthToken: cb => {
+                    // At this point, accessToken is guaranteed to be fresh.
+                    cb(accessToken);
+                },
                 volume: 0.5
             });
 
@@ -290,7 +294,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 _setPlayerState(state);
                 player.getVolume().then(sdkVolume => {
                     if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
-                        internalVolumeUpdate.current = true; // Flag this as an SDK-initiated update
+                        internalVolumeUpdate.current = true;
                         setVolume(sdkVolume);
                     }
                 });

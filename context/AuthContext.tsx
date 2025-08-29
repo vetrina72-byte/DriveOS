@@ -15,7 +15,7 @@ interface AuthState {
     user: SpotifyUser | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    isAuthReady: boolean; // New state to signal readiness
+    isAuthReady: boolean;
     error: string | null;
     playerState: SpotifyPlayerState | null;
     volume: number;
@@ -65,13 +65,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+    const fetchUserInfo = useCallback(async () => {
+        try {
+            const { data } = await apiClient.get('/me');
+            return data;
+        } catch (err) {
+            console.error('Failed to fetch user info.', err);
+            return null;
+        }
+    }, []);
+
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_expires_at');
         axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
-        // Reset to a clean, non-authenticated, not-loading state.
+        // On manual logout, reset isAuthReady to false. The app is no longer
+        // in a "ready" state for authenticated actions. This allows a subsequent
+        // login to correctly trigger effects that depend on isAuthReady changing state.
         setState({
             ...initialState,
             isLoading: false,
@@ -124,64 +136,70 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
     }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
+    // Centralized function to determine auth status on initial load.
+    const initializeAuth = useCallback(async () => {
+        console.log("Initializing authentication...");
+        try {
+            // Attempt to refresh the token using the HttpOnly cookie.
+            // This is the single source of truth for an existing session.
+            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+            const { access_token, expires_in } = data;
+            const expiresAt = Date.now() + expires_in * 1000;
+            
+            localStorage.setItem('spotify_access_token', access_token);
+            localStorage.setItem('spotify_expires_at', String(expiresAt));
+            apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+            
+            const user = await fetchUserInfo();
+            if (!user) throw new Error("Failed to fetch user info after token refresh.");
+
+            // SUCCESS: We have a valid token and user. Auth is ready and authenticated.
+            setState(s => ({
+                ...s, 
+                accessToken: access_token, 
+                expiresAt, 
+                user, 
+                isAuthenticated: true, 
+                isAuthReady: true, // CRITICAL: Signal readiness
+                isLoading: false 
+            }));
+            console.log("Authentication successful.");
+
+        } catch (err) {
+            console.log("No valid session found on load. Setting to logged-out state.");
+            // FAILURE: No valid session. Auth state is now resolved.
+            // We are "ready" but not authenticated.
+            localStorage.removeItem('spotify_access_token');
+            localStorage.removeItem('spotify_expires_at');
+            setState({
+                ...initialState,
+                isLoading: false,
+                isAuthReady: true, // CRITICAL: Signal readiness (state is known)
+                isAuthenticated: false,
+            });
+        }
+    }, [fetchUserInfo]);
+
+    // This effect runs ONLY ONCE when the AuthProvider is mounted.
+    useEffect(() => {
+        initializeAuth();
+    }, [initializeAuth]);
+
+
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
         setState(s => ({ ...s, playerState: newState }));
     }, []);
     
-    const fetchUserInfo = useCallback(async () => {
-        try {
-            const { data } = await apiClient.get('/me');
-            return data;
-        } catch (err) {
-            console.error('Failed to fetch user info.', err);
-            return null;
-        }
-    }, []);
-
-    useEffect(() => {
-        const initAuth = async () => {
-            try {
-                const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
-                const { access_token, expires_in } = data;
-                const expiresAt = Date.now() + expires_in * 1000;
-                
-                localStorage.setItem('spotify_access_token', access_token);
-                localStorage.setItem('spotify_expires_at', String(expiresAt));
-                apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-                
-                const user = await fetchUserInfo();
-                if (user) {
-                    setState(s => ({
-                        ...s, 
-                        accessToken: access_token, 
-                        expiresAt, 
-                        user, 
-                        isAuthenticated: true, 
-                        isAuthReady: true, // Auth is ready
-                        isLoading: false 
-                    }));
-                } else {
-                    throw new Error("Failed to fetch user info after token refresh.");
-                }
-            } catch (err) {
-                console.log("No valid session found on load.");
-                logout();
-            }
-        };
-
-        initAuth();
-    }, [fetchUserInfo, logout]);
-
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null, isAuthReady: false }));
 
         if (authError) {
-             setState(s => ({...s, error: authError, isLoading: false}));
+             setState(s => ({...s, error: authError, isLoading: false, isAuthReady: true}));
              return;
         }
 
         if (!authCode) {
-            setState(s => ({...s, error: 'Authorization code is missing.', isLoading: false}));
+            setState(s => ({...s, error: 'Authorization code is missing.', isLoading: false, isAuthReady: true}));
             return;
         }
 
@@ -204,7 +222,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     isAuthenticated: true,
                     isLoading: false,
                     error: null,
-                    isAuthReady: true, // Auth is ready
+                    isAuthReady: true, // Auth is now ready after successful login
                 }));
             } else {
                  throw new Error("Failed to fetch user info after login.");
@@ -215,7 +233,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setState({
                 ...initialState,
                 isLoading: false,
-                isAuthReady: false,
+                isAuthReady: true, // Auth state is determined (failed), so it's ready.
                 error: errorMessage,
             });
         }
