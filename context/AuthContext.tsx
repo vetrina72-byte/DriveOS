@@ -96,7 +96,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setState({
             ...initialState,
             isLoading: false,
-            isAuthReady: false,
+            isAuthReady: true,
+            isAuthenticated: false,
         });
     }, []);
 
@@ -218,7 +219,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
     
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
-        setState(s => ({ ...s, isLoading: true, error: null, isAuthReady: false }));
+        setState(s => ({ ...s, isLoading: true, error: null }));
 
         if (authError) {
              setState(s => ({...s, error: authError, isLoading: false, isAuthReady: true}));
@@ -249,7 +250,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     isAuthenticated: true,
                     isLoading: false,
                     error: null,
-                    isAuthReady: true, // Auth is now ready after successful login
+                    isAuthReady: true, 
                 }));
             } else {
                  throw new Error("Failed to fetch user info after login.");
@@ -260,7 +261,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setState({
                 ...initialState,
                 isLoading: false,
-                isAuthReady: true, // Auth state is determined (failed), so it's ready.
+                isAuthReady: true, 
                 error: errorMessage,
             });
         }

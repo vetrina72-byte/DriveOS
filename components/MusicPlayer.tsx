@@ -27,7 +27,7 @@ interface MusicPlayerProps {
     nightPlayerButtonColor: string;
 }
 
-type PlayerStatus = 'connecting' | 'ready' | 'error';
+type PlayerStatus = 'disconnected' | 'connecting' | 'ready' | 'error';
 
 const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const [position, setPosition] = useState(state.position);
@@ -174,7 +174,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     nightPlayerButtonColor,
 }) => {
     const {
-        isAuthReady,
         isAuthenticated,
         setDeviceId,
         playerState,
@@ -182,10 +181,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         volume,
         setVolume,
         getLatestAccessToken,
-        refreshAccessToken
     } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
-    const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
+    const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('disconnected');
     const playerContainerRef = useRef<HTMLDivElement>(null);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
     
@@ -218,132 +216,87 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, [volume]);
 
-    const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
-        try {
-            await playerInstance.activateElement();
-            console.log('Browser audio context activated.');
-
-            await apiClient.put('/me/player', {
-                device_ids: [deviceId],
-                play: true 
-            });
-            console.log('Playback transferred and set to PLAY.');
-
-            setTimeout(async () => {
-                try {
-                    const { data: playerState } = await apiClient.get('/me/player');
-                    if (playerState && playerState.item) {
-                        await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
-                            position_ms: playerState.progress_ms
-                        });
-                        console.log('Explicit resume command sent.');
-                    }
-                } catch(e) {
-                    console.error("Error during resync play command", e);
-                }
-            }, 500);
-
-        } catch (error: any) {
-            if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-                console.log("No active session to transfer. Player is ready for new playback.");
-            } else {
-                console.error("Error during startup and synchronization:", error.response?.data || error.message);
-            }
-        }
-    }, []);
-
+    // This effect runs only ONCE and sets up the Spotify player logic.
+    // It is designed to be stable and not cause re-initialization loops.
     useEffect(() => {
-        // Guard clause: don't do anything until auth is ready.
-        if (!isAuthReady) {
-            return;
-        }
-        // If not authenticated, ensure player is disconnected and state is clean.
-        if (!isAuthenticated) {
-            if (playerRef.current) {
-                playerRef.current.disconnect();
-                playerRef.current = null;
-            }
-            setPlayerStatus('connecting');
-            _setPlayerState(null);
-            return;
-        }
-
         const scriptId = 'spotify-sdk';
-    
+
         const initializePlayer = () => {
-            // Disconnect any existing player. This is good practice.
+            // If a player instance already exists, do nothing to prevent re-initialization.
             if (playerRef.current) {
-                playerRef.current.disconnect();
+                return;
             }
-    
+            
+            // Check for a token. If none exists, the user is not logged in.
+            // The player won't be created. It will be created if the user logs in,
+            // which causes this component to re-render with a new `isAuthenticated` state.
+            const initialToken = getLatestAccessToken();
+            if (!initialToken) {
+                console.log("No auth token found, Spotify Player will not be initialized yet.");
+                return;
+            }
+
             setPlayerStatus('connecting');
             const player = new window.Spotify.Player({
                 name: 'DrivingOS',
-                getOAuthToken: async cb => {
+                // This is the simplified, stable token provider.
+                getOAuthToken: cb => {
                     const token = getLatestAccessToken();
-                    const expiresAt = parseInt(localStorage.getItem('spotify_expires_at') || '0');
-                    const isTokenStale = Date.now() > expiresAt - 60000; // 1 min buffer
-
-                    if (isTokenStale) {
-                         console.warn("[PLAYER] Token stantio, tento il refresh prima di fornirlo...");
-                         try {
-                             const newToken = await refreshAccessToken();
-                             if (newToken) {
-                                 console.log("[PLAYER] Refresh riuscito, fornisco il nuovo token.");
-                                 cb(newToken);
-                             } else {
-                                 throw new Error("Refresh returned null token");
-                             }
-                         } catch (e) {
-                             console.error("[PLAYER] Refresh fallito, fornisco il token vecchio sperando bene.", e);
-                             cb(token || '');
-                         }
-                    } else {
-                         cb(token || '');
-                    }
+                    cb(token || '');
                 },
-                volume: 0.5
+                volume: 0.5 // Initial volume
             });
-    
-            player.on('ready', async ({ device_id }) => {
-                console.log('Player ready. Starting audio unlock and sync procedure.');
+
+            player.on('ready', ({ device_id }) => {
+                console.log('Spotify Player is ready with Device ID:', device_id);
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
-                await startAndSyncPlayer(player, device_id);
             });
-    
-            player.on('not_ready', () => {
+
+            player.on('not_ready', ({ device_id }) => {
+                console.warn('Spotify Player is not ready. Device ID:', device_id);
                 setDeviceId(null);
-                setPlayerStatus('connecting');
+                setPlayerStatus('disconnected');
             });
-    
+
             player.on('player_state_changed', (state) => {
                 _setPlayerState(state);
                 player.getVolume().then(sdkVolume => {
-                    // FIX: The custom `setVolume` hook does not accept a functional update.
-                    // To avoid a stale closure on `volume`, we use a ref (`volumeRef`) to hold the latest volume
-                    // and compare against that before updating, preventing an infinite loop with the sync effect.
-                    if (typeof sdkVolume === 'number') {
-                        if (sdkVolume !== volumeRef.current) {
-                            internalVolumeUpdate.current = true;
-                            setVolume(sdkVolume);
-                        }
+                    if (typeof sdkVolume === 'number' && sdkVolume !== volumeRef.current) {
+                        internalVolumeUpdate.current = true;
+                        setVolume(sdkVolume);
                     }
                 });
             });
-    
-            const handleError = (error: { message: string }) => {
-                console.error("Spotify Player Error:", error.message);
+
+            // This is the crucial error handler. It sets a local state instead of logging out,
+            // which breaks the reported infinite loop.
+            player.on('authentication_error', error => {
+              console.error('Player SDK Authentication Error:', error);
+              setPlayerStatus('error');
+            });
+
+            player.on('account_error', error => {
+              console.error('Player SDK Account Error:', error);
+              setPlayerStatus('error');
+            });
+            
+            player.on('initialization_error', error => {
+                console.error('Player SDK Initialization Error:', error);
                 setPlayerStatus('error');
-            };
-            player.on('initialization_error', handleError);
-            player.on('authentication_error', handleError);
-            player.on('account_error', handleError);
-    
-            player.connect();
+            });
+
+            player.connect().then(success => {
+                if (success) {
+                    console.log('The Spotify Player has connected successfully!');
+                } else {
+                    console.error('The Spotify Player failed to connect.');
+                }
+            });
+            
             playerRef.current = player;
         };
-    
+
         if (!window.Spotify) {
             const script = document.createElement('script');
             script.id = scriptId;
@@ -354,15 +307,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         } else {
             initializePlayer();
         }
-    
-        // Cleanup on unmount, or if auth state changes to non-authed
+
         return () => {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
             }
         };
-    }, [isAuthReady, isAuthenticated, setDeviceId, _setPlayerState, setVolume, startAndSyncPlayer, getLatestAccessToken, refreshAccessToken]);
+    // This effect now depends only on `isAuthenticated`. It will run once when the user
+    // logs in, and the cleanup will run if they log out. This is a stable and correct
+    // lifecycle that prevents re-initialization on simple re-renders or token refreshes.
+    }, [isAuthenticated]);
+
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {
@@ -510,63 +466,42 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         : 'border-zinc-300';
     
     const renderPlayerContent = () => {
-        if (playerStatus === 'error') {
+        if (!isAuthenticated) {
             return (
-                <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
-                    <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
-                    <div className="overflow-hidden">
-                        <div className="font-semibold truncate">Errore di connessione</div>
-                        <div className="text-sm truncate">Impossibile connettersi a Spotify.</div>
+                <div className="flex items-center w-full h-full gap-5 px-4">
+                    <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                        <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                    </div>
+                    <div className="flex-grow overflow-hidden">
+                        <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Connect to Spotify</div>
+                        <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>
+                            to start listening.
+                        </div>
                     </div>
                 </div>
             );
         }
 
-        if (playerStatus === 'connecting' || !isAuthenticated) {
-            const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
-
+        if (playerStatus === 'error') {
             return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
-                    <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                                <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                            </div>
-                            <div className="overflow-hidden">
-                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>Connect to listen</div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-5">
-                            <button disabled className={disabledIconColor}><PiShuffleBold className="w-5 h-5" /></button>
-                            <button disabled className={disabledIconColor}><PiRepeatBold className="w-5 h-5" /></button>
-                        </div>
+                <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
+                    <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
+                    <div className="overflow-hidden">
+                        <div className="font-semibold truncate">Connection Error</div>
+                        <div className="text-sm truncate">Please try refreshing the page.</div>
                     </div>
-
-                    <div className="w-full">
-                        <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]">
-                            <div className="h-full rounded-full bg-[var(--icon-color-disabled)] relative w-0">
-                                 <div 
-                                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--icon-color-disabled)]"
-                                    style={{ transform: 'translateY(-50%)' }} 
-                                />
-                            </div>
-                        </div>
+                </div>
+            );
+        }
+        
+        if (playerStatus === 'connecting') {
+             return (
+                <div className="flex items-center w-full h-full gap-5 px-4">
+                    <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                        <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                     </div>
-                    
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                        <div className="flex-1 flex justify-start">
-                            {/* Empty left spacer */}
-                        </div>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button disabled className={disabledIconColor}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
-                            <button disabled className={disabledIconColor}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button disabled className={disabledIconColor}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
-                        </div>
-                        <div className="flex-1 flex justify-end items-center">
-                            <button disabled className={disabledIconColor}><BsList style={{ width: '20px', height: '20px'}} /></button>
-                        </div>
+                    <div className="flex-grow overflow-hidden">
+                        <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Connecting to Spotify...</div>
                     </div>
                 </div>
             );
@@ -583,8 +518,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const songTitleColor = isNight 
               ? '#f7f7f7'
               : (playerState.paused ? '#454545' : '#000000');
-
-            const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
             
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
