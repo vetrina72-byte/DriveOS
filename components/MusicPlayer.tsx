@@ -314,7 +314,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             // Prova a vedere se il player è ancora vivo
             const state = await player.getCurrentState();
             if (!state) {
-              console.warn("Player state null dopo refresh: forzo reconnect.");
+              console.warn("[Spotify] State nullo dopo refresh → reconnect necessario.");
               // disconnetti e ricrea
               playerRef.current?.disconnect();
               playerRef.current = null;
@@ -324,7 +324,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 window.onSpotifyWebPlaybackSDKReady();
               }
             } else {
-              console.log("Auth ripristinata senza reconnect.");
+              console.log("[Spotify] Token refresh ok, playback in corso non interrotto 🎵");
             }
           } catch (e) {
             console.error("Refresh fallito dopo authentication_error. Logout.", e);

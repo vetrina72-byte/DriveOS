@@ -97,7 +97,7 @@ const silentRefreshToken = useCallback(async () => {
         accessToken: access_token,
         expiresAt: newExpiresAt,
       }));
-      console.log("Silent token refresh OK.");
+      console.log("%c[Spotify] Token refreshed ✅", "color: lime; font-weight: bold");
     } catch (err) {
       console.error("Silent token refresh failed. Logging out.", err);
       logout();
