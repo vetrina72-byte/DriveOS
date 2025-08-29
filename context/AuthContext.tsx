@@ -15,7 +15,6 @@ interface AuthState {
     user: SpotifyUser | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    isAuthReady: boolean;
     error: string | null;
     playerState: SpotifyPlayerState | null;
     volume: number;
@@ -29,13 +28,10 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     clearError: () => void;
     play: (options: PlayOptions) => void;
     setDeviceId: (id: string | null) => void;
-    deviceId: string | null;
     refreshTrigger: number;
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
     setVolume: (level: number) => void;
     toggleMute: () => void;
-    refreshAccessToken: () => Promise<string | null>;
-    getLatestAccessToken: () => string | null;
 }
 
 interface PlayOptions {
@@ -55,7 +51,6 @@ const initialState: AuthState = {
     user: null,
     isAuthenticated: false,
     isLoading: true,
-    isAuthReady: false, // Start as not ready
     error: null,
     playerState: null,
     volume: 1,
@@ -67,14 +62,72 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const accessTokenRef = useRef(state.accessToken);
 
+    const logout = useCallback(() => {
+        localStorage.removeItem('spotify_access_token');
+        localStorage.removeItem('spotify_expires_at');
+        // Call backend to clear the HttpOnly cookie
+        axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
+            console.error("Logout API call failed:", err);
+        });
+        setState(initialState);
+        setState(s => ({...s, isLoading: false}));
+    }, []);
+
+    const silentRefreshToken = useCallback(async () => {
+        console.log("Proactively refreshing Spotify token...");
+        try {
+            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+            const { access_token, expires_in } = data;
+            const newExpiresAt = Date.now() + expires_in * 1000;
+            
+            localStorage.setItem('spotify_access_token', access_token);
+            localStorage.setItem('spotify_expires_at', String(newExpiresAt));
+            apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+            
+            setState(s => ({
+                ...s,
+                accessToken: access_token,
+                expiresAt: newExpiresAt,
+            }));
+            console.log("Token proactively refreshed.");
+        } catch (err) {
+            console.error("Silent token refresh failed. Logging out.", err);
+            logout(); // If silent refresh fails, the session is likely invalid.
+        }
+    }, [logout]);
+    
+    // Proactive token refresh timer
     useEffect(() => {
-        accessTokenRef.current = state.accessToken;
-    }, [state.accessToken]);
+        let refreshTimeout: ReturnType<typeof setTimeout>;
 
-    const getLatestAccessToken = useCallback(() => accessTokenRef.current, []);
+        if (state.isAuthenticated && state.expiresAt) {
+            const now = Date.now();
+            // Refresh 2 minutes before expiry
+            const timeoutDuration = state.expiresAt - now - 120000; 
 
+            if (timeoutDuration > 0) {
+                refreshTimeout = setTimeout(silentRefreshToken, timeoutDuration);
+                console.log(`Spotify token refresh scheduled in ${Math.round(timeoutDuration / 60000)} minutes.`);
+            } else {
+                // If we are already in the buffer zone, refresh now.
+                // This can happen if the page was inactive (e.g., hibernated laptop).
+                silentRefreshToken();
+            }
+        }
+
+        // Cleanup function to clear the timer
+        return () => {
+            if (refreshTimeout) {
+                clearTimeout(refreshTimeout);
+            }
+        };
+    }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
+
+    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
+        setState(s => ({ ...s, playerState: newState }));
+    }, []);
+    
     const fetchUserInfo = useCallback(async () => {
         try {
             const { data } = await apiClient.get('/me');
@@ -85,154 +138,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, []);
 
-    const logout = useCallback(() => {
-        localStorage.removeItem('spotify_access_token');
-        localStorage.removeItem('spotify_expires_at');
-        axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
-            console.error("Logout API call failed:", err);
-        });
-        // On manual logout, reset isAuthReady to false. The app is no longer
-        // in a "ready" state for authenticated actions. This allows a subsequent
-        // login to correctly trigger effects that depend on isAuthReady changing state.
-        setState({
-            ...initialState,
-            isLoading: false,
-            isAuthReady: true,
-            isAuthenticated: false,
-        });
-    }, []);
-
-    const refreshAccessToken = useCallback(async (): Promise<string | null> => {
-        console.warn('%c[TOKEN-TIMER] TIMER SCATTATO! Avvio refresh proattivo del token...', 'color: orange; font-weight: bold;');
-        try {
-            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
-            const { access_token, expires_in } = data;
-            const newExpiresAt = Date.now() + expires_in * 1000;
-            
-            console.log(`%c[TOKEN-TIMER] REFRESH RIUSCITO. Nuovo token ottenuto che finisce con: ...${access_token.slice(-4)}`, 'color: green; font-weight: bold;');
-            
-            localStorage.setItem('spotify_access_token', access_token);
-            localStorage.setItem('spotify_expires_at', String(newExpiresAt));
-            apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-            
-            setState(s => ({
-                ...s,
-                accessToken: access_token,
-                expiresAt: newExpiresAt,
-                isAuthReady: true, // Re-affirm auth is ready
-            }));
-            return access_token;
-        } catch (error: any) {
-            console.error('%c[TOKEN-TIMER] REFRESH PROATTIVO FALLITO!', 'color: red; font-weight: bold;');
-
-            if (error.response) {
-                console.error('  - Causa: Il server backend ha risposto con un errore.');
-                console.error('  - Status Code:', error.response.status);
-                console.error('  - Risposta del Server:', error.response.data);
-                console.error('  - Endpoint Chiamato:', error.config.url);
-            } else if (error.request) {
-                console.error('  - Causa: Nessuna risposta ricevuta dal server backend.');
-                console.error('  - Endpoint Chiamato:', error.config.url);
-            } else {
-                console.error('  - Causa: Errore nella configurazione della richiesta Axios.');
-                console.error('  - Messaggio:', error.message);
-            }
-            
-            logout(); // If silent refresh fails, the session is likely invalid.
-            return null;
-        }
-    }, [logout]);
-    
     useEffect(() => {
-        let refreshTimeout: ReturnType<typeof setTimeout>;
-
-        if (state.isAuthenticated && state.expiresAt) {
-            const now = Date.now();
-            const timeoutDuration = state.expiresAt - now - 120000; // Refresh 2 minutes before expiry
-
-            if (timeoutDuration > 0) {
-                console.log(`%c[TOKEN-TIMER] Timer di refresh impostato. Prossimo refresh automatico tra ${Math.round(timeoutDuration / 60000)} minuti.`, 'color: blue;');
-                refreshTimeout = setTimeout(refreshAccessToken, timeoutDuration);
-            } else {
-                refreshAccessToken();
-            }
-        }
-
-        return () => {
-            if (refreshTimeout) {
-                clearTimeout(refreshTimeout);
+        const initAuth = async () => {
+            try {
+                // We don't need to check for a stored access token. We directly ask the backend
+                // to refresh, which will succeed if a valid HttpOnly cookie exists.
+                const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+                const { access_token, expires_in } = data;
+                const expiresAt = Date.now() + expires_in * 1000;
+                
+                localStorage.setItem('spotify_access_token', access_token);
+                localStorage.setItem('spotify_expires_at', String(expiresAt));
+                apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+                
+                const user = await fetchUserInfo();
+                if (user) {
+                    setState(s => ({...s, accessToken: access_token, expiresAt, user, isAuthenticated: true}));
+                } else {
+                    throw new Error("Failed to fetch user info after token refresh.");
+                }
+            } catch (err) {
+                // This is expected if the user has no valid refresh token cookie.
+                console.log("No valid session found on load.");
+                logout(); // Ensure any leftover localstorage is cleared
+            } finally {
+                setState(s => ({...s, isLoading: false}));
             }
         };
-    }, [state.isAuthenticated, state.expiresAt, refreshAccessToken]);
 
-    // Centralized function to determine auth status on initial load.
-    const initializeAuth = useCallback(async () => {
-        console.log("Initializing authentication...");
-        try {
-            // Attempt to refresh the token using the HttpOnly cookie.
-            // This is the single source of truth for an existing session.
-            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
-            const { access_token, expires_in } = data;
-            const expiresAt = Date.now() + expires_in * 1000;
-            
-            localStorage.setItem('spotify_access_token', access_token);
-            localStorage.setItem('spotify_expires_at', String(expiresAt));
-            apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-            
-            const user = await fetchUserInfo();
-            if (!user) throw new Error("Failed to fetch user info after token refresh.");
+        initAuth();
+    }, [fetchUserInfo, logout]);
 
-            // SUCCESS: We have a valid token and user. Auth is ready and authenticated.
-            setState(s => ({
-                ...s, 
-                accessToken: access_token, 
-                expiresAt, 
-                user, 
-                isAuthenticated: true, 
-                isAuthReady: true, // CRITICAL: Signal readiness
-                isLoading: false 
-            }));
-            console.log("Authentication successful.");
-
-        } catch (err) {
-            console.log("No valid session found on load. Setting to logged-out state.");
-            // FAILURE: No valid session. Auth state is now resolved.
-            // We are "ready" but not authenticated.
-            localStorage.removeItem('spotify_access_token');
-            localStorage.removeItem('spotify_expires_at');
-            setState({
-                ...initialState,
-                isLoading: false,
-                isAuthReady: true, // CRITICAL: Signal readiness (state is known)
-                isAuthenticated: false,
-            });
-        }
-    }, [fetchUserInfo]);
-
-    // This effect runs ONLY ONCE when the AuthProvider is mounted.
-    useEffect(() => {
-        initializeAuth();
-    }, [initializeAuth]);
-
-
-    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
-        setState(s => ({ ...s, playerState: newState }));
-    }, []);
-    
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));
 
         if (authError) {
-             setState(s => ({...s, error: authError, isLoading: false, isAuthReady: true}));
+             setState(s => ({...s, error: authError, isLoading: false}));
              return;
         }
 
         if (!authCode) {
-            setState(s => ({...s, error: 'Authorization code is missing.', isLoading: false, isAuthReady: true}));
+            setState(s => ({...s, error: 'Authorization code is missing.', isLoading: false}));
             return;
         }
 
         try {
+            // The backend now handles setting the refresh token in an HttpOnly cookie.
             const response = await axios.post('/api/exchange-token', { code: authCode }, { withCredentials: true });
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
@@ -251,7 +202,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     isAuthenticated: true,
                     isLoading: false,
                     error: null,
-                    isAuthReady: true, 
                 }));
             } else {
                  throw new Error("Failed to fetch user info after login.");
@@ -259,14 +209,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (err: any) {
             console.error('Login process failed:', err);
             const errorMessage = err.response?.data?.details?.error_description || 'Failed to complete login.';
-            setState({
-                ...initialState,
-                isLoading: false,
-                isAuthReady: true, 
-                error: errorMessage,
-            });
+            logout(); 
+            setState(s => ({...s, error: errorMessage, isLoading: false}));
         }
-    }, [fetchUserInfo]);
+    }, [fetchUserInfo, logout]);
     
     const refreshHomePage = useCallback(() => {
         setRefreshTrigger(prev => prev + 1);
@@ -340,7 +286,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, deviceId, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, refreshAccessToken, getLatestAccessToken }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute }}>
             {children}
         </AuthContext.Provider>
     );
