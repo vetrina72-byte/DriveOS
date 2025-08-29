@@ -33,6 +33,8 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
     setVolume: (level: number) => void;
     toggleMute: () => void;
+    refreshAccessToken: () => Promise<string | null>;
+    getLatestAccessToken: () => string | null;
 }
 
 interface PlayOptions {
@@ -64,6 +66,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const accessTokenRef = useRef(state.accessToken);
+
+    useEffect(() => {
+        accessTokenRef.current = state.accessToken;
+    }, [state.accessToken]);
+
+    const getLatestAccessToken = useCallback(() => accessTokenRef.current, []);
 
     const fetchUserInfo = useCallback(async () => {
         try {
@@ -91,14 +100,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
     }, []);
 
-    const silentRefreshToken = useCallback(async () => {
-        console.log("Proactively refreshing Spotify token...");
+    const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+        console.warn('%c[TOKEN-TIMER] TIMER SCATTATO! Avvio refresh proattivo del token...', 'color: orange; font-weight: bold;');
         try {
             const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
             const { access_token, expires_in } = data;
             const newExpiresAt = Date.now() + expires_in * 1000;
             
-            console.log(`%c[AUTH] REFRESH COMPLETATO. Nuovo token finisce con: ...${access_token.slice(-4)}`, 'color: green; font-weight: bold;');
+            console.log(`%c[TOKEN-TIMER] REFRESH RIUSCITO. Nuovo token ottenuto che finisce con: ...${access_token.slice(-4)}`, 'color: green; font-weight: bold;');
             
             localStorage.setItem('spotify_access_token', access_token);
             localStorage.setItem('spotify_expires_at', String(newExpiresAt));
@@ -110,10 +119,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 expiresAt: newExpiresAt,
                 isAuthReady: true, // Re-affirm auth is ready
             }));
-            console.log("Token proactively refreshed.");
-        } catch (err) {
-            console.error("Silent token refresh failed. Logging out.", err);
+            return access_token;
+        } catch (error: any) {
+            console.error('%c[TOKEN-TIMER] REFRESH PROATTIVO FALLITO!', 'color: red; font-weight: bold;');
+
+            if (error.response) {
+                console.error('  - Causa: Il server backend ha risposto con un errore.');
+                console.error('  - Status Code:', error.response.status);
+                console.error('  - Risposta del Server:', error.response.data);
+                console.error('  - Endpoint Chiamato:', error.config.url);
+            } else if (error.request) {
+                console.error('  - Causa: Nessuna risposta ricevuta dal server backend.');
+                console.error('  - Endpoint Chiamato:', error.config.url);
+            } else {
+                console.error('  - Causa: Errore nella configurazione della richiesta Axios.');
+                console.error('  - Messaggio:', error.message);
+            }
+            
             logout(); // If silent refresh fails, the session is likely invalid.
+            return null;
         }
     }, [logout]);
     
@@ -125,9 +149,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const timeoutDuration = state.expiresAt - now - 120000; // Refresh 2 minutes before expiry
 
             if (timeoutDuration > 0) {
-                refreshTimeout = setTimeout(silentRefreshToken, timeoutDuration);
+                console.log(`%c[TOKEN-TIMER] Timer di refresh impostato. Prossimo refresh automatico tra ${Math.round(timeoutDuration / 60000)} minuti.`, 'color: blue;');
+                refreshTimeout = setTimeout(refreshAccessToken, timeoutDuration);
             } else {
-                silentRefreshToken();
+                refreshAccessToken();
             }
         }
 
@@ -136,7 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 clearTimeout(refreshTimeout);
             }
         };
-    }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
+    }, [state.isAuthenticated, state.expiresAt, refreshAccessToken]);
 
     // Centralized function to determine auth status on initial load.
     const initializeAuth = useCallback(async () => {
@@ -313,7 +338,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, refreshAccessToken, getLatestAccessToken }}>
             {children}
         </AuthContext.Provider>
     );

@@ -173,7 +173,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     dayPlayerButtonColor,
     nightPlayerButtonColor,
 }) => {
-    const { accessToken, isAuthReady, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume } = useAuth();
+    const {
+        isAuthReady,
+        isAuthenticated,
+        setDeviceId,
+        playerState,
+        _setPlayerState,
+        volume,
+        setVolume,
+        getLatestAccessToken,
+        refreshAccessToken
+    } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -243,8 +253,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, []);
 
     useEffect(() => {
-        // Guard clause: don't do anything until auth is ready and we have a token.
-        if (!isAuthReady || !accessToken) {
+        // Guard clause: don't do anything until auth is ready.
+        if (!isAuthReady) {
+            return;
+        }
+        // If not authenticated, ensure player is disconnected and state is clean.
+        if (!isAuthenticated) {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
@@ -253,15 +267,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             _setPlayerState(null);
             return;
         }
-    
+
         const scriptId = 'spotify-sdk';
     
-        // This function creates a new player instance. It will be called when the SDK is ready
-        // or when the access token changes.
         const initializePlayer = () => {
-            if (!accessToken) return; // Re-check accessToken inside closure
-    
-            // Disconnect any existing player. This is CRITICAL for token refreshes.
+            // Disconnect any existing player. This is good practice.
             if (playerRef.current) {
                 playerRef.current.disconnect();
             }
@@ -269,10 +279,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             setPlayerStatus('connecting');
             const player = new window.Spotify.Player({
                 name: 'DrivingOS',
-                getOAuthToken: cb => {
-                    // DEBUG LOG: Confirm which token is being provided to the SDK.
-                    console.warn(`%c[PLAYER] SDK chiede token. Fornisco token che finisce con: ...${accessToken?.slice(-4)}`, 'color: orange;');
-                    cb(accessToken);
+                getOAuthToken: async cb => {
+                    const token = getLatestAccessToken();
+                    const expiresAt = parseInt(localStorage.getItem('spotify_expires_at') || '0');
+                    const isTokenStale = Date.now() > expiresAt - 60000; // 1 min buffer
+
+                    if (isTokenStale) {
+                         console.warn("[PLAYER] Token stantio, tento il refresh prima di fornirlo...");
+                         try {
+                             const newToken = await refreshAccessToken();
+                             if (newToken) {
+                                 console.log("[PLAYER] Refresh riuscito, fornisco il nuovo token.");
+                                 cb(newToken);
+                             } else {
+                                 throw new Error("Refresh returned null token");
+                             }
+                         } catch (e) {
+                             console.error("[PLAYER] Refresh fallito, fornisco il token vecchio sperando bene.", e);
+                             cb(token || '');
+                         }
+                    } else {
+                         cb(token || '');
+                    }
                 },
                 volume: 0.5
             });
@@ -316,7 +344,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             playerRef.current = player;
         };
     
-        // Logic to load the SDK script if it's not already there.
         if (!window.Spotify) {
             const script = document.createElement('script');
             script.id = scriptId;
@@ -325,18 +352,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             document.body.appendChild(script);
             window.onSpotifyWebPlaybackSDKReady = initializePlayer;
         } else {
-            // If SDK is already loaded, just create the new player instance.
             initializePlayer();
         }
     
-        // Cleanup function: disconnects the player when dependencies change or component unmounts.
+        // Cleanup on unmount, or if auth state changes to non-authed
         return () => {
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
             }
         };
-    }, [isAuthReady, accessToken, setDeviceId, _setPlayerState, setVolume, startAndSyncPlayer]);
+    }, [isAuthReady, isAuthenticated, setDeviceId, _setPlayerState, setVolume, startAndSyncPlayer, getLatestAccessToken, refreshAccessToken]);
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {
