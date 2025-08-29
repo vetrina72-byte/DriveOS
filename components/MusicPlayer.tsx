@@ -173,7 +173,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     dayPlayerButtonColor,
     nightPlayerButtonColor,
 }) => {
-    const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume, silentRefreshToken } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -192,6 +192,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentTrackId = playerState?.track_window.current_track?.id;
     const currentTrackUri = playerState?.track_window.current_track?.uri;
     const internalVolumeUpdate = useRef(false);
+  // sempre l'ultimo token per il callback del SDK
+  const tokenRef = useRef<string | null>(accessToken);
+  useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
 
     // Effect to update SDK when context volume changes (e.g., from UI)
     useEffect(() => {
@@ -262,49 +265,76 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         script.async = true;
         document.body.appendChild(script);
 
-        window.onSpotifyWebPlaybackSDKReady = () => {
-            if (playerRef.current || !accessToken) return;
-
-            setPlayerStatus('connecting');
-            const player = new window.Spotify.Player({
-                name: 'DrivingOS',
-                getOAuthToken: cb => { cb(accessToken); },
-                volume: 0.5
-            });
-
-            player.on('ready', async ({ device_id }) => {
-                console.log('Player ready. Starting audio unlock and sync procedure.');
-                setDeviceId(device_id);
-                setPlayerStatus('ready');
-                await startAndSyncPlayer(player, device_id);
-            });
-
-            player.on('not_ready', () => {
-                setDeviceId(null);
-                setPlayerStatus('connecting');
-            });
-            
-            player.on('player_state_changed', (state) => {
-                _setPlayerState(state);
-                player.getVolume().then(sdkVolume => {
-                    if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
-                        internalVolumeUpdate.current = true; // Flag this as an SDK-initiated update
-                        setVolume(sdkVolume);
-                    }
-                });
-            });
-
-            const handleError = (error: { message: string }) => {
-                console.error("Spotify Player Error:", error.message);
-                setPlayerStatus('error');
-            };
-            player.on('initialization_error', handleError);
-            player.on('authentication_error', handleError);
-            player.on('account_error', handleError);
-
-            player.connect();
-            playerRef.current = player;
+    window.onSpotifyWebPlaybackSDKReady = () => {
+         if (playerRef.current || !accessToken) return;
+ 
+         setPlayerStatus('connecting');
+         const player = new window.Spotify.Player({
+             name: 'DrivingOS',
+            // Fornisce sempre l'ultimo access token al SDK
+            getOAuthToken: cb => {
+              if (tokenRef.current) cb(tokenRef.current);
+            },
+             volume: 0.5
+         });
+ 
+         player.on('ready', async ({ device_id }) => {
+             console.log('Player ready. Starting audio unlock and sync procedure.');
+             setDeviceId(device_id);
+             setPlayerStatus('ready');
+             await startAndSyncPlayer(player, device_id);
+         });
+ 
+         player.on('not_ready', () => {
+             setDeviceId(null);
+             setPlayerStatus('connecting');
+         });
+         
+         player.on('player_state_changed', (state) => {
+             _setPlayerState(state);
+             player.getVolume().then(sdkVolume => {
+                 if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
+                     internalVolumeUpdate.current = true; // Flag this as an SDK-initiated update
+                     setVolume(sdkVolume);
+                 }
+             });
+         });
+ 
+        const handleGenericError = (error: { message: string }) => {
+          console.error("Spotify Player Error:", error.message);
+          setPlayerStatus('error');
         };
+        player.on('initialization_error', handleGenericError);
+        player.on('account_error', handleGenericError);
+        // Gestione robusta del token scaduto
+        player.on('authentication_error', async (error: { message: string }) => {
+          console.warn("Spotify authentication_error:", error.message);
+          try {
+            await silentRefreshToken();
+            // Prova a vedere se il player è ancora vivo
+            const state = await player.getCurrentState();
+            if (!state) {
+              console.warn("Player state null dopo refresh: forzo reconnect.");
+              // disconnetti e ricrea
+              playerRef.current?.disconnect();
+              playerRef.current = null;
+              setPlayerStatus('connecting');
+              // Riusa la stessa entrypoint per ricreare il player
+              if (window.onSpotifyWebPlaybackSDKReady) {
+                window.onSpotifyWebPlaybackSDKReady();
+              }
+            } else {
+              console.log("Auth ripristinata senza reconnect.");
+            }
+          } catch (e) {
+            console.error("Refresh fallito dopo authentication_error. Logout.", e);
+            logout();
+          }
+        });
+ 
+         player.connect();
+         playerRef.current = player;
+     };
         
         return () => {
             if (playerRef.current) {
@@ -312,7 +342,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume]);
+    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume, silentRefreshToken]);
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {

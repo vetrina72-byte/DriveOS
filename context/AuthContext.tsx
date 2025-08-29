@@ -32,6 +32,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
     setVolume: (level: number) => void;
     toggleMute: () => void;
+  silentRefreshToken: () => Promise<void>;
 }
 
 interface PlayOptions {
@@ -62,6 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -74,28 +76,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setState(s => ({...s, isLoading: false}));
     }, []);
 
-    const silentRefreshToken = useCallback(async () => {
-        console.log("Proactively refreshing Spotify token...");
-        try {
-            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
-            const { access_token, expires_in } = data;
-            const newExpiresAt = Date.now() + expires_in * 1000;
-            
-            localStorage.setItem('spotify_access_token', access_token);
-            localStorage.setItem('spotify_expires_at', String(newExpiresAt));
-            apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-            
-            setState(s => ({
-                ...s,
-                accessToken: access_token,
-                expiresAt: newExpiresAt,
-            }));
-            console.log("Token proactively refreshed.");
-        } catch (err) {
-            console.error("Silent token refresh failed. Logging out.", err);
-            logout(); // If silent refresh fails, the session is likely invalid.
-        }
-    }, [logout]);
+const silentRefreshToken = useCallback(async () => {
+  if (refreshInFlight.current) {
+    // Evita refresh duplicati
+    return refreshInFlight.current;
+  }
+  refreshInFlight.current = (async () => {
+    console.log("Refreshing Spotify access token (silent)...");
+    try {
+      const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+      const { access_token, expires_in } = data;
+      const newExpiresAt = Date.now() + expires_in * 1000;
+
+      localStorage.setItem('spotify_access_token', access_token);
+      localStorage.setItem('spotify_expires_at', String(newExpiresAt));
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+
+      setState(s => ({
+        ...s,
+        accessToken: access_token,
+        expiresAt: newExpiresAt,
+      }));
+      console.log("Silent token refresh OK.");
+    } catch (err) {
+      console.error("Silent token refresh failed. Logging out.", err);
+      logout();
+    } finally {
+      refreshInFlight.current = null;
+    }
+  })();
+  return refreshInFlight.current;
+}, [logout]);
     
     // Proactive token refresh timer
     useEffect(() => {
@@ -286,7 +297,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken }}>
             {children}
         </AuthContext.Provider>
     );
