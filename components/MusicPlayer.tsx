@@ -248,9 +248,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             });
 
             player.on('ready', ({ device_id }) => {
-                console.log('Spotify Player is ready with Device ID:', device_id);
+                console.log('Player CONNESSO. Device ID ricevuto:', device_id);
                 setDeviceId(device_id);
                 setPlayerStatus('ready');
+
+                // Automatically transfer playback to this new device.
+                // This improves user experience by making the web player active immediately.
+                apiClient.put('/me/player', {
+                    device_ids: [device_id]
+                }).catch(err => {
+                    // This can fail if the user is in a private session or has no other active devices.
+                    // It's not a critical error, so we just log a warning.
+                    console.warn("Could not automatically transfer playback. User may need to select device manually.", err.response?.data || err.message);
+                });
             });
 
             player.on('not_ready', ({ device_id }) => {

@@ -29,6 +29,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     clearError: () => void;
     play: (options: PlayOptions) => void;
     setDeviceId: (id: string | null) => void;
+    deviceId: string | null;
     refreshTrigger: number;
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
     setVolume: (level: number) => void;
@@ -339,7 +340,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, refreshAccessToken, getLatestAccessToken }}>
+        <AuthContext.Provider value={{ ...state, deviceId, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, refreshAccessToken, getLatestAccessToken }}>
             {children}
         </AuthContext.Provider>
     );
