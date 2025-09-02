@@ -16,6 +16,7 @@ import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals'
 
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
+    isAnyAppOpen: boolean; // Manteniamo entrambi per compatibilità
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
     floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };

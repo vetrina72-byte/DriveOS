@@ -164,6 +164,7 @@ export const ICONS = {
     browser: FiGlobe,
     radio: MdRadio,
     tunein: FiMusic,
+    radio: MdRadio,
     tidal: SiTidal,
 
     // Connectivity
