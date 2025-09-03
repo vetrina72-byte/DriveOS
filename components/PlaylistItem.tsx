@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiMusic, FiMic, FiUser, FiHeart, FiRadio } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
-import { useAuth } from '../context/AuthContext';
 
 export interface SpotifyItem {
   id: string;
@@ -26,16 +25,12 @@ export interface SpotifyItem {
 }
 
 const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: SpotifyItem, isNight: boolean, onSelectItem: (item: SpotifyItem) => void, contextInfo?: string }) => {
-  const { isPlayerReady } = useAuth();
   const [imageError, setImageError] = useState(false);
   const textColorPrimary = isNight ? 'text-white' : 'text-zinc-800';
   const textColorSecondary = isNight ? 'text-[#b3b3b3]' : 'text-zinc-500';
   const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
   const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
-  
-  const isPlayable = item.type === 'track';
-  const isDisabled = isPlayable && !isPlayerReady;
   
   // Reset image error state if the item changes
   useEffect(() => {
@@ -100,7 +95,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   }
 
   return (
-    <div onClick={() => !isDisabled && onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 w-44 flex-shrink-0 ${bgColor} ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+    <div onClick={() => onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 w-44 flex-shrink-0 ${bgColor} cursor-pointer`}>
       <div className="relative w-full aspect-square mb-3">
         {imageUrl && !imageError ? (
           <img 

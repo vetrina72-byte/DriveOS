@@ -147,12 +147,18 @@ const silentRefreshToken = useCallback(async () => {
     }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
     // FIX: Update _setPlayerState to modify the unified nowPlaying state
-    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
-        setNowPlaying(s => ({ 
-            ...s, 
-            spotifyState: newState,
-            source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source)
-        }));
+   const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
+        setNowPlaying(s => { // `s` is the most recent state
+            // If the user has intentionally switched to the radio, we must not let
+            // a state update from Spotify (e.g., from it pausing) hijack the UI.
+            if (s.source === 'radio') {
+                // We can update Spotify's state in the background, but we MUST NOT change the source.
+                return { ...s, spotifyState: newState };
+            }
+
+            // Otherwise, it's safe for Spotify state changes to control the UI.
+            return { ...s, spotifyState: newState, source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source) };
+        });
     }, []);
     
     const fetchUserInfo = useCallback(async () => {
