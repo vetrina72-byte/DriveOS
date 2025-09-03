@@ -1,14 +1,11 @@
-
-
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import { useAuth } from '../context/AuthContext';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -18,8 +15,8 @@ const containerVariants = {
   }
 };
 
-// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
-const itemVariants = {
+// FIX: Add explicit `Variants` type to fix type inference issue with the `ease` property.
+const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -93,7 +90,6 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isLiked, setIsLiked] = useState(false);
-    // FIX: Destructure 'nowPlaying' from useAuth and derive 'playerState' from it.
     const { nowPlaying, user } = useAuth();
     const playerState = nowPlaying.spotifyState;
 

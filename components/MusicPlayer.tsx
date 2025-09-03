@@ -404,7 +404,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
 
     useEffect(() => {
         if (playerStatus === 'ready' && !spotifyState) {
-            setNowPlaying({ source: null });
+            setNowPlaying(s => s.source === 'spotify' ? { source: null, spotifyState: null } : {});
         }
     }, [spotifyState, playerStatus, setNowPlaying]);
 
@@ -508,8 +508,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
                     }
                 });
              } else {
-                // FIX: Update the call to use a functional update that returns a partial state object.
-                setNowPlaying(prev => (prev.source === 'spotify' ? { source: null, spotifyState: null } : {}));
+                setNowPlaying(s => (s.source === 'spotify' ? { source: null, spotifyState: null } : {}));
              }
          });
  

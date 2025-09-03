@@ -1,8 +1,9 @@
 
 
 
+
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { FiX } from 'react-icons/fi';
 
 interface WebAppViewerProps {
@@ -10,7 +11,6 @@ interface WebAppViewerProps {
     onClose: () => void;
 }
 
-// FIX: The 'Variants' type from framer-motion can be overly strict. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
 const webAppVariants = {
     initial: { opacity: 0 },
     animate: { opacity: 1 },

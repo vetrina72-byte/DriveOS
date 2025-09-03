@@ -1,15 +1,12 @@
-
-
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader, FiPlay } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import ContentCarousel from './ContentCarousel';
 import { useAuth } from '../context/AuthContext';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -19,8 +16,8 @@ const containerVariants = {
   }
 };
 
-// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
-const itemVariants = {
+// FIX: Add explicit `Variants` type to fix type inference issue with the `ease` property.
+const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -62,8 +59,8 @@ const AnimatedEqualizer = ({ className }: { className?: string; }) => (
     </div>
 );
 
-// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
-const topResultVariants = {
+// FIX: Add explicit `Variants` type to fix type inference issue with the `ease` property.
+const topResultVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: { y: 0, opacity: 1, transition: { ease: "easeOut", duration: 0.3 } },
 };
@@ -72,7 +69,6 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const [results, setResults] = useState<SearchResults>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    // FIX: Destructure 'nowPlaying' from useAuth and derive 'playerState' from it.
     const { nowPlaying } = useAuth();
     const playerState = nowPlaying.spotifyState;
 

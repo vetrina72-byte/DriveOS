@@ -31,7 +31,6 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'spotifyPlayerI
     play: (options: PlayOptions) => void;
     setDeviceId: (id: string | null) => void;
     refreshTrigger: number;
-    // FIX: Allow setNowPlaying to accept a functional update to prevent stale state issues.
     setNowPlaying: (update: Partial<NowPlayingState> | ((prevState: NowPlayingState) => Partial<NowPlayingState>)) => void;
     setSpotifyPlayerInstance: (player: SpotifyPlayer | null) => void;
     pauseSpotify: () => void;
@@ -138,7 +137,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
     }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
-    // FIX: Implement support for functional updates in setNowPlaying.
     const setNowPlaying = useCallback((update: Partial<NowPlayingState> | ((prevState: NowPlayingState) => Partial<NowPlayingState>)) => {
         setState(s => {
             const updateObj = typeof update === 'function' ? update(s.nowPlaying) : update;

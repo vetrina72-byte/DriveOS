@@ -1,8 +1,5 @@
-
-
-
 import React, { useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import WebAppViewer from './WebAppViewer';
 
 // A self-contained component for the service button with 3D hover effects.
@@ -108,21 +105,21 @@ const ServiceButton = ({ service, isNight, onClick }: {
 
 
 // Framer Motion Variants for the choreographed entry animation
-// FIX: The 'Variants' type from framer-motion can be overly strict with array-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
-const panelVariant = {
+// FIX: Add explicit `Variants` type to fix type inference issues with the `ease` property.
+const panelVariant: Variants = {
     initial: { x: '100%' },
     animate: { x: '0%', transition: { duration: 0.7, ease: [0.2, 0.8, 0.2, 1] } },
     exit: { x: '100%', transition: { duration: 0.5, ease: [0.8, 0.2, 1, 0.2] } },
 };
 
-const contentVariant = {
+const contentVariant: Variants = {
     initial: { opacity: 0 },
     animate: { opacity: 1, transition: { duration: 1, delay: 0.3 } },
     exit: { opacity: 0, transition: { duration: 0.2 } },
 };
 
-// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
-const driveOsHeaderVariant = {
+// FIX: Add explicit `Variants` type to fix type inference issues with the `ease` property.
+const driveOsHeaderVariant: Variants = {
     initial: { opacity: 0, y: 'calc(50vh - 150px)', scale: 1.5 },
     animate: {
         opacity: [0, 1, 1],
@@ -132,8 +129,8 @@ const driveOsHeaderVariant = {
     },
 };
 
-// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
-const otherElementsVariant = {
+// FIX: Add explicit `Variants` type to fix type inference issues with the `ease` property.
+const otherElementsVariant: Variants = {
     initial: { opacity: 0, y: 50 },
     animate: {
       opacity: 1,
@@ -145,7 +142,7 @@ const otherElementsVariant = {
     }
 };
 
-const gridContainerVariant = {
+const gridContainerVariant: Variants = {
     initial: {},
     animate: {
       transition: {
