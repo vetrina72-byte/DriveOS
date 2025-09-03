@@ -420,30 +420,26 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
 
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
+            // This is required to get audio playback in the browser.
+            // While it's best called from a user gesture, the SDK `ready` event is the earliest point we can do this programmatically.
             await playerInstance.activateElement();
+
+            // Transfer playback to this new device. This makes it the active player for API calls.
+            // We set `play: false` because playback should only be initiated by a direct user action (like clicking a play button).
             await apiClient.put('/me/player', {
                 device_ids: [deviceId],
-                play: true 
+                play: false
             });
-
-            setTimeout(async () => {
-                try {
-                    const { data: playerState } = await apiClient.get('/me/player');
-                    if (playerState && playerState.item) {
-                        await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
-                            position_ms: playerState.progress_ms
-                        });
-                    }
-                } catch(e) {
-                    console.error("Error during resync play command", e);
-                }
-            }, 500);
+            console.log("Playback successfully transferred to this web player.");
 
         } catch (error: any) {
+            // A 404 or 403 error during playback transfer is often not a critical failure.
+            // It usually means there was no other active Spotify session to transfer from.
+            // The player will still be ready for new playback commands.
             if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-                console.log("No active session to transfer. Player is ready for new playback.");
+                console.log("No active session to transfer. The player is ready for new playback commands.");
             } else {
-                console.error("Error during startup and synchronization:", error.response?.data || error.message);
+                console.error("Error during player startup and synchronization:", error.response?.data || error.message);
             }
         }
     }, []);
