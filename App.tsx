@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -1096,18 +1097,9 @@ function AppContent() {
     }
 
     if (willBeActive) {
-      if (appName === 'spotify') {
-        if (nowPlaying.source !== 'spotify') {
-          setNowPlaying(prev => ({
-            ...prev,
-            source: 'spotify',
-            radioStation: null,
-            radioContext: [],
-          }));
-        }
-      } else if (appName === 'radio') {
+      if (appName === 'radio') {
         // Let handlePlayStation manage state
-      } else if (nowPlaying.source === 'radio') {
+      } else if (nowPlaying.source === 'radio' && appName !== 'spotify') {
         // Stop radio if switching to a non-radio, non-spotify app
         setNowPlaying(prev => ({ 
             ...prev,
@@ -1259,6 +1251,7 @@ function AppContent() {
       </div>
 
       <MusicPlayer
+        activeApp={activeApp}
         onStationChange={handleStationChange}
         isAnyAppOpen={isUIOverlayActive}
         isNight={useDarkTheme}

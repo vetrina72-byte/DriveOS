@@ -25,8 +25,8 @@ interface MusicPlayerProps {
     widgetBgColor: string;
     dayPlayerButtonColor: string;
     nightPlayerButtonColor: string;
-    // FIX: Add missing onStationChange prop
     onStationChange: (direction: 'next' | 'prev') => void;
+    activeApp: string | null;
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -175,6 +175,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     dayPlayerButtonColor,
     nightPlayerButtonColor,
     onStationChange,
+    activeApp,
 }) => {
   const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
@@ -584,11 +585,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         : 'border-zinc-300';
     
     const renderPlayerContent = () => {
+        // CASE 1: Something is actively playing (Radio or Spotify)
         if (source === 'radio' && radioStation) {
             const { name, favicon, tags } = radioStation;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-            const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
-
+            
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
@@ -600,9 +601,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                     </div>
-
                     <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
-                    
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
@@ -614,7 +613,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 }
                             </button>
                             <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button disabled className={disabledIconColor}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                            <button disabled className={'text-[var(--icon-color-disabled)] cursor-not-allowed'}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
                         </div>
                         <div className="flex-1 flex justify-end items-center"></div>
                     </div>
@@ -622,81 +621,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             );
         }
 
-        if (playerStatus === 'error') {
-            return (
-                <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
-                    <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
-                    <div className="overflow-hidden">
-                        <div className="font-semibold truncate">Errore di connessione</div>
-                        <div className="text-sm truncate">Impossibile connettersi a Spotify.</div>
-                    </div>
-                </div>
-            );
-        }
-
-        if (playerStatus === 'connecting' || !isAuthenticated) {
-            const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
-
-            return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
-                    <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                                <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                            </div>
-                            <div className="overflow-hidden">
-                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>Connect to listen</div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-5">
-                            <button disabled className={disabledIconColor}><PiShuffleBold className="w-5 h-5" /></button>
-                            <button disabled className={disabledIconColor}><PiRepeatBold className="w-5 h-5" /></button>
-                        </div>
-                    </div>
-
-                    <div className="w-full">
-                        <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]">
-                            <div className="h-full rounded-full bg-[var(--icon-color-disabled)] relative w-0">
-                                 <div 
-                                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--icon-color-disabled)]"
-                                    style={{ transform: 'translateY(-50%)' }} 
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                        <div className="flex-1 flex justify-start">
-                            {/* Empty left spacer */}
-                        </div>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button disabled className={disabledIconColor}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
-                            <button disabled className={disabledIconColor}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button disabled className={disabledIconColor}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
-                        </div>
-                        <div className="flex-1 flex justify-end items-center">
-                            <button disabled className={disabledIconColor}><BsList style={{ width: '20px', height: '20px'}} /></button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        
-        if (isPlayerActive) {
+        if (source === 'spotify' && isPlayerActive) {
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
-            const nextTrack = playerState.track_window.next_tracks[0];
-            
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
-            
-            const songTitleColor = isNight 
-              ? '#f7f7f7'
-              : (playerState.paused ? '#454545' : '#000000');
-
-            const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
+            const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
             
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -719,15 +649,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                         </div>
                     </div>
-
                     <div className="w-full">
                         <ProgressBar player={playerRef.current} state={playerState} />
                     </div>
-                    
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                        <div className="flex-1 flex justify-start">
-                            {/* Empty left spacer */}
-                        </div>
+                        <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
                                 <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
@@ -750,7 +676,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                         </div>
                     </div>
-
                     {isQueuePopoverRendered && (
                         <QueuePopover
                             isNight={isNight}
@@ -764,8 +689,38 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             );
         }
 
+        // --- At this point, nothing is actively playing ---
+
+        if (playerStatus === 'error') {
+            return (
+                <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
+                    <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
+                    <div className="overflow-hidden">
+                        <div className="font-semibold truncate">Connection Error</div>
+                        <div className="text-sm truncate">Could not connect to Spotify.</div>
+                    </div>
+                </div>
+            );
+        }
+
+        // CASE 2: Inside Spotify App and not logged in
+        if (activeApp === 'spotify' && !isAuthenticated) {
+            return (
+                <div className="flex items-center w-full h-full gap-5 px-4">
+                     <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                        <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                    </div>
+                    <div className="overflow-hidden">
+                        <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
+                        <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>Accedi con Spotify</div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // CASE 3 (DEFAULT): Neutral placeholder
         return (
-             <div className="flex items-center w-full h-full gap-5 px-4">
+            <div className="flex items-center w-full h-full gap-5 px-4">
                 <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
                     <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                 </div>
