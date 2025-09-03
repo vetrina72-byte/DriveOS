@@ -37,6 +37,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     setNowPlaying: React.Dispatch<React.SetStateAction<NowPlayingState>>;
     isPlayerReady: boolean;
     pauseSpotify: () => void;
+    setPlayerAsReadyForAutoplay: () => void;
 }
 
 interface PlayOptions {
@@ -73,6 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         radioStation: null,
         radioContext: [],
     });
+    const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -156,28 +158,79 @@ const silentRefreshToken = useCallback(async () => {
         }
     }, []);
 
-    // Restore last session on initial load
+    const startSpotifyPlayback = useCallback(async () => {
+        if (!deviceId) {
+            console.warn("Attempted to start Spotify playback, but deviceId is not ready.");
+            return;
+        }
+
+        console.log("Executing start/sync Spotify playback logic for session restore.");
+        try {
+            await apiClient.put('/me/player', {
+                device_ids: [deviceId],
+                play: false,
+            });
+            console.log('Playback transferred to this device for session restore.');
+
+            setTimeout(async () => {
+                try {
+                    const { data: playerState } = await apiClient.get('/me/player');
+                    if (playerState && playerState.device && playerState.item) {
+                        await apiClient.put(`/me/player/play?device_id=${deviceId}`);
+                        console.log('Explicit play command sent to resume restored session.');
+                    } else {
+                        console.log("No active playback session found on Spotify's side to resume.");
+                    }
+                } catch (e: any) {
+                    if (e.response?.status !== 404) {
+                        console.error("Error during resync play command", e);
+                    } else {
+                        console.log("No active playback session found on Spotify's side to resume (404).");
+                    }
+                }
+            }, 500);
+        } catch (error: any) {
+            if (error.response && (error.response.status === 404 || error.response.status === 403)) {
+                console.log("No active session to transfer. Player is ready for new playback.");
+            } else {
+                console.error("Error during startup and synchronization:", error.response?.data || error.message);
+            }
+        }
+    }, [deviceId]);
+
+    // NEW session restore useEffect, triggered by the semaphore
     useEffect(() => {
-        const restoreLastSession = () => {
-            try {
-                const savedStateJSON = localStorage.getItem('last_now_playing');
-                if (savedStateJSON) {
-                    const savedState = JSON.parse(savedStateJSON) as NowPlayingState;
-                    console.log("Restoring last listening session:", savedState);
+        if (!isReadyForAutoplay) {
+            return;
+        }
+
+        console.log("Player is ready. Attempting to restore last session...");
+        
+        try {
+            const savedStateJSON = localStorage.getItem('last_now_playing');
+            if (savedStateJSON) {
+                const savedState = JSON.parse(savedStateJSON) as NowPlayingState;
+                console.log("Found saved session:", savedState);
+
+                if (savedState.source === 'spotify') {
+                    console.log("Last session was Spotify. Triggering playback.");
+                    startSpotifyPlayback();
+                } else if (savedState.source === 'radio') {
+                    console.log("Last session was Radio. Setting state for autoplay.");
                     setNowPlaying(savedState);
                 }
-            } catch (error) {
-                console.error("Failed to restore session from localStorage:", error);
-                localStorage.removeItem('last_now_playing');
+            } else {
+                 console.log("No saved session found in localStorage.");
             }
-        };
-        restoreLastSession();
-    }, []);
+        } catch (error) {
+            console.error("Failed to restore session from localStorage:", error);
+            localStorage.removeItem('last_now_playing');
+        }
+    }, [isReadyForAutoplay, startSpotifyPlayback]);
 
     // Save nowPlaying state to localStorage whenever it changes
     useEffect(() => {
       if (nowPlaying.source) {
-        // Avoid saving an empty, intermediate Spotify state during initialization
         if (nowPlaying.source === 'spotify' && !nowPlaying.spotifyState?.track_window.current_track) {
             return;
         }
@@ -250,7 +303,6 @@ const silentRefreshToken = useCallback(async () => {
                     isLoading: false,
                     error: null,
                 }));
-                // Force a switch to Spotify after a successful login
                 setNowPlaying({ source: 'spotify', spotifyState: null, radioStation: null, radioContext: [] });
             } else {
                  throw new Error("Failed to fetch user info after login.");
@@ -292,9 +344,9 @@ const silentRefreshToken = useCallback(async () => {
         });
     }, []);
 
-    const setDeviceId = (id: string | null) => {
-        setDeviceIdState(id);
-    };
+    const setPlayerAsReadyForAutoplay = useCallback(() => {
+        setIsReadyForAutoplay(true);
+    }, []);
 
     const play = useCallback(async (options: PlayOptions) => {
         if (!deviceId) {
@@ -353,7 +405,7 @@ const silentRefreshToken = useCallback(async () => {
     }, [deviceId]);
 
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay }}>
             {children}
         </AuthContext.Provider>
     );

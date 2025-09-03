@@ -177,7 +177,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     onStationChange,
     activeApp,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -203,11 +203,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentTrackId = playerState?.track_window.current_track?.id;
     const currentTrackUri = playerState?.track_window.current_track?.uri;
     const internalVolumeUpdate = useRef(false);
-  // sempre l'ultimo token per il callback del SDK
   const tokenRef = useRef<string | null>(accessToken);
   useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
 
-    // Effect to update SDK when context volume changes (e.g., from UI)
     useEffect(() => {
         if (playerRef.current && typeof volume === 'number') {
             if (internalVolumeUpdate.current) {
@@ -277,39 +275,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
     }, [source, radioStation?.url_resolved]);
 
-    const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
-        try {
-            // `activateElement` has been moved to the 'ready' handler to unlock audio context earlier.
-
-            await apiClient.put('/me/player', {
-                device_ids: [deviceId],
-                play: true 
-            });
-            console.log('Playback transferred and set to PLAY.');
-
-            setTimeout(async () => {
-                try {
-                    const { data: playerState } = await apiClient.get('/me/player');
-                    if (playerState && playerState.item) {
-                        await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
-                            position_ms: playerState.progress_ms
-                        });
-                        console.log('Explicit resume command sent.');
-                    }
-                } catch(e) {
-                    console.error("Error during resync play command", e);
-                }
-            }, 500);
-
-        } catch (error: any) {
-            if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-                console.log("No active session to transfer. Player is ready for new playback.");
-            } else {
-                console.error("Error during startup and synchronization:", error.response?.data || error.message);
-            }
-        }
-    }, []);
-
     useEffect(() => {
         if (!accessToken) {
             if (playerRef.current) {
@@ -340,7 +305,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
          setPlayerStatus('connecting');
          const player = new window.Spotify.Player({
              name: 'DrivingOS',
-            // Fornisce sempre l'ultimo access token al SDK
             getOAuthToken: cb => {
               if (tokenRef.current) cb(tokenRef.current);
             },
@@ -354,7 +318,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
              
              setDeviceId(device_id);
              setPlayerStatus('ready');
-             await startAndSyncPlayer(player, device_id);
+             setPlayerAsReadyForAutoplay();
          });
  
          player.on('not_ready', () => {
@@ -366,7 +330,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
              _setPlayerState(state);
              player.getVolume().then(sdkVolume => {
                  if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
-                     internalVolumeUpdate.current = true; // Flag this as an SDK-initiated update
+                     internalVolumeUpdate.current = true;
                      setVolume(sdkVolume);
                  }
              });
@@ -378,20 +342,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
         player.on('initialization_error', handleGenericError);
         player.on('account_error', handleGenericError);
-        // Gestione robusta del token scaduto
         player.on('authentication_error', async (error: { message: string }) => {
           console.warn("Spotify authentication_error:", error.message);
           try {
             await silentRefreshToken();
-            // Prova a vedere se il player è ancora vivo
             const state = await player.getCurrentState();
             if (!state) {
               console.warn("[Spotify] State nullo dopo refresh → reconnect necessario.");
-              // disconnetti e ricrea
               playerRef.current?.disconnect();
               playerRef.current = null;
               setPlayerStatus('connecting');
-              // Riusa la stessa entrypoint per ricreare il player
               if (window.onSpotifyWebPlaybackSDKReady) {
                 window.onSpotifyWebPlaybackSDKReady();
               }
@@ -414,7 +374,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume, silentRefreshToken]);
+    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, volume, silentRefreshToken, setPlayerAsReadyForAutoplay]);
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !playerState || playerState.paused) {
@@ -587,7 +547,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         : 'border-zinc-300';
     
     const renderPlayerContent = () => {
-        // CASE 1: Something is actively playing (Radio or Spotify)
         if (source === 'radio' && radioStation) {
             const { name, favicon, tags } = radioStation;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
@@ -691,8 +650,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             );
         }
 
-        // --- At this point, nothing is actively playing ---
-
         if (playerStatus === 'error') {
             return (
                 <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
@@ -705,7 +662,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             );
         }
 
-        // CASE 2: Inside Spotify App and not logged in
         if (activeApp === 'spotify' && !isAuthenticated) {
             return (
                 <div className="flex items-center w-full h-full gap-5 px-4">
@@ -720,7 +676,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             );
         }
         
-        // CASE 3 (DEFAULT): Neutral placeholder
         return (
             <div className="flex items-center w-full h-full gap-5 px-4">
                 <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
