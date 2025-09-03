@@ -91,7 +91,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isFollowing, setIsFollowing] = useState(false);
-    const { nowPlaying } = useAuth();
+    const { nowPlaying, isPlayerReady } = useAuth();
     const playerState = nowPlaying.spotifyState;
 
     const isPlayingContext = playerState && !playerState.paused;
@@ -214,7 +214,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                     <p className={`text-sm ${theme.textSecondary}`}>{formatFollowers(artist.followers.total)} followers</p>
                     <div className="flex items-center gap-4 mt-4">
                         {tracks.length > 0 && (
-                            <button onClick={() => onPlay({ uris: trackUris })} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+                            <button onClick={() => isPlayerReady && onPlay({ uris: trackUris })} disabled={!isPlayerReady} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
                                 <FiPlay className="w-7 h-7 ml-1" />
                             </button>
                         )}
@@ -246,8 +246,8 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                                 <motion.div
                                     key={track.id + index}
                                     variants={itemVariants}
-                                    onClick={() => onPlay({ uris: trackUris, offset: { position: index } })}
-                                    className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                                    onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index } })}
+                                    className={`flex items-center gap-4 p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                                 >
                                     <div className="w-8 text-center font-medium">
                                         {isPlaying ? (

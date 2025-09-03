@@ -69,7 +69,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const [results, setResults] = useState<SearchResults>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { nowPlaying } = useAuth();
+    const { nowPlaying, isPlayerReady } = useAuth();
     const playerState = nowPlaying.spotifyState;
 
     const isPlayingContext = playerState && !playerState.paused;
@@ -152,7 +152,11 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                     {topResult.artists?.map(a => a.name).join(', ')}
                                 </p>
                             </div>
-                            <button onClick={(e) => { e.stopPropagation(); onPlay({ uris: [topResult.uri] }); }} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform self-start">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onPlay({ uris: [topResult.uri] }); }}
+                                disabled={!isPlayerReady}
+                                className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform self-start disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                            >
                                 <FiPlay className="w-7 h-7 ml-1" />
                             </button>
                         </div>
@@ -173,8 +177,8 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                     <motion.div
                                       key={track.id}
                                       variants={itemVariants}
-                                      onClick={() => onPlay({ uris: trackUris, offset: { position: index + 1 } })}
-                                      className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${theme.hover}`}
+                                      onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index + 1 } })}
+                                      className={`flex items-center gap-3 p-2 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                                     >
                                         <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>
                                         <div className="flex-grow overflow-hidden">

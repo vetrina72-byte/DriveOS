@@ -21,6 +21,7 @@ interface AuthState {
     volume: number;
     isMuted: boolean;
     lastVolume: number;
+    isPlayerReady: boolean;
     spotifyPlayerInstance: SpotifyPlayer | null;
 }
 
@@ -33,6 +34,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'spotifyPlayerI
     refreshTrigger: number;
     setNowPlaying: (update: Partial<NowPlayingState> | ((prevState: NowPlayingState) => Partial<NowPlayingState>)) => void;
     setSpotifyPlayerInstance: (player: SpotifyPlayer | null) => void;
+    setIsPlayerReady: (isReady: boolean) => void;
     pauseSpotify: () => void;
     setVolume: (level: number) => void;
     toggleMute: () => void;
@@ -66,6 +68,7 @@ const initialState: AuthState = {
     volume: 1,
     isMuted: false,
     lastVolume: 1,
+    isPlayerReady: false,
     spotifyPlayerInstance: null,
 };
 
@@ -146,6 +149,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const setSpotifyPlayerInstance = useCallback((player: SpotifyPlayer | null) => {
         setState(s => ({ ...s, spotifyPlayerInstance: player }));
+    }, []);
+    
+    const setIsPlayerReady = useCallback((isReady: boolean) => {
+        setState(s => ({ ...s, isPlayerReady: isReady }));
     }, []);
 
     const pauseSpotify = useCallback(() => {
@@ -307,7 +314,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, setNowPlaying, setSpotifyPlayerInstance, pauseSpotify, setVolume, toggleMute, silentRefreshToken }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, setNowPlaying, setSpotifyPlayerInstance, pauseSpotify, setVolume, toggleMute, silentRefreshToken, setIsPlayerReady }}>
             {children}
         </AuthContext.Provider>
     );

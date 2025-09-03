@@ -85,7 +85,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     const [episodes, setEpisodes] = useState<Episode[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { nowPlaying } = useAuth();
+    const { nowPlaying, isPlayerReady } = useAuth();
     const playerState = nowPlaying.spotifyState;
     
     const [totalEpisodes, setTotalEpisodes] = useState(0);
@@ -162,14 +162,9 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     if (error || !show) {
         return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Show not found.'}</div>;
     }
-
-    const handlePlayShow = () => {
-        if (episodes.length > 0) {
-            onPlay({ uris: episodes.map(e => e.uri) });
-        }
-    };
     
     const handlePlayEpisode = (index: number) => {
+        if (!isPlayerReady) return;
         const urisToPlay = episodes.slice(index).map(e => e.uri);
         if (urisToPlay.length > 0) {
             onPlay({ uris: urisToPlay });
@@ -233,7 +228,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                             key={`${episode.id}-${index}`}
                             variants={itemVariants}
                             onClick={() => handlePlayEpisode(index)}
-                            className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                            className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                         >
                             {episode.images?.[0]?.url ? (
                                 <img src={episode.images[0].url} alt={episode.name} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
@@ -254,7 +249,11 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                                     <span>{formatDuration(episode.duration_ms)}</span>
                                 </div>
                             </div>
-                            <button onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }} className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }}
+                                disabled={!isPlayerReady}
+                                className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                            >
                                 <FiPlay className="w-5 h-5 ml-0.5" />
                             </button>
                         </motion.div>

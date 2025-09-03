@@ -90,7 +90,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isLiked, setIsLiked] = useState(false);
-    const { nowPlaying, user } = useAuth();
+    const { nowPlaying, user, isPlayerReady } = useAuth();
     const playerState = nowPlaying.spotifyState;
 
     const isLikedSongs = itemId === 'liked-songs';
@@ -200,6 +200,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     };
 
     const handlePlay = () => {
+        if (!isPlayerReady) return;
         if (isLikedSongs) {
             onPlay({ uris: tracks.map(t => t.uri) });
         } else if (details?.uri) {
@@ -208,6 +209,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     };
     
     const handleTrackPlay = (trackUri: string, index: number) => {
+        if (!isPlayerReady) return;
         if (isLikedSongs) {
             onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } });
         } else if (details?.uri) {
@@ -249,7 +251,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{details.name}</h1>
                     {sanitizedSubText && <p className={`text-sm ${theme.textSecondary} line-clamp-2`}>{sanitizedSubText}</p>}
                      <div className="flex items-center gap-4 mt-4">
-                        <button onClick={handlePlay} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+                        <button onClick={handlePlay} disabled={!isPlayerReady} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
                             <FiPlay className="w-7 h-7 ml-1" />
                         </button>
                         <button
@@ -292,7 +294,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                             key={`${track.id}-${index}`}
                             variants={itemVariants}
                             onClick={() => handleTrackPlay(track.uri, index)}
-                            className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                            className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                         >
                             <div className="text-center">
                                 {isPlaying ? (

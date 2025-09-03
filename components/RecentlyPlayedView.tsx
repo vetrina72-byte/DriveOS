@@ -3,6 +3,7 @@ import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import { motion, Variants } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -41,6 +42,7 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
     const [contextDetails, setContextDetails] = useState<Map<string, any>>(new Map());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { isPlayerReady } = useAuth();
 
     useEffect(() => {
         const fetchHistory = async () => {
@@ -120,8 +122,8 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
                         <motion.div
                             key={`${track.id}-${index}`}
                             variants={itemVariants}
-                            onClick={() => onPlay({ uris: [track.uri] })}
-                            className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                            onClick={() => isPlayerReady && onPlay({ uris: [track.uri] })}
+                            className={`flex items-center gap-4 p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                         >
                             <img 
                               src={track.album?.images?.[2]?.url || track.album?.images?.[0]?.url} 

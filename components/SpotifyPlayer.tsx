@@ -54,7 +54,7 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
-    const { isAuthenticated, user, error, play } = useAuth();
+    const { isAuthenticated, user, error, play, isPlayerReady } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
@@ -112,6 +112,10 @@ const SpotifyPlayer = ({
                 changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
             }
         } else if (item.type === 'track') {
+            if (!isPlayerReady) {
+                console.warn("Player not ready. Playback blocked.");
+                return;
+            }
             if (item.context?.uri) {
                 // If the track has context (album/playlist), play the context starting from this track
                 play({

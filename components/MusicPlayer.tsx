@@ -382,7 +382,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
     nightPlayerButtonColor,
     spotifyState,
 }) => {
-    const { accessToken, logout, setDeviceId, isAuthenticated, setNowPlaying, volume, setVolume, setSpotifyPlayerInstance, silentRefreshToken } = useAuth();
+    const { accessToken, logout, setDeviceId, isAuthenticated, setNowPlaying, volume, setVolume, setSpotifyPlayerInstance, silentRefreshToken, setIsPlayerReady } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
@@ -420,12 +420,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
 
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
-            // This is required to get audio playback in the browser.
-            // While it's best called from a user gesture, the SDK `ready` event is the earliest point we can do this programmatically.
             await playerInstance.activateElement();
-
-            // Transfer playback to this new device. This makes it the active player for API calls.
-            // We set `play: false` because playback should only be initiated by a direct user action (like clicking a play button).
             await apiClient.put('/me/player', {
                 device_ids: [deviceId],
                 play: false
@@ -433,9 +428,6 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
             console.log("Playback successfully transferred to this web player.");
 
         } catch (error: any) {
-            // A 404 or 403 error during playback transfer is often not a critical failure.
-            // It usually means there was no other active Spotify session to transfer from.
-            // The player will still be ready for new playback commands.
             if (error.response && (error.response.status === 404 || error.response.status === 403)) {
                 console.log("No active session to transfer. The player is ready for new playback commands.");
             } else {
@@ -452,6 +444,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
             }
             setPlayerStatus('connecting');
             setNowPlaying({ spotifyState: null });
+            setIsPlayerReady(false);
             return;
         }
 
@@ -485,12 +478,14 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
  
          player.on('ready', async ({ device_id }) => {
              setDeviceId(device_id);
+             setIsPlayerReady(true);
              setPlayerStatus('ready');
              await startAndSyncPlayer(player, device_id);
          });
  
          player.on('not_ready', () => {
              setDeviceId(null);
+             setIsPlayerReady(false);
              setPlayerStatus('connecting');
          });
          
@@ -542,9 +537,10 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
                 playerRef.current.disconnect();
                 setSpotifyPlayerInstance(null);
                 playerRef.current = null;
+                setIsPlayerReady(false);
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, setNowPlaying, setVolume, volume, silentRefreshToken, setSpotifyPlayerInstance]);
+    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, setNowPlaying, setVolume, volume, silentRefreshToken, setSpotifyPlayerInstance, setIsPlayerReady]);
 
     useEffect(() => {
         if (!isAutoQueueEnabled || !spotifyState || spotifyState.paused) {
