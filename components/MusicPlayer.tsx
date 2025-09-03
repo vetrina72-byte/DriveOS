@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiLoader, FiRadio
+    FiMusic, FiAlertTriangle, FiHeart
 } from 'react-icons/fi';
 import { 
     IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
@@ -13,11 +13,10 @@ import {
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
-import type { RadioStation } from '../types';
 
 interface MusicPlayerProps {
-    onStationChange: (direction: 'next' | 'prev') => void;
     isAnyAppOpen: boolean;
+    isAnyAppOpen: boolean; // Manteniamo entrambi per compatibilità
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
     floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };
@@ -38,6 +37,7 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
     const animationFrameRef = useRef(0);
     const lastUpdateTimeRef = useRef(Date.now());
 
+    // Sync with Spotify state. This is our source of truth.
     useEffect(() => {
         if (!isSeeking) {
             setPosition(state.position);
@@ -45,6 +45,7 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
         }
     }, [state.position, isSeeking]);
 
+    // Animate progress locally using requestAnimationFrame for smoothness when playing.
     useEffect(() => {
         const animate = () => {
             const now = Date.now();
@@ -161,230 +162,22 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { is
     );
 };
 
-const IdlePlayerContent: React.FC<Pick<MusicPlayerProps, 'isNight'>> = ({ isNight }) => (
-    <div className="flex items-center w-full h-full gap-5 px-4">
-        <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-            <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
-        </div>
-        <div className="flex-grow overflow-hidden">
-            <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Niente in riproduzione</div>
-            <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>
-                Scegli qualcosa da ascoltare.
-            </div>
-        </div>
-    </div>
-);
-
-
-const MusicPlayer: React.FC<MusicPlayerProps> = (props) => {
-    const { nowPlaying } = useAuth();
-
-    const playerStyle: React.CSSProperties = useMemo(() => {
-        let baseStyle: React.CSSProperties;
-        if (props.isAnyAppOpen) {
-            baseStyle = {
-                width: `${props.dockedConfig.width}px`,
-                height: `${props.dockedConfig.height}px`,
-                bottom: `${props.dockedConfig.bottom}px`,
-                left: `${props.dockedConfig.left}px`,
-                transform: 'translateX(0)',
-            };
-        } else {
-            const { width, bottom, height, otherWidgetWidth } = props.floatingConfig;
-            const transformX = -otherWidgetWidth / 2 - 8;
-            baseStyle = {
-                width: `${width}px`,
-                height: `${height}px`,
-                bottom: `${bottom}px`,
-                left: '50%',
-                transform: `translateX(calc(-50% + ${transformX}px))`,
-            };
-        }
-        baseStyle.background = !props.isNight ? props.widgetBgColor : 'var(--player-bg)';
-        return baseStyle;
-    }, [props.isAnyAppOpen, props.dockedConfig, props.floatingConfig, props.widgetBgColor, props.isNight]);
-
-    const themeClasses = props.isNight 
-        ? 'border-zinc-700/80' 
-        : 'border-zinc-300';
-    
-    const renderPlayerContent = () => {
-        if (nowPlaying.source === 'spotify' && nowPlaying.spotifyState) {
-            return <SpotifyPlayerContent {...props} spotifyState={nowPlaying.spotifyState} />;
-        }
-        if (nowPlaying.source === 'radio' && nowPlaying.radioStation) {
-            return <RadioPlayerContent {...props} station={nowPlaying.radioStation} />;
-        }
-        return <IdlePlayerContent isNight={props.isNight} />;
-    };
-
-    return (
-        <div
-            className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
-            style={playerStyle}
-        >
-            {renderPlayerContent()}
-        </div>
-    );
-};
-
-// --- RADIO PLAYER SUB-COMPONENT ---
-const RadioPlayerContent: React.FC<MusicPlayerProps & { station: RadioStation }> = ({
-    station, onStationChange, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor
-}) => {
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const hlsRef = useRef<any>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const { volume } = useAuth();
-    const [isLiked, setIsLiked] = useState(false);
-
-    useEffect(() => {
-        const favorites: RadioStation[] = JSON.parse(localStorage.getItem('radio_favorites') || '[]');
-        setIsLiked(favorites.some(fav => fav.stationuuid === station.stationuuid));
-    }, [station]);
-    
-    const handleToggleLike = () => {
-        const favorites: RadioStation[] = JSON.parse(localStorage.getItem('radio_favorites') || '[]');
-        const newLikedState = !isLiked;
-        let newFavorites;
-
-        if (newLikedState) {
-            newFavorites = [...favorites, station];
-        } else {
-            newFavorites = favorites.filter(fav => fav.stationuuid !== station.stationuuid);
-        }
-        
-        localStorage.setItem('radio_favorites', JSON.stringify(newFavorites));
-        setIsLiked(newLikedState);
-    };
-
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        const sourceUrl = station.url_resolved;
-        
-        audio.pause();
-        audio.removeAttribute('src');
-
-        if (hlsRef.current) {
-            hlsRef.current.destroy();
-            hlsRef.current = null;
-        }
-        
-        if (sourceUrl.includes('.m3u8')) {
-            if ((window as any).Hls && (window as any).Hls.isSupported()) {
-                const hls = new (window as any).Hls();
-                hlsRef.current = hls;
-                hls.loadSource(sourceUrl);
-                hls.attachMedia(audio);
-                hls.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
-                    audio.play().catch(e => console.error("HLS Autoplay failed", e));
-                });
-                hls.on((window as any).Hls.Events.ERROR, (event: any, data: any) => {
-                    if (data.fatal) console.error('Fatal HLS error:', data);
-                });
-            } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
-                audio.src = sourceUrl;
-                audio.addEventListener('loadedmetadata', () => {
-                    audio.play().catch(e => console.error("Native HLS Autoplay failed", e));
-                });
-            } else {
-                console.error("HLS is not supported in this browser.");
-            }
-        } else {
-            audio.src = sourceUrl;
-            audio.play().catch(error => console.error("Direct stream Autoplay failed:", error));
-        }
-
-        const handlePlay = () => setIsPlaying(true);
-        const handlePause = () => setIsPlaying(false);
-        audio.addEventListener('play', handlePlay);
-        audio.addEventListener('playing', handlePlay); 
-        audio.addEventListener('pause', handlePause);
-        
-        return () => {
-            audio.removeEventListener('play', handlePlay);
-            audio.removeEventListener('playing', handlePlay);
-            audio.removeEventListener('pause', handlePause);
-            if (hlsRef.current) {
-                hlsRef.current.destroy();
-                hlsRef.current = null;
-            }
-        };
-    }, [station.url_resolved]);
-    
-    useEffect(() => {
-        if (audioRef.current) audioRef.current.volume = volume;
-    }, [volume]);
-
-    const handleTogglePlay = () => {
-        if (audioRef.current) {
-            isPlaying ? audioRef.current.pause() : audioRef.current.play().catch(e => console.error("Failed to play on toggle", e));
-        }
-    };
-
-    const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-    const songTitleColor = isNight ? '#f7f7f7' : '#000000';
-    const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
-
-    return (
-        <div className="w-full h-full flex flex-col justify-between px-4 py-3">
-            <audio ref={audioRef} playsInline />
-            
-            <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-3 min-w-0">
-                    {station.favicon ? (
-                         <img src={station.favicon} alt={station.name} className="w-12 h-12 rounded-lg object-contain" />
-                    ) : (
-                        <div className="w-12 h-12 rounded-lg bg-zinc-800 flex items-center justify-center">
-                            <FiRadio className="w-7 h-7 text-zinc-500" />
-                        </div>
-                    )}
-                    <div className="overflow-hidden">
-                        <div className="font-semibold text-sm truncate" style={{ color: songTitleColor }}>{station.name}</div>
-                        <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>Live Radio</div>
-                    </div>
-                </div>
-                <button onClick={handleToggleLike} className="transition flex-shrink-0 ml-4 p-1" style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}>
-                    <FiHeart style={{ width: `${playerControlsSize * 1.1}px`, height: `${playerControlsSize * 1.1}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
-                </button>
-            </div>
-
-            <div className="w-full flex justify-center items-center" style={{ gap: `${playerControlsGap}px`, transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                <button onClick={() => onStationChange('prev')} className="transition" style={{ color: buttonActiveColor }}>
-                    <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
-                </button>
-                <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
-                    {isPlaying 
-                        ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
-                        : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
-                    }
-                </button>
-                <button onClick={() => onStationChange('next')} className="transition" style={{ color: buttonActiveColor }}>
-                    <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
-                </button>
-            </div>
-
-            <div className="w-full h-1" />
-        </div>
-    );
-};
-
-
-// --- SPOTIFY PLAYER SUB-COMPONENT ---
-const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyPlayerState | null }> = ({ 
+const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
+    isAnyAppOpen, 
     isNight, 
+    dockedConfig, 
+    floatingConfig, 
     playerControlsSize,
     playerControlsGap,
     playerControlsVerticalPosition,
+    widgetBgColor,
     dayPlayerButtonColor,
     nightPlayerButtonColor,
-    spotifyState,
 }) => {
-    const { accessToken, logout, setDeviceId, isAuthenticated, setNowPlaying, volume, setVolume, setSpotifyPlayerInstance, silentRefreshToken, setIsPlayerReady } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume, silentRefreshToken } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
+    const playerContainerRef = useRef<HTMLDivElement>(null);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
     
     const [showQueue, setShowQueue] = useState(false);
@@ -393,45 +186,18 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
 
     const [isLiked, setIsLiked] = useState(false);
 
+    const queueButtonRef = useRef<HTMLButtonElement>(null);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
-    const isPlayerActive = playerStatus === 'ready' && spotifyState && spotifyState.track_window.current_track;
-    const currentTrackId = spotifyState?.track_window.current_track?.id;
-    const currentTrackUri = spotifyState?.track_window.current_track?.uri;
+    const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
+    const currentTrackId = playerState?.track_window.current_track?.id;
+    const currentTrackUri = playerState?.track_window.current_track?.uri;
     const internalVolumeUpdate = useRef(false);
-    const tokenRef = useRef<string | null>(accessToken);
-    useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
-    
-    const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
-        try {
-            await playerInstance.activateElement();
-            await apiClient.put('/me/player', {
-                device_ids: [deviceId],
-                play: false
-            });
-            console.log("Playback successfully transferred to this web player.");
+  // sempre l'ultimo token per il callback del SDK
+  const tokenRef = useRef<string | null>(accessToken);
+  useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
 
-        } catch (error: any) {
-            if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-                console.log("No active session to transfer. The player is ready for new playback commands.");
-            } else {
-                console.error("Error during player startup and synchronization:", error.response?.data || error.message);
-            }
-        }
-    }, []);
-
-    // This ref will hold the latest callbacks, avoiding stale closures in the SDK listeners.
-    const callbacksRef = useRef({ setNowPlaying, setVolume, volume, silentRefreshToken, logout, startAndSyncPlayer });
-    useEffect(() => {
-        callbacksRef.current = { setNowPlaying, setVolume, volume, silentRefreshToken, logout, startAndSyncPlayer };
-    }); // No dependency array, runs on every render to keep callbacks fresh
-
-    useEffect(() => {
-        if (playerStatus === 'ready' && !spotifyState) {
-            callbacksRef.current.setNowPlaying(s => s.source === 'spotify' ? { source: null, spotifyState: null } : {});
-        }
-    }, [spotifyState, playerStatus]);
-
+    // Effect to update SDK when context volume changes (e.g., from UI)
     useEffect(() => {
         if (playerRef.current && typeof volume === 'number') {
             if (internalVolumeUpdate.current) {
@@ -442,6 +208,40 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
         }
     }, [volume]);
 
+    const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
+        try {
+            await playerInstance.activateElement();
+            console.log('Browser audio context activated.');
+
+            await apiClient.put('/me/player', {
+                device_ids: [deviceId],
+                play: true 
+            });
+            console.log('Playback transferred and set to PLAY.');
+
+            setTimeout(async () => {
+                try {
+                    const { data: playerState } = await apiClient.get('/me/player');
+                    if (playerState && playerState.item) {
+                        await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
+                            position_ms: playerState.progress_ms
+                        });
+                        console.log('Explicit resume command sent.');
+                    }
+                } catch(e) {
+                    console.error("Error during resync play command", e);
+                }
+            }, 500);
+
+        } catch (error: any) {
+            if (error.response && (error.response.status === 404 || error.response.status === 403)) {
+                console.log("No active session to transfer. Player is ready for new playback.");
+            } else {
+                console.error("Error during startup and synchronization:", error.response?.data || error.message);
+            }
+        }
+    }, []);
+
     useEffect(() => {
         if (!accessToken) {
             if (playerRef.current) {
@@ -449,8 +249,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
                 playerRef.current = null;
             }
             setPlayerStatus('connecting');
-            setNowPlaying({ spotifyState: null });
-            setIsPlayerReady(false);
+            _setPlayerState(null);
             return;
         }
 
@@ -467,47 +266,39 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
         script.async = true;
         document.body.appendChild(script);
 
-        window.onSpotifyWebPlaybackSDKReady = () => {
+    window.onSpotifyWebPlaybackSDKReady = () => {
          if (playerRef.current || !accessToken) return;
  
          setPlayerStatus('connecting');
          const player = new window.Spotify.Player({
              name: 'DrivingOS',
+            // Fornisce sempre l'ultimo access token al SDK
             getOAuthToken: cb => {
               if (tokenRef.current) cb(tokenRef.current);
             },
-             volume: volume
+             volume: 0.5
          });
-         
-         playerRef.current = player;
-         setSpotifyPlayerInstance(player);
  
          player.on('ready', async ({ device_id }) => {
+             console.log('Player ready. Starting audio unlock and sync procedure.');
              setDeviceId(device_id);
-             setIsPlayerReady(true);
              setPlayerStatus('ready');
-             await callbacksRef.current.startAndSyncPlayer(player, device_id);
+             await startAndSyncPlayer(player, device_id);
          });
  
          player.on('not_ready', () => {
              setDeviceId(null);
-             setIsPlayerReady(false);
              setPlayerStatus('connecting');
          });
          
          player.on('player_state_changed', (state) => {
-            console.log('%c[PLAYER SDK] Evento "player_state_changed" ricevuto!', 'color: purple; font-weight: bold;', state);
-             if (state) {
-                callbacksRef.current.setNowPlaying({ source: 'spotify', spotifyState: state, radioStation: null, radioContext: [] });
-                player.getVolume().then(sdkVolume => {
-                    if (typeof sdkVolume === 'number' && sdkVolume !== callbacksRef.current.volume) {
-                        internalVolumeUpdate.current = true;
-                        callbacksRef.current.setVolume(sdkVolume);
-                    }
-                });
-             } else {
-                callbacksRef.current.setNowPlaying(s => (s.source === 'spotify' ? { source: null, spotifyState: null } : {}));
-             }
+             _setPlayerState(state);
+             player.getVolume().then(sdkVolume => {
+                 if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
+                     internalVolumeUpdate.current = true; // Flag this as an SDK-initiated update
+                     setVolume(sdkVolume);
+                 }
+             });
          });
  
         const handleGenericError = (error: { message: string }) => {
@@ -516,49 +307,54 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
         };
         player.on('initialization_error', handleGenericError);
         player.on('account_error', handleGenericError);
+        // Gestione robusta del token scaduto
         player.on('authentication_error', async (error: { message: string }) => {
           console.warn("Spotify authentication_error:", error.message);
           try {
-            await callbacksRef.current.silentRefreshToken();
+            await silentRefreshToken();
+            // Prova a vedere se il player è ancora vivo
             const state = await player.getCurrentState();
             if (!state) {
+              console.warn("[Spotify] State nullo dopo refresh → reconnect necessario.");
+              // disconnetti e ricrea
               playerRef.current?.disconnect();
               playerRef.current = null;
-              setSpotifyPlayerInstance(null);
               setPlayerStatus('connecting');
+              // Riusa la stessa entrypoint per ricreare il player
               if (window.onSpotifyWebPlaybackSDKReady) {
                 window.onSpotifyWebPlaybackSDKReady();
               }
+            } else {
+              console.log("[Spotify] Token refresh ok, playback in corso non interrotto 🎵");
             }
           } catch (e) {
             console.error("Refresh fallito dopo authentication_error. Logout.", e);
-            callbacksRef.current.logout();
+            logout();
           }
         });
  
          player.connect();
+         playerRef.current = player;
      };
         
         return () => {
             if (playerRef.current) {
                 playerRef.current.disconnect();
-                setSpotifyPlayerInstance(null);
                 playerRef.current = null;
-                setIsPlayerReady(false);
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, setNowPlaying, setVolume, volume, silentRefreshToken, setSpotifyPlayerInstance, setIsPlayerReady]);
+    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume, silentRefreshToken]);
 
     useEffect(() => {
-        if (!isAutoQueueEnabled || !spotifyState || spotifyState.paused) {
+        if (!isAutoQueueEnabled || !playerState || playerState.paused) {
             return;
         }
-        const { duration, position } = spotifyState;
+        const { duration, position } = playerState;
         const timeLeft = duration - position;
         if (duration > 0 && timeLeft < 15000 && timeLeft > 0 && !showQueue) {
             setShowQueue(true);
         }
-    }, [spotifyState, isAutoQueueEnabled, showQueue]);
+    }, [playerState, isAutoQueueEnabled, showQueue]);
 
     const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
@@ -569,10 +365,11 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
     }, [currentTrackUri, isAutoQueueEnabled]);
 
     useEffect(() => {
-        const playerEl = document.querySelector('.music-player');
+        const playerEl = playerContainerRef.current;
         if (!showQueue || !playerEl) return;
 
         let animationFrameId: number;
+
         const calculatePosition = () => {
             const playerRect = playerEl.getBoundingClientRect();
             setPopoverPosition({
@@ -586,6 +383,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
             calculatePosition();
             animationFrameId = requestAnimationFrame(updateLoop);
         };
+
         animationFrameId = requestAnimationFrame(updateLoop);
         window.addEventListener('resize', calculatePosition);
     
@@ -622,8 +420,10 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handleSpotifyTogglePlay = () => playerRef.current?.togglePlay();
-    
+    const handleTogglePlay = () => playerRef.current?.togglePlay();
+    const handleNextTrack = () => playerRef.current?.nextTrack();
+    const handlePrevTrack = () => playerRef.current?.previousTrack();
+
     const handleToggleLike = async () => {
         if (!currentTrackId) return;
         try {
@@ -640,13 +440,13 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
     };
 
     const handleToggleShuffle = () => {
-        if (!spotifyState) return;
-        apiClient.put(`/me/player/shuffle?state=${!spotifyState.shuffle}`);
+        if (!playerState) return;
+        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
     };
 
     const handleToggleRepeat = () => {
-        if (!spotifyState) return;
-        const nextState = (spotifyState.repeat_mode + 1) % 3;
+        if (!playerState) return;
+        const nextState = (playerState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
@@ -661,118 +461,200 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
         });
     };
     
-    const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-    const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
-    
-    if (playerStatus === 'error') {
-        return (
-            <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
-                <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
-                <div className="overflow-hidden">
-                    <div className="font-semibold truncate">Errore di connessione</div>
-                    <div className="text-sm truncate">Impossibile connettersi a Spotify.</div>
-                </div>
-            </div>
-        );
-    }
+    const playerStyle: React.CSSProperties = useMemo(() => {
+        let baseStyle: React.CSSProperties;
+        if (isAnyAppOpen) {
+            baseStyle = {
+                width: `${dockedConfig.width}px`,
+                height: `${dockedConfig.height}px`,
+                bottom: `${dockedConfig.bottom}px`,
+                left: `${dockedConfig.left}px`,
+                transform: 'translateX(0)',
+            };
+        } else {
+            const { width, bottom, height, otherWidgetWidth } = floatingConfig;
+            const transformX = -otherWidgetWidth / 2 - 8;
+            baseStyle = {
+                width: `${width}px`,
+                height: `${height}px`,
+                bottom: `${bottom}px`,
+                left: '50%',
+                transform: `translateX(calc(-50% + ${transformX}px))`,
+            };
+        }
+        baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
+        return baseStyle;
+    }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
 
-    if (playerStatus === 'connecting' || !isAuthenticated) {
+    const themeClasses = isNight 
+        ? 'border-zinc-700/80' 
+        : 'border-zinc-300';
+    
+    const renderPlayerContent = () => {
+        if (playerStatus === 'error') {
+            return (
+                <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
+                    <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
+                    <div className="overflow-hidden">
+                        <div className="font-semibold truncate">Errore di connessione</div>
+                        <div className="text-sm truncate">Impossibile connettersi a Spotify.</div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (playerStatus === 'connecting' || !isAuthenticated) {
+            const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
+
+            return (
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                            </div>
+                            <div className="overflow-hidden">
+                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>Connect to listen</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-5">
+                            <button disabled className={disabledIconColor}><PiShuffleBold className="w-5 h-5" /></button>
+                            <button disabled className={disabledIconColor}><PiRepeatBold className="w-5 h-5" /></button>
+                        </div>
+                    </div>
+
+                    <div className="w-full">
+                        <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]">
+                            <div className="h-full rounded-full bg-[var(--icon-color-disabled)] relative w-0">
+                                 <div 
+                                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--icon-color-disabled)]"
+                                    style={{ transform: 'translateY(-50%)' }} 
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                        <div className="flex-1 flex justify-start">
+                            {/* Empty left spacer */}
+                        </div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                            <button disabled className={disabledIconColor}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
+                            <button disabled className={disabledIconColor}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button disabled className={disabledIconColor}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                        </div>
+                        <div className="flex-1 flex justify-end items-center">
+                            <button disabled className={disabledIconColor}><BsList style={{ width: '20px', height: '20px'}} /></button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        if (isPlayerActive) {
+            const { name: trackName, album, artists } = playerState.track_window.current_track!;
+            const imageUrl = album.images[0]?.url;
+            const nextTrack = playerState.track_window.next_tracks[0];
+            
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
+            
+            const songTitleColor = isNight 
+              ? '#f7f7f7'
+              : (playerState.paused ? '#454545' : '#000000');
+
+            const iconColor = 'text-[var(--icon-color)] hover:text-[var(--icon-hover)]';
+            
+            return (
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
+                            <div className="overflow-hidden">
+                                <div className={`font-semibold text-sm truncate`} style={{ color: songTitleColor }}>{trackName}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
+                                    {artists.map(a => a.name).join(', ')}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-5">
+                            <button onClick={handleToggleShuffle} className={`transition`} style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}>
+                                <PiShuffleBold className="w-5 h-5" />
+                            </button>
+                            <button onClick={handleToggleRepeat} className={`transition`} style={{ color: playerState.repeat_mode !== 0 ? buttonActiveColor : inactiveButtonColor }}>
+                               {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="w-full">
+                        <ProgressBar player={playerRef.current} state={playerState} />
+                    </div>
+                    
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                        <div className="flex-1 flex justify-start">
+                            {/* Empty left spacer */}
+                        </div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
+                                <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
+                            </button>
+                            <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
+                                {playerState.paused 
+                                    ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
+                                    : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
+                            </button>
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
+                                <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
+                            </button>
+                             <button onClick={handleToggleLike} className={`transition`} style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}>
+                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
+                             </button>
+                        </div>
+                        <div className="flex-1 flex justify-end items-center">
+                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
+                                <BsList style={{ width: '20px', height: '20px'}} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {isQueuePopoverRendered && (
+                        <QueuePopover
+                            isNight={isNight}
+                            nextTrack={nextTrack}
+                            position={popoverPosition}
+                            isClosing={!showQueue}
+                            onClose={() => setShowQueue(false)}
+                        />
+                    )}
+                </div>
+            );
+        }
+
         return (
              <div className="flex items-center w-full h-full gap-5 px-4">
                 <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
                     <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                 </div>
                 <div className="flex-grow overflow-hidden">
-                    <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
+                    <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Niente in riproduzione</div>
                     <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>
-                       Connettiti per ascoltare
+                        Scegli qualcosa da ascoltare.
                     </div>
                 </div>
             </div>
         );
-    }
-    
-    if (isPlayerActive && spotifyState) {
-        const { name: trackName, album, artists } = spotifyState.track_window.current_track!;
-        const imageUrl = album.images[0]?.url;
-        const nextTrack = spotifyState.track_window.next_tracks[0];
-        const songTitleColor = isNight 
-          ? '#f7f7f7'
-          : (spotifyState.paused ? '#454545' : '#000000');
-        
-        return (
-            <div className="w-full h-full flex flex-col justify-between px-4 py-2">
-                <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center gap-3 min-w-0">
-                        {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
-                        <div className="overflow-hidden">
-                            <div className={`font-semibold text-sm truncate`} style={{ color: songTitleColor }}>{trackName}</div>
-                            <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
-                                {artists.map(a => a.name).join(', ')}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-5">
-                        <button onClick={handleToggleShuffle} className={`transition`} style={{ color: spotifyState.shuffle ? buttonActiveColor : inactiveButtonColor }}>
-                            <PiShuffleBold className="w-5 h-5" />
-                        </button>
-                        <button onClick={handleToggleRepeat} className={`transition`} style={{ color: spotifyState.repeat_mode !== 0 ? buttonActiveColor : inactiveButtonColor }}>
-                           {spotifyState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
-                        </button>
-                    </div>
-                </div>
-
-                <div className="w-full">
-                    <ProgressBar player={playerRef.current} state={spotifyState} />
-                </div>
-                
-                <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                    <div className="flex-1 flex justify-start">
-                         <button onClick={handleToggleLike} className={`transition`} style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}>
-                            <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
-                         </button>
-                    </div>
-                    <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
-                        <button onClick={() => playerRef.current?.previousTrack()} disabled={spotifyState.disallows.skipping_prev} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
-                            <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
-                        </button>
-                        <button onClick={handleSpotifyTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
-                            {spotifyState.paused 
-                                ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
-                                : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
-                        </button>
-                        <button onClick={() => playerRef.current?.nextTrack()} disabled={spotifyState.disallows.skipping_next} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
-                            <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
-                        </button>
-                    </div>
-                    <div className="flex-1 flex justify-end items-center">
-                        <button onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
-                            <BsList style={{ width: '20px', height: '20px'}} />
-                        </button>
-                    </div>
-                </div>
-
-                {isQueuePopoverRendered && (
-                    <QueuePopover
-                        isNight={isNight}
-                        nextTrack={nextTrack}
-                        position={popoverPosition}
-                        isClosing={!showQueue}
-                        onClose={() => setShowQueue(false)}
-                    />
-                )}
-            </div>
-        );
-    }
+    };
 
     return (
-        <div className="flex items-center w-full h-full gap-5 px-4">
-            <div className={`w-12 h-12 rounded-md shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                <FiLoader className={`w-7 h-7 animate-spin ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
-            </div>
-            <div className="flex-grow overflow-hidden">
-                <div className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>Connessione a Spotify...</div>
-            </div>
+        <div 
+            ref={playerContainerRef}
+            className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
+            style={playerStyle}
+        >
+            {renderPlayerContent()}
         </div>
     );
 };
