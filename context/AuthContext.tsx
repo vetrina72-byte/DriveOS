@@ -250,6 +250,8 @@ const silentRefreshToken = useCallback(async () => {
                     isLoading: false,
                     error: null,
                 }));
+                // Force a switch to Spotify after a successful login
+                setNowPlaying({ source: 'spotify', spotifyState: null, radioStation: null, radioContext: [] });
             } else {
                  throw new Error("Failed to fetch user info after login.");
             }

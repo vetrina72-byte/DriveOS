@@ -248,7 +248,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 hls.loadSource(streamUrl);
                 hls.attachMedia(audio);
                 hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-                    audio.play().catch(e => console.error("Radio play failed:", e));
+                    audio.play().catch(e => console.error("Radio autoplay failed:", e));
                 });
                 hls.on(window.Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
@@ -258,7 +258,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 });
             } else {
                 audio.src = streamUrl;
-                audio.play().catch(e => console.error("Radio play failed:", e));
+                audio.play().catch(e => console.error("Radio autoplay failed:", e));
             }
         } else {
             cleanup();
@@ -275,12 +275,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             audio.removeEventListener('pause', handlePause);
             cleanup();
         };
-    }, [source, radioStation]);
+    }, [source, radioStation?.url_resolved]);
 
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
-            await playerInstance.activateElement();
-            console.log('Browser audio context activated.');
+            // `activateElement` has been moved to the 'ready' handler to unlock audio context earlier.
 
             await apiClient.put('/me/player', {
                 device_ids: [deviceId],
@@ -349,7 +348,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
          });
  
          player.on('ready', async ({ device_id }) => {
-             console.log('Player ready. Starting audio unlock and sync procedure.');
+             console.log('Player SDK pronto. Tento di attivare il contesto audio...');
+             await player.activateElement();
+             console.log('Contesto audio attivato.');
+             
              setDeviceId(device_id);
              setPlayerStatus('ready');
              await startAndSyncPlayer(player, device_id);
