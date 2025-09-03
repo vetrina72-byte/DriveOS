@@ -1,4 +1,5 @@
 import type { Dispatch } from 'react';
+import type { SpotifyPlayerState } from '@/globals';
 
 export enum DriveMode {
   Park = 'P',
@@ -92,7 +93,9 @@ export interface RadioStation {
     codec: string;
 }
 
-// FIX: Moved NowPlayingSource here from App.tsx to avoid circular dependency.
-export type NowPlayingSource = 
-    | { type: 'spotify' }
-    | { type: 'radio', station: RadioStation, context: RadioStation[] };
+export interface NowPlayingState {
+  source: 'spotify' | 'radio' | null;
+  spotifyState: SpotifyPlayerState | null;
+  radioStation: RadioStation | null;
+  radioContext: RadioStation[];
+}

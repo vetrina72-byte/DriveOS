@@ -13,12 +13,9 @@ import {
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
-// FIX: Changed import from '../App' to '../types' to resolve module export error and break circular dependency.
-import type { NowPlayingSource, RadioStation } from '../types';
+import type { RadioStation } from '../types';
 
 interface MusicPlayerProps {
-    nowPlaying: NowPlayingSource | null;
-    onStop: () => void;
     onStationChange: (direction: 'next' | 'prev') => void;
     isAnyAppOpen: boolean;
     isNight: boolean;
@@ -41,7 +38,6 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
     const animationFrameRef = useRef(0);
     const lastUpdateTimeRef = useRef(Date.now());
 
-    // Sync with Spotify state. This is our source of truth.
     useEffect(() => {
         if (!isSeeking) {
             setPosition(state.position);
@@ -49,7 +45,6 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
         }
     }, [state.position, isSeeking]);
 
-    // Animate progress locally using requestAnimationFrame for smoothness when playing.
     useEffect(() => {
         const animate = () => {
             const now = Date.now();
@@ -182,7 +177,7 @@ const IdlePlayerContent: React.FC<Pick<MusicPlayerProps, 'isNight'>> = ({ isNigh
 
 
 const MusicPlayer: React.FC<MusicPlayerProps> = (props) => {
-    const { nowPlaying } = props;
+    const { nowPlaying } = useAuth();
 
     const playerStyle: React.CSSProperties = useMemo(() => {
         let baseStyle: React.CSSProperties;
@@ -214,17 +209,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = (props) => {
         : 'border-zinc-300';
     
     const renderPlayerContent = () => {
-        if (!nowPlaying) {
-            return <IdlePlayerContent isNight={props.isNight} />;
+        if (nowPlaying.source === 'spotify' && nowPlaying.spotifyState) {
+            return <SpotifyPlayerContent {...props} spotifyState={nowPlaying.spotifyState} />;
         }
-        switch (nowPlaying.type) {
-            case 'spotify':
-                return <SpotifyPlayerContent {...props} />;
-            case 'radio':
-                return <RadioPlayerContent {...props} station={nowPlaying.station} />;
-            default:
-                return <IdlePlayerContent isNight={props.isNight} />;
+        if (nowPlaying.source === 'radio' && nowPlaying.radioStation) {
+            return <RadioPlayerContent {...props} station={nowPlaying.radioStation} />;
         }
+        return <IdlePlayerContent isNight={props.isNight} />;
     };
 
     return (
@@ -242,7 +233,7 @@ const RadioPlayerContent: React.FC<MusicPlayerProps & { station: RadioStation }>
     station, onStationChange, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor
 }) => {
     const audioRef = useRef<HTMLAudioElement>(null);
-    const hlsRef = useRef<any>(null); // To hold the hls.js instance
+    const hlsRef = useRef<any>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const { volume } = useAuth();
     const [isLiked, setIsLiked] = useState(false);
@@ -341,7 +332,6 @@ const RadioPlayerContent: React.FC<MusicPlayerProps & { station: RadioStation }>
         <div className="w-full h-full flex flex-col justify-between px-4 py-3">
             <audio ref={audioRef} playsInline />
             
-            {/* Top part: Info and Like button */}
             <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-3 min-w-0">
                     {station.favicon ? (
@@ -361,7 +351,6 @@ const RadioPlayerContent: React.FC<MusicPlayerProps & { station: RadioStation }>
                 </button>
             </div>
 
-            {/* Middle part: Main controls (centered) */}
             <div className="w-full flex justify-center items-center" style={{ gap: `${playerControlsGap}px`, transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <button onClick={() => onStationChange('prev')} className="transition" style={{ color: buttonActiveColor }}>
                     <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
@@ -377,7 +366,6 @@ const RadioPlayerContent: React.FC<MusicPlayerProps & { station: RadioStation }>
                 </button>
             </div>
 
-            {/* Bottom spacer to push controls to vertical center */}
             <div className="w-full h-1" />
         </div>
     );
@@ -385,16 +373,16 @@ const RadioPlayerContent: React.FC<MusicPlayerProps & { station: RadioStation }>
 
 
 // --- SPOTIFY PLAYER SUB-COMPONENT ---
-const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({ 
+const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyPlayerState | null }> = ({ 
     isNight, 
     playerControlsSize,
     playerControlsGap,
     playerControlsVerticalPosition,
     dayPlayerButtonColor,
     nightPlayerButtonColor,
-    onStop,
+    spotifyState,
 }) => {
-    const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume, silentRefreshToken } = useAuth();
+    const { accessToken, logout, setDeviceId, isAuthenticated, setNowPlaying, volume, setVolume, setSpotifyPlayerInstance, silentRefreshToken } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
@@ -407,21 +395,19 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
 
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
-    const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
-    const currentTrackId = playerState?.track_window.current_track?.id;
-    const currentTrackUri = playerState?.track_window.current_track?.uri;
+    const isPlayerActive = playerStatus === 'ready' && spotifyState && spotifyState.track_window.current_track;
+    const currentTrackId = spotifyState?.track_window.current_track?.id;
+    const currentTrackUri = spotifyState?.track_window.current_track?.uri;
     const internalVolumeUpdate = useRef(false);
     const tokenRef = useRef<string | null>(accessToken);
     useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
 
-    // Effect to call onStop when player becomes idle
     useEffect(() => {
-        if (playerStatus === 'ready' && !playerState) {
-            onStop();
+        if (playerStatus === 'ready' && !spotifyState) {
+            setNowPlaying({ source: null });
         }
-    }, [playerState, playerStatus, onStop]);
+    }, [spotifyState, playerStatus, setNowPlaying]);
 
-    // Effect to update SDK when context volume changes (e.g., from UI)
     useEffect(() => {
         if (playerRef.current && typeof volume === 'number') {
             if (internalVolumeUpdate.current) {
@@ -435,13 +421,10 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
             await playerInstance.activateElement();
-            console.log('Browser audio context activated.');
-
             await apiClient.put('/me/player', {
                 device_ids: [deviceId],
                 play: true 
             });
-            console.log('Playback transferred and set to PLAY.');
 
             setTimeout(async () => {
                 try {
@@ -450,7 +433,6 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
                         await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
                             position_ms: playerState.progress_ms
                         });
-                        console.log('Explicit resume command sent.');
                     }
                 } catch(e) {
                     console.error("Error during resync play command", e);
@@ -473,7 +455,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
             setPlayerStatus('connecting');
-            _setPlayerState(null);
+            setNowPlaying({ spotifyState: null });
             return;
         }
 
@@ -501,9 +483,11 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
             },
              volume: volume
          });
+         
+         playerRef.current = player;
+         setSpotifyPlayerInstance(player);
  
          player.on('ready', async ({ device_id }) => {
-             console.log('Player ready. Starting audio unlock and sync procedure.');
              setDeviceId(device_id);
              setPlayerStatus('ready');
              await startAndSyncPlayer(player, device_id);
@@ -516,15 +500,16 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
          
          player.on('player_state_changed', (state) => {
              if (state) {
-                 _setPlayerState(state);
-                 player.getVolume().then(sdkVolume => {
-                     if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
-                         internalVolumeUpdate.current = true;
-                         setVolume(sdkVolume);
-                     }
-                 });
+                setNowPlaying({ source: 'spotify', spotifyState: state, radioStation: null, radioContext: [] });
+                player.getVolume().then(sdkVolume => {
+                    if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
+                        internalVolumeUpdate.current = true;
+                        setVolume(sdkVolume);
+                    }
+                });
              } else {
-                 _setPlayerState(null);
+                // FIX: Update the call to use a functional update that returns a partial state object.
+                setNowPlaying(prev => (prev.source === 'spotify' ? { source: null, spotifyState: null } : {}));
              }
          });
  
@@ -540,15 +525,13 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
             await silentRefreshToken();
             const state = await player.getCurrentState();
             if (!state) {
-              console.warn("[Spotify] State nullo dopo refresh → reconnect necessario.");
               playerRef.current?.disconnect();
               playerRef.current = null;
+              setSpotifyPlayerInstance(null);
               setPlayerStatus('connecting');
               if (window.onSpotifyWebPlaybackSDKReady) {
                 window.onSpotifyWebPlaybackSDKReady();
               }
-            } else {
-              console.log("[Spotify] Token refresh ok, playback in corso non interrotto 🎵");
             }
           } catch (e) {
             console.error("Refresh fallito dopo authentication_error. Logout.", e);
@@ -557,27 +540,27 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
         });
  
          player.connect();
-         playerRef.current = player;
      };
         
         return () => {
             if (playerRef.current) {
                 playerRef.current.disconnect();
+                setSpotifyPlayerInstance(null);
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, _setPlayerState, setVolume, volume, silentRefreshToken]);
+    }, [accessToken, logout, setDeviceId, startAndSyncPlayer, setNowPlaying, setVolume, volume, silentRefreshToken, setSpotifyPlayerInstance]);
 
     useEffect(() => {
-        if (!isAutoQueueEnabled || !playerState || playerState.paused) {
+        if (!isAutoQueueEnabled || !spotifyState || spotifyState.paused) {
             return;
         }
-        const { duration, position } = playerState;
+        const { duration, position } = spotifyState;
         const timeLeft = duration - position;
         if (duration > 0 && timeLeft < 15000 && timeLeft > 0 && !showQueue) {
             setShowQueue(true);
         }
-    }, [playerState, isAutoQueueEnabled, showQueue]);
+    }, [spotifyState, isAutoQueueEnabled, showQueue]);
 
     const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
@@ -588,7 +571,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
     }, [currentTrackUri, isAutoQueueEnabled]);
 
     useEffect(() => {
-        const playerEl = document.querySelector('.music-player'); // Use a stable selector
+        const playerEl = document.querySelector('.music-player');
         if (!showQueue || !playerEl) return;
 
         let animationFrameId: number;
@@ -659,13 +642,13 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
     };
 
     const handleToggleShuffle = () => {
-        if (!playerState) return;
-        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
+        if (!spotifyState) return;
+        apiClient.put(`/me/player/shuffle?state=${!spotifyState.shuffle}`);
     };
 
     const handleToggleRepeat = () => {
-        if (!playerState) return;
-        const nextState = (playerState.repeat_mode + 1) % 3;
+        if (!spotifyState) return;
+        const nextState = (spotifyState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
@@ -711,13 +694,13 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
         );
     }
     
-    if (isPlayerActive) {
-        const { name: trackName, album, artists } = playerState.track_window.current_track!;
+    if (isPlayerActive && spotifyState) {
+        const { name: trackName, album, artists } = spotifyState.track_window.current_track!;
         const imageUrl = album.images[0]?.url;
-        const nextTrack = playerState.track_window.next_tracks[0];
+        const nextTrack = spotifyState.track_window.next_tracks[0];
         const songTitleColor = isNight 
           ? '#f7f7f7'
-          : (playerState.paused ? '#454545' : '#000000');
+          : (spotifyState.paused ? '#454545' : '#000000');
         
         return (
             <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -732,17 +715,17 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
                     <div className="flex items-center gap-5">
-                        <button onClick={handleToggleShuffle} className={`transition`} style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}>
+                        <button onClick={handleToggleShuffle} className={`transition`} style={{ color: spotifyState.shuffle ? buttonActiveColor : inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
-                        <button onClick={handleToggleRepeat} className={`transition`} style={{ color: playerState.repeat_mode !== 0 ? buttonActiveColor : inactiveButtonColor }}>
-                           {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
+                        <button onClick={handleToggleRepeat} className={`transition`} style={{ color: spotifyState.repeat_mode !== 0 ? buttonActiveColor : inactiveButtonColor }}>
+                           {spotifyState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                         </button>
                     </div>
                 </div>
 
                 <div className="w-full">
-                    <ProgressBar player={playerRef.current} state={playerState} />
+                    <ProgressBar player={playerRef.current} state={spotifyState} />
                 </div>
                 
                 <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
@@ -752,15 +735,15 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps> = ({
                          </button>
                     </div>
                     <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
-                        <button onClick={() => playerRef.current?.previousTrack()} disabled={playerState.disallows.skipping_prev} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
+                        <button onClick={() => playerRef.current?.previousTrack()} disabled={spotifyState.disallows.skipping_prev} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
                             <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                         </button>
                         <button onClick={handleSpotifyTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
-                            {playerState.paused 
+                            {spotifyState.paused 
                                 ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
                                 : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
                         </button>
-                        <button onClick={() => playerRef.current?.nextTrack()} disabled={playerState.disallows.skipping_next} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
+                        <button onClick={() => playerRef.current?.nextTrack()} disabled={spotifyState.disallows.skipping_next} className={`disabled:opacity-30 transition`} style={{ color: buttonActiveColor }}>
                             <IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                         </button>
                     </div>

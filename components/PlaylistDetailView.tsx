@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
@@ -92,7 +93,9 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isLiked, setIsLiked] = useState(false);
-    const { playerState, user } = useAuth();
+    // FIX: Destructure 'nowPlaying' from useAuth and derive 'playerState' from it.
+    const { nowPlaying, user } = useAuth();
+    const playerState = nowPlaying.spotifyState;
 
     const isLikedSongs = itemId === 'liked-songs';
     const isPlayingContext = playerState && !playerState.paused && (playerState.context.uri === details?.uri || isLikedSongs);

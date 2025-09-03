@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader, FiPlay } from 'react-icons/fi';
@@ -71,7 +72,9 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const [results, setResults] = useState<SearchResults>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { playerState } = useAuth();
+    // FIX: Destructure 'nowPlaying' from useAuth and derive 'playerState' from it.
+    const { nowPlaying } = useAuth();
+    const playerState = nowPlaying.spotifyState;
 
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window.current_track?.id;

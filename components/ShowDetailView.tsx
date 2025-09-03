@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiMic, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
@@ -87,7 +88,9 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     const [episodes, setEpisodes] = useState<Episode[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { playerState } = useAuth();
+    // FIX: Destructure 'nowPlaying' from useAuth and derive 'playerState' from it.
+    const { nowPlaying } = useAuth();
+    const playerState = nowPlaying.spotifyState;
     
     const [totalEpisodes, setTotalEpisodes] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
