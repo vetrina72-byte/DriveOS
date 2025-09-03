@@ -279,6 +279,15 @@ const silentRefreshToken = useCallback(async () => {
             console.error("Cannot play: No active Spotify device ID.");
             return;
         }
+
+        // Stop radio if it's playing by switching the source
+        setNowPlaying(s => {
+            if (s.source === 'radio') {
+                return { ...s, source: 'spotify', radioStation: null, radioContext: [] };
+            }
+            return s;
+        });
+        
         try {
             const body: { context_uri?: string; uris?: string[]; offset?: any; } = {};
 

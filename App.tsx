@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -739,12 +740,12 @@ function AppContent() {
   
   const handlePlayStation = (station: RadioStation, context: RadioStation[]) => {
       pauseSpotify();
-      setNowPlaying({
+      setNowPlaying(prev => ({
+        ...prev,
         source: 'radio',
         radioStation: station,
         radioContext: context,
-        spotifyState: null,
-      });
+      }));
   };
   
   const handleStationChange = (direction: 'next' | 'prev') => {
@@ -762,7 +763,7 @@ function AppContent() {
       } else {
           nextIndex = (currentIndex - 1 + radioContext.length) % radioContext.length;
       }
-      setNowPlaying({ radioStation: radioContext[nextIndex] });
+      setNowPlaying(prev => ({ ...prev, radioStation: radioContext[nextIndex] }));
   };
 
   const startTripSimulation = useCallback(() => {
@@ -1097,17 +1098,23 @@ function AppContent() {
     if (willBeActive) {
       if (appName === 'spotify') {
         if (nowPlaying.source !== 'spotify') {
-          setNowPlaying({
+          setNowPlaying(prev => ({
+            ...prev,
             source: 'spotify',
             radioStation: null,
             radioContext: [],
-          });
+          }));
         }
       } else if (appName === 'radio') {
         // Let handlePlayStation manage state
       } else if (nowPlaying.source === 'radio') {
         // Stop radio if switching to a non-radio, non-spotify app
-        setNowPlaying({ source: null, radioStation: null, radioContext: [] });
+        setNowPlaying(prev => ({ 
+            ...prev,
+            source: null, 
+            radioStation: null, 
+            radioContext: [] 
+        }));
       }
     }
 

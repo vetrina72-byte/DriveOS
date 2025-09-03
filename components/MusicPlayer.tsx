@@ -194,6 +194,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const playerState = nowPlaying.spotifyState;
     const { radioStation, source } = nowPlaying;
 
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const hlsRef = useRef<any>(null);
+    const [isRadioPlaying, setIsRadioPlaying] = useState(false);
+
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
     const currentTrackUri = playerState?.track_window.current_track?.uri;
@@ -212,6 +216,65 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             playerRef.current.setVolume(volume).catch(e => console.error("Failed to set Spotify volume", e));
         }
     }, [volume]);
+    
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume;
+        }
+    }, [volume]);
+    
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const cleanup = () => {
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
+            }
+            audio.pause();
+            audio.removeAttribute('src');
+            audio.load();
+        };
+
+        if (source === 'radio' && radioStation?.url_resolved) {
+            const streamUrl = radioStation.url_resolved;
+            cleanup();
+
+            if (window.Hls.isSupported() && streamUrl.includes('.m3u8')) {
+                const hls = new window.Hls();
+                hlsRef.current = hls;
+                hls.loadSource(streamUrl);
+                hls.attachMedia(audio);
+                hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+                    audio.play().catch(e => console.error("Radio play failed:", e));
+                });
+                hls.on(window.Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        console.error('Fatal HLS error, destroying instance.', data);
+                        cleanup();
+                    }
+                });
+            } else {
+                audio.src = streamUrl;
+                audio.play().catch(e => console.error("Radio play failed:", e));
+            }
+        } else {
+            cleanup();
+        }
+
+        const handlePlay = () => setIsRadioPlaying(true);
+        const handlePause = () => setIsRadioPlaying(false);
+
+        audio.addEventListener('play', handlePlay);
+        audio.addEventListener('pause', handlePause);
+
+        return () => {
+            audio.removeEventListener('play', handlePlay);
+            audio.removeEventListener('pause', handlePause);
+            cleanup();
+        };
+    }, [source, radioStation]);
 
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
@@ -425,7 +488,20 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handleTogglePlay = () => { if (source === 'spotify') playerRef.current?.togglePlay(); };
+    const handleTogglePlay = () => {
+        if (source === 'spotify') {
+            playerRef.current?.togglePlay();
+        } else if (source === 'radio') {
+            const audio = audioRef.current;
+            if (audio) {
+                if (audio.paused) {
+                    audio.play().catch(e => console.error("Failed to play radio stream:", e));
+                } else {
+                    audio.pause();
+                }
+            }
+        }
+    };
     const handleNextTrack = () => {
         if (source === 'spotify') {
             playerRef.current?.nextTrack();
@@ -531,7 +607,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
                             <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
+                            <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
+                                {isRadioPlaying
+                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                }
+                            </button>
                             <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
                             <button disabled className={disabledIconColor}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
                         </div>
@@ -705,6 +786,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             style={playerStyle}
         >
             {renderPlayerContent()}
+            <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
         </div>
     );
 };
