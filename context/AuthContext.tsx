@@ -33,7 +33,6 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     setVolume: (level: number) => void;
     toggleMute: () => void;
     silentRefreshToken: () => Promise<void>;
-    // FIX: Add missing properties to the context type
     nowPlaying: NowPlayingState;
     setNowPlaying: React.Dispatch<React.SetStateAction<NowPlayingState>>;
     isPlayerReady: boolean;
@@ -68,9 +67,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const refreshInFlight = useRef<Promise<void> | null>(null);
-    // FIX: Add state for nowPlaying to manage both Spotify and Radio
     const [nowPlaying, setNowPlaying] = useState<NowPlayingState>({
-        source: 'spotify',
+        source: null,
         spotifyState: null,
         radioStation: null,
         radioContext: [],
@@ -79,7 +77,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_expires_at');
-        // Call backend to clear the HttpOnly cookie
         axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
@@ -89,7 +86,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 const silentRefreshToken = useCallback(async () => {
   if (refreshInFlight.current) {
-    // Evita refresh duplicati
     return refreshInFlight.current;
   }
   refreshInFlight.current = (async () => {
@@ -119,26 +115,21 @@ const silentRefreshToken = useCallback(async () => {
   return refreshInFlight.current;
 }, [logout]);
     
-    // Proactive token refresh timer
     useEffect(() => {
         let refreshTimeout: ReturnType<typeof setTimeout>;
 
         if (state.isAuthenticated && state.expiresAt) {
             const now = Date.now();
-            // Refresh 2 minutes before expiry
             const timeoutDuration = state.expiresAt - now - 120000; 
 
             if (timeoutDuration > 0) {
                 refreshTimeout = setTimeout(silentRefreshToken, timeoutDuration);
                 console.log(`Spotify token refresh scheduled in ${Math.round(timeoutDuration / 60000)} minutes.`);
             } else {
-                // If we are already in the buffer zone, refresh now.
-                // This can happen if the page was inactive (e.g., hibernated laptop).
                 silentRefreshToken();
             }
         }
 
-        // Cleanup function to clear the timer
         return () => {
             if (refreshTimeout) {
                 clearTimeout(refreshTimeout);
@@ -146,17 +137,11 @@ const silentRefreshToken = useCallback(async () => {
         };
     }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
-    // FIX: Update _setPlayerState to modify the unified nowPlaying state
    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
-        setNowPlaying(s => { // `s` is the most recent state
-            // If the user has intentionally switched to the radio, we must not let
-            // a state update from Spotify (e.g., from it pausing) hijack the UI.
+        setNowPlaying(s => { 
             if (s.source === 'radio') {
-                // We can update Spotify's state in the background, but we MUST NOT change the source.
                 return { ...s, spotifyState: newState };
             }
-
-            // Otherwise, it's safe for Spotify state changes to control the UI.
             return { ...s, spotifyState: newState, source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source) };
         });
     }, []);
@@ -171,11 +156,42 @@ const silentRefreshToken = useCallback(async () => {
         }
     }, []);
 
+    // Restore last session on initial load
+    useEffect(() => {
+        const restoreLastSession = () => {
+            try {
+                const savedStateJSON = localStorage.getItem('last_now_playing');
+                if (savedStateJSON) {
+                    const savedState = JSON.parse(savedStateJSON) as NowPlayingState;
+                    console.log("Restoring last listening session:", savedState);
+                    setNowPlaying(savedState);
+                }
+            } catch (error) {
+                console.error("Failed to restore session from localStorage:", error);
+                localStorage.removeItem('last_now_playing');
+            }
+        };
+        restoreLastSession();
+    }, []);
+
+    // Save nowPlaying state to localStorage whenever it changes
+    useEffect(() => {
+      if (nowPlaying.source) {
+        // Avoid saving an empty, intermediate Spotify state during initialization
+        if (nowPlaying.source === 'spotify' && !nowPlaying.spotifyState?.track_window.current_track) {
+            return;
+        }
+        try {
+          localStorage.setItem('last_now_playing', JSON.stringify(nowPlaying));
+        } catch (e) {
+            console.error("Failed to save session state to localStorage", e);
+        }
+      }
+    }, [nowPlaying]);
+
     useEffect(() => {
         const initAuth = async () => {
             try {
-                // We don't need to check for a stored access token. We directly ask the backend
-                // to refresh, which will succeed if a valid HttpOnly cookie exists.
                 const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
                 const { access_token, expires_in } = data;
                 const expiresAt = Date.now() + expires_in * 1000;
@@ -191,9 +207,8 @@ const silentRefreshToken = useCallback(async () => {
                     throw new Error("Failed to fetch user info after token refresh.");
                 }
             } catch (err) {
-                // This is expected if the user has no valid refresh token cookie.
                 console.log("No valid session found on load.");
-                logout(); // Ensure any leftover localstorage is cleared
+                logout(); 
             } finally {
                 setState(s => ({...s, isLoading: false}));
             }
@@ -216,7 +231,6 @@ const silentRefreshToken = useCallback(async () => {
         }
 
         try {
-            // The backend now handles setting the refresh token in an HttpOnly cookie.
             const response = await axios.post('/api/exchange-token', { code: authCode }, { withCredentials: true });
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
@@ -286,7 +300,6 @@ const silentRefreshToken = useCallback(async () => {
             return;
         }
 
-        // Stop radio if it's playing by switching the source
         setNowPlaying(s => {
             if (s.source === 'radio') {
                 return { ...s, source: 'spotify', radioStation: null, radioContext: [] };
@@ -316,7 +329,6 @@ const silentRefreshToken = useCallback(async () => {
                 `/me/player/play?device_id=${deviceId}`,
                 body
             );
-            // After successfully starting playback, trigger a refresh for the home page.
             refreshHomePage();
         } catch (err) {
             console.error('Failed to start playback', err);
@@ -327,7 +339,6 @@ const silentRefreshToken = useCallback(async () => {
         setState(s => ({...s, error: null}));
     };
 
-    // FIX: Define isPlayerReady and pauseSpotify
     const isPlayerReady = !!deviceId;
 
     const pauseSpotify = useCallback(async () => {
