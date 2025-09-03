@@ -401,23 +401,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
     const internalVolumeUpdate = useRef(false);
     const tokenRef = useRef<string | null>(accessToken);
     useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
-
-    useEffect(() => {
-        if (playerStatus === 'ready' && !spotifyState) {
-            setNowPlaying(s => s.source === 'spotify' ? { source: null, spotifyState: null } : {});
-        }
-    }, [spotifyState, playerStatus, setNowPlaying]);
-
-    useEffect(() => {
-        if (playerRef.current && typeof volume === 'number') {
-            if (internalVolumeUpdate.current) {
-                internalVolumeUpdate.current = false;
-                return;
-            }
-            playerRef.current.setVolume(volume).catch(e => console.error("Failed to set Spotify volume", e));
-        }
-    }, [volume]);
-
+    
     const startAndSyncPlayer = useCallback(async (playerInstance: SpotifyPlayer, deviceId: string) => {
         try {
             await playerInstance.activateElement();
@@ -435,6 +419,28 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
             }
         }
     }, []);
+
+    // This ref will hold the latest callbacks, avoiding stale closures in the SDK listeners.
+    const callbacksRef = useRef({ setNowPlaying, setVolume, volume, silentRefreshToken, logout, startAndSyncPlayer });
+    useEffect(() => {
+        callbacksRef.current = { setNowPlaying, setVolume, volume, silentRefreshToken, logout, startAndSyncPlayer };
+    }); // No dependency array, runs on every render to keep callbacks fresh
+
+    useEffect(() => {
+        if (playerStatus === 'ready' && !spotifyState) {
+            callbacksRef.current.setNowPlaying(s => s.source === 'spotify' ? { source: null, spotifyState: null } : {});
+        }
+    }, [spotifyState, playerStatus]);
+
+    useEffect(() => {
+        if (playerRef.current && typeof volume === 'number') {
+            if (internalVolumeUpdate.current) {
+                internalVolumeUpdate.current = false;
+                return;
+            }
+            playerRef.current.setVolume(volume).catch(e => console.error("Failed to set Spotify volume", e));
+        }
+    }, [volume]);
 
     useEffect(() => {
         if (!accessToken) {
@@ -480,7 +486,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
              setDeviceId(device_id);
              setIsPlayerReady(true);
              setPlayerStatus('ready');
-             await startAndSyncPlayer(player, device_id);
+             await callbacksRef.current.startAndSyncPlayer(player, device_id);
          });
  
          player.on('not_ready', () => {
@@ -490,16 +496,17 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
          });
          
          player.on('player_state_changed', (state) => {
+            console.log('%c[PLAYER SDK] Evento "player_state_changed" ricevuto!', 'color: purple; font-weight: bold;', state);
              if (state) {
-                setNowPlaying({ source: 'spotify', spotifyState: state, radioStation: null, radioContext: [] });
+                callbacksRef.current.setNowPlaying({ source: 'spotify', spotifyState: state, radioStation: null, radioContext: [] });
                 player.getVolume().then(sdkVolume => {
-                    if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
+                    if (typeof sdkVolume === 'number' && sdkVolume !== callbacksRef.current.volume) {
                         internalVolumeUpdate.current = true;
-                        setVolume(sdkVolume);
+                        callbacksRef.current.setVolume(sdkVolume);
                     }
                 });
              } else {
-                setNowPlaying(s => (s.source === 'spotify' ? { source: null, spotifyState: null } : {}));
+                callbacksRef.current.setNowPlaying(s => (s.source === 'spotify' ? { source: null, spotifyState: null } : {}));
              }
          });
  
@@ -512,7 +519,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
         player.on('authentication_error', async (error: { message: string }) => {
           console.warn("Spotify authentication_error:", error.message);
           try {
-            await silentRefreshToken();
+            await callbacksRef.current.silentRefreshToken();
             const state = await player.getCurrentState();
             if (!state) {
               playerRef.current?.disconnect();
@@ -525,7 +532,7 @@ const SpotifyPlayerContent: React.FC<MusicPlayerProps & { spotifyState: SpotifyP
             }
           } catch (e) {
             console.error("Refresh fallito dopo authentication_error. Logout.", e);
-            logout();
+            callbacksRef.current.logout();
           }
         });
  

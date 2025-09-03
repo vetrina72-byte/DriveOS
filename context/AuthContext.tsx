@@ -143,6 +143,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const setNowPlaying = useCallback((update: Partial<NowPlayingState> | ((prevState: NowPlayingState) => Partial<NowPlayingState>)) => {
         setState(s => {
             const updateObj = typeof update === 'function' ? update(s.nowPlaying) : update;
+            console.log('%c[AUTH CONTEXT] Funzione setNowPlaying chiamata con:', 'color: green; font-weight: bold;', updateObj);
             return { ...s, nowPlaying: { ...s.nowPlaying, ...updateObj } };
         });
     }, []);
