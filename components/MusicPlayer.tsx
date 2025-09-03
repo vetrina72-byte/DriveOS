@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart
+    FiMusic, FiAlertTriangle, FiHeart, FiRadio
 } from 'react-icons/fi';
 import { 
     IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
@@ -16,7 +16,6 @@ import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals'
 
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
-    isAnyAppOpen: boolean; // Manteniamo entrambi per compatibilità
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
     floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };
@@ -26,6 +25,8 @@ interface MusicPlayerProps {
     widgetBgColor: string;
     dayPlayerButtonColor: string;
     nightPlayerButtonColor: string;
+    // FIX: Add missing onStationChange prop
+    onStationChange: (direction: 'next' | 'prev') => void;
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -173,8 +174,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     widgetBgColor,
     dayPlayerButtonColor,
     nightPlayerButtonColor,
+    onStationChange,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, playerState, _setPlayerState, volume, setVolume, silentRefreshToken } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -189,6 +191,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const queueButtonRef = useRef<HTMLButtonElement>(null);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
+    const playerState = nowPlaying.spotifyState;
+    const { radioStation, source } = nowPlaying;
+
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
     const currentTrackUri = playerState?.track_window.current_track?.uri;
@@ -420,9 +425,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         checkIsLiked();
     }, [currentTrackId]);
 
-    const handleTogglePlay = () => playerRef.current?.togglePlay();
-    const handleNextTrack = () => playerRef.current?.nextTrack();
-    const handlePrevTrack = () => playerRef.current?.previousTrack();
+    const handleTogglePlay = () => { if (source === 'spotify') playerRef.current?.togglePlay(); };
+    const handleNextTrack = () => {
+        if (source === 'spotify') {
+            playerRef.current?.nextTrack();
+        } else if (source === 'radio') {
+            onStationChange('next');
+        }
+    };
+    const handlePrevTrack = () => {
+        if (source === 'spotify') {
+            playerRef.current?.previousTrack();
+        } else if (source === 'radio') {
+            onStationChange('prev');
+        }
+    };
 
     const handleToggleLike = async () => {
         if (!currentTrackId) return;
@@ -491,6 +508,39 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         : 'border-zinc-300';
     
     const renderPlayerContent = () => {
+        if (source === 'radio' && radioStation) {
+            const { name, favicon, tags } = radioStation;
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const disabledIconColor = 'text-[var(--icon-color-disabled)] cursor-not-allowed';
+
+            return (
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            {favicon ? <img src={favicon} alt={name} className="w-12 h-12 rounded-lg object-contain bg-zinc-800" /> : <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}><FiRadio className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /></div>}
+                            <div className="overflow-hidden">
+                                <div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
+                    
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                        <div className="flex-1 flex justify-start"></div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                            <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button disabled className={disabledIconColor}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
+                            <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button disabled className={disabledIconColor}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                        </div>
+                        <div className="flex-1 flex justify-end items-center"></div>
+                    </div>
+                </div>
+            );
+        }
+
         if (playerStatus === 'error') {
             return (
                 <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
@@ -623,7 +673,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     {isQueuePopoverRendered && (
                         <QueuePopover
                             isNight={isNight}
-                            nextTrack={nextTrack}
+                            nextTrack={playerState.track_window.next_tracks[0]}
                             position={popoverPosition}
                             isClosing={!showQueue}
                             onClose={() => setShowQueue(false)}

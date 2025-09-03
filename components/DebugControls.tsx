@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';

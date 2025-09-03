@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useCallback, Rea
 import axios from 'axios';
 import apiClient from '../api';
 import type { SpotifyPlayerState } from '@/globals';
+import { NowPlayingState } from '../types';
 
 interface SpotifyUser {
     display_name: string;
@@ -16,7 +17,6 @@ interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;
     error: string | null;
-    playerState: SpotifyPlayerState | null;
     volume: number;
     isMuted: boolean;
     lastVolume: number;
@@ -32,7 +32,12 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
     setVolume: (level: number) => void;
     toggleMute: () => void;
-  silentRefreshToken: () => Promise<void>;
+    silentRefreshToken: () => Promise<void>;
+    // FIX: Add missing properties to the context type
+    nowPlaying: NowPlayingState;
+    setNowPlaying: React.Dispatch<React.SetStateAction<NowPlayingState>>;
+    isPlayerReady: boolean;
+    pauseSpotify: () => void;
 }
 
 interface PlayOptions {
@@ -53,7 +58,6 @@ const initialState: AuthState = {
     isAuthenticated: false,
     isLoading: true,
     error: null,
-    playerState: null,
     volume: 1,
     isMuted: false,
     lastVolume: 1,
@@ -63,7 +67,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const refreshInFlight = useRef<Promise<void> | null>(null);
+    const refreshInFlight = useRef<Promise<void> | null>(null);
+    // FIX: Add state for nowPlaying to manage both Spotify and Radio
+    const [nowPlaying, setNowPlaying] = useState<NowPlayingState>({
+        source: 'spotify',
+        spotifyState: null,
+        radioStation: null,
+        radioContext: [],
+    });
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -135,8 +146,13 @@ const silentRefreshToken = useCallback(async () => {
         };
     }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
+    // FIX: Update _setPlayerState to modify the unified nowPlaying state
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
-        setState(s => ({ ...s, playerState: newState }));
+        setNowPlaying(s => ({ 
+            ...s, 
+            spotifyState: newState,
+            source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source)
+        }));
     }, []);
     
     const fetchUserInfo = useCallback(async () => {
@@ -296,8 +312,20 @@ const silentRefreshToken = useCallback(async () => {
         setState(s => ({...s, error: null}));
     };
 
+    // FIX: Define isPlayerReady and pauseSpotify
+    const isPlayerReady = !!deviceId;
+
+    const pauseSpotify = useCallback(async () => {
+        if (!deviceId) return;
+        try {
+            await apiClient.put(`/me/player/pause?device_id=${deviceId}`);
+        } catch (e) {
+            console.error("Failed to pause spotify", e);
+        }
+    }, [deviceId]);
+
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify }}>
             {children}
         </AuthContext.Provider>
     );
