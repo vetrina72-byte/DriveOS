@@ -1,730 +1,418 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, Variants } from 'framer-motion';
-import { FiRadio, FiHeart, FiLoader, FiAlertTriangle, FiSearch, FiSend } from 'react-icons/fi';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { FiLoader, FiRadio, FiAlertTriangle, FiSearch, FiX } from 'react-icons/fi';
+import type { RadioStation } from '../types';
+import RadioCard from './RadioCard';
+import HorizontalCarousel from './HorizontalCarousel';
+import { curatedStations } from './radio_curated';
 
-// Framer Motion Variants
-const panelVariant: Variants = {
-    initial: { x: '100%' },
-    animate: { x: '0%', transition: { duration: 0.7, ease: [0.2, 0.8, 0.2, 1] } },
-    exit: { x: '100%', transition: { duration: 0.5, ease: [0.8, 0.2, 1, 0.2] } },
-};
-
-const contentVariant: Variants = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 1, delay: 0.3 } },
-    exit: { opacity: 0, transition: { duration: 0.2 } },
-};
-
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05
+// Helper to sanitize and override logos for station data from the API
+const sanitizeStation = (station: any): RadioStation | null => {
+    if (
+        !station.url_resolved ||
+        station.name.toLowerCase().includes('test') ||
+        !station.stationuuid ||
+        station.codec?.toLowerCase() === 'webm'
+    ) {
+        return null;
     }
-  }
-};
 
-const itemVariants: Variants = {
-  hidden: { y: 20, opacity: 0 },
-  visible: {
-    y: 0,
-    opacity: 1,
-    transition: {
-      ease: "easeOut",
-      duration: 0.3
+    let favicon = (station.favicon && station.favicon.startsWith('http') && !station.favicon.includes('default')) 
+        ? station.favicon 
+        : '';
+
+    const stationNameLower = station.name.toLowerCase();
+
+    // Specific logo overrides based on keywords
+    const logoOverrides = [
+        { keywords: ['virgin radio'], logo: 'https://upload.wikimedia.org/wikipedia/commons/d/d1/VirginRadio.png' },
+        { keywords: ['radio deejay', 'deejay'], logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Logo_DeeJay.png' },
+        { keywords: ['rtl 102.5', 'rtl 1025'], logo: 'https://upload.wikimedia.org/wikipedia/commons/0/0e/RTL_102.5_logo.svg' },
+        { keywords: ['radio 105', '105 network', '105 rap'], logo: 'https://upload.wikimedia.org/wikipedia/commons/5/50/Radio_105_logo.svg' },
+        { keywords: ['r101'], logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e9/R101_-_Logo_2015.svg' },
+        { keywords: ['radio italia'], logo: 'https://upload.wikimedia.org/wikipedia/commons/0/06/Radio_Italia_logo_%282020%29.svg' },
+        { keywords: ['kiss kiss'], logo: 'https://upload.wikimedia.org/wikipedia/commons/c/c6/Kiss_95.9.png' },
+        { keywords: ['radio 80'], logo: 'https://upload.wikimedia.org/wikipedia/commons/a/ad/80s80s_Logo_2015.svg' },
+    ];
+
+    for (const override of logoOverrides) {
+        if (override.keywords.some(keyword => stationNameLower.includes(keyword))) {
+            favicon = override.logo;
+            break; // Stop after first match
+        }
     }
-  }
-};
-
-// Interfacce per le stazioni radio
-interface RadioStation {
-    id: string;
-    name: string;
-    logo?: string;
-    streamUrl: string;
-    country: string;
-    description?: string;
-    genre?: string;
-    nowPlaying?: string;
-    website?: string;
-}
-
-interface RadioContextType {
-    currentStation: RadioStation | null;
-    isPlaying: boolean;
-    volume: number;
-    favorites: RadioStation[];
-}
-
-// Hook personalizzato per gestire il player radio
-const useRadioPlayer = () => {
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    const [radioContext, setRadioContext] = useState<RadioContextType>({
-        currentStation: null,
-        isPlaying: false,
-        volume: 0.7,
-        favorites: []
-    });
-
-    const playStation = (station: RadioStation) => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.src = station.streamUrl;
-            audioRef.current.volume = radioContext.volume;
-            audioRef.current.play().catch(err => {
-                console.error('Errore riproduzione radio:', err);
-            });
-        } else {
-            audioRef.current = new Audio(station.streamUrl);
-            audioRef.current.volume = radioContext.volume;
-            audioRef.current.play().catch(err => {
-                console.error('Errore riproduzione radio:', err);
-            });
-        }
-
-        setRadioContext(prev => ({
-            ...prev,
-            currentStation: station,
-            isPlaying: true
-        }));
-    };
-
-    const pauseRadio = () => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-        }
-        setRadioContext(prev => ({ ...prev, isPlaying: false }));
-    };
-
-    const resumeRadio = () => {
-        if (audioRef.current && radioContext.currentStation) {
-            audioRef.current.play().catch(err => {
-                console.error('Errore ripresa radio:', err);
-            });
-            setRadioContext(prev => ({ ...prev, isPlaying: true }));
-        }
-    };
-
-    const togglePlayPause = () => {
-        if (radioContext.isPlaying) {
-            pauseRadio();
-        } else {
-            resumeRadio();
-        }
-    };
-
-    const setVolume = (volume: number) => {
-        const newVolume = Math.max(0, Math.min(1, volume));
-        if (audioRef.current) {
-            audioRef.current.volume = newVolume;
-        }
-        setRadioContext(prev => ({ ...prev, volume: newVolume }));
-    };
-
-    const toggleFavorite = (station: RadioStation) => {
-        setRadioContext(prev => {
-            const isFavorite = prev.favorites.some(fav => fav.id === station.id);
-            const newFavorites = isFavorite
-                ? prev.favorites.filter(fav => fav.id !== station.id)
-                : [...prev.favorites, station];
-            
-            // Salva nei preferiti locali
-            localStorage.setItem('radio_favorites', JSON.stringify(newFavorites));
-            
-            return { ...prev, favorites: newFavorites };
-        });
-    };
-
-    // Carica preferiti salvati
-    useEffect(() => {
-        const savedFavorites = localStorage.getItem('radio_favorites');
-        if (savedFavorites) {
-            try {
-                const favorites = JSON.parse(savedFavorites);
-                setRadioContext(prev => ({ ...prev, favorites }));
-            } catch (err) {
-                console.error('Errore caricamento preferiti radio:', err);
-            }
-        }
-    }, []);
 
     return {
-        radioContext,
-        playStation,
-        pauseRadio,
-        resumeRadio,
-        togglePlayPause,
-        setVolume,
-        toggleFavorite
+        stationuuid: station.stationuuid,
+        name: station.name.trim(),
+        url_resolved: station.url_resolved,
+        favicon: favicon,
+        tags: station.tags || '',
+        codec: station.codec || '',
     };
 };
 
-// Componente per singola stazione radio
-const RadioStationItem = ({ 
-    station, 
-    isNight, 
-    onPlay, 
-    onToggleFavorite, 
-    isFavorite,
-    isCurrentStation,
-    isPlaying 
-}: {
-    station: RadioStation;
-    isNight: boolean;
-    onPlay: (station: RadioStation) => void;
-    onToggleFavorite: (station: RadioStation) => void;
-    isFavorite: boolean;
-    isCurrentStation: boolean;
-    isPlaying: boolean;
-}) => {
-    const textColorPrimary = isNight ? 'text-white' : 'text-zinc-800';
-    const textColorSecondary = isNight ? 'text-[#b3b3b3]' : 'text-zinc-500';
-    const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
-    const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
-    const heartColor = isFavorite ? 'text-red-500' : (isNight ? 'text-zinc-400' : 'text-zinc-500');
 
-    const AnimatedEqualizer = () => (
-        <div className="flex items-end justify-center w-4 h-4 gap-0.5 text-green-400">
-            <style>{`
-                @keyframes radio-equalizer {
-                    0%, 100% { height: 20%; }
-                    50% { height: 100%; }
-                }
-            `}</style>
-            <span className="w-1 bg-current" style={{ animation: 'radio-equalizer 1.2s ease-in-out infinite', animationDelay: '0s' }}></span>
-            <span className="w-1 bg-current" style={{ animation: 'radio-equalizer 1.2s ease-in-out infinite', animationDelay: '-0.2s' }}></span>
-            <span className="w-1 bg-current" style={{ animation: 'radio-equalizer 1.2s ease-in-out infinite', animationDelay: '-0.4s' }}></span>
-            <span className="w-1 bg-current" style={{ animation: 'radio-equalizer 1.2s ease-in-out infinite', animationDelay: '-0.6s' }}></span>
-        </div>
-    );
-
-    return (
-        <div 
-            onClick={() => onPlay(station)} 
-            className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 ${bgColor} ${isCurrentStation ? 'ring-2 ring-green-500' : ''}`}
-        >
-            <div className="relative w-full aspect-square mb-3">
-                {station.logo ? (
-                    <img 
-                        src={station.logo} 
-                        alt={station.name} 
-                        className="w-full h-full rounded-md object-cover shadow-lg"
-                        onError={(e) => {
-                            // Fallback se l'immagine non carica
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            target.nextElementSibling?.classList.remove('hidden');
-                        }}
-                    />
-                ) : null}
-                <div className={`w-full h-full rounded-md flex items-center justify-center ${placeholderBg} ${station.logo ? 'hidden' : ''}`}>
-                    <FiRadio className={`w-10 h-10 ${isNight ? 'text-zinc-500' : 'text-zinc-600'}`} />
-                </div>
-                
-                {/* Indicatore di riproduzione */}
-                {isCurrentStation && isPlaying && (
-                    <div className="absolute top-2 right-2 bg-green-500 rounded-full p-1">
-                        <AnimatedEqualizer />
-                    </div>
-                )}
-                
-                {/* Pulsante cuore */}
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(station);
-                    }}
-                    className="absolute bottom-2 right-2 p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
-                >
-                    <FiHeart className={`w-4 h-4 ${heartColor} ${isFavorite ? 'fill-current' : ''}`} />
-                </button>
-            </div>
-            
-            <h3 className={`font-bold truncate ${textColorPrimary}`}>{station.name}</h3>
-            <p className={`text-sm truncate ${textColorSecondary}`}>
-                {station.nowPlaying || station.genre || station.description || 'Stazione Radio'}
-            </p>
-        </div>
-    );
-};
-
-// Componente per carousel di stazioni
-const RadioCarousel = ({ 
-    title, 
-    stations, 
-    isNight, 
-    onPlay, 
-    onToggleFavorite, 
-    favorites,
-    currentStation,
-    isPlaying 
-}: {
-    title: string;
-    stations: RadioStation[];
-    isNight: boolean;
-    onPlay: (station: RadioStation) => void;
-    onToggleFavorite: (station: RadioStation) => void;
-    favorites: RadioStation[];
-    currentStation: RadioStation | null;
-    isPlaying: boolean;
-}) => {
-    const scrollRef = useRef<HTMLDivElement>(null);
-
-    if (stations.length === 0) return null;
-
-    return (
-        <section className="mb-8">
-            <h2 
-                className="text-2xl font-bold mb-4 px-6" 
-                style={{ color: 'var(--heading-color)' }}
-            >
-                {title}
-            </h2>
-            <motion.div
-                ref={scrollRef}
-                className="spotify-carousel gap-4 px-6"
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-            >
-                {stations.map((station, index) => (
-                    <motion.div variants={itemVariants} key={`${title}-${station.id}-${index}`}>
-                        <RadioStationItem
-                            station={station}
-                            isNight={isNight}
-                            onPlay={onPlay}
-                            onToggleFavorite={onToggleFavorite}
-                            isFavorite={favorites.some(fav => fav.id === station.id)}
-                            isCurrentStation={currentStation?.id === station.id}
-                            isPlaying={isPlaying}
-                        />
-                    </motion.div>
-                ))}
-            </motion.div>
-        </section>
-    );
-};
-
-// Servizio per recuperare stazioni radio
-const RadioService = {
-    // Funzione per ottenere la posizione dell'utente
-    async getUserCountry(): Promise<string> {
-        try {
-            // Prova a ottenere la posizione GPS
-            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, {
-                    timeout: 5000,
-                    enableHighAccuracy: false
-                });
-            });
-
-            // Usa un servizio di geocoding per ottenere il paese
-            const response = await fetch(
-                `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=it`
-            );
-            const data = await response.json();
-            return data.countryCode || 'IT';
-        } catch (error) {
-            console.log('Impossibile ottenere posizione, uso Italia come default');
-            return 'IT';
-        }
-    },
-
-    // Funzione principale per ottenere stazioni radio
-    async getRadioStations(country: string = 'IT'): Promise<{ popular: RadioStation[], national: RadioStation[] }> {
-        try {
-            // Prima prova con Radio Browser API (gratuita e affidabile)
-            const response = await fetch(
-                `https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/${country}?limit=100&order=clickcount&reverse=true`
-            );
-            
-            if (!response.ok) {
-                throw new Error('Errore API Radio Browser');
-            }
-
-            const stations = await response.json();
-            
-            // Filtra e mappa le stazioni
-            const validStations: RadioStation[] = stations
-                .filter((station: any) => 
-                    station.url_resolved && 
-                    station.name && 
-                    station.clickcount > 100 // Solo stazioni popolari
-                )
-                .map((station: any) => ({
-                    id: station.stationuuid,
-                    name: station.name,
-                    logo: station.favicon || undefined,
-                    streamUrl: station.url_resolved,
-                    country: station.countrycode,
-                    description: station.tags || station.state,
-                    genre: station.tags,
-                    website: station.homepage
-                }))
-                .slice(0, 50); // Limita a 50 stazioni
-
-            // Dividi in popolari (prime 20) e nazionali (resto)
-            const popular = validStations.slice(0, 20);
-            const national = validStations.slice(20);
-
-            return { popular, national };
-        } catch (error) {
-            console.error('Errore caricamento stazioni radio:', error);
-            
-            // Fallback con stazioni italiane predefinite
-            return this.getFallbackStations();
-        }
-    },
-
-    // Stazioni di fallback per l'Italia
-    getFallbackStations(): { popular: RadioStation[], national: RadioStation[] } {
-        const fallbackStations: RadioStation[] = [
-            {
-                id: 'rai-radio1',
-                name: 'RAI Radio 1',
-                logo: 'https://www.raiplayradio.it/assets/img/loghi/radio1.png',
-                streamUrl: 'https://icestreaming.rai.it/1.mp3',
-                country: 'IT',
-                description: 'La radio generalista della RAI',
-                genre: 'Generalista'
-            },
-            {
-                id: 'rai-radio2',
-                name: 'RAI Radio 2',
-                logo: 'https://www.raiplayradio.it/assets/img/loghi/radio2.png',
-                streamUrl: 'https://icestreaming.rai.it/2.mp3',
-                country: 'IT',
-                description: 'Musica e intrattenimento',
-                genre: 'Musica'
-            },
-            {
-                id: 'rtl-102.5',
-                name: 'RTL 102.5',
-                logo: 'https://www.rtl.it/assets/img/logo-rtl.png',
-                streamUrl: 'https://streamingv2.shoutcast.com/rtl-1025',
-                country: 'IT',
-                description: 'Very Normal People',
-                genre: 'Pop'
-            },
-            {
-                id: 'radio-italia',
-                name: 'Radio Italia',
-                logo: 'https://www.radioitalia.it/images/logo.png',
-                streamUrl: 'https://radioitalia-lh.akamaihd.net/i/radioitalia_1@329645/master.m3u8',
-                country: 'IT',
-                description: 'Solo musica italiana',
-                genre: 'Italiana'
-            },
-            {
-                id: 'radio-deejay',
-                name: 'Radio Deejay',
-                logo: 'https://www.deejay.it/images/logo.png',
-                streamUrl: 'https://deejay-lh.akamaihd.net/i/DeejayTV_1@129866/master.m3u8',
-                country: 'IT',
-                description: 'La radio più ascoltata',
-                genre: 'Pop'
-            },
-            {
-                id: 'radio-capital',
-                name: 'Radio Capital',
-                logo: 'https://www.capital.it/images/logo.png',
-                streamUrl: 'https://capital-lh.akamaihd.net/i/CapitalTV_1@183098/master.m3u8',
-                country: 'IT',
-                description: 'Rock e musica alternativa',
-                genre: 'Rock'
-            }
-        ];
-
-        return {
-            popular: fallbackStations.slice(0, 4),
-            national: fallbackStations.slice(4)
-        };
-    },
-
-    // Ricerca stazioni
-    async searchStations(query: string, country: string = 'IT'): Promise<RadioStation[]> {
-        try {
-            const response = await fetch(
-                `https://de1.api.radio-browser.info/json/stations/byname/${encodeURIComponent(query)}?limit=20&countrycode=${country}`
-            );
-            
-            if (!response.ok) {
-                throw new Error('Errore ricerca stazioni');
-            }
-
-            const stations = await response.json();
-            
-            return stations
-                .filter((station: any) => station.url_resolved && station.name)
-                .map((station: any) => ({
-                    id: station.stationuuid,
-                    name: station.name,
-                    logo: station.favicon || undefined,
-                    streamUrl: station.url_resolved,
-                    country: station.countrycode,
-                    description: station.tags || station.state,
-                    genre: station.tags
-                }));
-        } catch (error) {
-            console.error('Errore ricerca stazioni:', error);
-            return [];
-        }
-    }
-};
-
-// Componente principale RadioApp
-const RadioApp = ({
-    isOpen,
-    onClose,
-    isNight,
-    spotifyPlayerTop,
-    spotifyPlayerBottom,
-}: {
+interface RadioAppProps {
     isOpen: boolean;
     onClose: () => void;
     isNight: boolean;
+    onPlayStation: (station: RadioStation, context: RadioStation[]) => void;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
-}) => {
-    const [popularStations, setPopularStations] = useState<RadioStation[]>([]);
-    const [nationalStations, setNationalStations] = useState<RadioStation[]>([]);
-    const [searchResults, setSearchResults] = useState<RadioStation[]>([]);
+}
+
+const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
+    const bgColor = isNight ? 'bg-white/5' : 'bg-black/5';
+    return (
+        <div className="mb-8 px-6 animate-pulse">
+            <div className={`h-8 w-1/3 rounded-md mb-4 ${bgColor}`}></div>
+            <div className="flex gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className={`flex-shrink-0 w-44`}>
+                        <div className={`w-full aspect-square rounded-md ${bgColor}`}></div>
+                        <div className={`h-4 w-full rounded-md mt-3 ${bgColor}`}></div>
+                        <div className={`h-3 w-2/3 rounded-md mt-2 ${bgColor}`}></div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spotifyPlayerTop, spotifyPlayerBottom }) => {
+    const [translateX, setTranslateX] = useState(100);
+    const animationFrameId = useRef<number | null>(null);
+    
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [categories, setCategories] = useState<{name: string; stations: RadioStation[]}[]>([]);
+    const [favorites, setFavorites] = useState<RadioStation[]>([]);
+    
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<RadioStation[]>([]);
     const [isSearching, setIsSearching] = useState(false);
-    const [userCountry, setUserCountry] = useState('IT');
+    const searchDebounceRef = useRef<number | null>(null);
 
-    const { radioContext, playStation, togglePlayPause, toggleFavorite } = useRadioPlayer();
+    const openingBoxSpeed = 4.5;
+    const closingBoxSpeed = 8.6;
 
-    // Carica stazioni all'apertura
+    const radioBrowserApi = useMemo(() => {
+        const servers = [
+            'https://de1.api.radio-browser.info/json',
+            'https://nl1.api.radio-browser.info/json',
+            'https://fr1.api.radio-browser.info/json',
+            'https://at1.api.radio-browser.info/json',
+        ].sort(() => Math.random() - 0.5);
+        let currentServerIndex = 0;
+
+        const performRequest = async (config: { url: string; params?: any; }, retryCount = 0): Promise<{ data: any }> => {
+            const server = servers[currentServerIndex];
+            const url = new URL(server + config.url);
+            if (config.params) {
+                Object.keys(config.params).forEach(key => url.searchParams.append(key, String(config.params[key])));
+            }
+
+            try {
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers: { 'User-Agent': 'AutomotiveUIConceptOKPERFET/1.0' },
+                    signal: AbortSignal.timeout(5000),
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                return { data };
+            } catch (error) {
+                console.warn(`Request to ${server} failed.`, error);
+                if (retryCount < servers.length - 1) {
+                    currentServerIndex = (currentServerIndex + 1) % servers.length;
+                    console.log(`Retrying with ${servers[currentServerIndex]}`);
+                    return performRequest(config, retryCount + 1);
+                } else {
+                    throw new Error("All Radio Browser API servers failed.");
+                }
+            }
+        };
+        
+        const recordClick = (stationuuid: string) => {
+            performRequest({ url: `/url/${stationuuid}` }).catch(err => {
+                console.error(`Failed to record click for ${stationuuid}`, err);
+            });
+        };
+
+        return { performRequest, recordClick };
+    }, []);
+
     useEffect(() => {
         if (isOpen) {
-            loadStations();
+            const storedFavorites: RadioStation[] = JSON.parse(localStorage.getItem('radio_favorites') || '[]');
+            setFavorites(storedFavorites);
         }
     }, [isOpen]);
 
-    const loadStations = async () => {
-        setLoading(true);
-        setError(null);
-        
-        try {
-            const country = await RadioService.getUserCountry();
-            setUserCountry(country);
-            
-            const { popular, national } = await RadioService.getRadioStations(country);
-            setPopularStations(popular);
-            setNationalStations(national);
-        } catch (err) {
-            console.error('Errore caricamento stazioni:', err);
-            setError('Impossibile caricare le stazioni radio');
-        } finally {
-            setLoading(false);
-        }
-    };
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            setLoading(true);
+            setError(null);
 
-    const handleSearch = async () => {
-        if (!searchTerm.trim()) return;
+            const categoriesToFetch = [
+                { name: 'Successi Italiani', params: { tag: 'italian', countrycode: 'IT', limit: 20, order: 'votes', reverse: 'true' }},
+                { name: 'Pop', params: { tag: 'pop', countrycode: 'IT', limit: 20, order: 'votes', reverse: 'true' }},
+                { name: 'Rock', params: { tag: 'rock', countrycode: 'IT', limit: 20, order: 'votes', reverse: 'true' }},
+                { name: 'Dance', params: { tag: 'dance', countrycode: 'IT', limit: 20, order: 'votes', reverse: 'true' }},
+                { name: 'Notizie', params: { tag: 'news', countrycode: 'IT', limit: 20, order: 'votes', reverse: 'true' }},
+            ];
+
+            try {
+                const requests = categoriesToFetch.map(cat => 
+                    radioBrowserApi.performRequest({ url: '/stations/search', params: { ...cat.params, hidebroken: 'true' } })
+                );
+                
+                const responses = await Promise.allSettled(requests);
+                
+                const curatedStationUuids = new Set(curatedStations.map(s => s.stationuuid));
+                const curatedStationNames = new Set(curatedStations.map(s => s.name.toLowerCase()));
+
+                const categoryPromises = responses.map(async (res, index) => {
+                    const categoryConfig = categoriesToFetch[index];
+                    
+                    if (res.status === 'fulfilled') {
+                        let liveStations = (res.value.data || [])
+                            .map(sanitizeStation)
+                            .filter((s): s is RadioStation => s !== null && !!s.favicon);
+
+                        // Filter out any curated stations from these other categories to avoid duplicates
+                        liveStations = liveStations.filter(s => !curatedStationUuids.has(s.stationuuid) && !curatedStationNames.has(s.name.toLowerCase()));
+
+                        if (categoryConfig.name === 'Notizie') {
+                            liveStations = liveStations.filter(s => {
+                                const nameLower = s.name.toLowerCase();
+                                const isSole24Ore = nameLower.includes('sole') && nameLower.includes('24');
+                                return !nameLower.includes('rai news 24') && !isSole24Ore;
+                            });
+                        }
+
+                        if (liveStations.length > 0) {
+                            return { name: categoryConfig.name, stations: liveStations };
+                        }
+                    }
+                    return null;
+                });
+                
+                const fetchedCategories = (await Promise.all(categoryPromises))
+                    .filter((c): c is { name: string; stations: RadioStation[] } => c !== null);
+
+                // Manually prepend the curated list as the first category
+                const allCategories = [
+                    { name: 'Le più ascoltate in Italia', stations: curatedStations },
+                    ...fetchedCategories
+                ];
+                
+                setCategories(allCategories);
+
+            } catch (err) {
+                setError("Impossibile caricare le stazioni radio. Verranno mostrate solo quelle principali.");
+                // If API fails, at least show the curated stations
+                setCategories([{ name: 'Le più ascoltate in Italia', stations: curatedStations }]);
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchInitialData();
+    }, [radioBrowserApi]);
+    
+    useEffect(() => {
+        if (searchQuery.trim().length < 3) {
+            setSearchResults([]);
+            return;
+        }
+
+        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         
         setIsSearching(true);
-        try {
-            const results = await RadioService.searchStations(searchTerm, userCountry);
-            setSearchResults(results);
-        } catch (err) {
-            console.error('Errore ricerca:', err);
-        } finally {
-            setIsSearching(false);
-        }
-    };
+        searchDebounceRef.current = window.setTimeout(async () => {
+            try {
+                const response = await radioBrowserApi.performRequest({
+                    url: '/stations/search',
+                    params: {
+                        name: searchQuery,
+                        countrycode: 'IT',
+                        limit: 50,
+                        order: 'votes',
+                        reverse: 'true',
+                        hidebroken: 'true',
+                    }
+                });
+                 const stationsWithLogos = response.data
+                    .map(sanitizeStation)
+                    .filter((s): s is RadioStation => s !== null && !!s.favicon);
 
-    const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            handleSearch();
-        }
-    };
+                setSearchResults(stationsWithLogos);
 
-    const clearSearch = () => {
-        setSearchTerm('');
-        setSearchResults([]);
-    };
+            } catch (err) {
+                console.error('Radio search failed', err);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 300);
 
+        return () => {
+            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        };
+    }, [searchQuery, radioBrowserApi]);
+
+    useEffect(() => {
+        let lastTime = performance.now();
+        const animate = (now: number) => {
+            const delta = (now - lastTime) / 1000;
+            lastTime = now;
+            setTranslateX(currentX => {
+                const target = isOpen ? 0 : 100;
+                const speed = isOpen ? openingBoxSpeed : closingBoxSpeed;
+                const damp = 1 - Math.exp(-speed * delta);
+                const newX = currentX + (target - currentX) * damp;
+                if (Math.abs(target - newX) < 0.1) {
+                    if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+                    return target;
+                }
+                return newX;
+            });
+            animationFrameId.current = requestAnimationFrame(animate);
+        };
+        if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = requestAnimationFrame(animate);
+        return () => {
+            if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+        };
+    }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
+
+    const handlePlayStation = (station: RadioStation, context: RadioStation[]) => {
+        radioBrowserApi.recordClick(station.stationuuid);
+        onPlayStation(station, context);
+    };
+    
     const renderContent = () => {
         if (loading) {
             return (
-                <div className="flex-grow flex justify-center items-center">
-                    <div className="flex flex-col items-center gap-4">
-                        <FiLoader className={`animate-spin text-4xl ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`} />
-                        <p className={`${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            Caricamento stazioni radio...
-                        </p>
-                    </div>
+                <>
+                    <SkeletonCarousel isNight={isNight} />
+                    <SkeletonCarousel isNight={isNight} />
+                    <SkeletonCarousel isNight={isNight} />
+                </>
+            );
+        }
+        if (error) {
+            return (
+                <div className="flex-grow flex flex-col justify-center items-center text-red-400 gap-4 text-center p-4">
+                    <FiAlertTriangle className="w-10 h-10" />
+                    <p>{error}</p>
                 </div>
             );
         }
-
-        if (error) {
-            return (
-                <div className="flex-grow flex justify-center items-center">
-                    <div className="flex flex-col items-center gap-4 text-center">
-                        <FiAlertTriangle className="text-4xl text-red-500" />
-                        <p className="font-semibold text-lg">Errore</p>
-                        <p className={`${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>{error}</p>
-                        <button 
-                            onClick={loadStations}
-                            className="mt-4 px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full font-semibold transition-colors"
-                        >
-                            Riprova
-                        </button>
-                    </div>
+        
+        if (searchQuery.trim().length >= 3) {
+             return (
+                <div className="px-6">
+                    {isSearching ? (
+                        <div className="flex justify-center items-center py-10">
+                            <FiLoader className="animate-spin text-3xl text-zinc-400" />
+                        </div>
+                    ) : searchResults.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                            {searchResults.map((station, index) => (
+                                <RadioCard
+                                    key={`${station.stationuuid}-${index}`}
+                                    station={station}
+                                    isNight={isNight}
+                                    onPlay={(s) => handlePlayStation(s, searchResults)}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-zinc-400 py-10">Nessun risultato per "{searchQuery}"</p>
+                    )}
                 </div>
-            );
+             );
+        }
+
+        const displayCategories = [...categories];
+        if (favorites.length > 0) {
+            displayCategories.unshift({ name: 'Preferiti', stations: favorites });
         }
 
         return (
-            <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
-                {/* Header con ricerca */}
-                <div className="px-6 pt-6 pb-4">
-                    <div className="flex items-center gap-4 mb-6">
-                        <FiRadio className={`w-8 h-8 ${isNight ? 'text-green-400' : 'text-green-600'}`} />
-                        <h1 
-                            className="text-3xl font-bold"
-                            style={{ color: 'var(--heading-color)' }}
-                        >
-                            Radio
-                        </h1>
-                    </div>
-
-                    {/* Barra di ricerca */}
-                    <div className="relative max-w-md">
-                        <FiSearch className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`} />
-                        <input
-                            type="text"
-                            placeholder="Cerca stazioni radio..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            onKeyDown={handleSearchKeyDown}
-                            className={`w-full pl-11 pr-10 py-3 rounded-full text-sm font-medium transition-colors duration-300 ${
-                                isNight ? 'bg-white/10' : 'bg-black/5'
-                            } placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
-                            style={{ color: 'var(--text-primary)' }}
-                        />
-                        <button 
-                            onClick={handleSearch}
-                            disabled={isSearching}
-                            className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-colors duration-200 ${
-                                isNight ? 'hover:bg-white/10' : 'hover:bg-black/5'
-                            } disabled:opacity-50`}
-                            aria-label="Cerca"
-                        >
-                            {isSearching ? (
-                                <FiLoader className="w-4 h-4 animate-spin" style={{ color: 'var(--text-primary)' }} />
-                            ) : (
-                                <FiSend className="w-4 h-4" style={{ color: 'var(--text-primary)' }} />
-                            )}
-                        </button>
-                    </div>
-
-                    {searchTerm && (
-                        <button
-                            onClick={clearSearch}
-                            className={`mt-2 text-sm ${isNight ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'} transition-colors`}
-                        >
-                            Cancella ricerca
-                        </button>
-                    )}
-                </div>
-
-                {/* Risultati ricerca */}
-                {searchResults.length > 0 && (
-                    <RadioCarousel
-                        title={`Risultati per "${searchTerm}"`}
-                        stations={searchResults}
-                        isNight={isNight}
-                        onPlay={playStation}
-                        onToggleFavorite={toggleFavorite}
-                        favorites={radioContext.favorites}
-                        currentStation={radioContext.currentStation}
-                        isPlaying={radioContext.isPlaying}
-                    />
-                )}
-
-                {/* Preferiti */}
-                {radioContext.favorites.length > 0 && (
-                    <RadioCarousel
-                        title="Le tue stazioni preferite"
-                        stations={radioContext.favorites}
-                        isNight={isNight}
-                        onPlay={playStation}
-                        onToggleFavorite={toggleFavorite}
-                        favorites={radioContext.favorites}
-                        currentStation={radioContext.currentStation}
-                        isPlaying={radioContext.isPlaying}
-                    />
-                )}
-
-                {/* Stazioni popolari */}
-                {popularStations.length > 0 && (
-                    <RadioCarousel
-                        title="Stazioni più popolari"
-                        stations={popularStations}
-                        isNight={isNight}
-                        onPlay={playStation}
-                        onToggleFavorite={toggleFavorite}
-                        favorites={radioContext.favorites}
-                        currentStation={radioContext.currentStation}
-                        isPlaying={radioContext.isPlaying}
-                    />
-                )}
-
-                {/* Stazioni nazionali */}
-                {nationalStations.length > 0 && (
-                    <RadioCarousel
-                        title="Altre stazioni nazionali"
-                        stations={nationalStations}
-                        isNight={isNight}
-                        onPlay={playStation}
-                        onToggleFavorite={toggleFavorite}
-                        favorites={radioContext.favorites}
-                        currentStation={radioContext.currentStation}
-                        isPlaying={radioContext.isPlaying}
-                    />
-                )}
-            </div>
+            <>
+                {displayCategories.map(category => (
+                    <section key={category.name} className="mb-8">
+                        <h2 className="text-2xl font-bold mb-4 px-6" style={{ color: `var(--heading-color)` }}>
+                            {category.name}
+                        </h2>
+                        <HorizontalCarousel isNight={isNight}>
+                            {category.stations.map((station) => (
+                                <RadioCard
+                                    key={station.stationuuid}
+                                    station={station}
+                                    isNight={isNight}
+                                    onPlay={(s) => handlePlayStation(s, category.stations)}
+                                />
+                            ))}
+                        </HorizontalCarousel>
+                    </section>
+                ))}
+            </>
         );
     };
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    variants={panelVariant}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="fixed right-0 w-2/3 shadow-2xl z-20 flex"
-                    style={{
-                        top: `${spotifyPlayerTop}px`,
-                        bottom: `${spotifyPlayerBottom}px`,
-                    }}
-                    aria-hidden={!isOpen}
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="radio-app-title"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <motion.div
-                        className="w-full h-full flex flex-col relative backdrop-blur-lg"
-                        style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
-                        variants={contentVariant}
-                    >
-                        <h1 id="radio-app-title" className="sr-only">Radio App</h1>
-                        {renderContent()}
-                    </motion.div>
-                </motion.div>
-            )}
-        </AnimatePresence>
+        <div 
+            className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
+            style={{
+                transform: `translateX(${translateX}%)`,
+                top: `${spotifyPlayerTop}px`,
+                bottom: `${spotifyPlayerBottom}px`,
+            }}
+            aria-hidden={!isOpen}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="radio-app-title"
+            onClick={(e) => e.stopPropagation()}
+        >
+            <div 
+              className={`w-full h-full flex flex-col relative backdrop-blur-lg`}
+              style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
+            >
+                 <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
+                    <div className="flex items-center gap-4">
+                        <FiRadio className="w-8 h-8" style={{ color: 'var(--text-primary)' }} />
+                        <h1 id="radio-app-title" className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>Radio</h1>
+                    </div>
+                     <div className="flex items-center gap-6">
+                        <div className="relative max-w-xs">
+                            <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+                            <input
+                                type="text"
+                                placeholder="Cerca una stazione..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className={`w-full pl-11 pr-10 py-3 rounded-full text-sm font-medium transition-colors duration-300 placeholder:text-zinc-400 border border-transparent focus:outline-none ${isNight ? 'bg-white/10 focus:border-white/20' : 'bg-black/5 focus:border-black/20'}`}
+                                style={{ color: 'var(--text-primary)' }}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/20"
+                                >
+                                    <FiX className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                                </button>
+                            )}
+                        </div>
+                     </div>
+                 </header>
+                <div className="flex-grow flex flex-col overflow-y-auto hide-scrollbar">
+                     {renderContent()}
+                </div>
+            </div>
+        </div>
     );
 };
 

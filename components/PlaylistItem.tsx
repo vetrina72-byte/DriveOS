@@ -1,5 +1,6 @@
-import React from 'react';
-import { FiMusic, FiMic, FiUser, FiHeart } from 'react-icons/fi';
+
+import React, { useState, useEffect } from 'react';
+import { FiMusic, FiMic, FiUser, FiHeart, FiRadio } from 'react-icons/fi';
 import { FaSpotify } from 'react-icons/fa';
 
 export interface SpotifyItem {
@@ -10,7 +11,7 @@ export interface SpotifyItem {
   artists?: { name: string }[];
   description?: string;
   publisher?: string;
-  type: 'playlist' | 'album' | 'track' | 'artist' | 'show' | 'category';
+  type: 'playlist' | 'album' | 'track' | 'artist' | 'show' | 'category' | 'station';
   album?: { name: string; images: { url: string }[] };
   explicit?: boolean;
   context?: {
@@ -21,16 +22,25 @@ export interface SpotifyItem {
     display_name: string;
     id: string;
   };
-  // This property is specific to category items from the API
   icons?: { url: string }[];
 }
 
 const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: SpotifyItem, isNight: boolean, onSelectItem: (item: SpotifyItem) => void, contextInfo?: string }) => {
+  const [imageError, setImageError] = useState(false);
   const textColorPrimary = isNight ? 'text-white' : 'text-zinc-800';
   const textColorSecondary = isNight ? 'text-[#b3b3b3]' : 'text-zinc-500';
   const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
   const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
+  
+  // Reset image error state if the item changes
+  useEffect(() => {
+    setImageError(false);
+  }, [item.id]);
+
+  const handleImageError = () => {
+    setImageError(true);
+  };
 
   const getContextualDescription = (): string => {
     if (contextInfo) return contextInfo;
@@ -49,6 +59,8 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
             return item.publisher ?? 'Podcast';
         case 'category':
              return 'Genere';
+        case 'station':
+            return item.description || 'Stazione Radio';
         default:
             return item.description ?? '';
     }
@@ -78,6 +90,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
       case 'show': return <FiMic className={`w-10 h-10 ${placeholderIconColor}`} />;
       case 'playlist': return <FaSpotify className={`w-10 h-10 ${placeholderIconColor}`} />;
       case 'category': return <FiMusic className={`w-10 h-10 ${placeholderIconColor}`} />;
+      case 'station': return <FiRadio className={`w-10 h-10 ${placeholderIconColor}`} />;
       default: return <FiMusic className={`w-10 h-10 ${placeholderIconColor}`} />;
     }
   }
@@ -85,8 +98,14 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   return (
     <div onClick={() => onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer w-44 flex-shrink-0 ${bgColor}`}>
       <div className="relative w-full aspect-square mb-3">
-        {imageUrl ? (
-          <img src={imageUrl} alt={item.name} className="w-full h-full rounded-md object-cover shadow-lg" />
+        {imageUrl && !imageError ? (
+          <img 
+            src={imageUrl} 
+            alt={item.name} 
+            className="w-full h-full rounded-md object-cover shadow-lg"
+            loading="lazy"
+            onError={handleImageError}
+          />
         ) : (
           <div className={`w-full h-full rounded-md flex items-center justify-center ${placeholderBg}`}>
             {getPlaceholderIcon()}

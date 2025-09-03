@@ -1,11 +1,12 @@
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
-import { motion, Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const containerVariants: Variants = {
+const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -15,7 +16,8 @@ const containerVariants: Variants = {
   }
 };
 
-const itemVariants: Variants = {
+// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
+const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -40,26 +42,21 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
                 const response = await apiClient.get('/browse/categories', {
                     params: {
                         country: 'IT',
-                        limit: 50,
+                        limit: 50, // Fetch a good number of categories
                     }
                 });
-
-                const categoriesToExclude = ["Realizzato per te", "Nuove uscite", "Sanremo", "Classifiche", "Allenamento", "Cucina e cena"];
-                const filteredCategories = response.data.categories.items.filter(
-                    (category: any) => !categoriesToExclude.includes(category.name)
-                );
-
-                const mappedCategories = filteredCategories.map((cat: any) => ({
+                // The API returns category objects that need to be mapped to our SpotifyItem type
+                const mappedCategories = response.data.categories.items.map((cat: any) => ({
                     id: cat.id,
                     name: cat.name,
-                    uri: cat.href,
-                    images: cat.icons,
+                    uri: cat.href, // Using href as a unique identifier if needed, though id is primary
+                    images: cat.icons, // The API uses 'icons' instead of 'images'
                     type: 'category',
                 }));
                 setCategories(mappedCategories);
             } catch (err) {
                 console.error('Failed to fetch categories', err);
-                setError('Could not load genres.');
+                setError('Could not load genres and moods.');
             } finally {
                 setLoading(false);
             }
@@ -87,13 +84,9 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
               animate="visible"
             >
                 {categories.map((category, index) => (
-                     <motion.div variants={itemVariants} key={`genre-${category.id}-${index}`}>
-                       <PlaylistItem 
-                          item={{...category, description: 'Genere'}} 
-                          isNight={isNight} 
-                          onSelectItem={onSelectItem}
-                       />
-                     </motion.div>
+                    <motion.div variants={itemVariants} key={`genre-${category.id}-${index}`}>
+                      <PlaylistItem item={category} isNight={isNight} onSelectItem={onSelectItem} />
+                    </motion.div>
                 ))}
             </motion.div>
         </div>

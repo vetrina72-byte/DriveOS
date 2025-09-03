@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
-import { SpotifyItem } from './PlaylistItem';
+import { SpotifyItem as MediaItem } from './PlaylistItem';
 import apiClient from '../api';
 
 // Helper for dynamic greeting
@@ -32,13 +32,13 @@ const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
 };
 
 
-const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
-    const unifiedList: SpotifyItem[] = [];
+const processRecentPlays = async (items: any[]): Promise<MediaItem[]> => {
+    const unifiedList: MediaItem[] = [];
     const addedUris = new Set<string>();
-    const contextDetailsCache = new Map<string, SpotifyItem>();
+    const contextDetailsCache = new Map<string, MediaItem>();
 
     // Special item for "Liked Songs"
-    const likedSongsItem: SpotifyItem = {
+    const likedSongsItem: MediaItem = {
         id: 'liked-songs',
         name: 'Brani che ti piacciono',
         type: 'playlist',
@@ -82,7 +82,7 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
     for (const item of items) {
         if (!item.track) continue;
 
-        let itemToAdd: SpotifyItem | null = null;
+        let itemToAdd: MediaItem | null = null;
 
         // CRITICAL FIX: Explicitly check for "Liked Songs" context first.
         if (item.context?.type === 'collection') {
@@ -108,7 +108,7 @@ const processRecentPlays = async (items: any[]): Promise<SpotifyItem[]> => {
 
 
 // Main Component
-const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: SpotifyItem) => void; startFetching: boolean; }) => {
+const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolean; onSelectItem: (item: MediaItem) => void; startFetching: boolean; }) => {
   const { user, refreshTrigger } = useAuth();
   
   const [loading, setLoading] = useState(false);
@@ -116,20 +116,20 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
   const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
   
   // States for each curated section
-  const [continueListeningItems, setContinueListeningItems] = useState<SpotifyItem[]>([]);
-  const [newReleases, setNewReleases] = useState<SpotifyItem[]>([]);
-  const [userPlaylists, setUserPlaylists] = useState<SpotifyItem[]>([]);
-  const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<SpotifyItem[]>([]);
-  const [topArtists, setTopArtists] = useState<SpotifyItem[]>([]);
-  const [chartsPlaylists, setChartsPlaylists] = useState<SpotifyItem[]>([]);
-  const [genresCategories, setGenresCategories] = useState<SpotifyItem[]>([]);
-  const [recommendedShows, setRecommendedShows] = useState<SpotifyItem[]>([]);
-  const [partyPlaylists, setPartyPlaylists] = useState<SpotifyItem[]>([]);
-  const [topTracks, setTopTracks] = useState<SpotifyItem[]>([]);
-  const [artistRadioTracks, setArtistRadioTracks] = useState<SpotifyItem[]>([]);
-  const [trackRecommendations, setTrackRecommendations] = useState<SpotifyItem[]>([]);
-  const [savedAlbums, setSavedAlbums] = useState<SpotifyItem[]>([]);
-  const [madeForYou, setMadeForYou] = useState<SpotifyItem[]>([]);
+  const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>([]);
+  const [newReleases, setNewReleases] = useState<MediaItem[]>([]);
+  const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>([]);
+  const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>([]);
+  const [topArtists, setTopArtists] = useState<MediaItem[]>([]);
+  const [chartsPlaylists, setChartsPlaylists] = useState<MediaItem[]>([]);
+  const [genresCategories, setGenresCategories] = useState<MediaItem[]>([]);
+  const [recommendedShows, setRecommendedShows] = useState<MediaItem[]>([]);
+  const [partyPlaylists, setPartyPlaylists] = useState<MediaItem[]>([]);
+  const [topTracks, setTopTracks] = useState<MediaItem[]>([]);
+  const [artistRadioTracks, setArtistRadioTracks] = useState<MediaItem[]>([]);
+  const [trackRecommendations, setTrackRecommendations] = useState<MediaItem[]>([]);
+  const [savedAlbums, setSavedAlbums] = useState<MediaItem[]>([]);
+  const [madeForYou, setMadeForYou] = useState<MediaItem[]>([]);
 
   
   const fetchData = useCallback(async () => {
@@ -230,7 +230,7 @@ const ContentArea = ({ isNight, onSelectItem, startFetching }: { isNight: boolea
           const tracks = topTracksRes.value.data.items;
           setTopTracks(tracks);
           if (tracks.length >= 2) {
-              const seedTrackIds = tracks.slice(0, 2).map((track: SpotifyItem) => track.id).join(',');
+              const seedTrackIds = tracks.slice(0, 2).map((track: MediaItem) => track.id).join(',');
               apiClient.get(`/recommendations?seed_tracks=${seedTrackIds}&limit=20`)
                   .then(res => setTrackRecommendations(res.data.tracks.filter(Boolean)))
                   .catch(e => console.error("Failed to fetch track recommendations", e));

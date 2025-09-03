@@ -139,6 +139,7 @@ declare global {
     Spotify: {
         Player: new (options: SpotifyPlayerOptions) => SpotifyPlayer;
     };
+    Hls: any;
   }
 
   // --- Electron <webview> Tag Typings ---

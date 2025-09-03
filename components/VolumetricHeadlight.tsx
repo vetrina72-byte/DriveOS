@@ -1,5 +1,6 @@
 
-import React, { useRef, useMemo } from 'react';
+
+import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 
@@ -84,16 +85,23 @@ export const VolumetricHeadlight = ({
     const groupRef = useRef<THREE.Group>(null!);
     const materialRef = useRef<THREE.ShaderMaterial>(null!);
 
+    // The original code passed a new Euler object via the `rotation` prop on every `beamAngle`/`beamRoll`
+    // change, causing a "Cannot assign to read only property" error in three.js.
+    // We now manage rotation internally. This effect sets the *initial* state to avoid the
+    // "roll-in" animation on mount. All subsequent changes are animated smoothly by useFrame.
+    useEffect(() => {
+        if (groupRef.current) {
+            const initialEuler = new THREE.Euler(beamAngle, Math.PI, beamRoll, 'YXZ');
+            groupRef.current.quaternion.setFromEuler(initialEuler);
+        }
+    // This effect is intentionally run only once to set the initial state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Memoize reusable THREE objects to avoid recreating them on every render
     const targetQuat = useMemo(() => new THREE.Quaternion(), []);
     const targetEuler = useMemo(() => new THREE.Euler(0, 0, 0, 'YXZ'), []);
-
-    // Create the initial Euler rotation from props to set it declaratively.
-    // This prevents the headlight from "rolling" into position on page load.
-    const initialRotation = useMemo(() => {
-        return new THREE.Euler(beamAngle, Math.PI, beamRoll, 'YXZ');
-    }, [beamAngle, beamRoll]);
-
+    
     const shaderArgs = useMemo(() => ({
         uniforms: {
             uColor: { value: new THREE.Color('white') },
@@ -149,9 +157,7 @@ export const VolumetricHeadlight = ({
         <group
             ref={groupRef}
             position={position}
-            // Set the initial rotation declaratively to prevent the roll-in animation on load.
-            // The `useFrame` loop will then smoothly animate any subsequent changes.
-            rotation={initialRotation}
+            // The problematic `rotation` prop is now removed. All rotation is handled by the `useFrame` loop.
         >
             <mesh
                 castShadow={false}

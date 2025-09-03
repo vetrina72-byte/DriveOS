@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
 import ContentArea from './ContentArea';
-import { SpotifyItem } from './PlaylistItem';
+import { SpotifyItem as MediaItem } from './PlaylistItem';
 import PlaylistDetailView from './PlaylistDetailView';
 import ArtistListView from './ArtistListView';
 import PlaylistListView from './PlaylistListView';
@@ -96,7 +96,7 @@ const SpotifyPlayer = ({
         changeView({ type: 'search', query });
     };
 
-    const handleSelectItem = (item: SpotifyItem) => {
+    const handleSelectItem = (item: MediaItem) => {
         if (item.id === 'liked-songs') {
              changeView({ type: 'playlist', id: 'liked-songs' });
              return;

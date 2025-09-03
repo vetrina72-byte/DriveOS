@@ -1,8 +1,5 @@
 
 
-
-
-
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -268,7 +265,6 @@ export default function DebugControls({
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
 
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // FIX: Replaced parseInt with Number for consistency and to avoid potential typing issues.
     const hour = Number(e.target.value);
     const newDate = new Date();
     newDate.setHours(hour, 0, 0, 0);
@@ -333,16 +329,16 @@ export default function DebugControls({
     }
   };
 
-  const handleColorChange = (time: string, condition: string, property: 'sky' | 'floor', value: string) => {
+  const handleColorChange = (time: 'day' | 'night', condition: string, property: 'sky' | 'floor', value: string) => {
     setSceneColors(prev => ({
-      ...prev,
-      [time]: {
-        ...prev[time],
-        [condition]: {
-          ...prev[time][condition],
-          [property]: value
-        }
-      }
+        ...prev,
+        [time]: {
+            ...prev[time],
+            [condition]: {
+                ...(prev[time]?.[condition] || { sky: '#ffffff', floor: '#ffffff' }),
+                [property]: value,
+            },
+        },
     }));
   };
 
@@ -485,12 +481,10 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">App Launcher Layout</h3>
             <div>
               <label htmlFor="app-launcher-width">Width: {appLauncherWidth}%</label>
-              {/* FIX: Use Number() to safely convert input value, as parseInt has stricter typing that can cause issues here. */}
               <input id="app-launcher-width" type="range" min="20" max="95" step="1" value={appLauncherWidth} onChange={(e) => setAppLauncherWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
               <label htmlFor="app-launcher-height">Height: {appLauncherHeight}px</label>
-              {/* FIX: Use Number() to safely convert input value, as parseInt has stricter typing that can cause issues here. */}
               <input id="app-launcher-height" type="range" min="50" max="300" step="1" value={appLauncherHeight} onChange={(e) => setAppLauncherHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
@@ -625,7 +619,8 @@ export default function DebugControls({
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Scene Environment Colors</h3>
-            {(Object.keys(sceneColors) as Array<keyof SceneColors>).map(time => (
+            {/* FIX: The cast `as Array<keyof SceneColors>` was incorrect because `keyof SceneColors` evaluates to `string | number` for an index signature. Casting to the specific known keys (`'day' | 'night'`) is safer and more accurate. */}
+            {(Object.keys(sceneColors) as Array<'day' | 'night'>).map(time => (
               <div key={time} className="pl-2 border-l-2 border-zinc-600 mb-3 mt-2">
                 <h4 className="capitalize text-sm font-semibold text-zinc-300 mb-2">{time}</h4>
                 {Object.keys(sceneColors[time]).map(condition => (
@@ -875,7 +870,6 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Layout</h3>
             <div>
               <label htmlFor="player-controls-size">Icon Size: {playerControlsSize}px</label>
-              {/* FIX: Replaced `parseInt` with `Number` for type safety, as `parseInt` requires a string argument. */}
               <input id="player-controls-size" type="range" min="16" max="48" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
@@ -884,7 +878,6 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
-              {/* FIX: Replaced `parseInt` with `Number` for type safety, as `parseInt` requires a string argument. */}
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>

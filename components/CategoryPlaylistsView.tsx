@@ -1,11 +1,12 @@
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
-import { motion, Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const containerVariants: Variants = {
+const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -15,7 +16,8 @@ const containerVariants: Variants = {
   }
 };
 
-const itemVariants: Variants = {
+// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
+const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,

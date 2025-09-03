@@ -82,3 +82,17 @@ export interface WeatherParams {
   fogNear: number;
   fogFar: number;
 }
+
+export interface RadioStation {
+    stationuuid: string;
+    name: string;
+    url_resolved: string;
+    favicon: string;
+    tags: string;
+    codec: string;
+}
+
+// FIX: Moved NowPlayingSource here from App.tsx to avoid circular dependency.
+export type NowPlayingSource = 
+    | { type: 'spotify' }
+    | { type: 'radio', station: RadioStation, context: RadioStation[] };

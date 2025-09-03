@@ -1,13 +1,14 @@
 
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiLoader, FiPlay } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import ContentCarousel from './ContentCarousel';
 import { useAuth } from '../context/AuthContext';
-import { motion, Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const containerVariants: Variants = {
+const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -17,7 +18,8 @@ const containerVariants: Variants = {
   }
 };
 
-const itemVariants: Variants = {
+// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
+const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -59,6 +61,12 @@ const AnimatedEqualizer = ({ className }: { className?: string; }) => (
     </div>
 );
 
+// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
+const topResultVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1, transition: { ease: "easeOut", duration: 0.3 } },
+};
+
 const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, onSelectItem, onPlay }) => {
     const [results, setResults] = useState<SearchResults>({});
     const [loading, setLoading] = useState(true);
@@ -97,7 +105,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
-        hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
+        hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/5',
     };
     
     if (loading) {
@@ -126,9 +134,9 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                 {topResult && (
                     <motion.div
                       className="md:col-span-1"
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ ease: "easeOut", duration: 0.3 }}
+                      variants={topResultVariants}
+                      initial="hidden"
+                      animate="visible"
                     >
                         <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Miglior risultato</h2>
                         <div onClick={() => onSelectItem(topResult)} className={`p-4 rounded-lg transition-colors duration-200 cursor-pointer flex flex-col gap-4 ${isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'}`}>

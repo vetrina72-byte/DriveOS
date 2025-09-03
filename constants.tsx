@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { 
-    FiWind, FiThermometer, FiSpeaker, FiPlay, FiPause, FiSkipBack, FiSkipForward, FiSearch, FiHome, FiBriefcase, FiLock, FiUnlock, FiUser, FiMoreHorizontal, FiMonitor, FiTrello, FiSun, FiMoon, FiCalendar, FiMessageSquare, FiGift, FiGlobe, FiMusic, FiVideo, FiUmbrella, FiDroplet, FiXCircle
+    FiWind, FiThermometer, FiSpeaker, FiPlay, FiPause, FiSkipBack, FiSkipForward, FiSearch, FiHome, FiBriefcase, FiLock, FiUnlock, FiUser, FiMoreHorizontal, FiMonitor, FiTrello, FiSun, FiMoon, FiCalendar, FiMessageSquare, FiGift, FiGlobe, FiMusic, FiVideo, FiUmbrella, FiDroplet, FiXCircle, FiRadio
 } from 'react-icons/fi';
 import { 
     BsBatteryHalf, BsBatteryFull, BsBatteryCharging, BsFan
@@ -10,7 +9,7 @@ import {
     GiCarDoor, GiCarSeat, GiGearStick, GiSteeringWheel 
 } from 'react-icons/gi';
 import { 
-    MdAcUnit, MdOutlinePhone, MdOutlineApps, MdBluetooth, MdWifi, MdGpsFixed, MdOutlineSettings, MdFlashOn, MdFlashOff, MdOutlineMic, MdEvStation, MdRadio
+    MdAcUnit, MdOutlinePhone, MdOutlineApps, MdBluetooth, MdWifi, MdGpsFixed, MdOutlineSettings, MdFlashOn, MdFlashOff, MdOutlineMic, MdEvStation
 } from 'react-icons/md';
 import { 
     PiFanFill, PiSeatbeltFill, PiCarSimpleBold 
@@ -150,6 +149,7 @@ export const ICONS = {
     voice: MdOutlineMic,
     spotify: FaSpotify,
     maps: MapsIcon,
+    radio: FiRadio,
     sun: FiSun,
     moon: FiMoon,
     more: FiMoreHorizontal,
@@ -162,9 +162,7 @@ export const ICONS = {
     arcade: IoGameControllerOutline,
     toybox: FiGift,
     browser: FiGlobe,
-    radio: MdRadio,
     tunein: FiMusic,
-    radio: MdRadio,
     tidal: SiTidal,
 
     // Connectivity

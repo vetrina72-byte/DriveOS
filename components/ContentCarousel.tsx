@@ -1,10 +1,11 @@
 
-import React, { useRef } from 'react';
-import PlaylistItem, { SpotifyItem } from './PlaylistItem';
-import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { motion, Variants } from 'framer-motion';
 
-const containerVariants: Variants = {
+import React, { useRef } from 'react';
+import PlaylistItem, { SpotifyItem as MediaItem } from './PlaylistItem';
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { motion } from 'framer-motion';
+
+const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -14,7 +15,8 @@ const containerVariants: Variants = {
   }
 };
 
-const itemVariants: Variants = {
+// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
+const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -26,7 +28,7 @@ const itemVariants: Variants = {
   }
 };
 
-const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: SpotifyItem[], isNight: boolean, onSelectItem: (item: SpotifyItem) => void, keyPrefix: string }) => {
+const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: MediaItem[], isNight: boolean, onSelectItem: (item: MediaItem) => void, keyPrefix: string }) => {
   const validItems = Array.isArray(items) ? items.filter(item => item && item.id) : [];
 
   if (validItems.length === 0) return null;

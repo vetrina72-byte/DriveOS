@@ -1,12 +1,13 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiLoader, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
-import { motion, Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const containerVariants: Variants = {
+const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -16,7 +17,8 @@ const containerVariants: Variants = {
   }
 };
 
-const itemVariants: Variants = {
+// FIX: The 'Variants' type from framer-motion can be overly strict with string-based easing types. Removing the explicit type annotation allows TypeScript to infer a compatible type, resolving the error.
+const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -166,7 +168,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
-        hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
+        hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/5',
     };
 
     if (isLoading) {

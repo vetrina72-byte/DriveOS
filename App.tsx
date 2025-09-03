@@ -10,7 +10,8 @@ import AppLauncher from './components/AppLauncher';
 import TopStatusBar from './components/TopStatusBar';
 import WeatherModal from './components/WeatherModal';
 import MiniMap from './components/MiniMap';
-import { WeatherData, TempUnit, WeatherParams } from './types';
+// FIX: Import NowPlayingSource from types.ts
+import { WeatherData, TempUnit, WeatherParams, RadioStation, NowPlayingSource } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
 import SpotifyCallback from './components/SpotifyCallback';
 import { routeStore } from './components/routeStore';
@@ -19,6 +20,7 @@ import DebugControls from './components/DebugControls';
 import VolumeControl from './components/VolumeControl';
 import { FiMinus } from 'react-icons/fi';
 import TheaterApp from './components/Theater';
+import RadioApp from './components/RadioApp';
 import { AnimatePresence } from 'framer-motion';
 
 interface AppDefinition {
@@ -28,10 +30,13 @@ interface AppDefinition {
   colorClasses?: string;
 }
 
+// FIX: Removed NowPlayingSource type definition, it's now in types.ts
+
 const ALL_APPS: AppDefinition[] = [
   { id: 'spotify', icon: ICONS.spotify, label: 'Spotify', colorClasses: 'text-green-500 hover:text-green-400' },
   { id: 'maps', icon: ICONS.maps, label: 'Maps' },
   { id: 'theater', icon: ICONS.theater, label: 'Theater' },
+  { id: 'radio', icon: ICONS.radio, label: 'Radio' },
 ];
 
 const weatherConfig: Record<string, WeatherParams> = {
@@ -692,8 +697,11 @@ export default function App() {
   // App Customization State
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
-  const [launcherApps, setLauncherApps] = useState<string[]>(['theater']);
+  const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
+
+  // Media Player State
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingSource | null>(null);
 
   const moveAppToLauncher = (appId: string) => {
     setDockApps(prev => prev.filter(id => id !== appId));
@@ -740,6 +748,27 @@ export default function App() {
   const [navigationTarget, setNavigationTarget] = useState<{ lat: number, lng: number, name: string } | null>(null);
   const [mapStyle, setMapStyle] = useState('dark');
   
+  const handlePlayStation = (station: RadioStation, context: RadioStation[]) => {
+      setNowPlaying({ type: 'radio', station, context });
+  };
+  
+  const handleStationChange = (direction: 'next' | 'prev') => {
+      if (nowPlaying?.type !== 'radio') return;
+      const { station, context } = nowPlaying;
+      if (!context || context.length === 0) return;
+      
+      const currentIndex = context.findIndex(s => s.stationuuid === station.stationuuid);
+      if (currentIndex === -1) return;
+      
+      let nextIndex;
+      if (direction === 'next') {
+          nextIndex = (currentIndex + 1) % context.length;
+      } else {
+          nextIndex = (currentIndex - 1 + context.length) % context.length;
+      }
+      setNowPlaying({ type: 'radio', station: context[nextIndex], context });
+  };
+
   const startTripSimulation = useCallback(() => {
     if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
     if (!tripInfo) {
@@ -1082,6 +1111,16 @@ export default function App() {
         setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
     }
 
+    // New logic for player source
+    if (willBeActive) {
+      if (appName === 'spotify') {
+        setNowPlaying({ type: 'spotify' });
+      } else if (appName !== 'radio' && nowPlaying?.type === 'radio') {
+        // Stop radio if switching to a non-radio, non-spotify app
+        setNowPlaying(null);
+      }
+    }
+
     if (appName === 'spotify' && activeApp === 'maps') {
         // SPECIAL CASE: Maps is open, open Spotify ON TOP.
         setActiveApp('spotify');
@@ -1175,7 +1214,7 @@ export default function App() {
           />
 
           {arrivalMessage && (
-              <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-500/90 text-white font-bold px-6 py-3 rounded-lg shadow-lg animate-fade-in">
+              <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 text-white font-bold px-6 py-3 rounded-lg shadow-lg animate-fade-in">
                   {arrivalMessage}
               </div>
           )}
@@ -1229,7 +1268,10 @@ export default function App() {
           </div>
 
           {/* Single Music Player instance for smooth transitions */}
-          <MusicPlayer 
+          <MusicPlayer
+            nowPlaying={nowPlaying}
+            onStop={() => setNowPlaying(null)}
+            onStationChange={handleStationChange}
             isAnyAppOpen={isUIOverlayActive}
             isNight={useDarkTheme}
             dockedConfig={{
@@ -1274,6 +1316,16 @@ export default function App() {
               <TheaterApp
                 onClose={() => toggleApp('theater')}
                 isNight={useDarkTheme}
+                spotifyPlayerTop={spotifyPlayerTop}
+                spotifyPlayerBottom={spotifyPlayerBottom}
+              />
+            )}
+            {activeApp === 'radio' && (
+              <RadioApp
+                isOpen={activeApp === 'radio'}
+                onClose={() => toggleApp('radio')}
+                isNight={useDarkTheme}
+                onPlayStation={handlePlayStation}
                 spotifyPlayerTop={spotifyPlayerTop}
                 spotifyPlayerBottom={spotifyPlayerBottom}
               />
@@ -1391,7 +1443,6 @@ export default function App() {
             </div>
             <div className="flex-1 flex justify-end">
                 <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
-                    {/* FIX: Corrected prop name from 'sliderThickness' to 'volumeSliderThickness' to match the VolumeControl component's props interface. */}
                     <VolumeControl 
                         iconSize={volumeIconSize} 
                         sliderOffsetY={volumeSliderOffsetY} 
@@ -1513,7 +1564,6 @@ export default function App() {
             dayFogFar={dayFogFar}
             setDayFogFar={setDayFogFar}
           />
-
         </div>
       </AuthProvider>
     </VehicleProvider>
