@@ -38,6 +38,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     isPlayerReady: boolean;
     pauseSpotify: () => void;
     setPlayerAsReadyForAutoplay: () => void;
+    isSpotifyTrackLoading: boolean;
 }
 
 interface PlayOptions {
@@ -75,6 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         radioContext: [],
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
+    const [isSpotifyTrackLoading, setIsSpotifyTrackLoading] = useState(false);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -140,13 +142,16 @@ const silentRefreshToken = useCallback(async () => {
     }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
+        if (isSpotifyTrackLoading && newState && newState.track_window.current_track) {
+            setIsSpotifyTrackLoading(false);
+        }
         setNowPlaying(s => { 
             if (s.source === 'radio') {
                 return { ...s, spotifyState: newState };
             }
             return { ...s, spotifyState: newState, source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source) };
         });
-    }, []);
+    }, [isSpotifyTrackLoading]);
     
     const fetchUserInfo = useCallback(async () => {
         try {
@@ -354,6 +359,8 @@ const silentRefreshToken = useCallback(async () => {
             return;
         }
 
+        setIsSpotifyTrackLoading(true);
+
         setNowPlaying(s => {
             if (s.source === 'radio') {
                 return { ...s, source: 'spotify', radioStation: null, radioContext: [] };
@@ -376,6 +383,7 @@ const silentRefreshToken = useCallback(async () => {
                 }
             } else {
                 console.error("Play function called without context_uri or uris.");
+                setIsSpotifyTrackLoading(false);
                 return;
             }
 
@@ -386,6 +394,7 @@ const silentRefreshToken = useCallback(async () => {
             refreshHomePage();
         } catch (err) {
             console.error('Failed to start playback', err);
+            setIsSpotifyTrackLoading(false);
         }
     }, [deviceId, refreshHomePage]);
 
@@ -405,7 +414,7 @@ const silentRefreshToken = useCallback(async () => {
     }, [deviceId]);
 
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay, isSpotifyTrackLoading }}>
             {children}
         </AuthContext.Provider>
     );

@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio
+    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiLoader
 } from 'react-icons/fi';
 import { 
     IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
@@ -13,6 +13,7 @@ import {
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
+import type { RadioStation } from '../types';
 
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
@@ -27,6 +28,8 @@ interface MusicPlayerProps {
     nightPlayerButtonColor: string;
     onStationChange: (direction: 'next' | 'prev') => void;
     activeApp: string | null;
+    favoriteStationUUIDs: string[];
+    onToggleFavorite: (station: RadioStation) => void;
 }
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
@@ -176,8 +179,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     nightPlayerButtonColor,
     onStationChange,
     activeApp,
+    favoriteStationUUIDs,
+    onToggleFavorite,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay, isSpotifyTrackLoading } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -547,9 +552,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         : 'border-zinc-300';
     
     const renderPlayerContent = () => {
+        if (isSpotifyTrackLoading) {
+            return (
+                <div className="w-full h-full flex items-center gap-5 px-4 animate-pulse" style={{backgroundColor: 'var(--player-bg)'}}>
+                    <div className={`w-12 h-12 rounded-lg flex-shrink-0 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
+                    <div className="flex-grow overflow-hidden space-y-2">
+                        <div className={`h-4 rounded w-3/4 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
+                        <div className={`h-3 rounded w-1/2 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
+                    </div>
+                    <div className="flex-shrink-0">
+                        <FiLoader className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'} animate-spin`} />
+                    </div>
+                </div>
+            );
+        }
+
         if (source === 'radio' && radioStation) {
             const { name, favicon, tags } = radioStation;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const isFavorite = favoriteStationUUIDs.includes(radioStation.stationuuid);
             
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -574,7 +595,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 }
                             </button>
                             <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button disabled className={'text-[var(--icon-color-disabled)] cursor-not-allowed'}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                            <button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} />
+                            </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center"></div>
                     </div>

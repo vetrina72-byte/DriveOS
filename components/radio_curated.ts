@@ -2,7 +2,7 @@ import type { RadioStation } from '../types';
 
 export const curatedStations: RadioStation[] = [
     {
-        stationuuid: 'curated-rtl-102-5',
+        stationuuid: '9611354c-0601-11e8-a442-52543be04c81',
         name: 'RTL 102.5',
         url_resolved: 'https://streamingv2.shoutcast.com/rtl-1025',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/0/0e/RTL_102.5_logo.svg',
@@ -10,7 +10,7 @@ export const curatedStations: RadioStation[] = [
         codec: 'MP3',
     },
     {
-        stationuuid: 'curated-radio-deejay',
+        stationuuid: '96113d98-0601-11e8-a442-52543be04c81',
         name: 'Radio Deejay',
         url_resolved: 'https://streamcdnr11-4c4b867c89244861ac216426883d1ad0.msvdn.net/webradio/deejaywfmlinus/live.m3u8',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Logo_DeeJay.png',
@@ -18,7 +18,7 @@ export const curatedStations: RadioStation[] = [
         codec: 'HLS',
     },
     {
-        stationuuid: 'curated-radio-105',
+        stationuuid: '96113ca2-0601-11e8-a442-52543be04c81',
         name: 'Radio 105 Network',
         url_resolved: 'https://icy.unitedradio.it/Radio105.mp3',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/5/50/Radio_105_logo.svg',
@@ -26,7 +26,7 @@ export const curatedStations: RadioStation[] = [
         codec: 'MP3',
     },
     {
-        stationuuid: 'curated-r101',
+        stationuuid: '96113d50-0601-11e8-a442-52543be04c81',
         name: 'R101',
         url_resolved: 'https://icy.unitedradio.it/R101_558.aac',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/e/e9/R101_-_Logo_2015.svg',
@@ -34,7 +34,7 @@ export const curatedStations: RadioStation[] = [
         codec: 'AAC',
     },
     {
-        stationuuid: 'curated-virgin-radio',
+        stationuuid: '96113da2-0601-11e8-a442-52543be04c81',
         name: 'Virgin Radio Italia',
         url_resolved: 'https://icy.unitedradio.it/Virgin.mp3',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/d/d1/VirginRadio.png',
@@ -42,7 +42,7 @@ export const curatedStations: RadioStation[] = [
         codec: 'MP3',
     },
     {
-        stationuuid: 'curated-radio-italia',
+        stationuuid: '96113d30-0601-11e8-a442-52543be04c81',
         name: 'Radio Italia Solo Musica Italiana',
         url_resolved: 'https://radioitaliasmi.akamaized.net/hls/live/2093120/RISMI/stream01/streamPlaylist.m3u8',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/0/06/Radio_Italia_logo_%282020%29.svg',
@@ -50,7 +50,7 @@ export const curatedStations: RadioStation[] = [
         codec: 'HLS',
     },
     {
-        stationuuid: 'curated-kiss-kiss',
+        stationuuid: '96113d3a-0601-11e8-a442-52543be04c81',
         name: 'Radio Kiss Kiss',
         url_resolved: 'https://ice06.fluidstream.net:8080/KissKiss.mp3',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/c/c6/Kiss_95.9.png',
@@ -58,7 +58,7 @@ export const curatedStations: RadioStation[] = [
         codec: 'MP3',
     },
     {
-        stationuuid: 'curated-radio-80',
+        stationuuid: '96112d78-0601-11e8-a442-52543be04c81',
         name: 'Radio 80',
         url_resolved: 'https://wma01.fluidstream.net/radio80.mp3',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/a/ad/80s80s_Logo_2015.svg',

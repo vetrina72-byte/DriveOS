@@ -59,6 +59,7 @@ interface RadioAppProps {
     onPlayStation: (station: RadioStation, context: RadioStation[]) => void;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    favoriteStationUUIDs: string[];
 }
 
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
@@ -79,7 +80,7 @@ const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     );
 };
 
-const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spotifyPlayerTop, spotifyPlayerBottom }) => {
+const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spotifyPlayerTop, spotifyPlayerBottom, favoriteStationUUIDs }) => {
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
     
@@ -87,6 +88,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spo
     const [error, setError] = useState<string | null>(null);
     const [categories, setCategories] = useState<{name: string; stations: RadioStation[]}[]>([]);
     const [favorites, setFavorites] = useState<RadioStation[]>([]);
+    const [favoritesLoading, setFavoritesLoading] = useState(true);
     
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<RadioStation[]>([]);
@@ -143,11 +145,35 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spo
     }, []);
 
     useEffect(() => {
-        if (isOpen) {
-            const storedFavorites: RadioStation[] = JSON.parse(localStorage.getItem('radio_favorites') || '[]');
-            setFavorites(storedFavorites);
-        }
-    }, [isOpen]);
+        const fetchFavorites = async () => {
+            if (!isOpen || favoriteStationUUIDs.length === 0) {
+                setFavorites([]);
+                setFavoritesLoading(false);
+                return;
+            }
+            setFavoritesLoading(true);
+            try {
+                const response = await radioBrowserApi.performRequest({
+                    url: '/stations/byuuid',
+                    params: {
+                        uuids: favoriteStationUUIDs.join(','),
+                        hidebroken: 'true',
+                    }
+                });
+                const stations = response.data
+                    .map(sanitizeStation)
+                    .filter((s): s is RadioStation => s !== null);
+                setFavorites(stations);
+            } catch (err) {
+                console.error("Failed to fetch favorite stations", err);
+                setFavorites([]);
+            } finally {
+                setFavoritesLoading(false);
+            }
+        };
+
+        fetchFavorites();
+    }, [isOpen, favoriteStationUUIDs, radioBrowserApi]);
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -335,14 +361,26 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spo
              );
         }
 
-        const displayCategories = [...categories];
-        if (favorites.length > 0) {
-            displayCategories.unshift({ name: 'Preferiti', stations: favorites });
-        }
-
         return (
             <>
-                {displayCategories.map(category => (
+                {!favoritesLoading && favorites.length > 0 && (
+                     <section className="mb-8">
+                        <h2 className="text-2xl font-bold mb-4 px-6" style={{ color: `var(--heading-color)` }}>
+                            I tuoi preferiti
+                        </h2>
+                        <HorizontalCarousel isNight={isNight}>
+                            {favorites.map((station) => (
+                                <RadioCard
+                                    key={station.stationuuid}
+                                    station={station}
+                                    isNight={isNight}
+                                    onPlay={(s) => handlePlayStation(s, favorites)}
+                                />
+                            ))}
+                        </HorizontalCarousel>
+                    </section>
+                )}
+                {categories.map(category => (
                     <section key={category.name} className="mb-8">
                         <h2 className="text-2xl font-bold mb-4 px-6" style={{ color: `var(--heading-color)` }}>
                             {category.name}

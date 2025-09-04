@@ -250,15 +250,6 @@ const SpotifyPlayer = ({
                 {/* The close button has been removed from the header */}
                 <h1 id="spotify-app-title" className="sr-only">Spotify App</h1>
                 <div className="flex-grow flex justify-center items-center overflow-hidden relative">
-                    {/* TASK 1: Add loading overlay while player is connecting */}
-                    {!isPlayerReady && isAuthenticated && user && !error && (
-                        <div 
-                            className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg"
-                            aria-label="Connecting to Spotify" role="status"
-                        >
-                            <FiLoader className="animate-spin text-white text-4xl" />
-                        </div>
-                    )}
                     {renderContent()}
                 </div>
             </div>

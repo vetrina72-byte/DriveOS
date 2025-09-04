@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -693,6 +691,38 @@ function AppContent() {
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
   const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
+  
+  // Radio Favorites State
+  const [favoriteStationUUIDs, setFavoriteStationUUIDs] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+        const storedFavorites = localStorage.getItem('radio_favorite_uuids');
+        if (storedFavorites) {
+            setFavoriteStationUUIDs(JSON.parse(storedFavorites));
+        }
+    } catch (e) {
+        console.error("Failed to load favorite stations from localStorage", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+        localStorage.setItem('radio_favorite_uuids', JSON.stringify(favoriteStationUUIDs));
+    } catch (e) {
+        console.error("Failed to save favorite stations to localStorage", e);
+    }
+  }, [favoriteStationUUIDs]);
+
+  const handleToggleFavorite = useCallback((station: RadioStation) => {
+    setFavoriteStationUUIDs(prev => {
+        if (prev.includes(station.stationuuid)) {
+            return prev.filter(uuid => uuid !== station.stationuuid);
+        } else {
+            return [...prev, station.stationuuid];
+        }
+    });
+  }, []);
 
   const moveAppToLauncher = (appId: string) => {
     setDockApps(prev => prev.filter(id => id !== appId));
@@ -1273,6 +1303,8 @@ function AppContent() {
         widgetBgColor={widgetBgColor}
         dayPlayerButtonColor={dayPlayerButtonColor}
         nightPlayerButtonColor={nightPlayerButtonColor}
+        favoriteStationUUIDs={favoriteStationUUIDs}
+        onToggleFavorite={handleToggleFavorite}
       />
 
       <MapsContainer 
@@ -1309,6 +1341,7 @@ function AppContent() {
             onPlayStation={handlePlayStation}
             spotifyPlayerTop={spotifyPlayerTop}
             spotifyPlayerBottom={spotifyPlayerBottom}
+            favoriteStationUUIDs={favoriteStationUUIDs}
           />
         )}
       </AnimatePresence>
