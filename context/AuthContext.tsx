@@ -313,6 +313,18 @@ const silentRefreshToken = useCallback(async () => {
 
             const userData = await fetchUserInfo();
             if (userData) {
+                // Step 1: Set a neutral state to stop any existing radio playback.
+                // This state change is processed before the next one, ensuring the radio's
+                // useEffect hook runs its cleanup logic.
+                setNowPlaying({
+                    source: null,
+                    radioStation: null,
+                    spotifyState: nowPlaying.spotifyState,
+                    radioContext: [],
+                    isLoading: false,
+                });
+
+                // Step 2: Update the core authentication state.
                 setState(s => ({
                     ...s,
                     accessToken: access_token,
@@ -322,9 +334,14 @@ const silentRefreshToken = useCallback(async () => {
                     isLoading: false,
                     error: null,
                 }));
-                // By setting the source to Spotify and isLoading to true, we signal the UI
-                // to switch from radio and prepare for Spotify playback.
-                setNowPlaying({ source: 'spotify', spotifyState: null, radioStation: null, radioContext: [], isLoading: true });
+                
+                // Step 3: Switch the source to Spotify. This is processed in a subsequent render,
+                // triggering the Spotify player logic.
+                setNowPlaying(s => ({
+                    ...s,
+                    source: 'spotify',
+                    isLoading: true, // Signal to the UI that Spotify is syncing.
+                }));
             } else {
                  throw new Error("Failed to fetch user info after login.");
             }
@@ -334,7 +351,7 @@ const silentRefreshToken = useCallback(async () => {
             logout(); 
             setState(s => ({...s, error: errorMessage, isLoading: false}));
         }
-    }, [fetchUserInfo, logout]);
+    }, [fetchUserInfo, logout, nowPlaying.spotifyState]);
     
     const refreshHomePage = useCallback(() => {
         setRefreshTrigger(prev => prev + 1);
