@@ -19,7 +19,6 @@ import DebugControls from './components/DebugControls';
 import VolumeControl from './components/VolumeControl';
 import { FiMinus } from 'react-icons/fi';
 import TheaterApp from './components/Theater';
-import WebAppViewer from './components/WebAppViewer';
 import RadioApp from './components/RadioApp';
 import { AnimatePresence } from 'framer-motion';
 
@@ -695,29 +694,6 @@ function AppContent() {
   
   // Radio Favorites State
   const [favoriteStationUUIDs, setFavoriteStationUUIDs] = useState<string[]>([]);
-  // FIX: Add state and handlers for WebAppViewer
-  const [webAppUrl, setWebAppUrl] = useState<string | null>(null);
-  // FIX: Add state and effect for aspect ratio
-  const [aspectRatio, setAspectRatio] = useState(window.innerWidth / window.innerHeight);
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 0 && window.innerHeight > 0) {
-        setAspectRatio(window.innerWidth / window.innerHeight);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    handleResize(); // Initial call
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const handleLaunchWebApp = (url: string) => {
-    setWebAppUrl(url);
-  };
-
-  const handleCloseWebApp = () => {
-    setWebAppUrl(null);
-  };
 
   useEffect(() => {
     try {
@@ -1218,7 +1194,6 @@ function AppContent() {
           dayFogNear={dayFogNear}
           dayFogFar={dayFogFar}
           targetWeatherParams={targetWeatherParams}
-          aspectRatio={aspectRatio}
       />
 
       <MiniMap 
@@ -1357,7 +1332,6 @@ function AppContent() {
             isNight={useDarkTheme}
             spotifyPlayerTop={spotifyPlayerTop}
             spotifyPlayerBottom={spotifyPlayerBottom}
-            onLaunchWebApp={handleLaunchWebApp}
           />
         )}
         {activeApp === 'radio' && (
@@ -1373,9 +1347,6 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {webAppUrl && <WebAppViewer url={webAppUrl} onClose={handleCloseWebApp} />}
-      </AnimatePresence>
 
       <AppLauncher
           isOpen={isAppLauncherOpen}

@@ -15,6 +15,7 @@ const containerVariants: Variants = {
   }
 };
 
+// FIX: Add explicit `Variants` type to fix type inference issue with the `ease` property.
 const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: {

@@ -16,6 +16,7 @@ const containerVariants: Variants = {
   }
 };
 
+// FIX: Add explicit `Variants` type to fix type inference issue with the `ease` property.
 const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
@@ -58,6 +59,7 @@ const AnimatedEqualizer = ({ className }: { className?: string; }) => (
     </div>
 );
 
+// FIX: Add explicit `Variants` type to fix type inference issue with the `ease` property.
 const topResultVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: { y: 0, opacity: 1, transition: { ease: "easeOut", duration: 0.3 } },

@@ -34,14 +34,6 @@ export const curatedStations: RadioStation[] = [
         codec: 'AAC',
     },
     {
-        stationuuid: '96113d46-0601-11e8-a442-52543be04c81',
-        name: 'Radio Monte Carlo',
-        url_resolved: 'https://online-1.gkvr.ru:8000/mc_eka_64.aac',
-        favicon: 'https://upload.wikimedia.org/wikipedia/commons/e/e9/Logo_Radio_Monte_Carlo.svg',
-        tags: 'lounge,chillout,italian,pop',
-        codec: 'AAC',
-    },
-    {
         stationuuid: '96113da2-0601-11e8-a442-52543be04c81',
         name: 'Virgin Radio Italia',
         url_resolved: 'https://icy.unitedradio.it/Virgin.mp3',

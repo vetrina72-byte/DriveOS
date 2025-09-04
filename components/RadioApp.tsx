@@ -403,7 +403,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spo
 
     return (
         <div 
-            className={`absolute right-0 w-2/3 shadow-2xl z-20 flex`}
+            className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
             style={{
                 transform: `translateX(${translateX}%)`,
                 top: `${spotifyPlayerTop}px`,
