@@ -38,7 +38,6 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     isPlayerReady: boolean;
     pauseSpotify: () => void;
     setPlayerAsReadyForAutoplay: () => void;
-    isSpotifyTrackLoading: boolean;
 }
 
 interface PlayOptions {
@@ -74,9 +73,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         spotifyState: null,
         radioStation: null,
         radioContext: [],
+        isLoading: false,
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
-    const [isSpotifyTrackLoading, setIsSpotifyTrackLoading] = useState(false);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -142,16 +141,31 @@ const silentRefreshToken = useCallback(async () => {
     }, [state.isAuthenticated, state.expiresAt, silentRefreshToken]);
 
    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
-        if (isSpotifyTrackLoading && newState && newState.track_window.current_track) {
-            setIsSpotifyTrackLoading(false);
-        }
-        setNowPlaying(s => { 
+        setNowPlaying(s => {
+            // Case 1: We are actively loading a Spotify track.
+            if (s.isLoading && s.source === 'spotify') {
+                return {
+                    ...s,
+                    spotifyState: newState,
+                    // Turn off loading only when we get a valid new track
+                    isLoading: !(newState && newState.track_window.current_track)
+                };
+            }
+            
+            // Case 2: Radio is playing, just update Spotify state in the background.
             if (s.source === 'radio') {
                 return { ...s, spotifyState: newState };
             }
-            return { ...s, spotifyState: newState, source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source) };
+            
+            // Case 3: General Spotify update (e.g., song ends, user pauses from another device).
+            return {
+                ...s,
+                spotifyState: newState,
+                source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source),
+                isLoading: false // Ensure loading is always false here.
+            };
         });
-    }, [isSpotifyTrackLoading]);
+    }, []);
     
     const fetchUserInfo = useCallback(async () => {
         try {
@@ -359,15 +373,16 @@ const silentRefreshToken = useCallback(async () => {
             return;
         }
 
-        setIsSpotifyTrackLoading(true);
-
-        setNowPlaying(s => {
-            if (s.source === 'radio') {
-                return { ...s, source: 'spotify', radioStation: null, radioContext: [] };
-            }
-            return s;
+        // STEP 1: Shut down radio and prepare state for loading
+        setNowPlaying({
+            source: 'spotify',
+            spotifyState: null,
+            radioStation: null,
+            radioContext: [],
+            isLoading: true
         });
         
+        // STEP 2: Execute the API command
         try {
             const body: { context_uri?: string; uris?: string[]; offset?: any; } = {};
 
@@ -382,9 +397,7 @@ const silentRefreshToken = useCallback(async () => {
                     body.offset = options.offset;
                 }
             } else {
-                console.error("Play function called without context_uri or uris.");
-                setIsSpotifyTrackLoading(false);
-                return;
+                throw new Error("Play function called without context_uri or uris.");
             }
 
             await apiClient.put(
@@ -394,7 +407,14 @@ const silentRefreshToken = useCallback(async () => {
             refreshHomePage();
         } catch (err) {
             console.error('Failed to start playback', err);
-            setIsSpotifyTrackLoading(false);
+            // Revert to a neutral state on failure
+            setNowPlaying({
+                source: null,
+                spotifyState: null,
+                radioStation: null,
+                radioContext: [],
+                isLoading: false
+            });
         }
     }, [deviceId, refreshHomePage]);
 
@@ -414,7 +434,7 @@ const silentRefreshToken = useCallback(async () => {
     }, [deviceId]);
 
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay, isSpotifyTrackLoading }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay }}>
             {children}
         </AuthContext.Provider>
     );

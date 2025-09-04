@@ -98,4 +98,5 @@ export interface NowPlayingState {
   spotifyState: SpotifyPlayerState | null;
   radioStation: RadioStation | null;
   radioContext: RadioStation[];
+  isLoading?: boolean;
 }

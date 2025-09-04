@@ -776,6 +776,7 @@ function AppContent() {
         source: 'radio',
         radioStation: station,
         radioContext: context,
+        isLoading: false,
       }));
   };
   
