@@ -283,7 +283,7 @@ export default function WeatherModal({ isOpen, onClose, isNight, status, data, e
 
     return (
         <div 
-            className={`fixed inset-0 bg-black/40 backdrop-blur-md z-[9999] flex justify-center items-start pt-[15vh] transition-opacity duration-500 ease-in-out ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`absolute inset-0 bg-black/40 backdrop-blur-md z-[60] flex justify-center items-start pt-[15vh] transition-opacity duration-500 ease-in-out ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={onClose}
         >
             <div

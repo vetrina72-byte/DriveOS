@@ -105,7 +105,6 @@ const ServiceButton = ({ service, isNight, onClick }: {
 
 
 // Framer Motion Variants for the choreographed entry animation
-// FIX: Add explicit `Variants` type to fix type inference issues with the `ease` property.
 const panelVariant: Variants = {
     initial: { x: '100%' },
     animate: { x: '0%', transition: { duration: 0.7, ease: [0.2, 0.8, 0.2, 1] } },
@@ -118,7 +117,6 @@ const contentVariant: Variants = {
     exit: { opacity: 0, transition: { duration: 0.2 } },
 };
 
-// FIX: Add explicit `Variants` type to fix type inference issues with the `ease` property.
 const driveOsHeaderVariant: Variants = {
     initial: { opacity: 0, y: 'calc(50vh - 150px)', scale: 1.5 },
     animate: {
@@ -129,7 +127,6 @@ const driveOsHeaderVariant: Variants = {
     },
 };
 
-// FIX: Add explicit `Variants` type to fix type inference issues with the `ease` property.
 const otherElementsVariant: Variants = {
     initial: { opacity: 0, y: 50 },
     animate: {
@@ -153,22 +150,19 @@ const gridContainerVariant: Variants = {
 };
 
 
-const Theater = ({
+const TheaterApp = ({
     onClose,
     isNight,
     spotifyPlayerTop,
     spotifyPlayerBottom,
+    onLaunchWebApp,
 }: {
     onClose: () => void;
     isNight: boolean;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    onLaunchWebApp: (url: string) => void;
 }) => {
-    const [activeWebAppUrl, setActiveWebAppUrl] = useState<string | null>(null);
-
-    const handleServiceClick = (url: string) => {
-        setActiveWebAppUrl(url);
-    };
 
     const services = [
         { name: 'Netflix', url: 'https://www.netflix.com', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', logoClassName: 'w-36', glowColor: '#E50914' },
@@ -198,74 +192,65 @@ const Theater = ({
     ];
 
     return (
-        <>
+        <motion.div
+            variants={panelVariant}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`absolute right-0 w-2/3 shadow-2xl z-20 flex`}
+            style={{
+                top: `${spotifyPlayerTop}px`,
+                bottom: `${spotifyPlayerBottom}px`,
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="theater-app-title"
+            onClick={(e) => e.stopPropagation()}
+        >
             <motion.div
-                variants={panelVariant}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
-                style={{
-                    top: `${spotifyPlayerTop}px`,
-                    bottom: `${spotifyPlayerBottom}px`,
-                }}
-                aria-hidden={!!activeWebAppUrl}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="theater-app-title"
-                onClick={(e) => e.stopPropagation()}
+            className="theater-container"
+            variants={contentVariant}
             >
-                <motion.div
-                className="theater-container"
-                variants={contentVariant}
+                <motion.header 
+                    className="theater-header"
+                    initial="initial"
+                    animate="animate"
+                    variants={{ animate: { transition: { delayChildren: 1.5 }}}}
                 >
-                    <motion.header 
-                        className="theater-header"
-                        initial="initial"
-                        animate="animate"
-                        variants={{ animate: { transition: { delayChildren: 1.5 }}}}
+                    <motion.h1 
+                        id="theater-app-title" 
+                        className="driveos-title"
+                        variants={driveOsHeaderVariant}
                     >
-                        <motion.h1 
-                            id="theater-app-title" 
-                            className="driveos-title"
-                            variants={driveOsHeaderVariant}
-                        >
-                            DRIVE OS
-                        </motion.h1>
-                        <motion.h2
-                            variants={otherElementsVariant}
-                            className="theater-title"
-                        >
-                            THEATER
-                        </motion.h2>
-                    </motion.header>
+                        DRIVE OS
+                    </motion.h1>
+                    <motion.h2
+                        variants={otherElementsVariant}
+                        className="theater-title"
+                    >
+                        THEATER
+                    </motion.h2>
+                </motion.header>
 
-                    <motion.main 
-                        variants={gridContainerVariant}
-                        initial="initial"
-                        animate="animate"
-                        className="services-grid"
-                    >
-                        {services.map((service) => (
-                            <motion.div key={service.name} variants={otherElementsVariant}>
-                                <ServiceButton
-                                    service={service}
-                                    isNight={isNight}
-                                    onClick={() => handleServiceClick(service.url)}
-                                />
-                            </motion.div>
-                        ))}
-                    </motion.main>
-                </motion.div>
+                <motion.main 
+                    variants={gridContainerVariant}
+                    initial="initial"
+                    animate="animate"
+                    className="services-grid"
+                >
+                    {services.map((service) => (
+                        <motion.div key={service.name} variants={otherElementsVariant}>
+                            <ServiceButton
+                                service={service}
+                                isNight={isNight}
+                                onClick={() => onLaunchWebApp(service.url)}
+                            />
+                        </motion.div>
+                    ))}
+                </motion.main>
             </motion.div>
-
-            <AnimatePresence>
-                {activeWebAppUrl && (
-                    <WebAppViewer url={activeWebAppUrl} onClose={() => setActiveWebAppUrl(null)} />
-                )}
-            </AnimatePresence>
-        </>
+        </motion.div>
     );
 };
 
-export default React.memo(Theater);
+export default React.memo(TheaterApp);

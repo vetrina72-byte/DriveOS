@@ -1210,7 +1210,7 @@ export default function MapsContainer({
 
   return (
     <div 
-        className={`fixed top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel`}
+        className={`absolute top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel`}
         style={{ transform: `translateX(${translateX}%)` }}
         aria-hidden={!isOpen}
         role="dialog"

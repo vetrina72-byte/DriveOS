@@ -432,6 +432,31 @@ function EnvironmentController({
   return null;
 }
 
+function CameraUpdater({ aspectRatio }: { aspectRatio: number }) {
+  const { camera } = useThree();
+  
+  useEffect(() => {
+    const refAspect = 1280 / 800;
+    const refFov = 48; // The default FoV set on the Canvas component
+
+    // Convert FoV to radians for Math.tan
+    const refFovRad = refFov * (Math.PI / 180);
+    
+    // Calculate the new FoV in radians to maintain horizontal view
+    const newFovRad = 2 * Math.atan(Math.tan(refFovRad / 2) * (refAspect / aspectRatio));
+    
+    // Convert back to degrees
+    const newFov = newFovRad * (180 / Math.PI);
+
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = newFov;
+      camera.updateProjectionMatrix();
+    }
+  }, [aspectRatio, camera]);
+
+  return null;
+}
+
 interface VehicleCanvasProps {
   isAppOpen: boolean;
   isNight: boolean;
@@ -447,6 +472,7 @@ interface VehicleCanvasProps {
   dayFogNear: number;
   dayFogFar: number;
   targetWeatherParams: WeatherParams;
+  aspectRatio: number;
 }
 
 export default function VehicleCanvas({
@@ -464,6 +490,7 @@ export default function VehicleCanvas({
   dayFogNear,
   dayFogFar,
   targetWeatherParams,
+  aspectRatio,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -538,6 +565,7 @@ export default function VehicleCanvas({
               beamAngle={beamAngle}
               beamRoll={beamRoll}
               intensity={beamIntensity}
+              // FIX: The variable `fade` was not defined. Using `beamFade` which is defined in this scope.
               fade={beamFade}
               visible={isNight}
               beamStartWidth={beamStartWidth}
@@ -633,6 +661,7 @@ export default function VehicleCanvas({
           sceneColors={sceneColors}
           targetWeatherParams={targetWeatherParams}
         />
+        <CameraUpdater aspectRatio={aspectRatio} />
       </Canvas>
     </>
   );
