@@ -291,40 +291,30 @@ const silentRefreshToken = useCallback(async () => {
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));
-
+    
         if (authError) {
              setState(s => ({...s, error: authError, isLoading: false}));
              return;
         }
-
+    
         if (!authCode) {
             setState(s => ({...s, error: 'Authorization code is missing.', isLoading: false}));
             return;
         }
-
+    
         try {
             const response = await axios.post('/api/exchange-token', { code: authCode }, { withCredentials: true });
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
-
+    
             localStorage.setItem('spotify_access_token', access_token);
             localStorage.setItem('spotify_expires_at', String(expiresAt));
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-
+    
             const userData = await fetchUserInfo();
             if (userData) {
-                // Step 1: Set a neutral state to stop any existing radio playback.
-                // This state change is processed before the next one, ensuring the radio's
-                // useEffect hook runs its cleanup logic.
-                setNowPlaying({
-                    source: null,
-                    radioStation: null,
-                    spotifyState: nowPlaying.spotifyState,
-                    radioContext: [],
-                    isLoading: false,
-                });
-
-                // Step 2: Update the core authentication state.
+                // The login function now only handles setting the authentication state.
+                // A separate useEffect will react to this change to manage playback source.
                 setState(s => ({
                     ...s,
                     accessToken: access_token,
@@ -333,14 +323,6 @@ const silentRefreshToken = useCallback(async () => {
                     isAuthenticated: true,
                     isLoading: false,
                     error: null,
-                }));
-                
-                // Step 3: Switch the source to Spotify. This is processed in a subsequent render,
-                // triggering the Spotify player logic.
-                setNowPlaying(s => ({
-                    ...s,
-                    source: 'spotify',
-                    isLoading: true, // Signal to the UI that Spotify is syncing.
                 }));
             } else {
                  throw new Error("Failed to fetch user info after login.");
@@ -351,7 +333,56 @@ const silentRefreshToken = useCallback(async () => {
             logout(); 
             setState(s => ({...s, error: errorMessage, isLoading: false}));
         }
-    }, [fetchUserInfo, logout, nowPlaying.spotifyState]);
+    }, [fetchUserInfo, logout]);
+
+    // When the user logs in to Spotify, stop any radio playback and activate Spotify.
+    useEffect(() => {
+      // This effect runs when the user becomes authenticated and we have a device ID.
+      if (state.isAuthenticated && deviceId && state.accessToken) {
+        console.log("[AuthContext] Spotify authenticated, device ready. Switching source.");
+    
+        // Stop any radio playback by switching the active source to Spotify.
+        // The MusicPlayer component will see this change and tear down the radio stream.
+        setNowPlaying(prev => {
+            // Prevent re-triggering if the source is already spotify
+            if (prev.source === 'spotify' && !prev.radioStation) {
+                return prev;
+            }
+            return {
+                ...prev,
+                source: 'spotify',
+                radioStation: null, // Explicitly clear radio station
+                radioContext: [],
+                isLoading: true, // Indicate that Spotify is syncing
+            };
+        });
+    
+        // Attempt to transfer playback to this device.
+        // This will either resume the user's last session or prepare the device for new playback.
+        apiClient.put("/me/player", {
+          device_ids: [deviceId],
+          play: true // `play: true` can help resume playback if something was playing elsewhere.
+        })
+        .then(response => {
+            // A 204 No Content is a success for this endpoint.
+            if (response.status === 204) {
+              console.log(`[AuthContext] Playback transfer successful to device ${deviceId}.`);
+            } else {
+              console.warn(`[AuthContext] Playback transfer responded with status: ${response.status}.`);
+            }
+        })
+        .catch(e => {
+            const errorData = e.response?.data?.error;
+            // Gracefully handle common, non-critical errors.
+            if (errorData && (errorData.reason === 'NO_ACTIVE_DEVICE' || errorData.reason === 'PREMIUM_REQUIRED')) {
+                 console.log(`[AuthContext] Playback transfer not needed or possible: ${errorData.reason}`);
+            } else {
+                console.error("Error transferring playback:", e.response?.data || e.message);
+            }
+        });
+      }
+    // We depend on isAuthenticated, deviceId, and accessToken to ensure this runs at the right time.
+    }, [state.isAuthenticated, deviceId, state.accessToken]);
     
     const refreshHomePage = useCallback(() => {
         setRefreshTrigger(prev => prev + 1);
