@@ -322,7 +322,9 @@ const silentRefreshToken = useCallback(async () => {
                     isLoading: false,
                     error: null,
                 }));
-                setNowPlaying({ source: 'spotify', spotifyState: null, radioStation: null, radioContext: [] });
+                // By setting the source to Spotify and isLoading to true, we signal the UI
+                // to switch from radio and prepare for Spotify playback.
+                setNowPlaying({ source: 'spotify', spotifyState: null, radioStation: null, radioContext: [], isLoading: true });
             } else {
                  throw new Error("Failed to fetch user info after login.");
             }

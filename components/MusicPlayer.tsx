@@ -40,7 +40,6 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
 
-    // This single effect now handles both syncing with Spotify's state and smoothly animating the progress bar.
     useEffect(() => {
         // If the music is paused or the user is dragging the progress bar, we stop the animation.
         if (state.paused || isSeeking) {
@@ -48,13 +47,10 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
             }
-            // When paused, we also explicitly sync the position to the latest state from Spotify.
-            setPosition(state.position);
             return;
         }
 
-        // We use performance.now() as it's a high-precision timestamp designed for animations,
-        // which is not subject to system clock changes.
+        // We use performance.now() for a high-precision animation timer.
         // We calculate an animation "start time" by offsetting the current time with the song's current position.
         let startTime = performance.now() - state.position;
 
@@ -73,10 +69,9 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    // This effect re-runs when playback state changes (paused, duration) or when the user seeks.
-    // Crucially, it also re-runs when state.position is updated from Spotify, which corrects any drift
-    // and keeps the client-side animation perfectly in sync with the source of truth.
-    }, [state.paused, state.duration, isSeeking, state.position]);
+    // This effect re-runs ONLY when playback state changes (paused/unpaused) or when the user seeks.
+    // By removing `state.position`, we prevent the animation from re-syncing every second, resulting in a perfectly smooth progress bar.
+    }, [state.paused, state.duration, isSeeking]);
 
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
