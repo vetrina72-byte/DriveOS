@@ -182,7 +182,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     favoriteStationUUIDs,
     onToggleFavorite,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -240,6 +240,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             audio.removeAttribute('src');
             audio.load();
         };
+        
+        const handleCanPlay = () => {
+            if (nowPlaying.source === 'radio') {
+                setNowPlaying(s => ({ ...s, isLoading: false }));
+            }
+        };
 
         if (source === 'radio' && radioStation?.url_resolved) {
             const streamUrl = radioStation.url_resolved;
@@ -272,13 +278,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         audio.addEventListener('play', handlePlay);
         audio.addEventListener('pause', handlePause);
+        audio.addEventListener('canplay', handleCanPlay);
 
         return () => {
             audio.removeEventListener('play', handlePlay);
             audio.removeEventListener('pause', handlePause);
+            audio.removeEventListener('canplay', handleCanPlay);
             cleanup();
         };
-    }, [source, radioStation?.url_resolved]);
+    }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
 
     useEffect(() => {
         if (!accessToken) {
