@@ -39,40 +39,45 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
-    const lastUpdateTimeRef = useRef(Date.now());
 
-    // Sync with Spotify state. This is our source of truth.
+    // This single effect now handles both syncing with Spotify's state and smoothly animating the progress bar.
     useEffect(() => {
-        if (!isSeeking) {
+        // If the music is paused or the user is dragging the progress bar, we stop the animation.
+        if (state.paused || isSeeking) {
+            // Make sure to cancel any previously scheduled animation frame.
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
+            // When paused, we also explicitly sync the position to the latest state from Spotify.
             setPosition(state.position);
-            lastUpdateTimeRef.current = Date.now();
+            return;
         }
-    }, [state.position, isSeeking]);
 
-    // Animate progress locally using requestAnimationFrame for smoothness when playing.
-    useEffect(() => {
-        const animate = () => {
-            const now = Date.now();
-            const elapsed = now - lastUpdateTimeRef.current;
-            lastUpdateTimeRef.current = now;
-            
-            setPosition(prevPosition => Math.min(prevPosition + elapsed, state.duration));
-            
+        // We use performance.now() as it's a high-precision timestamp designed for animations,
+        // which is not subject to system clock changes.
+        // We calculate an animation "start time" by offsetting the current time with the song's current position.
+        let startTime = performance.now() - state.position;
+
+        const animate = (currentTime: number) => {
+            const newPosition = currentTime - startTime;
+            // Update the position state. Math.min ensures the bar doesn't go past the song's duration.
+            setPosition(Math.min(newPosition, state.duration));
             animationFrameRef.current = requestAnimationFrame(animate);
         };
 
-        if (!state.paused && !isSeeking) {
-            lastUpdateTimeRef.current = Date.now();
-            animationFrameRef.current = requestAnimationFrame(animate);
-        }
+        animationFrameRef.current = requestAnimationFrame(animate);
 
+        // Cleanup function to cancel the animation frame when the component unmounts or dependencies change.
         return () => {
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
-                animationFrameRef.current = 0;
             }
         };
-    }, [state.paused, state.duration, isSeeking]);
+    // This effect re-runs when playback state changes (paused, duration) or when the user seeks.
+    // Crucially, it also re-runs when state.position is updated from Spotify, which corrects any drift
+    // and keeps the client-side animation perfectly in sync with the source of truth.
+    }, [state.paused, state.duration, isSeeking, state.position]);
+
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player) return;
