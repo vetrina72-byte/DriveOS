@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FiMic, FiArrowUp, FiDelete } from 'react-icons/fi';
+import { FiMic, FiArrowUp, FiDelete, FiLoader, FiAlertTriangle } from 'react-icons/fi';
 
 const qwertyLayoutLower = [
     ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -12,6 +12,12 @@ const qwertyLayoutUpper = [
     ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
     ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
     ['Z', 'X', 'C', 'V', 'B', 'N', 'M', ';', ':'],
+];
+
+const symbolsLayout = [
+    ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')'],
+    ['-', '_', '=', '+', '[', ']', '{', '}', '\\', '|'],
+    [';', ':', '\'', '"', ',', '.', '/', '?'],
 ];
 
 
@@ -35,7 +41,7 @@ const Key = ({
 
     if (!key) return <div className="w-full" style={{ flex }} />;
 
-    const isSpecialKey = ['Shift', 'Backspace', '?123', 'Mic', 'Space', 'Enter'].includes(key);
+    const isSpecialKey = ['Shift', 'Backspace', '?123', 'ABC', 'Mic', 'Space', 'Enter'].includes(key);
     const isActive = className?.includes('bg-blue');
 
     const baseStyle = `w-full h-full flex items-center justify-center transition-all duration-100 ease-out focus:outline-none select-none`;
@@ -78,6 +84,8 @@ const Key = ({
     );
 };
 
+type VoiceStatus = 'idle' | 'listening' | 'processing' | 'error';
+
 const VirtualKeyboard = ({
     isVisible,
     targetElement,
@@ -102,14 +110,143 @@ const VirtualKeyboard = ({
     virtualKeyboardKeyFontWeight: number;
 }) => {
     const [shiftMode, setShiftMode] = useState<'off' | 'shift' | 'caps'>('off');
+    const [layoutMode, setLayoutMode] = useState<'letters' | 'symbols'>('letters');
+    const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>('idle');
+    const recognitionRef = useRef<SpeechRecognition | null>(null);
+    const mediaStreamRef = useRef<MediaStream | null>(null);
     const longPressTimer = useRef<number | null>(null);
     const longPressInterval = useRef<number | null>(null);
+    
+    const stopRecognitionAndStream = useCallback(() => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop(); // This will trigger onend
+            recognitionRef.current = null;
+        }
+        if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => track.stop());
+            mediaStreamRef.current = null;
+        }
+        // Only reset voice status if it's currently active, to avoid overriding the 'error' state's timeout
+        if (voiceStatus !== 'error') {
+            setVoiceStatus('idle');
+        }
+    }, [voiceStatus]);
+
+
+    // Cleanup effect to stop recognition and stream if the keyboard is closed or component unmounts.
+    useEffect(() => {
+        return () => {
+            stopRecognitionAndStream();
+        };
+    }, [stopRecognitionAndStream]);
+    
+    const handleVoiceRecognition = useCallback(async () => {
+        // If already listening or processing, stop the current instance.
+        if (voiceStatus === 'listening' || voiceStatus === 'processing') {
+            stopRecognitionAndStream();
+            return;
+        }
+    
+        // 1. Check for MediaDevices support first
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.warn('MediaDevices API not supported by this browser.');
+            setVoiceStatus('error');
+            setTimeout(() => setVoiceStatus('idle'), 2000);
+            return;
+        }
+        
+        try {
+            // 2. Explicitly request microphone permission AND STORE THE STREAM
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaStreamRef.current = stream;
+    
+            // 3. Now that permission is granted and the stream is active, check for the API.
+            const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognitionAPI) {
+                console.warn('Speech Recognition not supported by this browser.');
+                stopRecognitionAndStream(); // Clean up stream
+                setVoiceStatus('error');
+                setTimeout(() => setVoiceStatus('idle'), 2000);
+                return;
+            }
+    
+            const recognition = new SpeechRecognitionAPI();
+            recognitionRef.current = recognition;
+    
+            recognition.continuous = false;
+            recognition.lang = 'it-IT';
+            recognition.interimResults = false;
+    
+            recognition.onstart = () => setVoiceStatus('listening');
+            recognition.onspeechend = () => setVoiceStatus('processing');
+            
+            recognition.onend = () => {
+                // onend is the final event, clean up everything here.
+                if (mediaStreamRef.current) {
+                    mediaStreamRef.current.getTracks().forEach(track => track.stop());
+                    mediaStreamRef.current = null;
+                }
+                recognitionRef.current = null;
+                // Only change status if it wasn't an error, to let the error display for a moment
+                 if (voiceStatus !== 'error') {
+                    setVoiceStatus('idle');
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                setVoiceStatus('error');
+                // onend will be called after onerror, but we'll set a timeout to reset the visual state
+                setTimeout(() => setVoiceStatus('idle'), 2000);
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[event.results.length - 1][0].transcript.trim();
+                if (targetElement && transcript) {
+                    const start = targetElement.selectionStart ?? targetElement.value.length;
+                    const end = targetElement.selectionEnd ?? targetElement.value.length;
+                    const currentValue = targetElement.value;
+                    
+                    const textToInsert = (currentValue.length > 0 && !/\s$/.test(currentValue)) 
+                        ? ' ' + transcript 
+                        : transcript;
+    
+                    const newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
+                    const newCursorPos = start + textToInsert.length;
+    
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                        targetElement.constructor.prototype, 'value'
+                    )?.set;
+    
+                    if (nativeInputValueSetter) {
+                        nativeInputValueSetter.call(targetElement, newValue);
+                    } else {
+                        targetElement.value = newValue;
+                    }
+    
+                    targetElement.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                    targetElement.setSelectionRange(newCursorPos, newCursorPos);
+                }
+            };
+    
+            recognition.start();
+    
+        } catch (err: any) {
+            console.error('Error requesting microphone permission:', err.name, err.message);
+            stopRecognitionAndStream(); // Clean up stream on error
+            setVoiceStatus('error');
+            setTimeout(() => setVoiceStatus('idle'), 2000);
+        }
+    }, [voiceStatus, targetElement, stopRecognitionAndStream]);
+
 
     useEffect(() => {
         if (!isVisible) {
             setShiftMode('off');
+            setLayoutMode('letters');
+            stopRecognitionAndStream();
         }
-    }, [isVisible]);
+    }, [isVisible, stopRecognitionAndStream]);
 
     const handleShiftPress = useCallback(() => {
         setShiftMode(prev => {
@@ -122,9 +259,25 @@ const VirtualKeyboard = ({
     const handleKeyPress = useCallback((key: string) => {
         if (!targetElement) return;
 
-        if (key === 'Shift') {
-            handleShiftPress();
-            return;
+        switch (key) {
+            case 'Shift':
+                handleShiftPress();
+                return;
+            case '?123':
+                setLayoutMode('symbols');
+                return;
+            case 'ABC':
+                setLayoutMode('letters');
+                return;
+            case 'Mic':
+                handleVoiceRecognition();
+                return;
+            case 'Enter':
+                if (targetElement.form) {
+                    targetElement.form.requestSubmit();
+                }
+                onClose();
+                return;
         }
 
         targetElement.focus();
@@ -145,25 +298,17 @@ const VirtualKeyboard = ({
                     newCursorPos = start;
                 }
                 break;
-            case 'Enter':
-                if (targetElement.form) {
-                    targetElement.form.requestSubmit();
-                }
-                onClose();
-                return;
             case 'Space':
                 newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
                 newCursorPos = start + 1;
                 break;
-            default:
+            default: // Character keys
                 newValue = currentValue.substring(0, start) + key + currentValue.substring(end);
                 newCursorPos = start + 1;
+                if (shiftMode === 'shift') {
+                    setShiftMode('off');
+                }
                 break;
-        }
-
-        const isCharacterKey = key.length === 1;
-        if (isCharacterKey && shiftMode === 'shift') {
-            setShiftMode('off');
         }
         
         const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
@@ -179,7 +324,7 @@ const VirtualKeyboard = ({
 
         targetElement.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
         targetElement.setSelectionRange(newCursorPos, newCursorPos);
-    }, [targetElement, onClose, shiftMode, handleShiftPress]);
+    }, [targetElement, onClose, shiftMode, handleShiftPress, handleVoiceRecognition]);
 
     const handleBackspacePressStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
         e.preventDefault();
@@ -202,7 +347,9 @@ const VirtualKeyboard = ({
     }, []);
     
     const isUpperCase = shiftMode === 'shift' || shiftMode === 'caps';
-    const currentLetterLayout = isUpperCase ? qwertyLayoutUpper : qwertyLayoutLower;
+    const currentMainLayout = layoutMode === 'letters'
+        ? (isUpperCase ? qwertyLayoutUpper : qwertyLayoutLower)
+        : symbolsLayout;
     
     const getShiftKeyStyle = () => {
         switch (shiftMode) {
@@ -246,6 +393,26 @@ const VirtualKeyboard = ({
         paddingLeft: `${virtualKeyboardPaddingX}px`,
         paddingRight: `${virtualKeyboardPaddingX}px`,
     } as React.CSSProperties;
+    
+    const layoutToggleKey = layoutMode === 'letters'
+        ? { key: '?123', label: '?123', flex: '2', fontSize: virtualKeyboardKeySize * 0.8 }
+        : { key: 'ABC', label: 'ABC', flex: '2', fontSize: virtualKeyboardKeySize * 0.8 };
+        
+    const getMicKeyConfig = () => {
+        switch (voiceStatus) {
+            case 'listening':
+                return { label: <FiMic />, className: `mic-listening ${isNight ? 'bg-blue-600 text-white' : 'bg-blue-400 text-white'}` };
+            case 'processing':
+                return { label: <FiLoader className="animate-spin" />, className: isNight ? 'bg-blue-600 text-white' : 'bg-blue-400 text-white' };
+            case 'error':
+                 return { label: <FiAlertTriangle />, className: 'bg-red-600 text-white' };
+            case 'idle':
+            default:
+                return { label: <FiMic />, className: '' };
+        }
+    };
+
+    const micKeyConfig = getMicKeyConfig();
 
     return (
         <AnimatePresence>
@@ -270,38 +437,54 @@ const VirtualKeyboard = ({
                     >
                         <div className="flex h-full w-full gap-6">
                             <div className="flex flex-col flex-[3.5] h-full" style={{ gap: `${virtualKeyboardKeyGapY}px` }}>
-                                {currentLetterLayout.map((row, rowIndex) => (
+                                {currentMainLayout.map((row, rowIndex) => (
                                     <div key={rowIndex} className="flex justify-center w-full flex-1" style={{ gap: `${virtualKeyboardKeyGapX}px` }}>
-                                        {rowIndex === 1 && <div style={{flex: 0.5}}/>}
-                                        {rowIndex === 2 && (
+                                        {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                        {layoutMode === 'letters' && rowIndex === 2 && (
                                              <Key key="left-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5', className: getShiftKeyStyle() }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                         )}
+                                        {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                        {layoutMode === 'symbols' && rowIndex === 2 && <div style={{flex: 1.5}}/>}
+
                                         {row.map((key) => (
                                             <Key key={key} keyConfig={key} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                         ))}
-                                        {rowIndex === 1 && <div style={{flex: 0.5}}/>}
-                                        {rowIndex === 2 && (
-                                            <>
-                                                <Key key="right-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5', className: getShiftKeyStyle() }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                                <motion.button
-                                                    onMouseDown={handleBackspacePressStart}
-                                                    onMouseUp={handleBackspacePressEnd}
-                                                    onMouseLeave={handleBackspacePressEnd}
-                                                    onTouchStart={handleBackspacePressStart}
-                                                    onTouchEnd={handleBackspacePressEnd}
-                                                    className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
-                                                    style={{ flex: '1.5', fontSize: `${virtualKeyboardKeySize}px`, fontWeight: virtualKeyboardKeyFontWeight }}
-                                                    aria-label="Backspace"
-                                                >
-                                                    <FiDelete />
-                                                </motion.button>
-                                            </>
+                                        
+                                        {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                        {layoutMode === 'letters' && rowIndex === 2 && (
+                                            <motion.button
+                                                onMouseDown={handleBackspacePressStart}
+                                                onMouseUp={handleBackspacePressEnd}
+                                                onMouseLeave={handleBackspacePressEnd}
+                                                onTouchStart={handleBackspacePressStart}
+                                                onTouchEnd={handleBackspacePressEnd}
+                                                className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
+                                                style={{ flex: '1.5', fontSize: `${virtualKeyboardKeySize}px`, fontWeight: virtualKeyboardKeyFontWeight }}
+                                                aria-label="Backspace"
+                                            >
+                                                <FiDelete />
+                                            </motion.button>
+                                        )}
+                                        {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                        {layoutMode === 'symbols' && rowIndex === 2 && (
+                                            <motion.button
+                                                onMouseDown={handleBackspacePressStart}
+                                                onMouseUp={handleBackspacePressEnd}
+                                                onMouseLeave={handleBackspacePressEnd}
+                                                onTouchStart={handleBackspacePressStart}
+                                                onTouchEnd={handleBackspacePressEnd}
+                                                className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
+                                                style={{ flex: '1.5', fontSize: `${virtualKeyboardKeySize}px`, fontWeight: virtualKeyboardKeyFontWeight }}
+                                                aria-label="Backspace"
+                                            >
+                                                <FiDelete />
+                                            </motion.button>
                                         )}
                                     </div>
                                 ))}
                                 <div className="flex justify-center w-full flex-1" style={{ gap: `${virtualKeyboardKeyGapX}px` }}>
-                                    <Key keyConfig={{ key: '?123', label: '?123', flex: '2' }} onClick={() => {}} isNight={isNight} fontSize={virtualKeyboardKeySize * 0.8} fontWeight={virtualKeyboardKeyFontWeight} />
-                                    <Key keyConfig={{ key: 'Mic', label: <FiMic />, flex: '1.5' }} onClick={() => {}} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                                    <Key keyConfig={{ key: layoutToggleKey.key, label: layoutToggleKey.label, flex: layoutToggleKey.flex }} onClick={handleKeyPress} isNight={isNight} fontSize={layoutToggleKey.fontSize} fontWeight={virtualKeyboardKeyFontWeight} />
+                                    <Key keyConfig={{ key: 'Mic', ...micKeyConfig, flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                     <Key keyConfig={{ key: 'Space', label: '', flex: '8' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                     <Key keyConfig={{ key: 'Enter', label: 'Enter', flex: '2.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                 </div>

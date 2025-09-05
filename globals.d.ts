@@ -1,55 +1,6 @@
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.
 
-// --- Web Speech API ---
-
-interface SpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
-interface SpeechRecognitionResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionResultList {
-  readonly length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionEvent extends Event {
-  readonly resultIndex: number;
-  readonly results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-  readonly message: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  continuous: boolean;
-
-  start(): void;
-  stop(): void;
-  abort(): void;
-
-  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
-  onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null;
-}
-
-interface SpeechRecognitionStatic {
-  new (): SpeechRecognition;
-}
-
 // --- Spotify Web Playback SDK ---
 
 export interface SpotifyPlayerOptions {
@@ -123,6 +74,63 @@ export interface SpotifyPlayer {
 
 
 declare global {
+  // FIX: Moved Web Speech API interfaces into `declare global` to make them available
+  // project-wide and fix "Cannot find name 'SpeechRecognition'" errors.
+  // --- Web Speech API ---
+
+  interface SpeechRecognitionAlternative {
+    readonly transcript: string;
+    readonly confidence: number;
+  }
+
+  interface SpeechRecognitionResult {
+    readonly isFinal: boolean;
+    readonly length: number;
+    item(index: number): SpeechRecognitionAlternative;
+    [index: number]: SpeechRecognitionAlternative;
+  }
+
+  interface SpeechRecognitionResultList {
+    readonly length: number;
+    item(index: number): SpeechRecognitionResult;
+    [index: number]: SpeechRecognitionResult;
+  }
+
+  interface SpeechRecognitionEvent extends Event {
+    readonly resultIndex: number;
+    readonly results: SpeechRecognitionResultList;
+  }
+
+  interface SpeechRecognitionErrorEvent extends Event {
+    readonly error: string;
+    readonly message: string;
+  }
+
+  interface SpeechRecognition extends EventTarget {
+    lang: string;
+    interimResults: boolean;
+    maxAlternatives: number;
+    continuous: boolean;
+
+    start(): void;
+    stop(): void;
+    abort(): void;
+
+    // FIX: Added the missing `onstart` property to the SpeechRecognition interface
+    // to match the Web Speech API and fix the TypeScript error.
+    onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
+    // FIX: Added the missing `onend` property to the SpeechRecognition interface
+    // to match the Web Speech API and fix the TypeScript error.
+    onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+    onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
+    onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null;
+    onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null;
+  }
+
+  interface SpeechRecognitionStatic {
+    new (): SpeechRecognition;
+  }
+  
   // Manual definition for Vite's import.meta.env
   interface ImportMetaEnv {
     readonly VITE_REDIRECT_URI: string;
