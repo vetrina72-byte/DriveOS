@@ -21,6 +21,7 @@ import { FiMinus } from 'react-icons/fi';
 import TheaterApp from './components/Theater';
 import RadioApp from './components/RadioApp';
 import { AnimatePresence } from 'framer-motion';
+import VirtualKeyboard from './components/VirtualKeyboard';
 
 interface AppDefinition {
   id: string;
@@ -694,6 +695,44 @@ function AppContent() {
   
   // Radio Favorites State
   const [favoriteStationUUIDs, setFavoriteStationUUIDs] = useState<string[]>([]);
+
+  // Virtual Keyboard State
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardTarget, setKeyboardTarget] = useState<HTMLElement | null>(null);
+  const [virtualKeyboardKeySize, setVirtualKeyboardKeySize] = useState(41);
+  const [virtualKeyboardHeight, setVirtualKeyboardHeight] = useState(38);
+  const [virtualKeyboardPaddingX, setVirtualKeyboardPaddingX] = useState(69);
+  const [virtualKeyboardKeyGapX, setVirtualKeyboardKeyGapX] = useState(2);
+  const [virtualKeyboardKeyGapY, setVirtualKeyboardKeyGapY] = useState(2);
+  const [virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight] = useState(600);
+
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        (target.tagName === 'INPUT' && ['text', 'search', 'email', 'password', 'url', 'tel'].includes((target as HTMLInputElement).type)) ||
+        target.tagName === 'TEXTAREA'
+      ) {
+        setKeyboardTarget(target);
+        setIsKeyboardVisible(true);
+      }
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+    };
+  }, []);
+
+  const handleKeyboardClose = useCallback(() => {
+    if (keyboardTarget) {
+      keyboardTarget.blur();
+    }
+    setIsKeyboardVisible(false);
+    setKeyboardTarget(null);
+  }, [keyboardTarget]);
+
 
   useEffect(() => {
     try {
@@ -1469,6 +1508,19 @@ function AppContent() {
             </div>
         </div>
       </footer>
+
+      <VirtualKeyboard
+        isVisible={isKeyboardVisible}
+        targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null}
+        onClose={handleKeyboardClose}
+        isNight={useDarkTheme}
+        virtualKeyboardKeySize={virtualKeyboardKeySize}
+        virtualKeyboardHeight={virtualKeyboardHeight}
+        virtualKeyboardPaddingX={virtualKeyboardPaddingX}
+        virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
+        virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
+        virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
+      />
       
       <DebugControls
         isOpen={isDebugOpen}
@@ -1577,6 +1629,18 @@ function AppContent() {
         setDayFogNear={setDayFogNear}
         dayFogFar={dayFogFar}
         setDayFogFar={setDayFogFar}
+        virtualKeyboardKeySize={virtualKeyboardKeySize}
+        setVirtualKeyboardKeySize={setVirtualKeyboardKeySize}
+        virtualKeyboardHeight={virtualKeyboardHeight}
+        setVirtualKeyboardHeight={setVirtualKeyboardHeight}
+        virtualKeyboardPaddingX={virtualKeyboardPaddingX}
+        setVirtualKeyboardPaddingX={setVirtualKeyboardPaddingX}
+        virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
+        setVirtualKeyboardKeyGapX={setVirtualKeyboardKeyGapX}
+        virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
+        setVirtualKeyboardKeyGapY={setVirtualKeyboardKeyGapY}
+        virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
+        setVirtualKeyboardKeyFontWeight={setVirtualKeyboardKeyFontWeight}
       />
     </div>
   );

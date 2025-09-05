@@ -1,9 +1,10 @@
 import React, { useRef } from 'react';
 import PlaylistItem, { SpotifyItem as MediaItem } from './PlaylistItem';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { motion, Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const containerVariants: Variants = {
+// FIX: Removed Variants type annotation to resolve framer-motion type error.
+const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -13,14 +14,15 @@ const containerVariants: Variants = {
   }
 };
 
-// FIX: Add explicit `Variants` type to fix type inference issue with the `ease` property.
-const itemVariants: Variants = {
+// FIX: Removed Variants type annotation to resolve framer-motion type error.
+const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
     opacity: 1,
     transition: {
-      ease: "easeOut",
+      // FIX: The 'ease' property with string values like "easeOut" is causing type errors.
+      // framer-motion's default easing is sufficient here.
       duration: 0.3
     }
   }

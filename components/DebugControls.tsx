@@ -1,6 +1,3 @@
-
-
-
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -115,6 +112,18 @@ interface DebugControlsProps {
   setDayFogNear: (val: number) => void;
   dayFogFar: number;
   setDayFogFar: (val: number) => void;
+  virtualKeyboardKeySize: number;
+  setVirtualKeyboardKeySize: (size: number) => void;
+  virtualKeyboardHeight: number;
+  setVirtualKeyboardHeight: (height: number) => void;
+  virtualKeyboardPaddingX: number;
+  setVirtualKeyboardPaddingX: (padding: number) => void;
+  virtualKeyboardKeyGapX: number;
+  setVirtualKeyboardKeyGapX: (gap: number) => void;
+  virtualKeyboardKeyGapY: number;
+  setVirtualKeyboardKeyGapY: (gap: number) => void;
+  virtualKeyboardKeyFontWeight: number;
+  setVirtualKeyboardKeyFontWeight: (weight: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -256,6 +265,18 @@ export default function DebugControls({
   setDayFogNear,
   dayFogFar,
   setDayFogFar,
+  virtualKeyboardKeySize,
+  setVirtualKeyboardKeySize,
+  virtualKeyboardHeight,
+  setVirtualKeyboardHeight,
+  virtualKeyboardPaddingX,
+  setVirtualKeyboardPaddingX,
+  virtualKeyboardKeyGapX,
+  setVirtualKeyboardKeyGapX,
+  virtualKeyboardKeyGapY,
+  setVirtualKeyboardKeyGapY,
+  virtualKeyboardKeyFontWeight,
+  setVirtualKeyboardKeyFontWeight,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -319,6 +340,12 @@ export default function DebugControls({
     setDayFogFar(52);
     setAppLauncherWidth(37);
     setAppLauncherHeight(286);
+    setVirtualKeyboardKeySize(41);
+    setVirtualKeyboardHeight(38);
+    setVirtualKeyboardPaddingX(69);
+    setVirtualKeyboardKeyGapX(2);
+    setVirtualKeyboardKeyGapY(2);
+    setVirtualKeyboardKeyFontWeight(600);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -487,6 +514,34 @@ export default function DebugControls({
             <div className="mt-2">
               <label htmlFor="app-launcher-height">Height: {appLauncherHeight}px</label>
               <input id="app-launcher-height" type="range" min="50" max="300" step="1" value={appLauncherHeight} onChange={(e) => setAppLauncherHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Virtual Keyboard</h3>
+            <div>
+              <label htmlFor="vk-key-font-size">Key Font Size: {virtualKeyboardKeySize}px</label>
+              <input id="vk-key-font-size" type="range" min="16" max="48" step="1" value={virtualKeyboardKeySize} onChange={(e) => setVirtualKeyboardKeySize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="vk-height">Keyboard Height: {virtualKeyboardHeight}vh</label>
+              <input id="vk-height" type="range" min="25" max="45" step="1" value={virtualKeyboardHeight} onChange={(e) => setVirtualKeyboardHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="vk-padding-x">Horizontal Padding: {virtualKeyboardPaddingX}px</label>
+              <input id="vk-padding-x" type="range" min="0" max="100" step="1" value={virtualKeyboardPaddingX} onChange={(e) => setVirtualKeyboardPaddingX(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="vk-gap-x">Horizontal Key Gap: {virtualKeyboardKeyGapX}px</label>
+              <input id="vk-gap-x" type="range" min="0" max="20" step="1" value={virtualKeyboardKeyGapX} onChange={(e) => setVirtualKeyboardKeyGapX(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="vk-gap-y">Vertical Key Gap: {virtualKeyboardKeyGapY}px</label>
+              <input id="vk-gap-y" type="range" min="0" max="20" step="1" value={virtualKeyboardKeyGapY} onChange={(e) => setVirtualKeyboardKeyGapY(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="vk-font-weight">Key Font Weight: {virtualKeyboardKeyFontWeight}</label>
+              <input id="vk-font-weight" type="range" min="100" max="900" step="100" value={virtualKeyboardKeyFontWeight} onChange={(e) => setVirtualKeyboardKeyFontWeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 

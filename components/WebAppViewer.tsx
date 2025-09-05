@@ -1,9 +1,5 @@
-
-
-
-
 import React from 'react';
-import { motion, Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { FiX } from 'react-icons/fi';
 
 interface WebAppViewerProps {
@@ -11,19 +7,14 @@ interface WebAppViewerProps {
     onClose: () => void;
 }
 
-const webAppVariants = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    exit: { opacity: 0 },
-};
-
 const WebAppViewer: React.FC<WebAppViewerProps> = ({ url, onClose }) => {
     return (
         <motion.div
-            variants={webAppVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
+            // FIX: The 'webAppVariants' constant caused a type error. Moving the variants inline
+            // and using them as direct props resolves the issue.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
             className="fixed inset-0 bg-black z-[9999] flex flex-col"
             role="dialog"
