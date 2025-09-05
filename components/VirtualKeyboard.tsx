@@ -84,7 +84,7 @@ const Key = ({
     );
 };
 
-type VoiceStatus = 'idle' | 'listening' | 'processing' | 'error';
+type VoiceStatus = 'idle' | 'connecting' | 'listening' | 'processing' | 'error';
 
 const VirtualKeyboard = ({
     isVisible,
@@ -116,21 +116,31 @@ const VirtualKeyboard = ({
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const longPressTimer = useRef<number | null>(null);
     const longPressInterval = useRef<number | null>(null);
+
+    const voiceStatusRef = useRef(voiceStatus);
+    useEffect(() => {
+        voiceStatusRef.current = voiceStatus;
+    }, [voiceStatus]);
     
     const stopRecognitionAndStream = useCallback(() => {
         if (recognitionRef.current) {
-            recognitionRef.current.stop(); // This will trigger onend
+            // Detach all event handlers to prevent them from firing after a manual stop, avoiding race conditions.
+            recognitionRef.current.onstart = null;
+            recognitionRef.current.onspeechend = null;
+            recognitionRef.current.onresult = null;
+            recognitionRef.current.onerror = null;
+            recognitionRef.current.onend = null;
+            
+            recognitionRef.current.abort(); // Use abort() for a more immediate stop than stop().
             recognitionRef.current = null;
         }
         if (mediaStreamRef.current) {
             mediaStreamRef.current.getTracks().forEach(track => track.stop());
             mediaStreamRef.current = null;
         }
-        // Only reset voice status if it's currently active, to avoid overriding the 'error' state's timeout
-        if (voiceStatus !== 'error') {
-            setVoiceStatus('idle');
-        }
-    }, [voiceStatus]);
+        // Directly set the state to idle, as this is a manual user action.
+        setVoiceStatus('idle');
+    }, []);
 
 
     // Cleanup effect to stop recognition and stream if the keyboard is closed or component unmounts.
@@ -142,11 +152,14 @@ const VirtualKeyboard = ({
     
     const handleVoiceRecognition = useCallback(async () => {
         // If already listening or processing, stop the current instance.
-        if (voiceStatus === 'listening' || voiceStatus === 'processing') {
+        if (['connecting', 'listening', 'processing'].includes(voiceStatusRef.current)) {
             stopRecognitionAndStream();
             return;
         }
     
+        // Set 'connecting' state immediately for instant user feedback.
+        setVoiceStatus('connecting');
+        
         // 1. Check for MediaDevices support first
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             console.warn('MediaDevices API not supported by this browser.');
@@ -181,14 +194,14 @@ const VirtualKeyboard = ({
             recognition.onspeechend = () => setVoiceStatus('processing');
             
             recognition.onend = () => {
-                // onend is the final event, clean up everything here.
+                // This 'onend' is for natural completion (e.g., after speech)
                 if (mediaStreamRef.current) {
                     mediaStreamRef.current.getTracks().forEach(track => track.stop());
                     mediaStreamRef.current = null;
                 }
                 recognitionRef.current = null;
                 // Only change status if it wasn't an error, to let the error display for a moment
-                 if (voiceStatus !== 'error') {
+                 if (voiceStatusRef.current !== 'error') {
                     setVoiceStatus('idle');
                 }
             };
@@ -196,7 +209,7 @@ const VirtualKeyboard = ({
             recognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
                 setVoiceStatus('error');
-                // onend will be called after onerror, but we'll set a timeout to reset the visual state
+                // 'onend' will also fire, but we set a timeout to ensure the user sees the error state.
                 setTimeout(() => setVoiceStatus('idle'), 2000);
             };
 
@@ -237,7 +250,7 @@ const VirtualKeyboard = ({
             setVoiceStatus('error');
             setTimeout(() => setVoiceStatus('idle'), 2000);
         }
-    }, [voiceStatus, targetElement, stopRecognitionAndStream]);
+    }, [stopRecognitionAndStream, targetElement]);
 
 
     useEffect(() => {
@@ -400,6 +413,8 @@ const VirtualKeyboard = ({
         
     const getMicKeyConfig = () => {
         switch (voiceStatus) {
+            case 'connecting':
+                return { label: <FiLoader className="animate-spin" />, className: isNight ? 'text-white bg-zinc-600' : 'text-black bg-zinc-300' };
             case 'listening':
                 return { label: <FiMic />, className: `mic-listening ${isNight ? 'bg-blue-600 text-white' : 'bg-blue-400 text-white'}` };
             case 'processing':
