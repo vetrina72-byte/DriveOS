@@ -46,6 +46,7 @@ const SpotifyPlayer = ({
     isOpen, 
     onClose, 
     isNight,
+    // FIX: Add spotifyPlayerTop and spotifyPlayerBottom to props to fix type error.
     spotifyPlayerTop,
     spotifyPlayerBottom,
 }: { 
@@ -231,9 +232,10 @@ const SpotifyPlayer = ({
 
     return (
         <div 
-            className={`fixed right-0 w-2/3 shadow-2xl z-20 flex spotify-app-panel`}
+            className={`spotify-app-panel flex shadow-2xl`}
             style={{
                 transform: `translateX(${translateX}%)`,
+                // FIX: Apply positioning props.
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,
             }}

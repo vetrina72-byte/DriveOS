@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { FaSpotify } from 'react-icons/fa';
 import { FiSearch, FiChevronLeft, FiSend } from 'react-icons/fi';
@@ -39,10 +38,9 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
     }
   }
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSearch();
   };
   
   return (
@@ -56,25 +54,24 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
         ) : (
           <FaSpotify className={`w-8 h-8`} style={{ color: 'var(--text-spotify-logo)' }}/>
         )}
-        <div className="relative flex-grow max-w-xs">
+        <form onSubmit={handleSearchSubmit} className="relative flex-grow max-w-xs">
           <FiSearch className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5`} style={{ color: secondaryTextColor }} />
           <input
             type="text"
             placeholder="Cosa vuoi ascoltare?"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
             className={`w-full pl-11 pr-10 py-3 rounded-full text-sm font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
             style={{ color: textColor }}
           />
            <button 
-            onClick={handleSearch}
+            type="submit"
             className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-colors duration-200 ${hoverBg}`}
             aria-label="Cerca"
           >
               <FiSend className="w-4 h-4" style={{color: textColor}}/>
           </button>
-        </div>
+        </form>
       </div>
       
       {/* Right side: Navigation Links */}

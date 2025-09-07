@@ -40,6 +40,9 @@
     crossorigin=""/>
   <style>
     :root {
+      /* Fluid font-size for responsive scaling of rem units */
+      font-size: clamp(12px, 1.2vw, 16px);
+      
       --spotify-panel-bg: rgba(247, 247, 247, 0.95);
       --player-bg: rgb(247, 247, 247);
       --text-primary: #000000;
@@ -55,6 +58,10 @@
       --volume-slider-track-bg: var(--progress-bg);
       --volume-slider-thumb-bg: var(--progress-fill);
       --volume-slider-fill-bg: var(--progress-fill);
+
+      /* Layout Dimensions controlled by Debug Panel (with sane defaults) */
+      --footer-h: 6rem;
+      --header-h: 4rem;
     }
 
     [data-theme='dark'] {
@@ -253,8 +260,22 @@
       will-change: transform, opacity, width, height, left;
     }
 
+    /* Responsive App Panel Styles */
     .spotify-app-panel {
+      position: fixed;
+      z-index: 20;
       will-change: transform;
+      top: var(--spotify-player-top, var(--header-h));
+      bottom: var(--spotify-player-bottom, var(--footer-h));
+      width: clamp(320px, 95vw, 67vw);
+      right: 0;
+    }
+
+    @media (max-width: 768px) {
+      .spotify-app-panel {
+        width: 95vw;
+        right: 2.5vw;
+      }
     }
 
     .loading-spinner-border {
@@ -386,7 +407,7 @@
       width: 100%;
       max-width: 72rem; /* 1152px */
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
       gap: 2rem;
       perspective: 1000px;
     }

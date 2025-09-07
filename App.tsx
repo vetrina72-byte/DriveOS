@@ -20,7 +20,7 @@ import VolumeControl from './components/VolumeControl';
 import { FiMinus } from 'react-icons/fi';
 import TheaterApp from './components/Theater';
 import RadioApp from './components/RadioApp';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import VirtualKeyboard from './components/VirtualKeyboard';
 
 interface AppDefinition {
@@ -101,7 +101,7 @@ const formatTravelTime = (minutes: number | null): string => {
 };
 
 
-const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, dayPlayerButtonColor, nightPlayerButtonColor }: { 
+const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, dayPlayerButtonColor, nightPlayerButtonColor, homeLocation, workLocation }: { 
     isVisible: boolean, 
     isNight: boolean,
     onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
@@ -110,6 +110,8 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     widgetBgColor: string;
     dayPlayerButtonColor: string;
     nightPlayerButtonColor: string;
+    homeLocation: { lat: number, lng: number, name: string } | null;
+    workLocation: { lat: number, lng: number, name: string } | null;
 }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
@@ -118,10 +120,9 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     const [isExpanded, setIsExpanded] = useState(false);
     const searchTimeoutRef = useRef<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const GEOAPIFY_API_KEY = '0d2c9c7f72c0477eb3260838db72a383';
-    const HOME_COORDS = { lat: 41.8902, lng: 12.4922, name: 'Home' }; // Colosseum
-    const WORK_COORDS = { lat: 41.8986, lng: 12.4768, name: 'Work' }; // Pantheon
 
     const baseHeight = 113;
     const expandedHeight = 400;
@@ -202,25 +203,29 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     }, [query, currentPosition]);
 
     useEffect(() => {
-        setIsExpanded(isFocused && (loading || suggestions.length > 0));
-    }, [isFocused, loading, suggestions.length]);
+        // The panel should be expanded if the user is focused on the input,
+        // OR if there is text in the input (even if focus is lost).
+        // This prevents the panel from closing when the user clicks away while typing.
+        setIsExpanded(isFocused || query.length > 0);
+    }, [isFocused, query]);
 
     const handleSelect = (feature: any) => {
         const { lat, lon: lng } = feature.properties;
         const name = feature.properties.name || feature.properties.formatted;
-        setQuery(name);
+        setQuery('');
         setSuggestions([]);
         setIsFocused(false);
         onSelectDestination({ lat, lng, name });
     };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && suggestions.length > 0) {
-            e.preventDefault();
-            handleSelect(suggestions[0].feature);
+    
+    useEffect(() => {
+        const textarea = inputRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto'; // Reset height
+            textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
         }
-    };
-
+    }, [query]);
+    
     const theme = {
         bg: 'var(--player-bg)',
         border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
@@ -243,19 +248,23 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
         >
              <div className="p-3 flex flex-col h-full overflow-hidden">
                 <div className="relative flex-shrink-0">
-                    <ICONS.search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.iconColor}`} />
-                    <input
-                        type="text"
+                    <ICONS.search className={`absolute left-3.5 top-3.5 w-5 h-5 ${theme.iconColor}`} />
+                    <textarea
+                        ref={inputRef}
+                        rows={1}
                         id="home-search-input"
                         name="destination"
                         aria-label="Navigate"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={handleKeyDown}
                         onFocus={() => setIsFocused(true)}
-                        onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+                        onBlur={() => setTimeout(() => {
+                            if (!containerRef.current?.contains(document.activeElement)) {
+                                setIsFocused(false);
+                            }
+                        }, 200)}
                         placeholder="Navigate"
-                        className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${theme.inputBg} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors resize-none overflow-y-auto hide-scrollbar ${theme.inputBg} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                     />
                 </div>
                 
@@ -303,16 +312,18 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
                 <div className={`flex-shrink-0 mt-auto pt-2 border-t ${theme.border}`}>
                     <div className="flex justify-around items-center">
                         <button 
-                            onClick={() => onSelectDestination(HOME_COORDS)}
-                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
+                            onClick={() => homeLocation && onSelectDestination(homeLocation)}
+                            disabled={!homeLocation}
+                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${!homeLocation ? 'opacity-50 cursor-not-allowed' : theme.suggestionHover}`}
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                         >
                             <ICONS.home className="w-5 h-5" />
                             <span>Home</span>
                         </button>
                          <button 
-                            onClick={() => onSelectDestination(WORK_COORDS)}
-                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${theme.suggestionHover}`}
+                            onClick={() => workLocation && onSelectDestination(workLocation)}
+                            disabled={!workLocation}
+                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${!workLocation ? 'opacity-50 cursor-not-allowed' : theme.suggestionHover}`}
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                          >
                             <ICONS.work className="w-5 h-5" />
@@ -800,6 +811,9 @@ function AppContent() {
   const arrivalTimeoutRef = useRef<number | null>(null);
   const [tripInfo, setTripInfo] = useState<{ time: number, distance: number } | null>(null);
   const [throttledPosition, setThrottledPosition] = useState(currentPosition);
+  const [homeLocation, setHomeLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [workLocation, setWorkLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [favoriteLocations, setFavoriteLocations] = useState<{ lat: number, lng: number, name: string }[]>([]);
 
   // States for trip simulation
   const [simulatedRemainingDistance, setSimulatedRemainingDistance] = useState<number | null>(null);
@@ -875,6 +889,12 @@ function AppContent() {
     setNavigationTarget(null);
     setTripInfo(null);
     routeStore.setRoute(null);
+
+    const mapsIframe = document.querySelector('iframe[title="Tesla Navigation"]');
+    if (mapsIframe && (mapsIframe as HTMLIFrameElement).contentWindow) {
+        (mapsIframe as HTMLIFrameElement).contentWindow.postMessage({ type: 'CLEAR_ROUTE_FROM_PARENT' }, '*');
+    }
+
     if (message) {
       setArrivalMessage(message);
       if (arrivalTimeoutRef.current) clearTimeout(arrivalTimeoutRef.current);
@@ -883,9 +903,19 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    try {
+        const storedHome = localStorage.getItem('home_location');
+        if (storedHome) setHomeLocation(JSON.parse(storedHome));
+        const storedWork = localStorage.getItem('work_location');
+        if (storedWork) setWorkLocation(JSON.parse(storedWork));
+        const storedFavorites = localStorage.getItem('favorite_locations');
+        if (storedFavorites) setFavoriteLocations(JSON.parse(storedFavorites));
+    } catch (e) { console.error("Failed to load locations from localStorage", e); }
+  }, []);
+
+  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'ROUTE_CLEARED') {
-          if (activeApp !== 'maps') { return; }
           handleCancelNavigation();
       }
       
@@ -902,13 +932,34 @@ function AppContent() {
       if (event.data?.type === 'MAP_STYLE_CHANGED') {
         setMapStyle(event.data.payload.style);
       }
+
+      if (event.data?.type === 'SAVE_LOCATION' && event.data.payload) {
+        const { type, coords, name } = event.data.payload;
+        const locationData = { lat: coords.lat, lng: coords.lng, name };
+        if (type === 'home') {
+            setHomeLocation(locationData);
+            localStorage.setItem('home_location', JSON.stringify(locationData));
+        } else if (type === 'work') {
+            setWorkLocation(locationData);
+            localStorage.setItem('work_location', JSON.stringify(locationData));
+        }
+      }
+       if (event.data?.type === 'SAVE_FAVORITE' && event.data.payload) {
+            const newFavorite = event.data.payload;
+            setFavoriteLocations(prev => {
+                if (prev.some(f => f.name === newFavorite.name)) return prev;
+                const updatedFavorites = [newFavorite, ...prev];
+                localStorage.setItem('favorite_locations', JSON.stringify(updatedFavorites));
+                return updatedFavorites;
+            });
+        }
     };
 
     window.addEventListener('message', handleMessage);
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [activeApp, handleCancelNavigation]);
+  }, [handleCancelNavigation]);
 
   const handleCloseMaps = () => {
     toggleApp('maps');
@@ -1266,11 +1317,19 @@ function AppContent() {
         mapStyle={mapStyle}
       />
 
-      {arrivalMessage && (
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 text-white font-bold px-6 py-3 rounded-lg shadow-lg animate-fade-in">
-              {arrivalMessage}
-          </div>
-      )}
+      <AnimatePresence>
+          {arrivalMessage && (
+              <motion.div
+                  initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 50, scale: 0.9 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                  className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10"
+              >
+                  {arrivalMessage}
+              </motion.div>
+          )}
+      </AnimatePresence>
 
       <WeatherModal 
           isOpen={isWeatherModalOpen}
@@ -1286,13 +1345,14 @@ function AppContent() {
       />
       
       <div
-        className="fixed z-10 w-full flex items-end justify-center"
+        className="fixed z-10 flex items-end"
         style={{
             bottom: playerFloatingBottom,
             transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             opacity: isUIOverlayActive || isAppLauncherOpen ? 0 : 1,
             pointerEvents: isUIOverlayActive || isAppLauncherOpen ? 'none' : 'auto',
-            transform: isUIOverlayActive ? 'none' : `translateX(calc(${playerFloatingWidth / 2}px + 8px))`,
+            left: '50%',
+            transform: `translateX(calc(-50% + ${playerFloatingWidth / 2}px + 8px))`,
         }}
       >
           {navigationTarget ? (
@@ -1316,6 +1376,8 @@ function AppContent() {
               widgetBgColor={widgetBgColor}
               dayPlayerButtonColor={dayPlayerButtonColor}
               nightPlayerButtonColor={nightPlayerButtonColor}
+              homeLocation={homeLocation}
+              workLocation={workLocation}
             />
           )}
       </div>

@@ -205,7 +205,7 @@ const Theater = ({
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
+                className="spotify-app-panel shadow-2xl flex"
                 style={{
                     top: `${spotifyPlayerTop}px`,
                     bottom: `${spotifyPlayerBottom}px`,

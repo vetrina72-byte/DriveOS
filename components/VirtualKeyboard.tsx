@@ -41,7 +41,7 @@ const Key = ({
 
     if (!key) return <div className="w-full" style={{ flex }} />;
 
-    const isSpecialKey = ['Shift', 'Backspace', '?123', 'ABC', 'Mic', 'Space', 'Enter'].includes(key);
+    const isSpecialKey = ['Shift', 'Backspace', '!?_', 'ABC', 'Mic', 'Space', 'Enter'].includes(key);
     const isActive = className?.includes('bg-blue');
 
     const baseStyle = `w-full h-full flex items-center justify-center transition-all duration-100 ease-out focus:outline-none select-none`;
@@ -276,7 +276,7 @@ const VirtualKeyboard = ({
             case 'Shift':
                 handleShiftPress();
                 return;
-            case '?123':
+            case '!?_':
                 setLayoutMode('symbols');
                 return;
             case 'ABC':
@@ -286,8 +286,9 @@ const VirtualKeyboard = ({
                 handleVoiceRecognition();
                 return;
             case 'Enter':
+                targetElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', charCode: 13, keyCode: 13, bubbles: true }));
                 if (targetElement.form) {
-                    targetElement.form.requestSubmit();
+                    targetElement.form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
                 }
                 onClose();
                 return;
@@ -364,30 +365,22 @@ const VirtualKeyboard = ({
         ? (isUpperCase ? qwertyLayoutUpper : qwertyLayoutLower)
         : symbolsLayout;
     
-    const getShiftKeyStyle = () => {
-        switch (shiftMode) {
-            case 'shift':
-                return isNight ? 'bg-blue-800 text-white' : 'bg-blue-300 text-blue-800';
-            case 'caps':
-                return 'bg-blue-500 text-white';
-            default:
-                return '';
-        }
-    };
-    
     const getShiftIcon = () => {
+        const activeColor = isNight ? 'text-blue-400' : 'text-blue-500';
+        const inactiveColor = isNight ? 'text-gray-100' : 'text-black';
+
         switch (shiftMode) {
             case 'shift':
-                return <FiArrowUp style={{ strokeWidth: 3 }} />;
+                return <FiArrowUp style={{ strokeWidth: 3 }} className={activeColor} />;
             case 'caps':
                 return (
-                    <div className="relative flex items-center justify-center h-full w-full">
-                        <FiArrowUp />
-                        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-4 h-[2.5px] bg-current rounded-full" />
+                    <div className={`relative flex items-center justify-center h-full w-full font-bold ${activeColor}`}>
+                        <FiArrowUp style={{ strokeWidth: 3 }} />
+                        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-4 h-[3px] bg-current rounded-full" />
                     </div>
                 );
             default: // 'off'
-                return <FiArrowUp />;
+                return <FiArrowUp className={inactiveColor} />;
         }
     };
 
@@ -408,7 +401,7 @@ const VirtualKeyboard = ({
     } as React.CSSProperties;
     
     const layoutToggleKey = layoutMode === 'letters'
-        ? { key: '?123', label: '?123', flex: '2', fontSize: virtualKeyboardKeySize * 0.8 }
+        ? { key: '!?_', label: '!?_', flex: '2', fontSize: virtualKeyboardKeySize * 0.8 }
         : { key: 'ABC', label: 'ABC', flex: '2', fontSize: virtualKeyboardKeySize * 0.8 };
         
     const getMicKeyConfig = () => {
@@ -436,7 +429,7 @@ const VirtualKeyboard = ({
                     key="keyboard-backdrop"
                     className="fixed inset-0 z-[1000] flex items-end"
                     initial={{ backgroundColor: 'rgba(0,0,0,0)' }}
-                    animate={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+                    animate={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     exit={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     transition={{ duration: 0.3 }}
                     onClick={onClose}
@@ -456,7 +449,7 @@ const VirtualKeyboard = ({
                                     <div key={rowIndex} className="flex justify-center w-full flex-1" style={{ gap: `${virtualKeyboardKeyGapX}px` }}>
                                         {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
                                         {layoutMode === 'letters' && rowIndex === 2 && (
-                                             <Key key="left-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5', className: getShiftKeyStyle() }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                                             <Key key="left-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                         )}
                                         {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
                                         {layoutMode === 'symbols' && rowIndex === 2 && <div style={{flex: 1.5}}/>}
@@ -467,18 +460,21 @@ const VirtualKeyboard = ({
                                         
                                         {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
                                         {layoutMode === 'letters' && rowIndex === 2 && (
-                                            <motion.button
-                                                onMouseDown={handleBackspacePressStart}
-                                                onMouseUp={handleBackspacePressEnd}
-                                                onMouseLeave={handleBackspacePressEnd}
-                                                onTouchStart={handleBackspacePressStart}
-                                                onTouchEnd={handleBackspacePressEnd}
-                                                className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
-                                                style={{ flex: '1.5', fontSize: `${virtualKeyboardKeySize}px`, fontWeight: virtualKeyboardKeyFontWeight }}
-                                                aria-label="Backspace"
-                                            >
-                                                <FiDelete />
-                                            </motion.button>
+                                            <>
+                                                <Key key="right-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                                                <motion.button
+                                                    onMouseDown={handleBackspacePressStart}
+                                                    onMouseUp={handleBackspacePressEnd}
+                                                    onMouseLeave={handleBackspacePressEnd}
+                                                    onTouchStart={handleBackspacePressStart}
+                                                    onTouchEnd={handleBackspacePressEnd}
+                                                    className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
+                                                    style={{ flex: '1.5', fontSize: `${virtualKeyboardKeySize}px`, fontWeight: virtualKeyboardKeyFontWeight }}
+                                                    aria-label="Backspace"
+                                                >
+                                                    <FiDelete />
+                                                </motion.button>
+                                            </>
                                         )}
                                         {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
                                         {layoutMode === 'symbols' && rowIndex === 2 && (

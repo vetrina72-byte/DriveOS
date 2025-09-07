@@ -57,9 +57,9 @@ interface RadioAppProps {
     onClose: () => void;
     isNight: boolean;
     onPlayStation: (station: RadioStation, context: RadioStation[]) => void;
+    favoriteStationUUIDs: string[];
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
-    favoriteStationUUIDs: string[];
 }
 
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
@@ -80,7 +80,7 @@ const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     );
 };
 
-const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spotifyPlayerTop, spotifyPlayerBottom, favoriteStationUUIDs }) => {
+const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, favoriteStationUUIDs, spotifyPlayerTop, spotifyPlayerBottom }) => {
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
     
@@ -403,7 +403,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, spo
 
     return (
         <div 
-            className={`fixed right-0 w-2/3 shadow-2xl z-20 flex`}
+            className="spotify-app-panel flex shadow-2xl"
             style={{
                 transform: `translateX(${translateX}%)`,
                 top: `${spotifyPlayerTop}px`,

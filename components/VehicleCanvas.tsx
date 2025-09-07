@@ -82,6 +82,23 @@ const Model = forwardRef<THREE.Group, {
 Model.displayName = 'Model';
 useGLTF.preload(MODEL_URL);
 
+// This component adjusts the camera's Field of View based on the aspect ratio
+// to ensure the scene composition remains consistent across different screen sizes.
+function CameraController() {
+    const { camera, size } = useThree();
+    useEffect(() => {
+        if (camera instanceof THREE.PerspectiveCamera) {
+            const aspect = size.width / size.height;
+            // On tall/narrow screens (portrait), widen the FOV to prevent the scene
+            // from feeling too zoomed in. On wide screens, use the default FOV.
+            camera.fov = aspect < 1 ? 48 / aspect : 48;
+            camera.updateProjectionMatrix();
+        }
+    }, [size, camera]);
+    return null;
+}
+
+
 function SceneController({
   isAppOpen, activeConfig, setAppOpenConfig, modelRef,
   frontLightTarget, originalAppOpenConfig, onInteractionChange
@@ -608,7 +625,8 @@ export default function VehicleCanvas({
           maxPolarAngle={Math.PI / 2 - 0.05}
           autoRotate={false}
         />
-
+        
+        <CameraController />
         <SceneController
           isAppOpen={isAppOpen}
           activeConfig={activeConfig}

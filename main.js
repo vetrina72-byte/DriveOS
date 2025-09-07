@@ -2,6 +2,7 @@ import { app, BrowserWindow, session } from 'electron';
 import isDev from 'electron-is-dev';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { promises as fs } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,7 +66,6 @@ app.on('window-all-closed', () => {
 });
 
 // Create a minimal preload.js for context isolation, even if it's empty.
-import { promises as fs } from 'fs';
 const preloadPath = path.join(__dirname, 'preload.js');
 fs.writeFile(preloadPath, '// Preload script for context isolation', 'utf-8').catch(err => {
   if (err) console.error("Failed to create preload.js:", err);
