@@ -20,6 +20,7 @@ import VolumeControl from './components/VolumeControl';
 import { FiMinus } from 'react-icons/fi';
 import TheaterApp from './components/Theater';
 import RadioApp from './components/RadioApp';
+import YouTubeMusicApp from './components/YouTubeMusicApp';
 import { AnimatePresence, motion } from 'framer-motion';
 import VirtualKeyboard from './components/VirtualKeyboard';
 
@@ -32,6 +33,7 @@ interface AppDefinition {
 
 const ALL_APPS: AppDefinition[] = [
   { id: 'spotify', icon: ICONS.spotify, label: 'Spotify', colorClasses: 'text-green-500 hover:text-green-400' },
+  { id: 'youtube-music', icon: ICONS.youtube, label: 'YouTube', colorClasses: 'text-red-500 hover:text-red-400' },
   { id: 'maps', icon: ICONS.maps, label: 'Maps' },
   { id: 'theater', icon: ICONS.theater, label: 'Theater' },
   { id: 'radio', icon: ICONS.radio, label: 'Radio' },
@@ -701,7 +703,7 @@ function AppContent() {
   // App Customization State
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
-  const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio']);
+  const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
   
   // Radio Favorites State
@@ -829,6 +831,7 @@ function AppContent() {
         source: 'radio',
         radioStation: station,
         radioContext: context,
+        youtubeTrack: null,
         isLoading: true,
       }));
   };
@@ -1218,15 +1221,16 @@ function AppContent() {
     }
 
     if (willBeActive) {
-      if (appName === 'radio') {
-        // Let handlePlayStation manage state
-      } else if (nowPlaying.source === 'radio' && appName !== 'spotify') {
-        // Stop radio if switching to a non-radio, non-spotify app
+      if (appName === 'radio' || appName === 'youtube-music') {
+        // Let media player context handle state
+      } else if (nowPlaying.source !== 'spotify' && appName !== 'spotify') {
+        // Stop non-spotify media if switching to a non-media app
         setNowPlaying(prev => ({ 
             ...prev,
             source: null, 
             radioStation: null, 
-            radioContext: [] 
+            radioContext: [],
+            youtubeTrack: null,
         }));
       }
     }
@@ -1416,6 +1420,8 @@ function AppContent() {
           searchPanelWidth={mapsSearchPanelWidth}
           searchPanelTop={mapsSearchPanelTop}
           navigationTarget={navigationTarget}
+          spotifyPlayerTop={spotifyPlayerTop}
+          spotifyPlayerBottom={spotifyPlayerBottom}
       />
       
       <SpotifyApp 
@@ -1444,6 +1450,15 @@ function AppContent() {
             spotifyPlayerTop={spotifyPlayerTop}
             spotifyPlayerBottom={spotifyPlayerBottom}
             favoriteStationUUIDs={favoriteStationUUIDs}
+          />
+        )}
+         {activeApp === 'youtube-music' && (
+          <YouTubeMusicApp
+            isOpen={activeApp === 'youtube-music'}
+            onClose={() => toggleApp('youtube-music')}
+            isNight={useDarkTheme}
+            spotifyPlayerTop={spotifyPlayerTop}
+            spotifyPlayerBottom={spotifyPlayerBottom}
           />
         )}
       </AnimatePresence>
@@ -1560,6 +1575,7 @@ function AppContent() {
             <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
                 <VolumeControl 
                     iconSize={volumeIconSize} 
+// FIX: Corrected variable names `sliderOffsetY` and `sliderOffsetX` to match the state variables `volumeSliderOffsetY` and `volumeSliderOffsetX`.
                     sliderOffsetY={volumeSliderOffsetY} 
                     sliderOffsetX={volumeSliderOffsetX}
                     sliderWidth={volumeSliderWidth}

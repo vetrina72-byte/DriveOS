@@ -134,6 +134,7 @@ declare global {
   // Manual definition for Vite's import.meta.env
   interface ImportMetaEnv {
     readonly VITE_REDIRECT_URI: string;
+    readonly VITE_YOUTUBE_API_KEY?: string;
   }
 
   interface ImportMeta {

@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useCallback, Rea
 import axios from 'axios';
 import apiClient from '../api';
 import type { SpotifyPlayerState } from '@/globals';
-import { NowPlayingState } from '../types';
+import { NowPlayingState, YouTubeTrackInfo } from '../types';
 
 interface SpotifyUser {
     display_name: string;
@@ -27,6 +27,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     logout: () => void;
     clearError: () => void;
     play: (options: PlayOptions) => void;
+    playYouTube: (track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => void;
     setDeviceId: (id: string | null) => void;
     refreshTrigger: number;
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
@@ -73,6 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         spotifyState: null,
         radioStation: null,
         radioContext: [],
+        youtubeTrack: null,
         isLoading: false,
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
@@ -152,8 +154,8 @@ const silentRefreshToken = useCallback(async () => {
                 };
             }
             
-            // Case 2: Radio is playing, just update Spotify state in the background.
-            if (s.source === 'radio') {
+            // Case 2: Radio or YouTube is playing, just update Spotify state in the background.
+            if (s.source === 'radio' || s.source === 'youtube') {
                 return { ...s, spotifyState: newState };
             }
             
@@ -234,8 +236,8 @@ const silentRefreshToken = useCallback(async () => {
                 if (savedState.source === 'spotify') {
                     console.log("Last session was Spotify. Triggering playback.");
                     startSpotifyPlayback();
-                } else if (savedState.source === 'radio') {
-                    console.log("Last session was Radio. Setting state for autoplay.");
+                } else if (savedState.source === 'radio' || savedState.source === 'youtube') {
+                    console.log(`Last session was ${savedState.source}. Setting state for autoplay.`);
                     setNowPlaying(savedState);
                 }
             } else {
@@ -251,6 +253,9 @@ const silentRefreshToken = useCallback(async () => {
     useEffect(() => {
       if (nowPlaying.source) {
         if (nowPlaying.source === 'spotify' && !nowPlaying.spotifyState?.track_window.current_track) {
+            return;
+        }
+        if (nowPlaying.source === 'youtube' && !nowPlaying.youtubeTrack) {
             return;
         }
         try {
@@ -345,7 +350,7 @@ const silentRefreshToken = useCallback(async () => {
         // The MusicPlayer component will see this change and tear down the radio stream.
         setNowPlaying(prev => {
             // Prevent re-triggering if the source is already spotify
-            if (prev.source === 'spotify' && !prev.radioStation) {
+            if (prev.source === 'spotify' && !prev.radioStation && !prev.youtubeTrack) {
                 return prev;
             }
             return {
@@ -353,6 +358,7 @@ const silentRefreshToken = useCallback(async () => {
                 source: 'spotify',
                 radioStation: null, // Explicitly clear radio station
                 radioContext: [],
+                youtubeTrack: null,
                 isLoading: true, // Indicate that Spotify is syncing
             };
         });
@@ -417,18 +423,28 @@ const silentRefreshToken = useCallback(async () => {
         setIsReadyForAutoplay(true);
     }, []);
 
+    const pauseSpotify = useCallback(async () => {
+        if (!deviceId) return;
+        try {
+            await apiClient.put(`/me/player/pause?device_id=${deviceId}`);
+        } catch (e) {
+            console.error("Failed to pause spotify", e);
+        }
+    }, [deviceId]);
+
     const play = useCallback(async (options: PlayOptions) => {
         if (!deviceId) {
             console.error("Cannot play: No active Spotify device ID.");
             return;
         }
 
-        // STEP 1: Shut down radio and prepare state for loading
+        // STEP 1: Shut down other sources and prepare state for loading
         setNowPlaying({
             source: 'spotify',
             spotifyState: null,
             radioStation: null,
             radioContext: [],
+            youtubeTrack: null,
             isLoading: true
         });
         
@@ -463,10 +479,24 @@ const silentRefreshToken = useCallback(async () => {
                 spotifyState: null,
                 radioStation: null,
                 radioContext: [],
+                youtubeTrack: null,
                 isLoading: false
             });
         }
     }, [deviceId, refreshHomePage]);
+
+    const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => {
+        pauseSpotify();
+        setNowPlaying(prev => ({
+            ...prev,
+            source: 'youtube',
+            youtubeTrack: track,
+            youtubePlaylist: playlist,
+            radioStation: null,
+            radioContext: [],
+            isLoading: true,
+        }));
+    }, [pauseSpotify]);
 
     const clearError = () => {
         setState(s => ({...s, error: null}));
@@ -474,17 +504,8 @@ const silentRefreshToken = useCallback(async () => {
 
     const isPlayerReady = !!deviceId;
 
-    const pauseSpotify = useCallback(async () => {
-        if (!deviceId) return;
-        try {
-            await apiClient.put(`/me/player/pause?device_id=${deviceId}`);
-        } catch (e) {
-            console.error("Failed to pause spotify", e);
-        }
-    }, [deviceId]);
-
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay }}>
             {children}
         </AuthContext.Provider>
     );

@@ -93,10 +93,20 @@ export interface RadioStation {
     codec: string;
 }
 
+export interface YouTubeTrackInfo {
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  thumbnail: string;
+  playlistId?: string;
+}
+
 export interface NowPlayingState {
-  source: 'spotify' | 'radio' | null;
+  source: 'spotify' | 'radio' | 'youtube' | null;
   spotifyState: SpotifyPlayerState | null;
   radioStation: RadioStation | null;
   radioContext: RadioStation[];
+  youtubeTrack: YouTubeTrackInfo | null;
+  youtubePlaylist?: YouTubeTrackInfo[];
   isLoading?: boolean;
 }

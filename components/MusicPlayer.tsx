@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
+import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
@@ -198,11 +199,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
     const playerState = nowPlaying.spotifyState;
-    const { radioStation, source } = nowPlaying;
+    const { radioStation, youtubeTrack, youtubePlaylist, source } = nowPlaying;
 
     const audioRef = useRef<HTMLAudioElement>(null);
     const hlsRef = useRef<any>(null);
     const [isRadioPlaying, setIsRadioPlaying] = useState(false);
+    const youtubePlayerRef = useRef<any>(null);
+    const [isYouTubePlaying, setIsYouTubePlaying] = useState(false);
+
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
@@ -224,6 +228,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     useEffect(() => {
         if (audioRef.current) {
             audioRef.current.volume = volume;
+        }
+        if (youtubePlayerRef.current) {
+            youtubePlayerRef.current.setVolume(volume * 100);
         }
     }, [volume]);
     
@@ -464,6 +471,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         checkIsLiked();
     }, [currentTrackId]);
 
+    const handleYoutubeReady = (event: { target: any }) => {
+        youtubePlayerRef.current = event.target;
+        youtubePlayerRef.current.setVolume(volume * 100);
+    };
+
+    const handleYoutubeStateChange = (event: { data: number }) => {
+        // YT.PlayerState is not available globally in modules easily, use numbers
+        // 1 = PLAYING, 2 = PAUSED
+        const playerIsPlaying = event.data === 1;
+        setIsYouTubePlaying(playerIsPlaying);
+
+        if(playerIsPlaying) {
+             setNowPlaying(s => ({ ...s, isLoading: false }));
+        }
+    };
+
     const handleTogglePlay = () => {
         if (source === 'spotify') {
             playerRef.current?.togglePlay();
@@ -476,13 +499,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     audio.pause();
                 }
             }
+        } else if (source === 'youtube' && youtubePlayerRef.current) {
+            const playerState = youtubePlayerRef.current.getPlayerState();
+            if (playerState === 1) { // 1 = playing
+                youtubePlayerRef.current.pauseVideo();
+            } else {
+                youtubePlayerRef.current.playVideo();
+            }
         }
     };
+
     const handleNextTrack = () => {
         if (source === 'spotify') {
             playerRef.current?.nextTrack();
         } else if (source === 'radio') {
             onStationChange('next');
+        } else if (source === 'youtube' && youtubePlayerRef.current) {
+            youtubePlayerRef.current.nextVideo();
         }
     };
     const handlePrevTrack = () => {
@@ -490,6 +523,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             playerRef.current?.previousTrack();
         } else if (source === 'radio') {
             onStationChange('prev');
+        } else if (source === 'youtube' && youtubePlayerRef.current) {
+            youtubePlayerRef.current.previousVideo();
         }
     };
 
@@ -570,6 +605,39 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     </div>
                     <div className="flex-shrink-0">
                         <FiLoader className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'} animate-spin`} />
+                    </div>
+                </div>
+            );
+        }
+
+        if (source === 'youtube' && youtubeTrack) {
+            const { title, channelTitle, thumbnail } = youtubeTrack;
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
+
+            return (
+                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <img src={thumbnail} alt={title} className="w-12 h-12 rounded-lg object-cover" />
+                            <div className="overflow-hidden">
+                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{title}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
+                    <div className="w-full flex justify-center items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
+                            <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
+                                {isYouTubePlaying
+                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                }
+                            </button>
+                            <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                        </div>
                     </div>
                 </div>
             );
@@ -723,14 +791,34 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     return (
-        <div 
-            ref={playerContainerRef}
-            className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
-            style={playerStyle}
-        >
-            {renderPlayerContent()}
-            <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
-        </div>
+        <>
+            <div 
+                ref={playerContainerRef}
+                className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
+                style={playerStyle}
+            >
+                {renderPlayerContent()}
+                <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
+            </div>
+            {source === 'youtube' && youtubeTrack && (
+                <div style={{ position: 'absolute', top: -9999, left: -9999, width: 1, height: 1 }}>
+                    <YouTube
+                        videoId={youtubeTrack.videoId}
+                        opts={{
+                            height: '1',
+                            width: '1',
+                            playerVars: {
+                                autoplay: 1,
+                                playlist: youtubePlaylist ? youtubePlaylist.map(t => t.videoId).join(',') : undefined,
+                            }
+                        }}
+                        onReady={handleYoutubeReady}
+                        onStateChange={handleYoutubeStateChange}
+                        key={youtubePlaylist ? youtubePlaylist.map(t=>t.videoId).join('_') : youtubeTrack.videoId}
+                    />
+                </div>
+            )}
+        </>
     );
 };
 

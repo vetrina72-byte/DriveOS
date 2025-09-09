@@ -148,6 +148,7 @@ export const ICONS = {
     car: PiCarSimpleBold,
     voice: MdOutlineMic,
     spotify: FaSpotify,
+    youtube: FaYoutube,
     maps: MapsIcon,
     radio: FiRadio,
     sun: FiSun,
