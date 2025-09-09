@@ -27,7 +27,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
     const [tracks, setTracks] = useState<YouTubeTrackInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { nowPlaying, isPlayerReady, youTubeFavorites, onToggleYouTubeFavorite } = useAuth();
+    const { nowPlaying, youTubeFavorites, onToggleYouTubeFavorite } = useAuth();
     
     const currentTrackId = nowPlaying.source === 'youtube' ? nowPlaying.youtubeTrack?.videoId : null;
     const isFavorite = youTubeFavorites.includes(playlist.id);
@@ -111,7 +111,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                     <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Playlist</span>
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{playlist.name}</h1>
                     <div className="flex items-center gap-4 mt-4">
-                        <button onClick={handlePlayAll} disabled={!isPlayerReady || tracks.length === 0} className="bg-red-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
+                        <button onClick={handlePlayAll} disabled={tracks.length === 0} className="bg-red-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
                             <FiPlay className="w-7 h-7 ml-1" />
                         </button>
                         <button
@@ -140,7 +140,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                             key={track.videoId}
                             variants={itemVariants}
                             onClick={() => handlePlaySingle(track)}
-                            className={`flex items-center gap-4 p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
+                            className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
                         >
                             <span className={`w-8 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>
                             <img src={track.thumbnail} alt={track.title} className="w-16 h-10 rounded object-cover flex-shrink-0" />

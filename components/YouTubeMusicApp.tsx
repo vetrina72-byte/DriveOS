@@ -270,7 +270,7 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
                 <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <img 
-                          src="https://upload.wikimedia.org/wikipedia/commons/0/0e/YouTube_Music_full_logo.svg" 
+                          src={isNight ? "https://upload.wikimedia.org/wikipedia/commons/c/c3/YouTube_Music_short_logo_with_white_wordmark.svg" : "https://upload.wikimedia.org/wikipedia/commons/0/0a/YouTube_Music_short_logo-black.svg"}
                           alt="YouTube Music" 
                           className="h-8 w-auto"
                         />
