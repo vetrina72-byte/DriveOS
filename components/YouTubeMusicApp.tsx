@@ -3,9 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
 import { FiLoader, FiSearch, FiX } from 'react-icons/fi';
-import { FaYoutube } from 'react-icons/fa';
 import type { YouTubeTrackInfo } from '../types';
 import YouTubePlaylistDetailView from './YouTubePlaylistDetailView';
+import QuotaErrorModal from './QuotaErrorModal';
 
 // Legge la chiave API dalla variabile d'ambiente.
 const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
@@ -67,6 +67,7 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [quotaExceeded, setQuotaExceeded] = useState(false);
 
     const [musicCharts, setMusicCharts] = useState<MediaItem[]>([]);
     const [popPlaylists, setPopPlaylists] = useState<MediaItem[]>([]);
@@ -88,6 +89,7 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
     const fetchDefaultData = useCallback(async () => {
         setLoading(true);
         setError(null);
+        setQuotaExceeded(false);
         try {
             const [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes] = await Promise.all([
                 fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
@@ -103,6 +105,9 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
                 if (!res.ok) {
                     const errorData = await res.json();
                     console.error("YouTube API Error:", errorData);
+                    if (errorData.error?.errors?.[0]?.reason === 'quotaExceeded' || errorData.error?.message.toLowerCase().includes('quota')) {
+                        throw new Error("quotaExceeded");
+                    }
                     throw new Error(errorData.error?.message || 'Failed to fetch data from YouTube API');
                 }
             }
@@ -118,7 +123,12 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
 
         } catch (err: any) {
             console.error("YouTube API fetch error:", err);
-            setError(err.message || "Could not load content from YouTube.");
+            if (err.message === 'quotaExceeded') {
+                setError(null);
+                setQuotaExceeded(true);
+            } else {
+                setError(err.message || "Could not load content from YouTube.");
+            }
         } finally {
             setLoading(false);
         }
@@ -161,18 +171,31 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
         
         setIsSearching(true);
         setError(null);
+        setQuotaExceeded(false);
         setSubmittedQuery(searchQuery);
         setSearchResults([]);
         setSelectedPlaylist(null); // Exit playlist view on new search
 
         try {
             const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchQuery}&type=video&videoCategoryId=10&maxResults=20&key=${YOUTUBE_API_KEY}`);
-            if (!res.ok) throw new Error('YouTube search failed');
+             if (!res.ok) {
+                const errorData = await res.json();
+                console.error("YouTube API Error:", errorData);
+                if (errorData.error?.errors?.[0]?.reason === 'quotaExceeded' || errorData.error?.message.toLowerCase().includes('quota')) {
+                    throw new Error("quotaExceeded");
+                }
+                throw new Error(errorData.error?.message || 'YouTube search failed');
+            }
             const data = await res.json();
             setSearchResults(data.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
-        } catch (err) {
+        } catch (err: any) {
             console.error("YouTube search error:", err);
-            setError("Search failed.");
+            if (err.message === 'quotaExceeded') {
+                setError(null);
+                setQuotaExceeded(true);
+            } else {
+                setError(err.message || "Search failed.");
+            }
         } finally {
             setIsSearching(false);
         }
@@ -199,7 +222,17 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
 
     const handlePlayYouTubeTrack = (track: YouTubeTrackInfo, playlistContext?: YouTubeTrackInfo[]) => {
         playYouTube(track, playlistContext);
+        setQuotaExceeded(false);
     }
+    
+    const handleQuotaError = useCallback((err: Error) => {
+        if (err.message === 'quotaExceeded') {
+            setError(null);
+            setQuotaExceeded(true);
+        } else {
+            setError(err.message);
+        }
+    }, []);
 
     const renderContent = () => {
         if (selectedPlaylist) {
@@ -209,6 +242,7 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
                     isNight={isNight}
                     onBack={() => setSelectedPlaylist(null)}
                     onPlayTrack={handlePlayYouTubeTrack}
+                    onQuotaError={handleQuotaError}
                 />
             );
         }
@@ -271,9 +305,10 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
                     <div className="flex items-center gap-4">
                         <img 
                           src={isNight ? "https://upload.wikimedia.org/wikipedia/commons/c/c3/YouTube_Music_short_logo_with_white_wordmark.svg" : "https://upload.wikimedia.org/wikipedia/commons/0/0a/YouTube_Music_short_logo-black.svg"}
-                          alt="YouTube Music" 
+                          alt="YouTube Music Logo"
                           className="h-8 w-auto"
                         />
+                         <h1 id="youtube-music-app-title" className="sr-only">YouTube Music</h1>
                     </div>
                      <form onSubmit={handleSearchSubmit} className="relative flex-grow max-w-sm">
                         <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
@@ -297,8 +332,14 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
                         )}
                     </form>
                 </header>
-                <div className="flex-grow flex flex-col overflow-y-auto hide-scrollbar">
-                    {renderContent()}
+                <div className="flex-grow flex flex-col overflow-y-auto hide-scrollbar relative">
+                     {renderContent()}
+                     <QuotaErrorModal
+                        isOpen={quotaExceeded}
+                        onClose={() => setQuotaExceeded(false)}
+                        isNight={isNight}
+                        onPlayTrack={handlePlayYouTubeTrack}
+                     />
                 </div>
             </div>
         </div>

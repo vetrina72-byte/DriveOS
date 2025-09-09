@@ -21,9 +21,10 @@ interface YouTubePlaylistDetailViewProps {
     isNight: boolean;
     onBack: () => void;
     onPlayTrack: (track: YouTubeTrackInfo, playlistContext: YouTubeTrackInfo[]) => void;
+    onQuotaError: (error: Error) => void;
 }
 
-const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ playlist, isNight, onBack, onPlayTrack }) => {
+const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ playlist, isNight, onBack, onPlayTrack, onQuotaError }) => {
     const [tracks, setTracks] = useState<YouTubeTrackInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -39,6 +40,11 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
             try {
                 const response = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlist.id}&maxResults=50&key=${YOUTUBE_API_KEY}`);
                 if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error("YouTube API Error:", errorData);
+                    if (errorData.error?.errors?.[0]?.reason === 'quotaExceeded' || errorData.error?.message.toLowerCase().includes('quota')) {
+                        throw new Error("quotaExceeded");
+                    }
                     throw new Error('Failed to fetch playlist items');
                 }
                 const data = await response.json();
@@ -56,16 +62,18 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                     .filter((track): track is YouTubeTrackInfo => track !== null && track.title !== 'Private video' && track.title !== 'Deleted video');
                 
                 setTracks(mappedTracks);
-            } catch (err) {
+            } catch (err: any) {
                 console.error("Failed to fetch playlist items:", err);
-                setError("Could not load playlist content.");
+                const errorToReport = new Error(err.message || "Could not load playlist content.");
+                setError(errorToReport.message);
+                onQuotaError(errorToReport);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchPlaylistItems();
-    }, [playlist.id, playlist.description]);
+    }, [playlist.id, playlist.description, onQuotaError]);
 
     const handlePlayAll = () => {
         if (tracks.length > 0) {
@@ -90,7 +98,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
         return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${theme.textSecondary}`} /></div>;
     }
 
-    if (error) {
+    if (error && error !== 'quotaExceeded') {
         return <div className="flex-grow flex justify-center items-center text-red-400 p-4 text-center">{error}</div>;
     }
 
@@ -111,7 +119,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                     <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Playlist</span>
                     <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{playlist.name}</h1>
                     <div className="flex items-center gap-4 mt-4">
-                        <button onClick={handlePlayAll} disabled={tracks.length === 0} className="bg-red-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
+                        <button onClick={handlePlayAll} className="bg-red-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                             <FiPlay className="w-7 h-7 ml-1" />
                         </button>
                         <button
