@@ -1223,8 +1223,8 @@ function AppContent() {
     if (willBeActive) {
       if (appName === 'radio' || appName === 'youtube-music') {
         // Let media player context handle state
-      } else if (nowPlaying.source !== 'spotify' && appName !== 'spotify') {
-        // Stop non-spotify media if switching to a non-media app
+      } else if (nowPlaying.source !== 'spotify' && appName !== 'spotify' && appName !== 'maps') {
+        // Stop non-spotify media if switching to a non-media, non-maps app
         setNowPlaying(prev => ({ 
             ...prev,
             source: null, 
@@ -1559,48 +1559,48 @@ function AppContent() {
                                 className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${effectiveColorClasses}`}
                                 aria-label={app.label}
                             >
-                                <app.icon className="w-10 h-10" />
+                                <app.icon className="w-8 h-8 opacity-70" />
                             </button>
-                            {activeApp === app.id && !isCustomizing && (
+                             {activeApp === app.id && (
                                 <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
                             )}
-                        </div>
+                       </div>
                     );
                 })}
               </>
             )}
-
         </div>
-        <div className="flex-1 flex justify-end">
-            <div style={{ marginRight: `${volumeControlMarginRight}px` }}>
-                <VolumeControl 
-                    iconSize={volumeIconSize} 
-// FIX: Corrected variable names `sliderOffsetY` and `sliderOffsetX` to match the state variables `volumeSliderOffsetY` and `volumeSliderOffsetX`.
-                    sliderOffsetY={volumeSliderOffsetY} 
-                    sliderOffsetX={volumeSliderOffsetX}
-                    sliderWidth={volumeSliderWidth}
-                    volumeSliderThickness={volumeSliderThickness}
-                    sliderPopupWidth={volumeSliderPopupWidth}
-                    sliderPopupHeight={volumeSliderPopupHeight}
-                />
-            </div>
+        <div className="flex-1 flex justify-end items-center pr-2">
+            <VolumeControl 
+                iconSize={volumeIconSize}
+                sliderOffsetY={volumeSliderOffsetY}
+                sliderOffsetX={volumeSliderOffsetX}
+                sliderWidth={volumeSliderWidth}
+                volumeSliderThickness={volumeSliderThickness}
+                sliderPopupWidth={volumeSliderPopupWidth}
+                sliderPopupHeight={volumeSliderPopupHeight}
+            />
         </div>
       </footer>
-
-      <VirtualKeyboard
-        isVisible={isKeyboardVisible}
-        targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null}
-        onClose={handleKeyboardClose}
-        isNight={useDarkTheme}
-        virtualKeyboardKeySize={virtualKeyboardKeySize}
-        virtualKeyboardHeight={virtualKeyboardHeight}
-        virtualKeyboardPaddingX={virtualKeyboardPaddingX}
-        virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
-        virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
-        virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
-      />
       
-      <DebugControls
+      <AnimatePresence>
+        {isKeyboardVisible && (
+            <VirtualKeyboard 
+                isVisible={isKeyboardVisible}
+                targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null}
+                onClose={handleKeyboardClose}
+                isNight={useDarkTheme}
+                virtualKeyboardKeySize={virtualKeyboardKeySize}
+                virtualKeyboardHeight={virtualKeyboardHeight}
+                virtualKeyboardPaddingX={virtualKeyboardPaddingX}
+                virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
+                virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
+                virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
+            />
+        )}
+      </AnimatePresence>
+
+       {isDebugOpen && <DebugControls
         isOpen={isDebugOpen}
         onClose={() => setIsDebugOpen(false)}
         timeOverride={timeOverride}
@@ -1668,7 +1668,7 @@ function AppContent() {
         tripInfo={tripInfo}
         startTripSimulation={startTripSimulation}
         stopTripSimulation={stopTripSimulation}
-        isSimulating={simulationIntervalRef.current !== null}
+        isSimulating={!!simulationIntervalRef.current}
         navigateToolWidth={navigateToolWidth}
         setNavigateToolWidth={setNavigateToolWidth}
         playerControlsSize={playerControlsSize}
@@ -1719,21 +1719,27 @@ function AppContent() {
         setVirtualKeyboardKeyGapY={setVirtualKeyboardKeyGapY}
         virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
         setVirtualKeyboardKeyFontWeight={setVirtualKeyboardKeyFontWeight}
-      />
+      />}
     </div>
   );
 }
 
-export default function App() {
-  if (window.location.pathname === '/spotify-callback') {
+function App() {
+  const isSpotifyCallback = window.location.pathname === '/spotify-callback';
+
+  if (isSpotifyCallback) {
     return <SpotifyCallback />;
   }
-
+  
   return (
-    <VehicleProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <VehicleProvider>
         <AppContent />
-      </AuthProvider>
-    </VehicleProvider>
+        <div id="portal-root"></div>
+      </VehicleProvider>
+    </AuthProvider>
   );
 }
+
+// FIX: Add default export for the App component to make it available for import.
+export default App;

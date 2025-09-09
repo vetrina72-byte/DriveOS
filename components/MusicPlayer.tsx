@@ -41,6 +41,15 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
 
+    // Sync local position with the official state from Spotify,
+    // unless the user is actively seeking. This prevents the bar from jumping
+    // back if a state update arrives before the seek is processed.
+    useEffect(() => {
+        if (!isSeeking) {
+            setPosition(state.position);
+        }
+    }, [state.position, isSeeking]);
+
     useEffect(() => {
         if (state.paused || isSeeking) {
             if (animationFrameRef.current) {
@@ -49,7 +58,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             return;
         }
 
-        let startTime = performance.now() - state.position;
+        let startTime = performance.now() - position;
 
         const animate = (currentTime: number) => {
             const newPosition = currentTime - startTime;
@@ -64,13 +73,16 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [state.paused, state.duration, isSeeking]);
+    }, [state.paused, state.duration, isSeeking, position]);
 
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player) return;
         
         setIsSeeking(true);
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+        }
         
         const getSeekPosition = (clientX: number): number => {
             if (!progressRef.current) return 0;
@@ -90,9 +102,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mouseup', handleMouseUp);
             
             const finalPosition = getSeekPosition(upEvent.clientX);
-            player.seek(finalPosition);
-            
-            setTimeout(() => setIsSeeking(false), 50);
+            player.seek(finalPosition).then(() => {
+                setPosition(finalPosition); // Ensure local state is set to final seek value
+                setTimeout(() => setIsSeeking(false), 200); // Delay to allow state to propagate
+            });
         };
         
         window.addEventListener('mousemove', handleMouseMove);
@@ -159,7 +172,9 @@ const YouTubeProgressBar = ({
             const finalPos = getSeekPosition(upEvent.clientX);
             onSeek(finalPos);
             
-            setTimeout(() => setIsSeeking(false), 50);
+            // Give the player API time to process the seek before we start accepting external updates again.
+            // This prevents the progress bar from jumping back.
+            setTimeout(() => setIsSeeking(false), 250);
         };
         
         window.addEventListener('mousemove', handleMouseMove);
