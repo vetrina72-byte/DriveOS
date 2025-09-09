@@ -35,43 +35,35 @@ interface MusicPlayerProps {
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
 
-const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
+const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const [position, setPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
 
     useEffect(() => {
-        // If the music is paused or the user is dragging the progress bar, we stop the animation.
         if (state.paused || isSeeking) {
-            // Make sure to cancel any previously scheduled animation frame.
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
             }
             return;
         }
 
-        // We use performance.now() for a high-precision animation timer.
-        // We calculate an animation "start time" by offsetting the current time with the song's current position.
         let startTime = performance.now() - state.position;
 
         const animate = (currentTime: number) => {
             const newPosition = currentTime - startTime;
-            // Update the position state. Math.min ensures the bar doesn't go past the song's duration.
             setPosition(Math.min(newPosition, state.duration));
             animationFrameRef.current = requestAnimationFrame(animate);
         };
 
         animationFrameRef.current = requestAnimationFrame(animate);
 
-        // Cleanup function to cancel the animation frame when the component unmounts or dependencies change.
         return () => {
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    // This effect re-runs ONLY when playback state changes (paused/unpaused) or when the user seeks.
-    // By removing `state.position`, we prevent the animation from re-syncing every second, resulting in a perfectly smooth progress bar.
     }, [state.paused, state.duration, isSeeking]);
 
 
@@ -117,6 +109,73 @@ const ProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: S
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
                  <div 
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)]"
+                    style={{ transform: 'translateY(-50%)' }} 
+                />
+            </div>
+        </div>
+    );
+};
+
+const YouTubeProgressBar = ({
+    progress,
+    onSeek
+}: {
+    progress: { position: number; duration: number };
+    onSeek: (position: number) => void;
+}) => {
+    const [localPosition, setLocalPosition] = useState(progress.position);
+    const [isSeeking, setIsSeeking] = useState(false);
+    const progressRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isSeeking) {
+            setLocalPosition(progress.position);
+        }
+    }, [progress.position, isSeeking]);
+    
+    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (!progressRef.current) return;
+        setIsSeeking(true);
+        
+        const getSeekPosition = (clientX: number): number => {
+            if (!progressRef.current || !progress.duration) return 0;
+            const rect = progressRef.current.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
+            return progress.duration * ratio;
+        };
+        
+        const newPos = getSeekPosition(e.clientX);
+        setLocalPosition(newPos);
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            setLocalPosition(getSeekPosition(moveEvent.clientX));
+        };
+
+        const handleMouseUp = (upEvent: MouseEvent) => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            
+            const finalPos = getSeekPosition(upEvent.clientX);
+            onSeek(finalPos);
+            
+            setTimeout(() => setIsSeeking(false), 50);
+        };
+        
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }, [onSeek, progress.duration]);
+
+    const progressPercentage = progress.duration > 0 ? (localPosition / progress.duration) * 100 : 0;
+
+    return (
+        <div
+            ref={progressRef}
+            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)]"
+            onMouseDown={handleMouseDown}
+        >
+            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
+                <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)]"
                     style={{ transform: 'translateY(-50%)' }} 
                 />
@@ -183,7 +242,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     favoriteStationUUIDs,
     onToggleFavorite,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay, youTubeFavorites, onToggleYouTubeFavorite } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -206,6 +265,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isRadioPlaying, setIsRadioPlaying] = useState(false);
     const youtubePlayerRef = useRef<any>(null);
     const [isYouTubePlaying, setIsYouTubePlaying] = useState(false);
+    const [youTubeProgress, setYouTubeProgress] = useState({ position: 0, duration: 1 });
+    const progressIntervalRef = useRef<number | null>(null);
 
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
@@ -294,6 +355,34 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             cleanup();
         };
     }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
+
+    useEffect(() => {
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+        }
+
+        if (source === 'youtube' && isYouTubePlaying && youtubePlayerRef.current) {
+            progressIntervalRef.current = window.setInterval(() => {
+                const player = youtubePlayerRef.current;
+                if (player && typeof player.getCurrentTime === 'function') {
+                    const position = player.getCurrentTime();
+                    const duration = player.getDuration();
+                    if (duration > 0) {
+                         setYouTubeProgress({ position, duration });
+                    }
+                }
+            }, 500);
+        } else {
+            setYouTubeProgress({ position: 0, duration: 1 });
+        }
+
+        return () => {
+            if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+            }
+        };
+    }, [source, isYouTubePlaying]);
 
     useEffect(() => {
         if (!accessToken) {
@@ -565,6 +654,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         });
     };
     
+    const handleSeekYouTube = (position: number) => {
+        if (youtubePlayerRef.current) {
+            youtubePlayerRef.current.seekTo(position, true);
+        }
+    };
+
     const playerStyle: React.CSSProperties = useMemo(() => {
         let baseStyle: React.CSSProperties;
         if (isAnyAppOpen) {
@@ -614,6 +709,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
+            const isFavorite = youTubeFavorites.includes(youtubeTrack.videoId);
 
             return (
                  <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -626,9 +722,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
-                    <div className="w-full flex justify-center items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px`}}>
+                    <YouTubeProgressBar progress={youTubeProgress} onSeek={handleSeekYouTube} />
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                        <div className="flex-1 flex justify-start"></div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap * 0.8}px` }}>
                             <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
                             <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
                                 {isYouTubePlaying
@@ -637,7 +734,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 }
                             </button>
                             <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={() => onToggleYouTubeFavorite(youtubeTrack.videoId)} className="transition" style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} />
+                            </button>
                         </div>
+                        <div className="flex-1 flex justify-end items-center"></div>
                     </div>
                 </div>
             );
@@ -710,7 +811,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
                     <div className="w-full">
-                        <ProgressBar player={playerRef.current} state={playerState} />
+                        <SpotifyProgressBar player={playerRef.current} state={playerState} />
                     </div>
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>

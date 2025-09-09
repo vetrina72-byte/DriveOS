@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FiLoader, FiChevronLeft, FiPlay, FiMusic } from 'react-icons/fi';
+import { FiLoader, FiChevronLeft, FiPlay, FiMusic, FiHeart } from 'react-icons/fi';
 import type { YouTubeTrackInfo } from '../types';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -27,9 +27,10 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
     const [tracks, setTracks] = useState<YouTubeTrackInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { nowPlaying, isPlayerReady } = useAuth();
+    const { nowPlaying, isPlayerReady, youTubeFavorites, onToggleYouTubeFavorite } = useAuth();
     
     const currentTrackId = nowPlaying.source === 'youtube' ? nowPlaying.youtubeTrack?.videoId : null;
+    const isFavorite = youTubeFavorites.includes(playlist.id);
 
     useEffect(() => {
         const fetchPlaylistItems = async () => {
@@ -49,6 +50,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                             title: item.snippet.title,
                             channelTitle: item.snippet.videoOwnerChannelTitle || playlist.description || 'YouTube',
                             thumbnail: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url,
+                            playlistId: playlist.id,
                         };
                     })
                     .filter((track): track is YouTubeTrackInfo => track !== null && track.title !== 'Private video' && track.title !== 'Deleted video');
@@ -111,6 +113,13 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                     <div className="flex items-center gap-4 mt-4">
                         <button onClick={handlePlayAll} disabled={!isPlayerReady || tracks.length === 0} className="bg-red-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
                             <FiPlay className="w-7 h-7 ml-1" />
+                        </button>
+                        <button
+                            onClick={() => onToggleYouTubeFavorite(playlist.id)}
+                            className="p-2 text-gray-400 hover:text-white transition-colors"
+                            aria-label={isFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
+                        >
+                            <FiHeart className={`w-8 h-8 transition-all ${isFavorite ? 'fill-current text-red-500' : ''}`} />
                         </button>
                     </div>
                 </div>

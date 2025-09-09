@@ -39,6 +39,8 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     isPlayerReady: boolean;
     pauseSpotify: () => void;
     setPlayerAsReadyForAutoplay: () => void;
+    youTubeFavorites: string[];
+    onToggleYouTubeFavorite: (id: string) => void;
 }
 
 interface PlayOptions {
@@ -78,6 +80,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading: false,
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
+    const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
+
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('youtube_favorites');
+            if (stored) {
+                setYouTubeFavorites(JSON.parse(stored));
+            }
+        } catch (e) { console.error("Failed to load YT favs", e); }
+    }, []);
+
+    const onToggleYouTubeFavorite = useCallback((id: string) => {
+        setYouTubeFavorites(prev => {
+            const newFavorites = prev.includes(id)
+                ? prev.filter(favId => favId !== id)
+                : [...prev, id];
+            try {
+                localStorage.setItem('youtube_favorites', JSON.stringify(newFavorites));
+            } catch (e) { console.error("Failed to save YT favs", e); }
+            return newFavorites;
+        });
+    }, []);
 
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
@@ -505,7 +529,7 @@ const silentRefreshToken = useCallback(async () => {
     const isPlayerReady = !!deviceId;
 
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay, youTubeFavorites, onToggleYouTubeFavorite }}>
             {children}
         </AuthContext.Provider>
     );

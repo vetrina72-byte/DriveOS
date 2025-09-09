@@ -99,6 +99,14 @@ const TheaterIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
+const YouTubeMusicIcon = (props: React.HTMLAttributes<HTMLImageElement>) => (
+    <img 
+        src="https://upload.wikimedia.org/wikipedia/commons/f/fc/Youtube_shorts_icon.svg" 
+        alt="YouTube Music" 
+        {...props}
+    />
+);
+
 
 export const ICONS = {
     // Weather
@@ -148,7 +156,7 @@ export const ICONS = {
     car: PiCarSimpleBold,
     voice: MdOutlineMic,
     spotify: FaSpotify,
-    youtube: FaYoutube,
+    youtube: YouTubeMusicIcon,
     maps: MapsIcon,
     radio: FiRadio,
     sun: FiSun,

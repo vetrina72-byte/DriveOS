@@ -71,6 +71,9 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
     const [musicCharts, setMusicCharts] = useState<MediaItem[]>([]);
     const [popPlaylists, setPopPlaylists] = useState<MediaItem[]>([]);
     const [livePerformances, setLivePerformances] = useState<MediaItem[]>([]);
+    const [italianPlaylists, setItalianPlaylists] = useState<MediaItem[]>([]);
+    const [workoutPlaylists, setWorkoutPlaylists] = useState<MediaItem[]>([]);
+    const [acousticSessions, setAcousticSessions] = useState<MediaItem[]>([]);
     
     const [searchQuery, setSearchQuery] = useState('');
     const [submittedQuery, setSubmittedQuery] = useState('');
@@ -86,25 +89,32 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
         setLoading(true);
         setError(null);
         try {
-            const [chartsRes, popRes, liveRes] = await Promise.all([
+            const [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes] = await Promise.all([
                 fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
                 fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=official pop hits playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
-                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`)
+                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
+                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=musica italiana playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
+                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=workout music playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
+                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=acoustic sessions live&type=video&maxResults=10&key=${YOUTUBE_API_KEY}`)
             ]);
 
-            if (!chartsRes.ok || !popRes.ok || !liveRes.ok) {
-                const errorData = await chartsRes.json();
-                console.error("YouTube API Error:", errorData);
-                throw new Error(errorData.error?.message || 'Failed to fetch data from YouTube API');
+            const responses = [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes];
+            for (const res of responses) {
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    console.error("YouTube API Error:", errorData);
+                    throw new Error(errorData.error?.message || 'Failed to fetch data from YouTube API');
+                }
             }
 
-            const chartsData = await chartsRes.json();
-            const popData = await popRes.json();
-            const liveData = await liveRes.json();
+            const [chartsData, popData, liveData, italianData, workoutData, acousticData] = await Promise.all(responses.map(res => res.json()));
 
             setMusicCharts(chartsData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
             setPopPlaylists(popData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
             setLivePerformances(liveData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
+            setItalianPlaylists(italianData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
+            setWorkoutPlaylists(workoutData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
+            setAcousticSessions(acousticData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
 
         } catch (err: any) {
             console.error("YouTube API fetch error:", err);
@@ -231,7 +241,10 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
             <>
                 <ContentCarousel title="Classifiche Musicali Italia" items={musicCharts} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-charts" />
                 <ContentCarousel title="Playlist Pop del Momento" items={popPlaylists} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-pop" />
+                <ContentCarousel title="Successi Italiani" items={italianPlaylists} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-italian" />
+                <ContentCarousel title="Workout Hits" items={workoutPlaylists} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-workout" />
                 <ContentCarousel title="Live Performance" items={livePerformances} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-live" />
+                <ContentCarousel title="Acoustic Sessions" items={acousticSessions} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-acoustic" />
             </>
         )
     };
@@ -256,10 +269,11 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
             >
                 <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
-                        <FaYoutube className="w-8 h-8 text-red-600" />
-                        <h1 id="youtube-music-app-title" className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                            YouTube Music
-                        </h1>
+                        <img 
+                          src="https://upload.wikimedia.org/wikipedia/commons/0/0e/YouTube_Music_full_logo.svg" 
+                          alt="YouTube Music" 
+                          className="h-8 w-auto"
+                        />
                     </div>
                      <form onSubmit={handleSearchSubmit} className="relative flex-grow max-w-sm">
                         <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />

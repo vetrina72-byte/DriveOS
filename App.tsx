@@ -33,7 +33,7 @@ interface AppDefinition {
 
 const ALL_APPS: AppDefinition[] = [
   { id: 'spotify', icon: ICONS.spotify, label: 'Spotify', colorClasses: 'text-green-500 hover:text-green-400' },
-  { id: 'youtube-music', icon: ICONS.youtube, label: 'YouTube', colorClasses: 'text-red-500 hover:text-red-400' },
+  { id: 'youtube-music', icon: ICONS.youtube, label: 'YouTube Music', colorClasses: 'text-red-500 hover:text-red-400' },
   { id: 'maps', icon: ICONS.maps, label: 'Maps' },
   { id: 'theater', icon: ICONS.theater, label: 'Theater' },
   { id: 'radio', icon: ICONS.radio, label: 'Radio' },
