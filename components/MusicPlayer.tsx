@@ -356,6 +356,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
     }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
 
+    // This effect resets the progress bar ONLY when the video ID changes.
+    useEffect(() => {
+        if (source === 'youtube') {
+            // When a new video is loaded, reset the progress to 0.
+            setYouTubeProgress({ position: 0, duration: 1 });
+        }
+    }, [youtubeTrack?.videoId, source]);
+
+    // This effect manages the polling interval for the progress bar.
     useEffect(() => {
         if (progressIntervalRef.current) {
             clearInterval(progressIntervalRef.current);
@@ -365,18 +374,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (source === 'youtube' && isYouTubePlaying && youtubePlayerRef.current) {
             progressIntervalRef.current = window.setInterval(() => {
                 const player = youtubePlayerRef.current;
-                if (player && typeof player.getCurrentTime === 'function') {
+                if (player && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
                     const position = player.getCurrentTime();
                     const duration = player.getDuration();
+                    
+                    // Only update if duration is a sensible number to prevent initial flash.
                     if (duration > 0) {
-                         setYouTubeProgress({ position, duration });
+                        setYouTubeProgress({ position, duration });
                     }
                 }
-            }, 500);
-        } else {
-            setYouTubeProgress({ position: 0, duration: 1 });
+            }, 250); // Poll faster for a smoother progress bar.
         }
 
+        // Cleanup: Clear interval when component unmounts or dependencies change.
         return () => {
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
