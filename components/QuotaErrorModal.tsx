@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FiMusic } from 'react-icons/fi';
 import type { YouTubeTrackInfo } from '../types';
 
 // Expanded and diversified pool of fallback tracks for variety.
@@ -10,23 +11,23 @@ const FALLBACK_TRACK_POOL: YouTubeTrackInfo[] = [
     { videoId: '5wRWniH7rt8', title: 'Chillhop Radio', channelTitle: 'Chillhop Raccoon', thumbnail: 'https://i.ytimg.com/vi/5wRWniH7rt8/hqdefault_live.jpg' },
     
     // Genre Mixes
-    { videoId: '3455n3-sO8M', title: 'Mix Pop Internazionale', channelTitle: 'Level Up', thumbnail: 'https://i.ytimg.com/vi/3455n3-sO8M/maxresdefault.jpg' },
-    { videoId: 's33sI9Xp_G0', title: 'Mix Rock Classico 70s-90s', channelTitle: 'Classic Rock Music', thumbnail: 'https://i.ytimg.com/vi/s33sI9Xp_G0/maxresdefault.jpg' },
-    { videoId: 'P2lY53yF3Q4', title: 'Successi Italiani di Sempre', channelTitle: 'Canzoni Italiane', thumbnail: 'https://i.ytimg.com/vi/P2lY53yF3Q4/maxresdefault.jpg' },
+    { videoId: '3455n3-sO8M', title: 'Mix Pop Internazionale', channelTitle: 'Level Up', thumbnail: 'https://i.ytimg.com/vi/3455n3-sO8M/hqdefault.jpg' },
+    { videoId: 'ep6581-2294', title: 'Mix Rock Classico 70s-90s', channelTitle: 'Old Music', thumbnail: 'https://i.ytimg.com/vi/ep6581-2294/hqdefault.jpg' },
+    { videoId: 'G_KzP2y2l4c', title: 'Successi Italiani di Sempre', channelTitle: 'Musica, Amore e Ricordi', thumbnail: 'https://i.ytimg.com/vi/G_KzP2y2l4c/hqdefault.jpg' },
     { videoId: 'Dx5qFachdxc', title: 'Relaxing Jazz Piano Radio', channelTitle: 'Cafe Music BGM channel', thumbnail: 'https://i.ytimg.com/vi/Dx5qFachdxc/hqdefault_live.jpg' },
-    { videoId: 'h_Q24a4-h_g', title: 'Gaming Music Mix (EDM, Dubstep)', channelTitle: 'Magic Music', thumbnail: 'https://i.ytimg.com/vi/h_Q24a4-h_g/maxresdefault.jpg' },
-    { videoId: 'pRpeEdMmmQ0', title: 'Mix Indie/Rock/Alternative', channelTitle: 'alexrainbirdMusic', thumbnail: 'https://i.ytimg.com/vi/pRpeEdMmmQ0/maxresdefault.jpg' },
-    { videoId: 'mUT353__g-8', title: 'Grandi Successi Anni \'80', channelTitle: 'Best Music', thumbnail: 'https://i.ytimg.com/vi/mUT353__g-8/maxresdefault.jpg' },
-    { videoId: 'ulIhVp_wF5g', title: 'Mix Reggaeton 2024', channelTitle: 'DJ Kike', thumbnail: 'https://i.ytimg.com/vi/ulIhVp_wF5g/maxresdefault.jpg' },
-    { videoId: 'W-fFHeTX70Q', title: 'Musica Classica Rilassante', channelTitle: 'HALIDONMUSIC', thumbnail: 'https://i.ytimg.com/vi/W-fFHeTX70Q/maxresdefault.jpg' },
+    { videoId: 'h_Q24a4-h_g', title: 'Gaming Music Mix (EDM, Dubstep)', channelTitle: 'Magic Music', thumbnail: 'https://i.ytimg.com/vi/h_Q24a4-h_g/hqdefault.jpg' },
+    { videoId: 'pRpeEdMmmQ0', title: 'Mix Indie/Rock/Alternative', channelTitle: 'alexrainbirdMusic', thumbnail: 'https://i.ytimg.com/vi/pRpeEdMmmQ0/hqdefault.jpg' },
+    { videoId: '0o1-52p32sY', title: 'Grandi Successi Anni \'80', channelTitle: '80s Music', thumbnail: 'https://i.ytimg.com/vi/0o1-52p32sY/hqdefault.jpg' },
+    { videoId: 'ulIhVp_wF5g', title: 'Mix Reggaeton 2024', channelTitle: 'DJ Kike', thumbnail: 'https://i.ytimg.com/vi/ulIhVp_wF5g/hqdefault.jpg' },
+    { videoId: 'W-fFHeTX70Q', title: 'Musica Classica Rilassante', channelTitle: 'HALIDONMUSIC', thumbnail: 'https://i.ytimg.com/vi/W-fFHeTX70Q/hqdefault.jpg' },
 
     // Ambient & Focus
-    { videoId: 'DWcJFNfaw9c', title: 'Musica Ambient per Dormire', channelTitle: 'Quiet Quest - Study Music', thumbnail: 'https://i.ytimg.com/vi/DWcJFNfaw9c/maxresdefault.jpg' },
-    { videoId: '1O-k-J-4R1Y', title: 'Beautiful Space Music', channelTitle: 'Soothing Relaxation', thumbnail: 'https://i.ytimg.com/vi/1O-k-J-4R1Y/maxresdefault.jpg' },
+    { videoId: 'DWcJFNfaw9c', title: 'Musica Ambient per Dormire', channelTitle: 'Quiet Quest - Study Music', thumbnail: 'https://i.ytimg.com/vi/DWcJFNfaw9c/hqdefault.jpg' },
+    { videoId: '1O-k-J-4R1Y', title: 'Beautiful Space Music', channelTitle: 'Soothing Relaxation', thumbnail: 'https://i.ytimg.com/vi/1O-k-J-4R1Y/hqdefault.jpg' },
     
     // More Playlists
-    { videoId: 'q0BVR5jRX40', title: 'Top Hits Italiane', channelTitle: 'Power Hits', thumbnail: 'https://i.ytimg.com/vi/q0BVR5jRX40/maxresdefault.jpg'},
-    { videoId: 'bO4_9-I528Q', title: 'Acoustic Covers', channelTitle: 'Relaxing Music', thumbnail: 'https://i.ytimg.com/vi/bO4_9-I528Q/maxresdefault.jpg'},
+    { videoId: 'q0BVR5jRX40', title: 'Top Hits Italiane', channelTitle: 'Power Hits', thumbnail: 'https://i.ytimg.com/vi/q0BVR5jRX40/hqdefault.jpg'},
+    { videoId: 'bO4_9-I528Q', title: 'Acoustic Covers', channelTitle: 'Relaxing Music', thumbnail: 'https://i.ytimg.com/vi/bO4_9-I528Q/hqdefault.jpg'},
 ];
 
 
@@ -52,6 +53,16 @@ interface QuotaErrorModalProps {
 }
 
 const QuotaErrorModal: React.FC<QuotaErrorModalProps> = ({ isOpen, onClose, isNight, onPlayTrack }) => {
+    const [displayTracks, setDisplayTracks] = useState<YouTubeTrackInfo[]>([]);
+
+    useEffect(() => {
+        if (isOpen) {
+            // Shuffle the pool and take the first 4 tracks to display
+            const shuffled = [...FALLBACK_TRACK_POOL].sort(() => 0.5 - Math.random());
+            setDisplayTracks(shuffled.slice(0, 4));
+        }
+    }, [isOpen]);
+    
     const theme = {
         bg: isNight ? 'bg-zinc-800' : 'bg-gray-100',
         textPrimary: isNight ? 'text-zinc-100' : 'text-zinc-800',
@@ -85,15 +96,15 @@ const QuotaErrorModal: React.FC<QuotaErrorModalProps> = ({ isOpen, onClose, isNi
                             <h2 className={`text-2xl font-bold ${theme.textPrimary}`}>Un attimo di pausa 🎶</h2>
                         </div>
                         <p className={theme.textSecondary}>
-                            Alcuni brani non sono disponibili al momento. Nel frattempo, perché non ascolti una di queste playlist?
+                            Alcuni brani non sono disponibili al momento. Nel frattempo, perché non ascolti una di queste playlist offline?
                         </p>
 
-                        <div className={`flex flex-col gap-2 mt-2 h-64 overflow-y-auto hide-scrollbar border-y py-2 -mx-2 px-2 ${theme.border}`}>
-                            {FALLBACK_TRACK_POOL.map((track) => (
+                        <div className="flex flex-col gap-2 mt-2">
+                            {displayTracks.map((track) => (
                                 <button
                                     key={track.videoId}
-                                    onClick={() => onPlayTrack(track, FALLBACK_TRACK_POOL)}
-                                    className={`w-full text-left p-2 rounded-lg flex items-center gap-3 transition-colors flex-shrink-0 ${theme.hover}`}
+                                    onClick={() => onPlayTrack(track, displayTracks)}
+                                    className={`w-full text-left p-2 rounded-lg flex items-center gap-3 transition-colors ${theme.hover}`}
                                 >
                                     <img src={track.thumbnail} alt={track.title} className="w-12 h-12 rounded-md object-cover flex-shrink-0" />
                                     <div className="flex-grow min-w-0">
