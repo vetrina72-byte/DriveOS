@@ -7,14 +7,18 @@ import type { YouTubeTrackInfo } from '../types';
 import YouTubePlaylistDetailView from './YouTubePlaylistDetailView';
 import QuotaErrorModal from './QuotaErrorModal';
 
-// Legge la chiave API dalla variabile d'ambiente.
-const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
-
-// Aggiungi un log di avviso per ricordarmi quale chiave sto usando.
-if (!process.env.VITE_YOUTUBE_API_KEY) {
-  console.warn("ATTENZIONE: Sto usando una chiave API di fallback hardcodata nel codice. Assicurati che VITE_YOUTUBE_API_KEY sia impostata in produzione.");
+interface YouTubeMusicAppProps {
+    isOpen: boolean;
+    onClose: () => void;
+    isNight: boolean;
+    spotifyPlayerTop: number;
+    spotifyPlayerBottom: number;
+    homeData: { [key: string]: MediaItem[] };
+    isHomeDataLoading: boolean;
+    homeDataError: string | null;
+    homeDataQuotaExceeded: boolean;
+    onRetry: () => void;
 }
-
 
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     const bgColor = isNight ? 'bg-white/5' : 'bg-black/5';
@@ -54,27 +58,23 @@ const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
 };
 
 
-const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPlayerBottom }: { 
-    isOpen: boolean; 
-    onClose: () => void; 
-    isNight: boolean;
-    spotifyPlayerTop: number;
-    spotifyPlayerBottom: number;
+const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({ 
+    isOpen, 
+    isNight, 
+    spotifyPlayerTop, 
+    spotifyPlayerBottom,
+    homeData,
+    isHomeDataLoading,
+    homeDataError,
+    homeDataQuotaExceeded,
+    onRetry
 }) => {
     const { playYouTube } = useAuth();
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
 
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [quotaExceeded, setQuotaExceeded] = useState(false);
-
-    const [musicCharts, setMusicCharts] = useState<MediaItem[]>([]);
-    const [popPlaylists, setPopPlaylists] = useState<MediaItem[]>([]);
-    const [livePerformances, setLivePerformances] = useState<MediaItem[]>([]);
-    const [italianPlaylists, setItalianPlaylists] = useState<MediaItem[]>([]);
-    const [workoutPlaylists, setWorkoutPlaylists] = useState<MediaItem[]>([]);
-    const [acousticSessions, setAcousticSessions] = useState<MediaItem[]>([]);
     
     const [searchQuery, setSearchQuery] = useState('');
     const [submittedQuery, setSubmittedQuery] = useState('');
@@ -82,63 +82,12 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
     const [isSearching, setIsSearching] = useState(false);
     const [selectedPlaylist, setSelectedPlaylist] = useState<{ id: string; name: string; images?: { url: string }[], description?: string } | null>(null);
 
-
     const openingBoxSpeed = 4.5;
     const closingBoxSpeed = 8.6;
 
-    const fetchDefaultData = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        setQuotaExceeded(false);
-        try {
-            const [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes] = await Promise.all([
-                fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
-                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=official pop hits playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
-                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
-                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=musica italiana playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
-                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=workout music playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
-                fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=acoustic sessions live&type=video&maxResults=10&key=${YOUTUBE_API_KEY}`)
-            ]);
-
-            const responses = [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes];
-            for (const res of responses) {
-                if (!res.ok) {
-                    const errorData = await res.json();
-                    console.error("YouTube API Error:", errorData);
-                    if (errorData.error?.errors?.[0]?.reason === 'quotaExceeded' || errorData.error?.message.toLowerCase().includes('quota')) {
-                        throw new Error("quotaExceeded");
-                    }
-                    throw new Error(errorData.error?.message || 'Failed to fetch data from YouTube API');
-                }
-            }
-
-            const [chartsData, popData, liveData, italianData, workoutData, acousticData] = await Promise.all(responses.map(res => res.json()));
-
-            setMusicCharts(chartsData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
-            setPopPlaylists(popData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
-            setLivePerformances(liveData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
-            setItalianPlaylists(italianData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
-            setWorkoutPlaylists(workoutData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
-            setAcousticSessions(acousticData.items.map(mapYouTubeItemToMediaItem).filter(Boolean));
-
-        } catch (err: any) {
-            console.error("YouTube API fetch error:", err);
-            if (err.message === 'quotaExceeded') {
-                setError(null);
-                setQuotaExceeded(true);
-            } else {
-                setError(err.message || "Could not load content from YouTube.");
-            }
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
     useEffect(() => {
-        if (isOpen && musicCharts.length === 0) {
-            fetchDefaultData();
-        }
-    }, [isOpen, musicCharts.length, fetchDefaultData]);
+        setQuotaExceeded(homeDataQuotaExceeded);
+    }, [homeDataQuotaExceeded]);
 
     useEffect(() => {
         let lastTime = performance.now();
@@ -177,6 +126,7 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
         setSelectedPlaylist(null); // Exit playlist view on new search
 
         try {
+            const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
             const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchQuery}&type=video&videoCategoryId=10&maxResults=20&key=${YOUTUBE_API_KEY}`);
              if (!res.ok) {
                 const errorData = await res.json();
@@ -201,7 +151,7 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
         }
     }, [searchQuery]);
     
-    const handleSelectItem = (item: MediaItem) => {
+    const handleSelectItem = (item: MediaItem, contextItems?: MediaItem[]) => {
         if (item.type === 'track' && item.id) {
             const trackInfo: YouTubeTrackInfo = {
                 videoId: item.id,
@@ -209,7 +159,20 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
                 channelTitle: item.description || 'YouTube',
                 thumbnail: item.images?.[0]?.url || '',
             };
-            playYouTube(trackInfo);
+            
+            let context: YouTubeTrackInfo[] | undefined;
+            if (contextItems) {
+                context = contextItems
+                    .filter(i => i.type === 'track')
+                    .map(i => ({
+                        videoId: i.id,
+                        title: i.name,
+                        channelTitle: i.description || 'YouTube',
+                        thumbnail: i.images?.[0]?.url || '',
+                    }));
+            }
+            
+            playYouTube(trackInfo, context);
         } else if (item.type === 'playlist' && item.id) {
             setSelectedPlaylist({
                 id: item.id,
@@ -247,7 +210,7 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
             );
         }
         
-        if (loading) {
+        if (isHomeDataLoading) {
             return (
                 <>
                     <SkeletonCarousel isNight={isNight} />
@@ -257,8 +220,8 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
             );
         }
     
-        if (error) {
-            return <div className="flex-grow flex justify-center items-center text-red-400 p-4 text-center">{error}</div>;
+        if (error || homeDataError) {
+            return <div className="flex-grow flex justify-center items-center text-red-400 p-4 text-center">{error || homeDataError}</div>;
         }
 
         if (submittedQuery) {
@@ -273,12 +236,12 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
 
         return (
             <>
-                <ContentCarousel title="Classifiche Musicali Italia" items={musicCharts} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-charts" />
-                <ContentCarousel title="Playlist Pop del Momento" items={popPlaylists} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-pop" />
-                <ContentCarousel title="Successi Italiani" items={italianPlaylists} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-italian" />
-                <ContentCarousel title="Workout Hits" items={workoutPlaylists} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-workout" />
-                <ContentCarousel title="Live Performance" items={livePerformances} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-live" />
-                <ContentCarousel title="Acoustic Sessions" items={acousticSessions} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-acoustic" />
+                <ContentCarousel title="Classifiche Musicali Italia" items={homeData.musicCharts || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-charts" />
+                <ContentCarousel title="Playlist Pop del Momento" items={homeData.popPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-pop" />
+                <ContentCarousel title="Successi Italiani" items={homeData.italianPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-italian" />
+                <ContentCarousel title="Workout Hits" items={homeData.workoutPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-workout" />
+                <ContentCarousel title="Live Performance" items={homeData.livePerformances || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-live" />
+                <ContentCarousel title="Acoustic Sessions" items={homeData.acousticSessions || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-acoustic" />
             </>
         )
     };
@@ -336,7 +299,12 @@ const YouTubeMusicApp = ({ isOpen, onClose, isNight, spotifyPlayerTop, spotifyPl
                      {renderContent()}
                      <QuotaErrorModal
                         isOpen={quotaExceeded}
-                        onClose={() => setQuotaExceeded(false)}
+                        onClose={() => {
+                            setQuotaExceeded(false);
+                            if (homeDataQuotaExceeded) {
+                                onRetry();
+                            }
+                        }}
                         isNight={isNight}
                         onPlayTrack={handlePlayYouTubeTrack}
                      />

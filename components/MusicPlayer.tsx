@@ -132,29 +132,29 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
 const YouTubeProgressBar = ({
     progress,
+    isSeeking,
     onSeek,
     onSeekStart,
     onSeekEnd,
 }: {
     progress: { position: number; duration: number };
+    isSeeking: boolean;
     onSeek: (position: number) => void;
     onSeekStart: () => void;
     onSeekEnd: () => void;
 }) => {
     const [localPosition, setLocalPosition] = useState(progress.position);
-    const [isInteracting, setIsInteracting] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     
-    // Sync with external state only when not interacting
+    // Sync with external state only when not seeking
     useEffect(() => {
-        if (!isInteracting) {
+        if (!isSeeking) {
             setLocalPosition(progress.position);
         }
-    }, [progress.position, isInteracting]);
+    }, [progress.position, isSeeking]);
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current) return;
-        setIsInteracting(true);
         onSeekStart();
         
         const getSeekPosition = (clientX: number): number => {
@@ -176,8 +176,8 @@ const YouTubeProgressBar = ({
             window.removeEventListener('mouseup', handleMouseUp);
             
             const finalPos = getSeekPosition(upEvent.clientX);
+            setLocalPosition(finalPos);
             onSeek(finalPos);
-            setIsInteracting(false);
             onSeekEnd();
         };
         
@@ -185,7 +185,8 @@ const YouTubeProgressBar = ({
         window.addEventListener('mouseup', handleMouseUp);
     }, [onSeek, onSeekStart, onSeekEnd, progress.duration]);
 
-    const progressPercentage = progress.duration > 0 ? (localPosition / progress.duration) * 100 : 0;
+    const displayPosition = isSeeking ? localPosition : progress.position;
+    const progressPercentage = progress.duration > 0 ? (displayPosition / progress.duration) * 100 : 0;
 
     return (
         <div
@@ -261,7 +262,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     favoriteStationUUIDs,
     onToggleFavorite,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay, youTubeFavorites, onToggleYouTubeFavorite } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay, youTubeFavorites, onToggleYouTubeFavorite, playYouTube } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -286,7 +287,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isYouTubePlaying, setIsYouTubePlaying] = useState(false);
     const [youTubeProgress, setYouTubeProgress] = useState({ position: 0, duration: 1 });
     const progressIntervalRef = useRef<number | null>(null);
-    const isSeekingRef = useRef(false);
+    const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
 
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
@@ -389,7 +390,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         if (source === 'youtube' && isYouTubePlaying && youtubePlayerRef.current) {
             progressIntervalRef.current = window.setInterval(() => {
-                if (isSeekingRef.current) return;
+                if (isYouTubeSeeking) return;
                 
                 const player = youtubePlayerRef.current;
                 if (player && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
@@ -408,7 +409,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 clearInterval(progressIntervalRef.current);
             }
         };
-    }, [source, isYouTubePlaying]);
+    }, [source, isYouTubePlaying, isYouTubeSeeking]);
 
     useEffect(() => {
         if (!accessToken) {
@@ -601,6 +602,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
              setNowPlaying(s => ({ ...s, isLoading: false }));
         }
     };
+    
+    const handleYouTubeEnd = () => {
+        if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) {
+            return;
+        }
+    
+        const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
+            track => track.videoId === nowPlaying.youtubeTrack?.videoId
+        );
+    
+        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
+            console.log("End of YouTube playlist.");
+            return;
+        }
+    
+        const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
+        playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+    };
 
     const handleTogglePlay = () => {
         if (source === 'spotify') {
@@ -687,14 +706,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
     
     const handleYouTubeSeekStart = useCallback(() => {
-        isSeekingRef.current = true;
+        setIsYouTubeSeeking(true);
     }, []);
     
     const handleYouTubeSeekEnd = useCallback(() => {
-        // Add a small delay to allow the player to update its state
-        // before we resume polling. This prevents the progress bar jump.
         setTimeout(() => {
-            isSeekingRef.current = false;
+            setIsYouTubeSeeking(false);
         }, 300);
     }, []);
 
@@ -762,6 +779,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     </div>
                     <YouTubeProgressBar 
                         progress={youTubeProgress} 
+                        isSeeking={isYouTubeSeeking}
                         onSeek={handleSeekYouTube}
                         onSeekStart={handleYouTubeSeekStart}
                         onSeekEnd={handleYouTubeSeekEnd}
@@ -958,6 +976,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     }}
                     onReady={handleYoutubeReady}
                     onStateChange={handleYoutubeStateChange}
+                    onEnd={handleYouTubeEnd}
                 />
             </div>
         </>

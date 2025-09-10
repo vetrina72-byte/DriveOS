@@ -23,6 +23,7 @@ import RadioApp from './components/RadioApp';
 import YouTubeMusicApp from './components/YouTubeMusicApp';
 import { AnimatePresence, motion } from 'framer-motion';
 import VirtualKeyboard from './components/VirtualKeyboard';
+import { SpotifyItem as MediaItem } from './components/PlaylistItem';
 
 interface AppDefinition {
   id: string;
@@ -626,6 +627,23 @@ export const initialSceneColors: SceneColors = {
   }
 };
 
+const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
+
+const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
+    if (!item || !item.snippet) return null;
+    const id = typeof item.id === 'string' ? item.id : item.id?.videoId || item.id?.playlistId;
+    if (!id) return null;
+    const type = item.kind === 'youtube#video' || item.id?.kind === 'youtube#video' ? 'track' :
+                 item.kind === 'youtube#playlist' || item.id?.kind === 'youtube#playlist' ? 'playlist' : 'track';
+    return {
+        id,
+        name: item.snippet.title,
+        uri: `youtube:${type}:${id}`,
+        images: [item.snippet.thumbnails.high || item.snippet.thumbnails.default],
+        description: item.snippet.channelTitle,
+        type: type,
+    };
+};
 
 function AppContent() {
   const { nowPlaying, setNowPlaying, pauseSpotify } = useAuth();
@@ -690,6 +708,12 @@ function AppContent() {
   const [volumeSliderPopupHeight, setVolumeSliderPopupHeight] = useState(40);
   const [appLauncherWidth, setAppLauncherWidth] = useState(37); // percentage
   const [appLauncherHeight, setAppLauncherHeight] = useState(286); // pixels
+
+  // YouTube Music State
+  const [youtubeHomeData, setYoutubeHomeData] = useState<{[key: string]: MediaItem[]}>({});
+  const [youtubeHomeIsLoading, setYoutubeHomeIsLoading] = useState(true);
+  const [youtubeHomeError, setYoutubeHomeError] = useState<string | null>(null);
+  const [youtubeHomeQuotaExceeded, setYoutubeHomeQuotaExceeded] = useState(false);
 
   // Debug UI Colors
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
@@ -1211,6 +1235,62 @@ function AppContent() {
     }
   };
   
+  const fetchYouTubeHomeData = useCallback(async () => {
+    if (Object.keys(youtubeHomeData).length > 0) return;
+
+    setYoutubeHomeIsLoading(true);
+    setYoutubeHomeError(null);
+    setYoutubeHomeQuotaExceeded(false);
+    try {
+        const [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes] = await Promise.all([
+            fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=official pop hits playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=musica italiana playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=workout music playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=acoustic sessions live&type=video&maxResults=10&key=${YOUTUBE_API_KEY}`)
+        ]);
+
+        const responses = [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes];
+        for (const res of responses) {
+            if (!res.ok) {
+                const errorData = await res.json();
+                if (errorData.error?.errors?.[0]?.reason === 'quotaExceeded' || errorData.error?.message.toLowerCase().includes('quota')) {
+                    throw new Error("quotaExceeded");
+                }
+                throw new Error(errorData.error?.message || 'Failed to fetch data from YouTube API');
+            }
+        }
+
+        const [chartsData, popData, liveData, italianData, workoutData, acousticData] = await Promise.all(responses.map(res => res.json()));
+
+        setYoutubeHomeData({
+            musicCharts: chartsData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
+            popPlaylists: popData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
+            livePerformances: liveData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
+            italianPlaylists: italianData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
+            workoutPlaylists: workoutData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
+            acousticSessions: acousticData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
+        });
+
+    } catch (err: any) {
+        if (err.message === 'quotaExceeded') {
+            setYoutubeHomeError(null);
+            setYoutubeHomeQuotaExceeded(true);
+        } else {
+            setYoutubeHomeError(err.message || "Could not load content from YouTube.");
+        }
+    } finally {
+        setYoutubeHomeIsLoading(false);
+    }
+  }, [youtubeHomeData]);
+  
+  useEffect(() => {
+    if (activeApp === 'youtube-music') {
+        fetchYouTubeHomeData();
+    }
+  }, [activeApp, fetchYouTubeHomeData]);
+
   const toggleApp = (appName: string) => {
     setIsAppLauncherOpen(false);
     setIsCustomizing(false);
@@ -1459,6 +1539,11 @@ function AppContent() {
             isNight={useDarkTheme}
             spotifyPlayerTop={spotifyPlayerTop}
             spotifyPlayerBottom={spotifyPlayerBottom}
+            homeData={youtubeHomeData}
+            isHomeDataLoading={youtubeHomeIsLoading}
+            homeDataError={youtubeHomeError}
+            homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
+            onRetry={fetchYouTubeHomeData}
           />
         )}
       </AnimatePresence>

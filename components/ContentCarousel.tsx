@@ -28,7 +28,7 @@ const itemVariants = {
   }
 };
 
-const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: MediaItem[], isNight: boolean, onSelectItem: (item: MediaItem) => void, keyPrefix: string }) => {
+const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: MediaItem[], isNight: boolean, onSelectItem: (item: MediaItem, context?: MediaItem[]) => void, keyPrefix: string }) => {
   const validItems = Array.isArray(items) ? items.filter(item => item && item.id) : [];
 
   if (validItems.length === 0) return null;
@@ -77,7 +77,7 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
       >
         {validItems.map((item, index) => (
           <motion.div variants={itemVariants} key={`${keyPrefix}-${item.id || index}`}>
-            <PlaylistItem item={item} isNight={isNight} onSelectItem={onSelectItem} />
+            <PlaylistItem item={item} isNight={isNight} onSelectItem={(selectedItem) => onSelectItem(selectedItem, items)} />
           </motion.div>
         ))}
       </motion.div>
