@@ -57,6 +57,8 @@ const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
     };
 };
 
+const logoUrlDark = "https://upload.wikimedia.org/wikipedia/commons/c/c3/YouTube_Music_short_logo_with_white_wordmark.svg";
+const logoUrlLight = "https://upload.wikimedia.org/wikipedia/commons/0/0a/YouTube_Music_short_logo-black.svg";
 
 const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({ 
     isOpen, 
@@ -267,9 +269,9 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <img 
-                          src={isNight ? "https://upload.wikimedia.org/wikipedia/commons/c/c3/YouTube_Music_short_logo_with_white_wordmark.svg" : "https://upload.wikimedia.org/wikipedia/commons/0/0a/YouTube_Music_short_logo-black.svg"}
-                          alt="YouTube Music Logo"
-                          className="h-8 w-auto"
+                            src={isNight ? logoUrlDark : logoUrlLight} 
+                            alt="YouTube Music Logo" 
+                            className="h-7"
                         />
                          <h1 id="youtube-music-app-title" className="sr-only">YouTube Music</h1>
                     </div>

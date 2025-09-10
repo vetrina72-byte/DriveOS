@@ -14,7 +14,7 @@ import {
 import { 
     PiFanFill, PiSeatbeltFill, PiCarSimpleBold 
 } from "react-icons/pi";
-import { FaSoundcloud, FaSpotify, FaYoutube } from 'react-icons/fa';
+import { FaSoundcloud, FaSpotify } from 'react-icons/fa';
 import { IoGameControllerOutline } from 'react-icons/io5';
 import { SiTidal } from 'react-icons/si';
 
@@ -99,12 +99,8 @@ const TheaterIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
-const YouTubeMusicIcon = (props: React.HTMLAttributes<HTMLImageElement>) => (
-    <img 
-        src="https://upload.wikimedia.org/wikipedia/commons/f/fc/Youtube_shorts_icon.svg" 
-        alt="YouTube Music" 
-        {...props}
-    />
+const YouTubeMusicIcon = (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
+    <img src="https://upload.wikimedia.org/wikipedia/commons/f/fc/Youtube_shorts_icon.svg" alt="YouTube Music" {...props} />
 );
 
 

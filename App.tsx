@@ -34,10 +34,10 @@ interface AppDefinition {
 
 const ALL_APPS: AppDefinition[] = [
   { id: 'spotify', icon: ICONS.spotify, label: 'Spotify', colorClasses: 'text-green-500 hover:text-green-400' },
-  { id: 'youtube-music', icon: ICONS.youtube, label: 'YouTube Music', colorClasses: 'text-red-500 hover:text-red-400' },
+  { id: 'youtube-music', icon: ICONS.youtube, label: 'YouTube Music', colorClasses: '' },
   { id: 'maps', icon: ICONS.maps, label: 'Maps' },
   { id: 'theater', icon: ICONS.theater, label: 'Theater' },
-  { id: 'radio', icon: ICONS.radio, label: 'Radio' },
+  { id: 'radio', icon: ICONS.radio, label: 'Radio', colorClasses: 'text-white' },
 ];
 
 const weatherConfig: Record<string, WeatherParams> = {
@@ -701,7 +701,7 @@ function AppContent() {
   const [volumeIconSize, setVolumeIconSize] = useState(30);
   const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
   const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-128);
-  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(100);
+  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(20);
   const [volumeSliderWidth, setVolumeSliderWidth] = useState(177);
   const [volumeSliderThickness, setVolumeSliderThickness] = useState(6);
   const [volumeSliderPopupWidth, setVolumeSliderPopupWidth] = useState(247);
@@ -1286,10 +1286,10 @@ function AppContent() {
   }, [youtubeHomeData]);
   
   useEffect(() => {
-    if (activeApp === 'youtube-music') {
+    if (activeApp === 'youtube-music' && !nowPlaying.youtubeTrack) {
         fetchYouTubeHomeData();
     }
-  }, [activeApp, fetchYouTubeHomeData]);
+  }, [activeApp, fetchYouTubeHomeData, nowPlaying.youtubeTrack]);
 
   const toggleApp = (appName: string) => {
     setIsAppLauncherOpen(false);
@@ -1300,21 +1300,6 @@ function AppContent() {
         setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
     }
 
-    if (willBeActive) {
-      if (appName === 'radio' || appName === 'youtube-music') {
-        // Let media player context handle state
-      } else if (nowPlaying.source !== 'spotify' && appName !== 'spotify' && appName !== 'maps') {
-        // Stop non-spotify media if switching to a non-media, non-maps app
-        setNowPlaying(prev => ({ 
-            ...prev,
-            source: null, 
-            radioStation: null, 
-            radioContext: [],
-            youtubeTrack: null,
-        }));
-      }
-    }
-
     if (appName === 'spotify' && activeApp === 'maps') {
         setActiveApp('spotify');
         setIsMapsLayered(true);
@@ -1322,6 +1307,18 @@ function AppContent() {
         setActiveApp('maps');
         setIsMapsLayered(false);
     } else {
+        const isSwitchingToMediaApp = ['spotify', 'radio', 'youtube-music'].includes(appName);
+        const isSwitchingFromMediaApp = ['spotify', 'radio', 'youtube-music'].includes(activeApp ?? '');
+        
+        // If switching away from a media app to a non-media app, don't clear nowPlaying
+        if(isSwitchingFromMediaApp && !isSwitchingToMediaApp && willBeActive) {
+            // Don't do anything to nowPlaying state
+        } else if (isSwitchingFromMediaApp && isSwitchingToMediaApp && willBeActive) {
+            // This is handled by play functions in AuthContext
+        } else {
+            // setNowPlaying({ source: null, spotifyState: null, radioStation: null, radioContext: [], youtubeTrack: null });
+        }
+        
         setIsMapsLayered(false);
         setActiveApp(prevApp => (prevApp === appName ? null : appName));
     }
@@ -1588,7 +1585,7 @@ function AppContent() {
               const app = ALL_APPS.find(a => a.id === appId);
               if (!app) return null;
 
-              const effectiveColorClasses = app.colorClasses || 'text-gray-400 hover:text-white';
+              const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
               
               return (
                 <div key={app.id} className="relative flex flex-col items-center">
@@ -1636,7 +1633,7 @@ function AppContent() {
                 {recentAppsToShow.map(appId => {
                     const app = ALL_APPS.find(a => a.id === appId);
                     if (!app) return null;
-                    const effectiveColorClasses = app.colorClasses || 'text-gray-400 hover:text-white';
+                    const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
                     return (
                        <div key={`recent-${app.id}`} className="relative flex flex-col items-center">
                             <button
@@ -1644,7 +1641,7 @@ function AppContent() {
                                 className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${effectiveColorClasses}`}
                                 aria-label={app.label}
                             >
-                                <app.icon className="w-8 h-8 opacity-70" />
+                                <app.icon className={`w-8 h-8 ${activeApp === app.id ? 'opacity-100' : 'opacity-70'}`} />
                             </button>
                              {activeApp === app.id && (
                                 <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
@@ -1655,7 +1652,7 @@ function AppContent() {
               </>
             )}
         </div>
-        <div className="flex-1 flex justify-end items-center pr-2">
+        <div className="flex-1 flex justify-end items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}>
             <VolumeControl 
                 iconSize={volumeIconSize}
                 sliderOffsetY={volumeSliderOffsetY}

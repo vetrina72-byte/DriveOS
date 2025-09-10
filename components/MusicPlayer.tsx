@@ -291,6 +291,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const progressIntervalRef = useRef<number | null>(null);
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
+    const hasEndedRef = useRef(false);
 
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
@@ -398,26 +399,56 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, [source]);
 
+    const handleYouTubeEnd = useCallback(() => {
+        if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) {
+            return;
+        }
+    
+        const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
+            track => track.videoId === nowPlaying.youtubeTrack?.videoId
+        );
+    
+        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
+            console.log("End of YouTube playlist.");
+            return;
+        }
+    
+        const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
+        playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+    }, [nowPlaying, playYouTube]);
+
     useEffect(() => {
         if (progressIntervalRef.current) {
             clearInterval(progressIntervalRef.current);
         }
 
-        if (source === 'youtube' && isYouTubePlaying && youtubePlayerRef.current) {
+        if (source === 'youtube' && youtubePlayerRef.current) {
             progressIntervalRef.current = window.setInterval(() => {
-                // FIX #1: The crucial guard to prevent player state updates while user is seeking.
-                if (isYouTubeSeeking) return;
-                
                 const player = youtubePlayerRef.current;
-                if (player && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
-                    const position = player.getCurrentTime();
-                    const duration = player.getDuration();
-                    
+                if (!player || typeof player.getPlayerState !== 'function' || typeof player.getCurrentTime !== 'function') return;
+
+                const playerState = player.getPlayerState();
+                const position = player.getCurrentTime();
+                const duration = player.getDuration();
+                
+                // Handle progress update
+                if (playerState === 1 && !isYouTubeSeeking) { // PLAYING
                     if (duration > 0) {
                         setYouTubeProgress({ position, duration });
                     }
                 }
-            }, 250);
+                
+                // A track is considered finished if its state is ENDED (0),
+                // OR if its current time is very close to the end. This second condition
+                // helps catch cases where the ENDED event is missed in a throttled background tab.
+                const hasFinished = playerState === 0 || (duration > 0 && position >= duration - 0.6);
+
+                if (hasFinished && !hasEndedRef.current) {
+                    hasEndedRef.current = true;
+                    console.log(`Polling detected YouTube track end (state=${playerState}, pos=${position.toFixed(2)}, dur=${duration.toFixed(2)}). Advancing.`);
+                    handleYouTubeEnd();
+                }
+            }, 500);
         }
 
         return () => {
@@ -425,7 +456,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 clearInterval(progressIntervalRef.current);
             }
         };
-    }, [source, isYouTubePlaying, isYouTubeSeeking]);
+    }, [source, isYouTubePlaying, isYouTubeSeeking, handleYouTubeEnd]);
 
     useEffect(() => {
         if (source === 'youtube') {
@@ -615,29 +646,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleYoutubeStateChange = (event: { data: number }) => {
-        const playerIsPlaying = event.data === 1; // 1 = PLAYING
+        const playerState = event.data;
+        const playerIsPlaying = playerState === 1; // 1 = PLAYING
         setIsYouTubePlaying(playerIsPlaying);
-        if(playerIsPlaying) {
-             setNowPlaying(s => ({ ...s, isLoading: false }));
+    
+        if (playerIsPlaying) {
+            hasEndedRef.current = false; // Reset the ended flag when a new video starts
+            setNowPlaying(s => ({ ...s, isLoading: false }));
         }
-    };
-    
-    const handleYouTubeEnd = () => {
-        if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) {
-            return;
-        }
-    
-        const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
-            track => track.videoId === nowPlaying.youtubeTrack?.videoId
-        );
-    
-        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
-            console.log("End of YouTube playlist.");
-            return;
-        }
-    
-        const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
-        playYouTube(nextTrack, nowPlaying.youtubePlaylist);
     };
 
     const handleTogglePlay = () => {
@@ -1013,7 +1029,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     }}
                     onReady={handleYoutubeReady}
                     onStateChange={handleYoutubeStateChange}
-                    onEnd={handleYouTubeEnd}
                 />
             </div>
         </>
