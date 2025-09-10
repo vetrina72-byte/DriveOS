@@ -147,45 +147,46 @@ const YouTubeProgressBar = ({
 }) => {
     const [localPosition, setLocalPosition] = useState(progress.position);
     const progressRef = useRef<HTMLDivElement>(null);
-    
-    // Sync with external state only when not seeking
+
+    // Sync with external state only when not actively seeking
     useEffect(() => {
         if (!isSeeking) {
             setLocalPosition(progress.position);
         }
     }, [progress.position, isSeeking]);
-    
+
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current) return;
-        onSeekStart();
-        
+        onSeekStart(); // Tell parent we are starting to seek
+
         const getSeekPosition = (clientX: number): number => {
             if (!progressRef.current || !progress.duration) return 0;
             const rect = progressRef.current.getBoundingClientRect();
             const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
             return progress.duration * ratio;
         };
-        
+
         const newPos = getSeekPosition(e.clientX);
-        setLocalPosition(newPos);
-        onSeek(newPos); // Authoritative seek: update parent immediately
+        setLocalPosition(newPos); // Update visual state immediately
+        onSeek(newPos); // Tell parent to seek the player immediately (authoritative)
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const movePos = getSeekPosition(moveEvent.clientX);
-            setLocalPosition(movePos);
-            onSeek(movePos); // Authoritative seek on move
+            setLocalPosition(movePos); // Update visual state immediately on drag
+            onSeek(movePos); // Tell parent to seek the player immediately (authoritative)
         };
 
         const handleMouseUp = (upEvent: MouseEvent) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
-            onSeekEnd(); // Finalize the seek action
+            onSeekEnd(); // Tell parent we are done seeking
         };
-        
+
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
     }, [onSeek, onSeekStart, onSeekEnd, progress.duration]);
 
+    // Display our local, instantly-updated position while seeking, otherwise use the prop from the player.
     const displayPosition = isSeeking ? localPosition : progress.position;
     const progressPercentage = progress.duration > 0 ? (displayPosition / progress.duration) * 100 : 0;
 
@@ -404,6 +405,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         if (source === 'youtube' && isYouTubePlaying && youtubePlayerRef.current) {
             progressIntervalRef.current = window.setInterval(() => {
+                // FIX #1: The crucial guard to prevent player state updates while user is seeking.
                 if (isYouTubeSeeking) return;
                 
                 const player = youtubePlayerRef.current;
@@ -728,26 +730,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         });
     };
     
+    // FIX #1: Authoritative seek handler. Only commands the player.
     const handleSeekYouTube = useCallback((position: number) => {
-        if (isYouTubeSeeking && youtubePlayerRef.current) {
+        if (youtubePlayerRef.current) {
             youtubePlayerRef.current.seekTo(position, true);
         }
-         // Authoritatively update the UI state to prevent jumping.
-        setYouTubeProgress(prev => ({ ...prev, position }));
-    }, [isYouTubeSeeking]);
+    }, []);
     
-    
+    // FIX #1: Handler to set the seeking flag to true.
     const handleYouTubeSeekStart = useCallback(() => {
         setIsYouTubeSeeking(true);
     }, []);
     
+    // FIX #1: Handler to set the seeking flag to false and resync state.
     const handleYouTubeSeekEnd = useCallback(() => {
-        if (youtubePlayerRef.current) {
-            // On mouse up, perform the final seek command
-            youtubePlayerRef.current.seekTo(youTubeProgress.position, true);
-        }
         setIsYouTubeSeeking(false);
-    }, [youTubeProgress.position]);
+        // Optional: Force a progress update immediately after seek to resync UI
+        if (youtubePlayerRef.current) {
+            const position = youtubePlayerRef.current.getCurrentTime();
+            const duration = youtubePlayerRef.current.getDuration();
+            setYouTubeProgress({ position, duration });
+        }
+    }, []);
 
     const playerStyle: React.CSSProperties = useMemo(() => {
         let baseStyle: React.CSSProperties;
