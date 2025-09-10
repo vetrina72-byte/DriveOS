@@ -290,6 +290,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [youTubeProgress, setYouTubeProgress] = useState({ position: 0, duration: 1 });
     const progressIntervalRef = useRef<number | null>(null);
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
+    const lastYouTubeSeekTime = useRef(0);
 
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
@@ -392,7 +393,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         if (source === 'youtube' && isYouTubePlaying && youtubePlayerRef.current) {
             progressIntervalRef.current = window.setInterval(() => {
-                if (isYouTubeSeeking) return;
+                if (isYouTubeSeeking || Date.now() - lastYouTubeSeekTime.current < 1000) return;
                 
                 const player = youtubePlayerRef.current;
                 if (player && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
@@ -704,6 +705,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const handleSeekYouTube = (position: number) => {
         if (youtubePlayerRef.current) {
             youtubePlayerRef.current.seekTo(position, true);
+            lastYouTubeSeekTime.current = Date.now();
         }
     };
     
@@ -712,9 +714,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, []);
     
     const handleYouTubeSeekEnd = useCallback(() => {
-        setTimeout(() => {
-            setIsYouTubeSeeking(false);
-        }, 300);
+        setIsYouTubeSeeking(false);
     }, []);
 
     const playerStyle: React.CSSProperties = useMemo(() => {

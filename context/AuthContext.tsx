@@ -175,7 +175,6 @@ const silentRefreshToken = useCallback(async () => {
 
             // `isLoading` is set to true when play() is called.
             // We only turn it off here once we get a valid track state.
-            // This prevents a loading spinner on normal track changes.
             const stillLoading = s.isLoading && !(newState && newState.track_window.current_track);
 
             return {
@@ -456,32 +455,30 @@ const silentRefreshToken = useCallback(async () => {
             return;
         }
 
-        // STEP 1: Shut down other sources and prepare state for loading
-        setNowPlaying({
+        // Only show loader if we aren't already playing Spotify.
+        const showLoader = nowPlaying.source !== 'spotify' || !nowPlaying.spotifyState || nowPlaying.spotifyState.paused;
+
+        // Set loading state but preserve current track info to prevent UI flicker.
+        setNowPlaying(prev => ({
+            ...prev,
             source: 'spotify',
-            spotifyState: null,
             radioStation: null,
             radioContext: [],
             youtubeTrack: null,
-            isLoading: true
-        });
+            isLoading: showLoader,
+        }));
         
-        // STEP 2: Execute the API command
         try {
             const body: { context_uri?: string; uris?: string[]; offset?: any; } = {};
 
             if (options.context_uri) {
                 body.context_uri = options.context_uri;
-                if (options.offset) {
-                    body.offset = options.offset;
-                }
+                if (options.offset) body.offset = options.offset;
             } else if (options.uris) {
                 body.uris = options.uris;
-                if (options.offset) {
-                    body.offset = options.offset;
-                }
+                if (options.offset) body.offset = options.offset;
             } else {
-                throw new Error("Play function called without context_uri or uris.");
+                 // If no URI is provided, it's just a "play" command for the current track.
             }
 
             await apiClient.put(
@@ -491,20 +488,17 @@ const silentRefreshToken = useCallback(async () => {
             refreshHomePage();
         } catch (err) {
             console.error('Failed to start playback', err);
-            // Revert to a neutral state on failure
-            setNowPlaying({
-                source: null,
-                spotifyState: null,
-                radioStation: null,
-                radioContext: [],
-                youtubeTrack: null,
-                isLoading: false
-            });
+            // On failure, just stop the loading indicator.
+            setNowPlaying(prev => ({ ...prev, isLoading: false }));
         }
-    }, [deviceId, refreshHomePage]);
+    }, [deviceId, refreshHomePage, nowPlaying.source, nowPlaying.spotifyState]);
 
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => {
         pauseSpotify();
+
+        // Only show loader if we aren't already playing a YouTube video.
+        const showLoader = nowPlaying.source !== 'youtube';
+        
         setNowPlaying(prev => ({
             ...prev,
             source: 'youtube',
@@ -512,9 +506,9 @@ const silentRefreshToken = useCallback(async () => {
             youtubePlaylist: playlist,
             radioStation: null,
             radioContext: [],
-            isLoading: true,
+            isLoading: showLoader,
         }));
-    }, [pauseSpotify]);
+    }, [pauseSpotify, nowPlaying.source]);
 
     const clearError = () => {
         setState(s => ({...s, error: null}));
