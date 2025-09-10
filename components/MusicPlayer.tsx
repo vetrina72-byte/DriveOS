@@ -40,12 +40,13 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
+    const lastSeekTime = useRef(0); // Track when the last seek happened
 
-    // Sync local position with the official state from Spotify,
-    // unless the user is actively seeking. This prevents the bar from jumping
-    // back if a state update arrives before the seek is processed.
     useEffect(() => {
-        if (!isSeeking) {
+        // Only update from Spotify if we are not seeking AND
+        // it's been more than a second since we last seeked.
+        // This prevents the jump-back from an old state update arriving after seek.
+        if (!isSeeking && Date.now() - lastSeekTime.current > 1000) {
             setPosition(state.position);
         }
     }, [state.position, isSeeking]);
@@ -103,8 +104,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             
             const finalPosition = getSeekPosition(upEvent.clientX);
             player.seek(finalPosition).then(() => {
-                setPosition(finalPosition); // Ensure local state is set to final seek value
-                setTimeout(() => setIsSeeking(false), 200); // Delay to allow state to propagate
+                setPosition(finalPosition);
+                lastSeekTime.current = Date.now(); // Record seek time
+                setIsSeeking(false); // Set seeking to false immediately
             });
         };
         

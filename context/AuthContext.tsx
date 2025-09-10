@@ -168,27 +168,21 @@ const silentRefreshToken = useCallback(async () => {
 
    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
         setNowPlaying(s => {
-            // Case 1: We are actively loading a Spotify track.
-            if (s.isLoading && s.source === 'spotify') {
-                return {
-                    ...s,
-                    spotifyState: newState,
-                    // Turn off loading only when we get a valid new track
-                    isLoading: !(newState && newState.track_window.current_track)
-                };
-            }
-            
-            // Case 2: Radio or YouTube is playing, just update Spotify state in the background.
-            if (s.source === 'radio' || s.source === 'youtube') {
+            // If another source is active, just update spotify in background
+            if (s.source !== 'spotify' && s.source !== null) {
                 return { ...s, spotifyState: newState };
             }
-            
-            // Case 3: General Spotify update (e.g., song ends, user pauses from another device).
+
+            // `isLoading` is set to true when play() is called.
+            // We only turn it off here once we get a valid track state.
+            // This prevents a loading spinner on normal track changes.
+            const stillLoading = s.isLoading && !(newState && newState.track_window.current_track);
+
             return {
                 ...s,
                 spotifyState: newState,
-                source: newState ? 'spotify' : (s.source === 'spotify' ? null : s.source),
-                isLoading: false // Ensure loading is always false here.
+                isLoading: stillLoading,
+                source: newState ? 'spotify' : null
             };
         });
     }, []);
