@@ -168,19 +168,18 @@ const YouTubeProgressBar = ({
         
         const newPos = getSeekPosition(e.clientX);
         setLocalPosition(newPos);
+        onSeek(newPos); // Authoritative seek: update parent immediately
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
-            setLocalPosition(getSeekPosition(moveEvent.clientX));
+            const movePos = getSeekPosition(moveEvent.clientX);
+            setLocalPosition(movePos);
+            onSeek(movePos); // Authoritative seek on move
         };
 
         const handleMouseUp = (upEvent: MouseEvent) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
-            
-            const finalPos = getSeekPosition(upEvent.clientX);
-            setLocalPosition(finalPos);
-            onSeek(finalPos);
-            onSeekEnd();
+            onSeekEnd(); // Finalize the seek action
         };
         
         window.addEventListener('mousemove', handleMouseMove);
@@ -290,7 +289,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [youTubeProgress, setYouTubeProgress] = useState({ position: 0, duration: 1 });
     const progressIntervalRef = useRef<number | null>(null);
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
-    const lastYouTubeSeekTime = useRef(0);
+    const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
 
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
@@ -379,12 +378,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             cleanup();
         };
     }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
-
+    
+    // FIX #2: Maintain the last YouTube video ID to prevent the player from being re-created
+    // when the source changes to something else and `youtubeTrack` becomes null.
     useEffect(() => {
-        if (source === 'youtube') {
-            setYouTubeProgress({ position: 0, duration: 1 });
+        if (source === 'youtube' && youtubeTrack?.videoId) {
+            setCurrentYouTubeVideoId(youtubeTrack.videoId);
         }
-    }, [youtubeTrack?.videoId, source]);
+    }, [source, youtubeTrack]);
+    
+    // FIX #2: Add an effect to explicitly pause the YouTube player if the media source changes away from it.
+    useEffect(() => {
+        const player = youtubePlayerRef.current;
+        if (player && typeof player.pauseVideo === 'function') {
+            if (source !== 'youtube') {
+                player.pauseVideo();
+            }
+        }
+    }, [source]);
 
     useEffect(() => {
         if (progressIntervalRef.current) {
@@ -393,7 +404,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         if (source === 'youtube' && isYouTubePlaying && youtubePlayerRef.current) {
             progressIntervalRef.current = window.setInterval(() => {
-                if (isYouTubeSeeking || Date.now() - lastYouTubeSeekTime.current < 1000) return;
+                if (isYouTubeSeeking) return;
                 
                 const player = youtubePlayerRef.current;
                 if (player && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
@@ -413,6 +424,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         };
     }, [source, isYouTubePlaying, isYouTubeSeeking]);
+
+    useEffect(() => {
+        if (source === 'youtube') {
+            setYouTubeProgress({ position: 0, duration: 1 });
+        }
+    }, [youtubeTrack?.videoId, source]);
 
     useEffect(() => {
         if (!accessToken) {
@@ -596,11 +613,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleYoutubeStateChange = (event: { data: number }) => {
-        // YT.PlayerState is not available globally in modules easily, use numbers
-        // 1 = PLAYING, 2 = PAUSED
-        const playerIsPlaying = event.data === 1;
+        const playerIsPlaying = event.data === 1; // 1 = PLAYING
         setIsYouTubePlaying(playerIsPlaying);
-
         if(playerIsPlaying) {
              setNowPlaying(s => ({ ...s, isLoading: false }));
         }
@@ -651,8 +665,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             playerRef.current?.nextTrack();
         } else if (source === 'radio') {
             onStationChange('next');
-        } else if (source === 'youtube' && youtubePlayerRef.current) {
-            youtubePlayerRef.current.nextVideo();
+        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
+             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
+                track => track.videoId === nowPlaying.youtubeTrack?.videoId
+            );
+            if (currentTrackIndex > -1 && currentTrackIndex < nowPlaying.youtubePlaylist.length - 1) {
+                const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
+                playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+            }
         }
     };
     const handlePrevTrack = () => {
@@ -660,8 +680,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             playerRef.current?.previousTrack();
         } else if (source === 'radio') {
             onStationChange('prev');
-        } else if (source === 'youtube' && youtubePlayerRef.current) {
-            youtubePlayerRef.current.previousVideo();
+        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
+             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
+                track => track.videoId === nowPlaying.youtubeTrack?.videoId
+            );
+            if (currentTrackIndex > 0) {
+                const prevTrack = nowPlaying.youtubePlaylist[currentTrackIndex - 1];
+                playYouTube(prevTrack, nowPlaying.youtubePlaylist);
+            }
         }
     };
 
@@ -702,20 +728,26 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         });
     };
     
-    const handleSeekYouTube = (position: number) => {
-        if (youtubePlayerRef.current) {
+    const handleSeekYouTube = useCallback((position: number) => {
+        if (isYouTubeSeeking && youtubePlayerRef.current) {
             youtubePlayerRef.current.seekTo(position, true);
-            lastYouTubeSeekTime.current = Date.now();
         }
-    };
+         // Authoritatively update the UI state to prevent jumping.
+        setYouTubeProgress(prev => ({ ...prev, position }));
+    }, [isYouTubeSeeking]);
+    
     
     const handleYouTubeSeekStart = useCallback(() => {
         setIsYouTubeSeeking(true);
     }, []);
     
     const handleYouTubeSeekEnd = useCallback(() => {
+        if (youtubePlayerRef.current) {
+            // On mouse up, perform the final seek command
+            youtubePlayerRef.current.seekTo(youTubeProgress.position, true);
+        }
         setIsYouTubeSeeking(false);
-    }, []);
+    }, [youTubeProgress.position]);
 
     const playerStyle: React.CSSProperties = useMemo(() => {
         let baseStyle: React.CSSProperties;
@@ -964,16 +996,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 {renderPlayerContent()}
                 <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
             </div>
-            {/* The YouTube player component is always mounted but hidden. This pre-loads the player API for faster startup. */}
             <div style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none', opacity: 0 }}>
                 <YouTube
-                    videoId={source === 'youtube' ? youtubeTrack?.videoId : undefined}
+                    videoId={currentYouTubeVideoId}
                     opts={{
                         height: '360',
                         width: '640',
                         playerVars: {
                             autoplay: 1,
-                            playlist: youtubePlaylist ? youtubePlaylist.map(t => t.videoId).join(',') : undefined,
+                            controls: 0,
                         }
                     }}
                     onReady={handleYoutubeReady}
