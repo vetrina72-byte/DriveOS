@@ -714,6 +714,7 @@ function AppContent() {
   const [youtubeHomeIsLoading, setYoutubeHomeIsLoading] = useState(true);
   const [youtubeHomeError, setYoutubeHomeError] = useState<string | null>(null);
   const [youtubeHomeQuotaExceeded, setYoutubeHomeQuotaExceeded] = useState(false);
+  const retryIntervalRef = useRef<number | null>(null);
 
   // Debug UI Colors
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
@@ -1236,11 +1237,10 @@ function AppContent() {
   };
   
   const fetchYouTubeHomeData = useCallback(async () => {
-    if (Object.keys(youtubeHomeData).length > 0) return;
+    if (Object.keys(youtubeHomeData).length > 0 && !youtubeHomeQuotaExceeded) return;
 
     setYoutubeHomeIsLoading(true);
     setYoutubeHomeError(null);
-    setYoutubeHomeQuotaExceeded(false);
     try {
         const [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes] = await Promise.all([
             fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
@@ -1272,6 +1272,7 @@ function AppContent() {
             workoutPlaylists: workoutData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
             acousticSessions: acousticData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
         });
+        setYoutubeHomeQuotaExceeded(false);
 
     } catch (err: any) {
         if (err.message === 'quotaExceeded') {
@@ -1283,13 +1284,43 @@ function AppContent() {
     } finally {
         setYoutubeHomeIsLoading(false);
     }
-  }, [youtubeHomeData]);
+  }, [youtubeHomeData, youtubeHomeQuotaExceeded]);
   
   useEffect(() => {
     if (activeApp === 'youtube-music' && !nowPlaying.youtubeTrack) {
         fetchYouTubeHomeData();
     }
   }, [activeApp, fetchYouTubeHomeData, nowPlaying.youtubeTrack]);
+
+  // This effect will automatically retry fetching the home data if the quota was exceeded.
+  useEffect(() => {
+      const retryFetch = () => {
+          console.log("Retrying to fetch YouTube home data after quota error...");
+          fetchYouTubeHomeData();
+      };
+
+      if (youtubeHomeQuotaExceeded) {
+          if (retryIntervalRef.current) clearInterval(retryIntervalRef.current);
+          retryIntervalRef.current = window.setInterval(retryFetch, 15 * 60 * 1000); // 15 minutes
+          console.log("YouTube quota exceeded. Auto-retry scheduled.");
+      } else {
+          if (retryIntervalRef.current) {
+              clearInterval(retryIntervalRef.current);
+              retryIntervalRef.current = null;
+              console.log("YouTube quota seems restored. Auto-retry timer cleared.");
+          }
+      }
+
+      return () => {
+          if (retryIntervalRef.current) {
+              clearInterval(retryIntervalRef.current);
+          }
+      };
+  }, [youtubeHomeQuotaExceeded, fetchYouTubeHomeData]);
+
+  const handleGenericQuotaError = useCallback(() => {
+      setYoutubeHomeQuotaExceeded(true);
+  }, []);
 
   const toggleApp = (appName: string) => {
     setIsAppLauncherOpen(false);
@@ -1541,6 +1572,7 @@ function AppContent() {
             homeDataError={youtubeHomeError}
             homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
             onRetry={fetchYouTubeHomeData}
+            onQuotaError={handleGenericQuotaError}
           />
         )}
       </AnimatePresence>

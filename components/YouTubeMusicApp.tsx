@@ -18,6 +18,7 @@ interface YouTubeMusicAppProps {
     homeDataError: string | null;
     homeDataQuotaExceeded: boolean;
     onRetry: () => void;
+    onQuotaError: () => void;
 }
 
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
@@ -69,26 +70,30 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     isHomeDataLoading,
     homeDataError,
     homeDataQuotaExceeded,
-    onRetry
+    onRetry,
+    onQuotaError,
 }) => {
     const { playYouTube } = useAuth();
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
 
     const [error, setError] = useState<string | null>(null);
-    const [quotaExceeded, setQuotaExceeded] = useState(false);
     
     const [searchQuery, setSearchQuery] = useState('');
     const [submittedQuery, setSubmittedQuery] = useState('');
     const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [selectedPlaylist, setSelectedPlaylist] = useState<{ id: string; name: string; images?: { url: string }[], description?: string } | null>(null);
+    const [isQuotaModalDismissed, setIsQuotaModalDismissed] = useState(false);
 
     const openingBoxSpeed = 4.5;
     const closingBoxSpeed = 8.6;
-
+    
     useEffect(() => {
-        setQuotaExceeded(homeDataQuotaExceeded);
+        // Reset dismissed state if the quota error is resolved and comes back later
+        if (!homeDataQuotaExceeded) {
+            setIsQuotaModalDismissed(false);
+        }
     }, [homeDataQuotaExceeded]);
 
     useEffect(() => {
@@ -122,7 +127,6 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         
         setIsSearching(true);
         setError(null);
-        setQuotaExceeded(false);
         setSubmittedQuery(searchQuery);
         setSearchResults([]);
         setSelectedPlaylist(null); // Exit playlist view on new search
@@ -143,15 +147,14 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         } catch (err: any) {
             console.error("YouTube search error:", err);
             if (err.message === 'quotaExceeded') {
-                setError(null);
-                setQuotaExceeded(true);
+                onQuotaError();
             } else {
                 setError(err.message || "Search failed.");
             }
         } finally {
             setIsSearching(false);
         }
-    }, [searchQuery]);
+    }, [searchQuery, onQuotaError]);
     
     const handleSelectItem = (item: MediaItem, contextItems?: MediaItem[]) => {
         if (item.type === 'track' && item.id) {
@@ -187,17 +190,15 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
 
     const handlePlayYouTubeTrack = (track: YouTubeTrackInfo, playlistContext?: YouTubeTrackInfo[]) => {
         playYouTube(track, playlistContext);
-        setQuotaExceeded(false);
     }
     
-    const handleQuotaError = useCallback((err: Error) => {
+    const handlePlaylistQuotaError = useCallback((err: Error) => {
         if (err.message === 'quotaExceeded') {
-            setError(null);
-            setQuotaExceeded(true);
+            onQuotaError();
         } else {
             setError(err.message);
         }
-    }, []);
+    }, [onQuotaError]);
 
     const renderContent = () => {
         if (selectedPlaylist) {
@@ -207,7 +208,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                     isNight={isNight}
                     onBack={() => setSelectedPlaylist(null)}
                     onPlayTrack={handlePlayYouTubeTrack}
-                    onQuotaError={handleQuotaError}
+                    onQuotaError={handlePlaylistQuotaError}
                 />
             );
         }
@@ -300,15 +301,9 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 <div className="flex-grow flex flex-col overflow-y-auto hide-scrollbar relative">
                      {renderContent()}
                      <QuotaErrorModal
-                        isOpen={quotaExceeded}
-                        onClose={() => {
-                            setQuotaExceeded(false);
-                            if (homeDataQuotaExceeded) {
-                                onRetry();
-                            }
-                        }}
+                        isOpen={homeDataQuotaExceeded && !isQuotaModalDismissed}
+                        onClose={() => setIsQuotaModalDismissed(true)}
                         isNight={isNight}
-                        onPlayTrack={handlePlayYouTubeTrack}
                      />
                 </div>
             </div>
