@@ -39,8 +39,10 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     isPlayerReady: boolean;
     pauseSpotify: () => void;
     setPlayerAsReadyForAutoplay: () => void;
+    // FIX: Add youTubeFavorites and onToggleYouTubeFavorite to the context type to support
+    // favoriting YouTube playlists.
     youTubeFavorites: string[];
-    onToggleYouTubeFavorite: (id: string) => void;
+    onToggleYouTubeFavorite: (playlistId: string) => void;
 }
 
 interface PlayOptions {
@@ -80,25 +82,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading: false,
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
+    // FIX: Add state and logic for managing favorite YouTube playlists.
+    // This includes loading from and saving to localStorage.
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
 
     useEffect(() => {
         try {
-            const stored = localStorage.getItem('youtube_favorites');
-            if (stored) {
-                setYouTubeFavorites(JSON.parse(stored));
+            const storedFavorites = localStorage.getItem('youtube_favorites');
+            if (storedFavorites) {
+                setYouTubeFavorites(JSON.parse(storedFavorites));
             }
-        } catch (e) { console.error("Failed to load YT favs", e); }
+        } catch (e) {
+            console.error("Failed to load YouTube favorites from localStorage", e);
+        }
     }, []);
 
-    const onToggleYouTubeFavorite = useCallback((id: string) => {
+    const onToggleYouTubeFavorite = useCallback((playlistId: string) => {
         setYouTubeFavorites(prev => {
-            const newFavorites = prev.includes(id)
-                ? prev.filter(favId => favId !== id)
-                : [...prev, id];
+            const newFavorites = prev.includes(playlistId)
+                ? prev.filter(id => id !== playlistId)
+                : [...prev, playlistId];
+            
             try {
                 localStorage.setItem('youtube_favorites', JSON.stringify(newFavorites));
-            } catch (e) { console.error("Failed to save YT favs", e); }
+            } catch (e) {
+                console.error("Failed to save YouTube favorites to localStorage", e);
+            }
+
             return newFavorites;
         });
     }, []);

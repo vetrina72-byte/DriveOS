@@ -14,7 +14,7 @@ import {
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
-import type { RadioStation } from '../types';
+import type { RadioStation, YouTubeTrackInfo } from '../types';
 
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
@@ -207,7 +207,7 @@ const YouTubeProgressBar = ({
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { isNight: boolean, nextTrack: SpotifyTrack | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean }) => {
+const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { isNight: boolean, nextTrack: { name: string, description: string, imageUrl: string } | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -234,10 +234,10 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { is
             <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
             {nextTrack ? (
                 <div className="flex items-center gap-3 min-w-0">
-                    <img src={nextTrack.album.images[0].url} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
+                    <img src={nextTrack.imageUrl} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
                     <div className="overflow-hidden">
                         <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.name}</p>
-                        <p className="text-xs truncate" style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.artists.map(a => a.name).join(', ')}</p>
+                        <p className="text-xs truncate" style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.description}</p>
                     </div>
                 </div>
             ) : (
@@ -264,19 +264,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     favoriteStationUUIDs,
     onToggleFavorite,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay, youTubeFavorites, onToggleYouTubeFavorite, playYouTube } = useAuth();
+  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay, playYouTube } = useAuth();
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
     const playerContainerRef = useRef<HTMLDivElement>(null);
-    const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(false);
     
-    const [showQueue, setShowQueue] = useState(false);
-    const [isQueuePopoverRendered, setIsQueuePopoverRendered] = useState(false);
-    const queuePopoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+    const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
+    const [isQueueClosing, setIsQueueClosing] = useState(false);
+    
     const [isLiked, setIsLiked] = useState(false);
 
-    const queueButtonRef = useRef<HTMLButtonElement>(null);
+    const spotifyQueueButtonRef = useRef<HTMLButtonElement>(null);
+    const youTubeQueueButtonRef = useRef<HTMLButtonElement>(null);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
     const playerState = nowPlaying.spotifyState;
@@ -296,10 +295,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
     const currentTrackId = playerState?.track_window.current_track?.id;
-    const currentTrackUri = playerState?.track_window.current_track?.uri;
     const internalVolumeUpdate = useRef(false);
   const tokenRef = useRef<string | null>(accessToken);
   useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
+
+    const handleToggleQueue = (source: 'spotify' | 'youtube') => {
+        if (visibleQueue === source) {
+            setIsQueueClosing(true);
+            setTimeout(() => {
+                setVisibleQueue(null);
+                setIsQueueClosing(false);
+            }, 300);
+        } else {
+            setIsQueueClosing(false);
+            setVisibleQueue(source);
+        }
+    };
 
     useEffect(() => {
         if (playerRef.current && typeof volume === 'number') {
@@ -564,38 +575,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         }
     }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, volume, silentRefreshToken, setPlayerAsReadyForAutoplay]);
-
-    useEffect(() => {
-        if (!isAutoQueueEnabled || !playerState || playerState.paused) {
-            return;
-        }
-        const { duration, position } = playerState;
-        const timeLeft = duration - position;
-        if (duration > 0 && timeLeft < 15000 && timeLeft > 0 && !showQueue) {
-            setShowQueue(true);
-        }
-    }, [playerState, isAutoQueueEnabled, showQueue]);
-
-    const prevTrackUri = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (isAutoQueueEnabled && prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
-            setShowQueue(false);
-        }
-        prevTrackUri.current = currentTrackUri;
-    }, [currentTrackUri, isAutoQueueEnabled]);
-
+    
     useEffect(() => {
         const playerEl = playerContainerRef.current;
-        if (!showQueue || !playerEl) return;
+        const buttonRef = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
+        if (!visibleQueue || !playerEl || !buttonRef) return;
 
         let animationFrameId: number;
 
         const calculatePosition = () => {
             const playerRect = playerEl.getBoundingClientRect();
+            const buttonRect = buttonRef.getBoundingClientRect();
             setPopoverPosition({
                 bottom: window.innerHeight - playerRect.top + 16,
-                left: playerRect.right - 288,
-                transform: '',
+                left: buttonRect.left + buttonRect.width / 2,
+                transform: 'translateX(-50%)',
             });
         };
         
@@ -611,26 +605,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             cancelAnimationFrame(animationFrameId);
             window.removeEventListener('resize', calculatePosition);
         };
-    }, [showQueue]);
+    }, [visibleQueue]);
 
+    const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
-        if (queuePopoverTimeoutRef.current) {
-            clearTimeout(queuePopoverTimeoutRef.current);
+        const currentTrackUri = playerState?.track_window?.current_track?.uri;
+        if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
+            setVisibleQueue(null); // Close queue popover on track change
         }
-        if (showQueue) {
-            setIsQueuePopoverRendered(true);
-        } else {
-            queuePopoverTimeoutRef.current = setTimeout(() => {
-                setIsQueuePopoverRendered(false);
-            }, 300);
-        }
-    }, [showQueue]);
+        prevTrackUri.current = currentTrackUri;
+    }, [playerState?.track_window?.current_track?.uri]);
+
 
     useEffect(() => {
         const checkIsLiked = async () => {
-            if (!currentTrackId) return;
+            const trackId = playerState?.track_window?.current_track?.id;
+            if (!trackId) return;
             try {
-                const { data } = await apiClient.get(`/me/tracks/contains?ids=${currentTrackId}`);
+                const { data } = await apiClient.get(`/me/tracks/contains?ids=${trackId}`);
                 setIsLiked(data[0] || false);
             } catch (e) {
                 console.error("Failed to check if track is liked", e);
@@ -638,7 +630,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         };
         checkIsLiked();
-    }, [currentTrackId]);
+    }, [playerState?.track_window?.current_track?.id]);
 
     const handleYoutubeReady = (event: { target: any }) => {
         youtubePlayerRef.current = event.target;
@@ -710,13 +702,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleToggleLike = async () => {
-        if (!currentTrackId) return;
+        const trackId = playerState?.track_window?.current_track?.id;
+        if (!trackId) return;
         try {
             if (isLiked) {
-                await apiClient.delete(`/me/tracks`, { data: { ids: [currentTrackId] } });
+                await apiClient.delete(`/me/tracks`, { data: { ids: [trackId] } });
                 setIsLiked(false);
             } else {
-                await apiClient.put(`/me/tracks`, { ids: [currentTrackId] });
+                await apiClient.put(`/me/tracks`, { ids: [trackId] });
                 setIsLiked(true);
             }
         } catch (e) {
@@ -734,16 +727,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const nextState = (playerState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
-    };
-    
-    const handleToggleAutoQueue = () => {
-        setIsAutoQueueEnabled(prev => {
-            const newState = !prev;
-            if (!newState) {
-                setShowQueue(false);
-            }
-            return newState;
-        });
     };
     
     // FIX #1: Authoritative seek handler. Only commands the player.
@@ -818,7 +801,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
-            const isFavorite = youTubeFavorites.includes(youtubeTrack.videoId);
 
             return (
                  <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -849,11 +831,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 }
                             </button>
                             <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={() => onToggleYouTubeFavorite(youtubeTrack.videoId)} className="transition" style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
-                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} />
+                        </div>
+                        <div className="flex-1 flex justify-end items-center">
+                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                                <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>
-                        <div className="flex-1 flex justify-end items-center"></div>
                     </div>
                 </div>
             );
@@ -947,20 +930,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                              </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
-                            <button ref={queueButtonRef} onClick={handleToggleAutoQueue} className={`p-1 rounded-full transition-all duration-200`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
+                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'spotify' ? buttonActiveColor : inactiveButtonColor }}>
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>
                     </div>
-                    {isQueuePopoverRendered && (
-                        <QueuePopover
-                            isNight={isNight}
-                            nextTrack={playerState.track_window.next_tracks[0]}
-                            position={popoverPosition}
-                            isClosing={!showQueue}
-                            onClose={() => setShowQueue(false)}
-                        />
-                    )}
                 </div>
             );
         }
@@ -1005,6 +979,32 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             </div>
         );
     };
+    
+    const isPopoverVisible = visibleQueue !== null;
+
+    let genericNextTrack: { name: string, description: string, imageUrl: string } | null = null;
+    if (visibleQueue === 'spotify' && playerState?.track_window.next_tracks[0]) {
+        const next = playerState.track_window.next_tracks[0];
+        genericNextTrack = { 
+            name: next.name, 
+            description: next.artists.map(a => a.name).join(', '), 
+            imageUrl: next.album.images[0].url 
+        };
+    } else if (visibleQueue === 'youtube') {
+        const currentYouTubeIndex = nowPlaying.youtubePlaylist?.findIndex(
+            t => t.videoId === nowPlaying.youtubeTrack?.videoId
+        ) ?? -1;
+        const nextYouTubeTrack = (nowPlaying.youtubePlaylist && currentYouTubeIndex > -1 && currentYouTubeIndex < nowPlaying.youtubePlaylist.length - 1)
+            ? nowPlaying.youtubePlaylist[currentYouTubeIndex + 1]
+            : null;
+        if (nextYouTubeTrack) {
+            genericNextTrack = {
+                name: nextYouTubeTrack.title,
+                description: nextYouTubeTrack.channelTitle,
+                imageUrl: nextYouTubeTrack.thumbnail
+            };
+        }
+    }
 
     return (
         <>
@@ -1016,6 +1016,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 {renderPlayerContent()}
                 <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
             </div>
+            {isPopoverVisible && (
+                <QueuePopover
+                    isNight={isNight}
+                    nextTrack={genericNextTrack}
+                    position={popoverPosition}
+                    isClosing={isQueueClosing}
+                    onClose={() => handleToggleQueue(visibleQueue!)}
+                />
+            )}
             <div style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none', opacity: 0 }}>
                 <YouTube
                     videoId={currentYouTubeVideoId}

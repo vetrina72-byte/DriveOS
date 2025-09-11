@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiLoader, FiChevronLeft, FiPlay, FiMusic, FiHeart } from 'react-icons/fi';
 import type { YouTubeTrackInfo } from '../types';
 import { motion } from 'framer-motion';
+// FIX: Import the `useAuth` hook to access the new favoriting functionality.
 import { useAuth } from '../context/AuthContext';
 
 const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
@@ -28,6 +29,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
     const [tracks, setTracks] = useState<YouTubeTrackInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // FIX: Destructure `youTubeFavorites` and `onToggleYouTubeFavorite` from the `useAuth` hook.
     const { nowPlaying, youTubeFavorites, onToggleYouTubeFavorite } = useAuth();
     
     const currentTrackId = nowPlaying.source === 'youtube' ? nowPlaying.youtubeTrack?.videoId : null;

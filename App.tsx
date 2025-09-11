@@ -1673,7 +1673,7 @@ function AppContent() {
                                 className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${effectiveColorClasses}`}
                                 aria-label={app.label}
                             >
-                                <app.icon className={`w-8 h-8 ${activeApp === app.id ? 'opacity-100' : 'opacity-70'}`} />
+                                <app.icon className="w-8 h-8" />
                             </button>
                              {activeApp === app.id && (
                                 <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
