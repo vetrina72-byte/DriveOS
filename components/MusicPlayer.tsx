@@ -20,6 +20,7 @@ interface MusicPlayerProps {
     isAnyAppOpen: boolean;
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
+    // FIX: Update floatingConfig type to include all passed properties, resolving the type error.
     floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };
     playerControlsSize: number;
     playerControlsGap: number;
@@ -763,14 +764,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 transform: 'translateX(0)',
             };
         } else {
+            // FIX: Use props from floatingConfig instead of CSS variables.
             const { width, bottom, height, otherWidgetWidth } = floatingConfig;
-            const transformX = -otherWidgetWidth / 2 - 8;
             baseStyle = {
                 width: `${width}px`,
                 height: `${height}px`,
                 bottom: `${bottom}px`,
                 left: '50%',
-                transform: `translateX(calc(-50% + ${transformX}px))`,
+                transform: `translateX(calc(-50% - (${otherWidgetWidth}px / 2) - 8px))`,
             };
         }
         baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';

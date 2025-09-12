@@ -58,12 +58,15 @@ interface DebugControlsProps {
   setPlayerDockedLeft: (left: number) => void;
   playerDockedHeight: number;
   setPlayerDockedHeight: (height: number) => void;
+  // FIX: Add missing props for floating player and navigate tool to fix type error.
   playerFloatingWidth: number;
   setPlayerFloatingWidth: (width: number) => void;
   playerFloatingBottom: number;
   setPlayerFloatingBottom: (bottom: number) => void;
   playerFloatingHeight: number;
   setPlayerFloatingHeight: (height: number) => void;
+  navigateToolWidth: number;
+  setNavigateToolWidth: (width: number) => void;
   nightAmbientIntensity: number;
   setNightAmbientIntensity: (intensity: number) => void;
   nightFrontLightIntensity: number;
@@ -74,8 +77,6 @@ interface DebugControlsProps {
   startTripSimulation: () => void;
   stopTripSimulation: () => void;
   isSimulating: boolean;
-  navigateToolWidth: number;
-  setNavigateToolWidth: (width: number) => void;
   playerControlsSize: number;
   setPlayerControlsSize: (size: number) => void;
   playerControlsGap: number;
@@ -217,6 +218,8 @@ export default function DebugControls({
   setPlayerFloatingBottom,
   playerFloatingHeight,
   setPlayerFloatingHeight,
+  navigateToolWidth,
+  setNavigateToolWidth,
   nightAmbientIntensity,
   setNightAmbientIntensity,
   nightFrontLightIntensity,
@@ -227,8 +230,6 @@ export default function DebugControls({
   startTripSimulation,
   stopTripSimulation,
   isSimulating,
-  navigateToolWidth,
-  setNavigateToolWidth,
   playerControlsSize,
   setPlayerControlsSize,
   playerControlsGap,
@@ -865,7 +866,7 @@ export default function DebugControls({
                 <h4 className="text-sm font-semibold text-zinc-300">Music Player (Floating)</h4>
                 <div>
                   <label htmlFor="floating-width-slider">Width: {playerFloatingWidth}px</label>
-                  <input id="floating-width-slider" type="range" min="400" max="800" value={playerFloatingWidth} onChange={(e) => setPlayerFloatingWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="floating-width-slider" type="range" min="300" max="600" value={playerFloatingWidth} onChange={(e) => setPlayerFloatingWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div>
                   <label htmlFor="floating-height-slider">Height: {playerFloatingHeight}px</label>
@@ -873,15 +874,15 @@ export default function DebugControls({
                 </div>
                 <div>
                   <label htmlFor="floating-bottom-slider">Bottom Offset: {playerFloatingBottom}px</label>
-                  <input id="floating-bottom-slider" type="range" min="20" max="200" value={playerFloatingBottom} onChange={(e) => setPlayerFloatingBottom(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="floating-bottom-slider" type="range" min="0" max="200" value={playerFloatingBottom} onChange={(e) => setPlayerFloatingBottom(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
             </div>
 
             <div className="pl-2 border-l-2 border-zinc-600 mb-3 space-y-2">
-                <h4 className="text-sm font-semibold text-zinc-300">Navigation Tool (Floating)</h4>
+                <h4 className="text-sm font-semibold text-zinc-300">Navigate Tool</h4>
                 <div>
                   <label htmlFor="nav-tool-width-slider">Width: {navigateToolWidth}px</label>
-                  <input id="nav-tool-width-slider" type="range" min="300" max="600" step="1" value={navigateToolWidth} onChange={(e) => setNavigateToolWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                  <input id="nav-tool-width-slider" type="range" min="250" max="500" value={navigateToolWidth} onChange={(e) => setNavigateToolWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
             </div>
         </div>

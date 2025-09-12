@@ -60,9 +60,12 @@
       --volume-slider-thumb-bg: var(--progress-fill);
       --volume-slider-fill-bg: var(--progress-fill);
 
-      /* Layout Dimensions controlled by Debug Panel (with sane defaults) */
-      --footer-h: 6rem;
+      /* Layout Dimensions */
+      --footer-h: clamp(64px, 8vh, 96px);
       --header-h: 4rem;
+      --widget-bottom-offset: clamp(4rem, 12vh, 6rem);
+      --floating-player-width: clamp(400px, 30vw, 520px);
+      --floating-nav-width: clamp(300px, 22vw, 340px);
     }
 
     [data-theme='dark'] {
