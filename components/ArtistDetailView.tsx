@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
 
-// FIX: Removed framer-motion type annotation to resolve framer-motion type error.
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -16,15 +15,12 @@ const containerVariants = {
   }
 };
 
-// FIX: Removed framer-motion type annotation to resolve framer-motion type error.
 const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
     opacity: 1,
     transition: {
-      // FIX: The 'ease' property with string values like "easeOut" is causing type errors.
-      // framer-motion's default easing is sufficient here.
       duration: 0.3
     }
   }
@@ -222,85 +218,62 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                         )}
                         <button
                             onClick={handleToggleFollow}
-                            className="p-2 transition-colors"
+                            disabled={isFollowing && artist.followers.total <= 1} // Can't unfollow if you're the only one
+                            className="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             aria-label={isFollowing ? 'Smetti di seguire' : 'Segui'}
                         >
-                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400 hover:text-green-400' : 'text-gray-400 hover:text-white'}`} />
+                            <FiHeart className={`w-8 h-8 transition-all ${isFollowing ? 'fill-current text-green-400' : ''}`} />
                         </button>
                     </div>
                 </div>
             </header>
+            
+            <div className="px-6">
+                <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
+                <motion.div
+                  className="flex flex-col gap-1"
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                    {tracks.slice(0, 5).map((track, index) => {
+                        const isPlaying = isPlayingContext && track.id === currentTrackId;
+                        const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+                        return (
+                            <motion.div
+                                key={track.id}
+                                variants={itemVariants}
+                                onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index } })}
+                                className={`flex items-center gap-4 p-2 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
+                            >
+                                <span className={`w-6 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>
+                                <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded" />
+                                <div className="flex-grow flex items-center gap-2 overflow-hidden">
+                                    {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
+                                    <span className={`font-medium truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
+                                    {track.explicit && <span className="flex-shrink-0 text-xs bg-zinc-500/50 text-white rounded-sm px-1 py-0.5">E</span>}
+                                </div>
+                                <span className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</span>
+                            </motion.div>
+                        );
+                    })}
+                </motion.div>
+            </div>
 
-            {tracks.length > 0 && (
-                <div className="px-6">
-                    <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Popolari</h2>
-                    <motion.div
-                      className="flex flex-col"
-                      variants={containerVariants}
-                      initial="hidden"
-                      animate="visible"
-                    >
-                        {tracks.slice(0, 5).map((track, index) => {
-                            const isPlaying = isPlayingContext && track.id === currentTrackId;
-                            const activeColor = isNight ? 'text-green-400' : 'text-green-600';
-
-                            return (
-                                <motion.div
-                                    key={track.id + index}
-                                    variants={itemVariants}
-                                    onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index } })}
-                                    className={`flex items-center gap-4 p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
-                                >
-                                    <div className="w-8 text-center font-medium">
-                                        {isPlaying ? (
-                                            <AnimatedEqualizer className={`mx-auto ${activeColor}`} />
-                                        ) : (
-                                            <span className={theme.textSecondary}>{index + 1}</span>
-                                        )}
-                                    </div>
-                                    <img 
-                                      src={track.album.images?.[2]?.url || track.album.images?.[0]?.url} 
-                                      alt={track.album.name} 
-                                      className="w-10 h-10 rounded flex-shrink-0 object-cover" 
-                                    />
-                                    <div className="flex-grow flex flex-col overflow-hidden">
-                                        <span className={`truncate font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
-                                        {track.explicit && <span className="text-xs text-zinc-400">Explicit</span>}
-                                    </div>
-                                    <div className={`flex-shrink-0 text-sm font-medium text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
-                                </motion.div>
-                            )
-                        })}
-                    </motion.div>
+            <div className="mt-8">
+                <h2 className={`text-2xl font-bold mb-4 px-6 ${theme.textPrimary}`}>Discografia</h2>
+                <div className="spotify-carousel gap-4 px-6">
+                    {discography.map((item, index) => (
+                        <motion.div variants={itemVariants} key={`${item.id}-${index}`}>
+                            <PlaylistItem 
+                                item={{...item, description: `${new Date(item.release_date).getFullYear()} • ${item.album_type}`}} 
+                                isNight={isNight} 
+                                onSelectItem={onSelectItem} 
+                            />
+                        </motion.div>
+                    ))}
                 </div>
-            )}
-
-            {discography.length > 0 && (
-                <section className="px-6 mt-8">
-                    <h2 className={`text-2xl font-bold mb-4 ${theme.textPrimary}`}>Discografia</h2>
-                    <motion.div
-                      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"
-                      variants={containerVariants}
-                      initial="hidden"
-                      animate="visible"
-                    >
-                        {discography.map((item, index) => {
-                            const releaseType = item.album_type.charAt(0).toUpperCase() + item.album_type.slice(1);
-                            const year = new Date(item.release_date).getFullYear();
-                            const description = `${releaseType} • ${year}`;
-                            return (
-                                <motion.div variants={itemVariants} key={`discography-${item.id}-${index}`}>
-                                  <PlaylistItem 
-                                      item={{...item, description, type: 'album'}}
-                                      isNight={isNight} 
-                                      onSelectItem={onSelectItem} 
-                                  />
-                                </motion.div>
-                            );
-                        })}
-                    </motion.div>
-                </section>
-            )}
+            </div>
         </div>
     );
 };

@@ -85,12 +85,15 @@
       --volume-slider-fill-bg: var(--progress-fill);
     }
     
+    html {
+      height: 100%;
+    }
     body, #root {
       background-color: #1a1a1a;
       color: #e5e7eb;
       overflow: hidden;
-      height: 100vh;
-      width: 100vw;
+      height: 100%;
+      width: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     .leaflet-container {
@@ -528,6 +531,40 @@
     }
     .mic-listening {
       animation: mic-pulse-glow 2s infinite;
+    }
+    
+    /* --- UI Scaling Styles --- */
+    .ui-scaler {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      --ui-scale: 1.0;
+      transform: scale(var(--ui-scale));
+      transform-origin: top left;
+      transition: transform 0.3s ease-out;
+      pointer-events: none;
+    }
+    .ui-scaler > * {
+      pointer-events: auto;
+    }
+    footer {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    @media (max-width: 1440px) {
+      .ui-scaler { --ui-scale: 0.9; }
+    }
+    @media (max-width: 1280px) {
+      .ui-scaler { --ui-scale: 0.8; }
+    }
+    @media (max-width: 1024px) {
+      .ui-scaler { --ui-scale: 0.7; }
+    }
+    @media (max-width: 800px) {
+      .ui-scaler { --ui-scale: 0.6; }
+    }
+    @media (max-width: 640px) {
+      .ui-scaler { --ui-scale: 0.5; }
     }
   </style>
 </head>

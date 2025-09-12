@@ -10,8 +10,6 @@ interface WebAppViewerProps {
 const WebAppViewer: React.FC<WebAppViewerProps> = ({ url, onClose }) => {
     return (
         <motion.div
-            // FIX: The 'webAppVariants' constant caused a type error. Moving the variants inline
-            // and using them as direct props resolves the issue.
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

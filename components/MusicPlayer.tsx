@@ -20,7 +20,6 @@ interface MusicPlayerProps {
     isAnyAppOpen: boolean;
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
-    // FIX: Update floatingConfig type to include all passed properties, resolving the type error.
     floatingConfig: { width: number; bottom: number; height: number; otherWidgetWidth: number; };
     playerControlsSize: number;
     playerControlsGap: number;
@@ -393,15 +392,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
     }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
     
-    // FIX #2: Maintain the last YouTube video ID to prevent the player from being re-created
-    // when the source changes to something else and `youtubeTrack` becomes null.
     useEffect(() => {
         if (source === 'youtube' && youtubeTrack?.videoId) {
             setCurrentYouTubeVideoId(youtubeTrack.videoId);
         }
     }, [source, youtubeTrack]);
     
-    // FIX #2: Add an effect to explicitly pause the YouTube player if the media source changes away from it.
     useEffect(() => {
         const player = youtubePlayerRef.current;
         if (player && typeof player.pauseVideo === 'function') {
@@ -730,22 +726,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
     
-    // FIX #1: Authoritative seek handler. Only commands the player.
     const handleSeekYouTube = useCallback((position: number) => {
         if (youtubePlayerRef.current) {
             youtubePlayerRef.current.seekTo(position, true);
         }
     }, []);
     
-    // FIX #1: Handler to set the seeking flag to true.
     const handleYouTubeSeekStart = useCallback(() => {
         setIsYouTubeSeeking(true);
     }, []);
     
-    // FIX #1: Handler to set the seeking flag to false and resync state.
     const handleYouTubeSeekEnd = useCallback(() => {
         setIsYouTubeSeeking(false);
-        // Optional: Force a progress update immediately after seek to resync UI
         if (youtubePlayerRef.current) {
             const position = youtubePlayerRef.current.getCurrentTime();
             const duration = youtubePlayerRef.current.getDuration();
@@ -764,7 +756,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 transform: 'translateX(0)',
             };
         } else {
-            // FIX: Use props from floatingConfig instead of CSS variables.
             const { width, bottom, height, otherWidgetWidth } = floatingConfig;
             baseStyle = {
                 width: `${width}px`,

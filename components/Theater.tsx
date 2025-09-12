@@ -105,8 +105,6 @@ const ServiceButton = ({ service, isNight, onClick }: {
 
 
 // Framer Motion Variants for the choreographed entry animation
-// FIX: Removed Variants type annotation to resolve framer-motion type error.
-// FIX: Added 'as const' to the 'ease' property arrays to ensure TypeScript infers them as tuples instead of number arrays. This resolves the type incompatibility with framer-motion's 'Variants' type.
 const panelVariant = {
     initial: { x: '100%' },
     animate: { x: '0%', transition: { duration: 0.7, ease: [0.2, 0.8, 0.2, 1] as const } },
@@ -119,7 +117,6 @@ const contentVariant = {
     exit: { opacity: 0, transition: { duration: 0.2 } },
 };
 
-// FIX: Removed Variants type annotation to resolve framer-motion type error.
 const driveOsHeaderVariant = {
     initial: { opacity: 0, y: 'calc(50vh - 150px)', scale: 1.5 },
     animate: {
@@ -130,7 +127,6 @@ const driveOsHeaderVariant = {
     },
 };
 
-// FIX: Removed Variants type annotation to resolve framer-motion type error.
 const otherElementsVariant = {
     initial: { opacity: 0, y: 50 },
     animate: {
@@ -142,7 +138,6 @@ const otherElementsVariant = {
     }
 };
 
-// FIX: Removed Variants type annotation to resolve framer-motion type error.
 const gridContainerVariant = {
     initial: {},
     animate: {

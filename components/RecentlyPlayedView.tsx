@@ -5,7 +5,6 @@ import { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
-// FIX: Removed framer-motion type annotation to resolve framer-motion type error.
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -16,15 +15,12 @@ const containerVariants = {
   }
 };
 
-// FIX: Removed framer-motion type annotation to resolve framer-motion type error.
 const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
     opacity: 1,
     transition: {
-      // FIX: The 'ease' property with string values like "easeOut" is causing type errors.
-      // framer-motion's default easing is sufficient here.
       duration: 0.3
     }
   }

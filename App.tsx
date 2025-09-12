@@ -666,6 +666,7 @@ function AppContent() {
   const [miniMapZoom, setMiniMapZoom] = useState(17);
   const [miniMapFadeStart, setMiniMapFadeStart] = useState(0);
   const [miniMapFadeEnd, setMiniMapFadeEnd] = useState(69);
+  const [uiScale, setUiScale] = useState<number | null>(1.0);
 
   // 3D Scene
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
@@ -1398,321 +1399,323 @@ function AppContent() {
           targetWeatherParams={targetWeatherParams}
       />
 
-      <MiniMap 
-          isVisible={!isUIOverlayActive && !isCanvasInteracting && !isAppLauncherOpen} 
-          position={currentPosition} 
-          bearing={bearing}
-          isNight={isNight}
-          useDarkTheme={useDarkTheme}
-          top={miniMapTop}
-          right={miniMapRight}
-          size={miniMapSize}
-          zoom={miniMapZoom}
-          fadeStart={miniMapFadeStart}
-          fadeEnd={miniMapFadeEnd}
-          onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
-      />
+      <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
+        <MiniMap 
+            isVisible={!isUIOverlayActive && !isCanvasInteracting && !isAppLauncherOpen} 
+            position={currentPosition} 
+            bearing={bearing}
+            isNight={isNight}
+            useDarkTheme={useDarkTheme}
+            top={miniMapTop}
+            right={miniMapRight}
+            size={miniMapSize}
+            zoom={miniMapZoom}
+            fadeStart={miniMapFadeStart}
+            fadeEnd={miniMapFadeEnd}
+            onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
+        />
 
-      <TopStatusBar 
-        isNight={useDarkTheme} 
-        onWeatherClick={handleWeatherClick}
-        weatherData={weatherData}
-        weatherCondition={effectiveWeatherCondition}
-        sunsetArrowYPosition={sunsetArrowYPosition}
-        sunriseArrowYPosition={sunriseArrowYPosition}
-        isHot={isHot}
-        isCold={isCold}
-        tempUnit={tempUnit}
-        setTempUnit={setTempUnit}
-        scale={topBarScale}
-        offsetY={topBarOffsetY}
-        mapStyle={mapStyle}
-      />
-
-      <AnimatePresence>
-          {arrivalMessage && (
-              <motion.div
-                  initial={{ opacity: 0, y: 50, scale: 0.9 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 50, scale: 0.9 }}
-                  transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-                  className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10"
-              >
-                  {arrivalMessage}
-              </motion.div>
-          )}
-      </AnimatePresence>
-
-      <WeatherModal 
-          isOpen={isWeatherModalOpen}
-          onClose={() => setWeatherModalOpen(false)}
-          isNight={useDarkTheme}
-          status={weatherStatus}
-          data={weatherData}
-          error={weatherError}
-          effectiveTime={effectiveTime}
+        <TopStatusBar 
+          isNight={useDarkTheme} 
+          onWeatherClick={handleWeatherClick}
+          weatherData={weatherData}
+          weatherCondition={effectiveWeatherCondition}
           sunsetArrowYPosition={sunsetArrowYPosition}
           sunriseArrowYPosition={sunriseArrowYPosition}
+          isHot={isHot}
+          isCold={isCold}
           tempUnit={tempUnit}
-      />
-      
-      <div
-        className="fixed z-10 flex items-end"
-        style={{
-            bottom: playerFloatingBottom,
-            transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-            opacity: isUIOverlayActive || isAppLauncherOpen ? 0 : 1,
-            pointerEvents: isUIOverlayActive || isAppLauncherOpen ? 'none' : 'auto',
-            left: '50%',
-            transform: `translateX(calc(-50% + ${playerFloatingWidth / 2}px + 8px))`,
-        }}
-      >
-          {navigationTarget ? (
-            <NavigationStatus
-              target={navigationTarget}
-              currentPosition={throttledPosition}
-              isNight={useDarkTheme}
-              onCancel={handleCancelNavigation}
-              tripInfo={tripInfo}
-              simulatedRemainingDistance={simulatedRemainingDistance}
-              width={navigateToolWidth}
-              widgetBgColor={widgetBgColor}
-            />
-          ) : (
-            <NavigateTool 
-              isVisible={!isUIOverlayActive} 
-              isNight={useDarkTheme}
-              onSelectDestination={handleSelectDestination}
-              currentPosition={currentPosition}
-              width={navigateToolWidth}
-              widgetBgColor={widgetBgColor}
-              dayPlayerButtonColor={dayPlayerButtonColor}
-              nightPlayerButtonColor={nightPlayerButtonColor}
-              homeLocation={homeLocation}
-              workLocation={workLocation}
-            />
-          )}
-      </div>
+          setTempUnit={setTempUnit}
+          scale={topBarScale}
+          offsetY={topBarOffsetY}
+          mapStyle={mapStyle}
+        />
 
-      <MusicPlayer
-        activeApp={activeApp}
-        onStationChange={handleStationChange}
-        isAnyAppOpen={isUIOverlayActive}
-        isNight={useDarkTheme}
-        dockedConfig={{
-          width: playerDockedWidth,
-          bottom: playerFloatingBottom,
-          left: playerDockedLeft,
-          height: playerDockedHeight,
-        }}
-        floatingConfig={{
-          width: playerFloatingWidth,
-          bottom: playerFloatingBottom,
-          height: playerFloatingHeight,
-          otherWidgetWidth: navigateToolWidth,
-        }}
-        playerControlsSize={playerControlsSize}
-        playerControlsGap={playerControlsGap}
-        playerControlsVerticalPosition={playerControlsVerticalPosition}
-        widgetBgColor={widgetBgColor}
-        dayPlayerButtonColor={dayPlayerButtonColor}
-        nightPlayerButtonColor={nightPlayerButtonColor}
-        favoriteStationUUIDs={favoriteStationUUIDs}
-        onToggleFavorite={handleToggleFavorite}
-      />
+        <AnimatePresence>
+            {arrivalMessage && (
+                <motion.div
+                    initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 50, scale: 0.9 }}
+                    transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                    className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10"
+                >
+                    {arrivalMessage}
+                </motion.div>
+            )}
+        </AnimatePresence>
 
-      <MapsContainer 
-          isOpen={activeApp === 'maps' || isMapsLayered}
-          onClose={handleCloseMaps}
-          isNight={useDarkTheme}
-          searchPanelWidth={mapsSearchPanelWidth}
-          searchPanelTop={mapsSearchPanelTop}
-          navigationTarget={navigationTarget}
-          spotifyPlayerTop={spotifyPlayerTop}
-          spotifyPlayerBottom={spotifyPlayerBottom}
-      />
-      
-      <SpotifyApp 
-          isOpen={activeApp === 'spotify'} 
-          onClose={() => toggleApp('spotify')} 
-          isNight={useDarkTheme}
-          spotifyPlayerTop={spotifyPlayerTop}
-          spotifyPlayerBottom={spotifyPlayerBottom}
-      />
-      
-      <AnimatePresence>
-        {activeApp === 'theater' && (
-          <TheaterApp
-            onClose={() => toggleApp('theater')}
+        <WeatherModal 
+            isOpen={isWeatherModalOpen}
+            onClose={() => setWeatherModalOpen(false)}
             isNight={useDarkTheme}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-          />
-        )}
-        {activeApp === 'radio' && (
-          <RadioApp
-            isOpen={activeApp === 'radio'}
-            onClose={() => toggleApp('radio')}
-            isNight={useDarkTheme}
-            onPlayStation={handlePlayStation}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-            favoriteStationUUIDs={favoriteStationUUIDs}
-          />
-        )}
-         {activeApp === 'youtube-music' && (
-          <YouTubeMusicApp
-            isOpen={activeApp === 'youtube-music'}
-            onClose={() => toggleApp('youtube-music')}
-            isNight={useDarkTheme}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-            homeData={youtubeHomeData}
-            isHomeDataLoading={youtubeHomeIsLoading}
-            homeDataError={youtubeHomeError}
-            homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
-            onRetry={fetchYouTubeHomeData}
-            onQuotaError={handleGenericQuotaError}
-          />
-        )}
-      </AnimatePresence>
-
-
-      <AppLauncher
-          isOpen={isAppLauncherOpen}
-          width={appLauncherWidth}
-          height={appLauncherHeight}
-          apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)}
-          isCustomizing={isCustomizing}
-          onCustomizeClick={moveAppToDock}
-          onAppLaunch={toggleApp}
-          isNight={useDarkTheme}
-      />
-
-      {isAppLauncherOpen && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsCustomizing(prev => !prev);
-          }}
-          className={`fixed left-1/2 -translate-x-1/2 z-40 px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg
-            ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'}
-            ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+            status={weatherStatus}
+            data={weatherData}
+            error={weatherError}
+            effectiveTime={effectiveTime}
+            sunsetArrowYPosition={sunsetArrowYPosition}
+            sunriseArrowYPosition={sunriseArrowYPosition}
+            tempUnit={tempUnit}
+        />
+        
+        <div
+          className="fixed z-10 flex items-end"
           style={{
-            bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)`,
+              bottom: playerFloatingBottom,
+              transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+              opacity: isUIOverlayActive || isAppLauncherOpen ? 0 : 1,
+              pointerEvents: isUIOverlayActive || isAppLauncherOpen ? 'none' : 'auto',
+              left: '50%',
+              transform: `translateX(calc(-50% + ${playerFloatingWidth / 2}px + 8px))`,
           }}
         >
-          {isCustomizing ? 'Fine' : 'Personalizza'}
-        </button>
-      )}
-      
-      <footer 
-        className="absolute bottom-0 left-0 right-0 h-20 bg-black z-30 flex justify-between items-center px-8"
-        aria-label="Application Dock"
-      >
-        <div className="flex-1">
-        </div>
-        <div className="flex justify-center items-center gap-4">
-            {dockApps.map(appId => {
-              const app = ALL_APPS.find(a => a.id === appId);
-              if (!app) return null;
-
-              const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
-              
-              return (
-                <div key={app.id} className="relative flex flex-col items-center">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isCustomizing) return;
-                      toggleApp(app.id);
-                    }}
-                    className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out ${isCustomizing ? 'customizing-jiggle cursor-default' : 'hover:scale-110'} ${effectiveColorClasses}`}
-                    aria-label={app.label}
-                  >
-                    <app.icon className="w-10 h-10" />
-                  </button>
-                   {activeApp === app.id && !isCustomizing && (
-                      <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
-                   )}
-                  {isCustomizing && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveAppToLauncher(app.id); }}
-                      className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer"
-                      aria-label={`Sposta ${app.label} nel launcher`}
-                    >
-                      <FiMinus className="w-4 h-4 text-white" strokeWidth={3}/>
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            
-            <div className="relative flex flex-col items-center">
-                <DockButton 
-                  icon={ICONS.apps} 
-                  onClick={toggleLauncher}
-                  label="Open App Launcher"
-                />
-                 {isAppLauncherOpen && !isCustomizing && (
-                    <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
-                 )}
-            </div>
-
-            {recentAppsToShow.length > 0 && (
-              <>
-                <div className="w-px h-8 bg-gray-600" />
-                {recentAppsToShow.map(appId => {
-                    const app = ALL_APPS.find(a => a.id === appId);
-                    if (!app) return null;
-                    const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
-                    return (
-                       <div key={`recent-${app.id}`} className="relative flex flex-col items-center">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); toggleApp(app.id); }}
-                                className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${effectiveColorClasses}`}
-                                aria-label={app.label}
-                            >
-                                <app.icon className="w-8 h-8" />
-                            </button>
-                             {activeApp === app.id && (
-                                <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
-                            )}
-                       </div>
-                    );
-                })}
-              </>
+            {navigationTarget ? (
+              <NavigationStatus
+                target={navigationTarget}
+                currentPosition={throttledPosition}
+                isNight={useDarkTheme}
+                onCancel={handleCancelNavigation}
+                tripInfo={tripInfo}
+                simulatedRemainingDistance={simulatedRemainingDistance}
+                width={navigateToolWidth}
+                widgetBgColor={widgetBgColor}
+              />
+            ) : (
+              <NavigateTool 
+                isVisible={!isUIOverlayActive} 
+                isNight={useDarkTheme}
+                onSelectDestination={handleSelectDestination}
+                currentPosition={currentPosition}
+                width={navigateToolWidth}
+                widgetBgColor={widgetBgColor}
+                dayPlayerButtonColor={dayPlayerButtonColor}
+                nightPlayerButtonColor={nightPlayerButtonColor}
+                homeLocation={homeLocation}
+                workLocation={workLocation}
+              />
             )}
         </div>
-        <div className="flex-1 flex justify-end items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}>
-            <VolumeControl 
-                iconSize={volumeIconSize}
-                sliderOffsetY={volumeSliderOffsetY}
-                sliderOffsetX={volumeSliderOffsetX}
-                sliderWidth={volumeSliderWidth}
-                volumeSliderThickness={volumeSliderThickness}
-                sliderPopupWidth={volumeSliderPopupWidth}
-                sliderPopupHeight={volumeSliderPopupHeight}
+
+        <MusicPlayer
+          activeApp={activeApp}
+          onStationChange={handleStationChange}
+          isAnyAppOpen={isUIOverlayActive}
+          isNight={useDarkTheme}
+          dockedConfig={{
+            width: playerDockedWidth,
+            bottom: playerFloatingBottom,
+            left: playerDockedLeft,
+            height: playerDockedHeight,
+          }}
+          floatingConfig={{
+            width: playerFloatingWidth,
+            bottom: playerFloatingBottom,
+            height: playerFloatingHeight,
+            otherWidgetWidth: navigateToolWidth,
+          }}
+          playerControlsSize={playerControlsSize}
+          playerControlsGap={playerControlsGap}
+          playerControlsVerticalPosition={playerControlsVerticalPosition}
+          widgetBgColor={widgetBgColor}
+          dayPlayerButtonColor={dayPlayerButtonColor}
+          nightPlayerButtonColor={nightPlayerButtonColor}
+          favoriteStationUUIDs={favoriteStationUUIDs}
+          onToggleFavorite={handleToggleFavorite}
+        />
+
+        <MapsContainer 
+            isOpen={activeApp === 'maps' || isMapsLayered}
+            onClose={handleCloseMaps}
+            isNight={useDarkTheme}
+            searchPanelWidth={mapsSearchPanelWidth}
+            searchPanelTop={mapsSearchPanelTop}
+            navigationTarget={navigationTarget}
+            spotifyPlayerTop={spotifyPlayerTop}
+            spotifyPlayerBottom={spotifyPlayerBottom}
+        />
+        
+        <SpotifyApp 
+            isOpen={activeApp === 'spotify'} 
+            onClose={() => toggleApp('spotify')} 
+            isNight={useDarkTheme}
+            spotifyPlayerTop={spotifyPlayerTop}
+            spotifyPlayerBottom={spotifyPlayerBottom}
+        />
+        
+        <AnimatePresence>
+          {activeApp === 'theater' && (
+            <TheaterApp
+              onClose={() => toggleApp('theater')}
+              isNight={useDarkTheme}
+              spotifyPlayerTop={spotifyPlayerTop}
+              spotifyPlayerBottom={spotifyPlayerBottom}
             />
-        </div>
-      </footer>
-      
-      <AnimatePresence>
-        {isKeyboardVisible && (
-            <VirtualKeyboard 
-                isVisible={isKeyboardVisible}
-                targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null}
-                onClose={handleKeyboardClose}
-                isNight={useDarkTheme}
-                virtualKeyboardKeySize={virtualKeyboardKeySize}
-                virtualKeyboardHeight={virtualKeyboardHeight}
-                virtualKeyboardPaddingX={virtualKeyboardPaddingX}
-                virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
-                virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
-                virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
+          )}
+          {activeApp === 'radio' && (
+            <RadioApp
+              isOpen={activeApp === 'radio'}
+              onClose={() => toggleApp('radio')}
+              isNight={useDarkTheme}
+              onPlayStation={handlePlayStation}
+              spotifyPlayerTop={spotifyPlayerTop}
+              spotifyPlayerBottom={spotifyPlayerBottom}
+              favoriteStationUUIDs={favoriteStationUUIDs}
             />
+          )}
+           {activeApp === 'youtube-music' && (
+            <YouTubeMusicApp
+              isOpen={activeApp === 'youtube-music'}
+              onClose={() => toggleApp('youtube-music')}
+              isNight={useDarkTheme}
+              spotifyPlayerTop={spotifyPlayerTop}
+              spotifyPlayerBottom={spotifyPlayerBottom}
+              homeData={youtubeHomeData}
+              isHomeDataLoading={youtubeHomeIsLoading}
+              homeDataError={youtubeHomeError}
+              homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
+              onRetry={fetchYouTubeHomeData}
+              onQuotaError={handleGenericQuotaError}
+            />
+          )}
+        </AnimatePresence>
+
+
+        <AppLauncher
+            isOpen={isAppLauncherOpen}
+            width={appLauncherWidth}
+            height={appLauncherHeight}
+            apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)}
+            isCustomizing={isCustomizing}
+            onCustomizeClick={moveAppToDock}
+            onAppLaunch={toggleApp}
+            isNight={useDarkTheme}
+        />
+
+        {isAppLauncherOpen && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCustomizing(prev => !prev);
+            }}
+            className={`fixed left-1/2 -translate-x-1/2 z-40 px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg
+              ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'}
+              ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+            style={{
+              bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)`,
+            }}
+          >
+            {isCustomizing ? 'Fine' : 'Personalizza'}
+          </button>
         )}
-      </AnimatePresence>
+        
+        <footer 
+          className="fixed bottom-0 left-0 right-0 h-20 bg-black z-30 flex justify-between items-center px-8"
+          aria-label="Application Dock"
+        >
+          <div className="flex-1">
+          </div>
+          <div className="flex justify-center items-center gap-4">
+              {dockApps.map(appId => {
+                const app = ALL_APPS.find(a => a.id === appId);
+                if (!app) return null;
+
+                const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
+                
+                return (
+                  <div key={app.id} className="relative flex flex-col items-center">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCustomizing) return;
+                        toggleApp(app.id);
+                      }}
+                      className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out ${isCustomizing ? 'customizing-jiggle cursor-default' : 'hover:scale-110'} ${effectiveColorClasses}`}
+                      aria-label={app.label}
+                    >
+                      <app.icon className="w-10 h-10" />
+                    </button>
+                     {activeApp === app.id && !isCustomizing && (
+                        <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
+                     )}
+                    {isCustomizing && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveAppToLauncher(app.id); }}
+                        className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer"
+                        aria-label={`Sposta ${app.label} nel launcher`}
+                      >
+                        <FiMinus className="w-4 h-4 text-white" strokeWidth={3}/>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              
+              <div className="relative flex flex-col items-center">
+                  <DockButton 
+                    icon={ICONS.apps} 
+                    onClick={toggleLauncher}
+                    label="Open App Launcher"
+                  />
+                   {isAppLauncherOpen && !isCustomizing && (
+                      <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
+                   )}
+              </div>
+
+              {recentAppsToShow.length > 0 && (
+                <>
+                  <div className="w-px h-8 bg-gray-600" />
+                  {recentAppsToShow.map(appId => {
+                      const app = ALL_APPS.find(a => a.id === appId);
+                      if (!app) return null;
+                      const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
+                      return (
+                         <div key={`recent-${app.id}`} className="relative flex flex-col items-center">
+                              <button
+                                  onClick={(e) => { e.stopPropagation(); toggleApp(app.id); }}
+                                  className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${effectiveColorClasses}`}
+                                  aria-label={app.label}
+                              >
+                                  <app.icon className="w-8 h-8" />
+                              </button>
+                               {activeApp === app.id && (
+                                  <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
+                              )}
+                         </div>
+                      );
+                  })}
+                </>
+              )}
+          </div>
+          <div className="flex-1 flex justify-end items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}>
+              <VolumeControl 
+                  iconSize={volumeIconSize}
+                  sliderOffsetY={volumeSliderOffsetY}
+                  sliderOffsetX={volumeSliderOffsetX}
+                  sliderWidth={volumeSliderWidth}
+                  volumeSliderThickness={volumeSliderThickness}
+                  sliderPopupWidth={volumeSliderPopupWidth}
+                  sliderPopupHeight={volumeSliderPopupHeight}
+              />
+          </div>
+        </footer>
+        
+        <AnimatePresence>
+          {isKeyboardVisible && (
+              <VirtualKeyboard 
+                  isVisible={isKeyboardVisible}
+                  targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null}
+                  onClose={handleKeyboardClose}
+                  isNight={useDarkTheme}
+                  virtualKeyboardKeySize={virtualKeyboardKeySize}
+                  virtualKeyboardHeight={virtualKeyboardHeight}
+                  virtualKeyboardPaddingX={virtualKeyboardPaddingX}
+                  virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
+                  virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
+                  virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
+              />
+          )}
+        </AnimatePresence>
+      </div>
 
        {isDebugOpen && <DebugControls
         isOpen={isDebugOpen}
@@ -1833,6 +1836,8 @@ function AppContent() {
         setVirtualKeyboardKeyGapY={setVirtualKeyboardKeyGapY}
         virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
         setVirtualKeyboardKeyFontWeight={setVirtualKeyboardKeyFontWeight}
+        uiScale={uiScale}
+        setUiScale={setUiScale}
       />}
     </div>
   );
@@ -1855,5 +1860,4 @@ function App() {
   );
 }
 
-// FIX: Add default export for the App component to make it available for import.
 export default App;

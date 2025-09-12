@@ -58,7 +58,6 @@ interface DebugControlsProps {
   setPlayerDockedLeft: (left: number) => void;
   playerDockedHeight: number;
   setPlayerDockedHeight: (height: number) => void;
-  // FIX: Add missing props for floating player and navigate tool to fix type error.
   playerFloatingWidth: number;
   setPlayerFloatingWidth: (width: number) => void;
   playerFloatingBottom: number;
@@ -125,6 +124,8 @@ interface DebugControlsProps {
   setVirtualKeyboardKeyGapY: (gap: number) => void;
   virtualKeyboardKeyFontWeight: number;
   setVirtualKeyboardKeyFontWeight: (weight: number) => void;
+  uiScale: number | null;
+  setUiScale: (scale: number | null) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -278,6 +279,8 @@ export default function DebugControls({
   setVirtualKeyboardKeyGapY,
   virtualKeyboardKeyFontWeight,
   setVirtualKeyboardKeyFontWeight,
+  uiScale,
+  setUiScale,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -347,6 +350,7 @@ export default function DebugControls({
     setVirtualKeyboardKeyGapX(2);
     setVirtualKeyboardKeyGapY(2);
     setVirtualKeyboardKeyFontWeight(600);
+    setUiScale(1.0);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -442,6 +446,26 @@ export default function DebugControls({
             </div>
         </div>
         
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Global UI Scale</h3>
+            <div>
+              <label htmlFor="ui-scale-slider" className="block font-medium text-zinc-300 mb-2">
+                UI Scale Override: {uiScale ? uiScale.toFixed(2) : 'Auto'}
+              </label>
+              <input
+                id="ui-scale-slider"
+                type="range"
+                min="0.5"
+                max="1.2"
+                step="0.05"
+                value={uiScale ?? 1.0}
+                onChange={(e) => setUiScale(Number(e.target.value))}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+              />
+              <button onClick={() => setUiScale(null)} className="text-xs text-blue-400 hover:underline mt-1">Reset to Auto (Media Query)</button>
+            </div>
+        </div>
+
         <div>
           <label htmlFor="topbar-scale-slider" className="block font-medium text-zinc-300 mb-2">
             Top Bar Scale: {topBarScale.toFixed(2)}
