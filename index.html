@@ -541,9 +541,10 @@
       height: 100%;
       --ui-scale: 1.0;
       transform: scale(var(--ui-scale));
-      transform-origin: top left;
+      transform-origin: center;
       transition: transform 0.3s ease-out;
       pointer-events: none;
+      overflow: hidden; /* Prevent off-screen elements from being visible when scaled */
     }
     .ui-scaler > * {
       pointer-events: auto;

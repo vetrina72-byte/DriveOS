@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -1398,8 +1399,22 @@ function AppContent() {
           dayFogFar={dayFogFar}
           targetWeatherParams={targetWeatherParams}
       />
+      
+      <WeatherModal 
+          isOpen={isWeatherModalOpen}
+          onClose={() => setWeatherModalOpen(false)}
+          isNight={useDarkTheme}
+          status={weatherStatus}
+          data={weatherData}
+          error={weatherError}
+          effectiveTime={effectiveTime}
+          sunsetArrowYPosition={sunsetArrowYPosition}
+          sunriseArrowYPosition={sunriseArrowYPosition}
+          tempUnit={tempUnit}
+      />
 
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
+        <div id="scaled-portal-root" className="relative z-[9999]"></div>
         <MiniMap 
             isVisible={!isUIOverlayActive && !isCanvasInteracting && !isAppLauncherOpen} 
             position={currentPosition} 
@@ -1445,19 +1460,6 @@ function AppContent() {
             )}
         </AnimatePresence>
 
-        <WeatherModal 
-            isOpen={isWeatherModalOpen}
-            onClose={() => setWeatherModalOpen(false)}
-            isNight={useDarkTheme}
-            status={weatherStatus}
-            data={weatherData}
-            error={weatherError}
-            effectiveTime={effectiveTime}
-            sunsetArrowYPosition={sunsetArrowYPosition}
-            sunriseArrowYPosition={sunriseArrowYPosition}
-            tempUnit={tempUnit}
-        />
-        
         <div
           className="fixed z-10 flex items-end"
           style={{
@@ -1690,6 +1692,8 @@ function AppContent() {
               <VolumeControl 
                   iconSize={volumeIconSize}
                   sliderOffsetY={volumeSliderOffsetY}
+                  // FIX: The `sliderOffsetX` prop was being passed an undefined variable of the same name.
+                  // It has been corrected to use the `volumeSliderOffsetX` state variable.
                   sliderOffsetX={volumeSliderOffsetX}
                   sliderWidth={volumeSliderWidth}
                   volumeSliderThickness={volumeSliderThickness}
@@ -1717,7 +1721,7 @@ function AppContent() {
         </AnimatePresence>
       </div>
 
-       {isDebugOpen && <DebugControls
+      {isDebugOpen && <DebugControls
         isOpen={isDebugOpen}
         onClose={() => setIsDebugOpen(false)}
         timeOverride={timeOverride}

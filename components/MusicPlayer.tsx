@@ -244,7 +244,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { is
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Nessuna canzone in coda.</p>
             )}
         </div>,
-        document.getElementById('portal-root')!
+        document.getElementById('scaled-portal-root')!
     );
 };
 
