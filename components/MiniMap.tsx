@@ -89,7 +89,7 @@ const STADIA_API_KEY = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
 const MAPTILER_API_KEY = 'T3ITqSa4x2w9qQOiIENK';
 
 // Main MiniMap component
-const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, isNight, useDarkTheme, onClick }: {
+const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, isNight, useDarkTheme, onClick, uiScale }: {
     isVisible: boolean;
     position: { lat: number; lng: number } | null;
     bearing: number;
@@ -102,6 +102,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
     isNight: boolean;
     useDarkTheme: boolean;
     onClick: (e: React.MouseEvent) => void;
+    uiScale: number;
 }) => {
   const markerRef = useRef<L.Marker>(null);
 
@@ -120,8 +121,9 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
       height: `${size}px`,
       maskImage: maskImage,
       WebkitMaskImage: maskImage,
-    };
-  }, [top, right, size, fadeStart, fadeEnd]);
+      '--minimap-scale': uiScale,
+    } as React.CSSProperties;
+  }, [top, right, size, fadeStart, fadeEnd, uiScale]);
 
   if (!position) {
       return null;

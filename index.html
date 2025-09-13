@@ -195,18 +195,20 @@
     .minimap-container {
       position: absolute;
       /* top, right, width, height are controlled by inline styles from React */
+      --minimap-scale: 1.0;
       border-radius: 32px;
       overflow: hidden;
       z-index: 5;
       opacity: 0;
-      transform: scale(0.95) translateY(-10px);
+      transform-origin: top right;
+      transform: scale(var(--minimap-scale)) scale(0.95) translateY(-10px);
       transition: opacity 0.4s ease-out, transform 0.4s ease-out;
       pointer-events: none;
     }
     
     .minimap-container.visible {
       opacity: 1;
-      transform: scale(1) translateY(0);
+      transform: scale(var(--minimap-scale)) scale(1) translateY(0);
       pointer-events: auto;
       cursor: pointer;
     }
