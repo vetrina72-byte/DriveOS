@@ -126,6 +126,8 @@ interface DebugControlsProps {
   setVirtualKeyboardKeyFontWeight: (weight: number) => void;
   uiScale: number | null;
   setUiScale: (scale: number | null) => void;
+  appBarWidth: number;
+  setAppBarWidth: (width: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -281,6 +283,8 @@ export default function DebugControls({
   setVirtualKeyboardKeyFontWeight,
   uiScale,
   setUiScale,
+  appBarWidth,
+  setAppBarWidth,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -351,6 +355,7 @@ export default function DebugControls({
     setVirtualKeyboardKeyGapY(2);
     setVirtualKeyboardKeyFontWeight(600);
     setUiScale(1.0);
+    setAppBarWidth(500);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -463,6 +468,25 @@ export default function DebugControls({
                 className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
               />
               <button onClick={() => setUiScale(null)} className="text-xs text-blue-400 hover:underline mt-1">Reset to Auto (Media Query)</button>
+            </div>
+        </div>
+        
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Footer Layout</h3>
+            <div>
+              <label htmlFor="app-bar-width-slider" className="block font-medium text-zinc-300 mb-2">
+                App Bar Background Width: {appBarWidth}%
+              </label>
+              <input
+                id="app-bar-width-slider"
+                type="range"
+                min="100"
+                max="2000"
+                step="50"
+                value={appBarWidth}
+                onChange={(e) => setAppBarWidth(Number(e.target.value))}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+              />
             </div>
         </div>
 

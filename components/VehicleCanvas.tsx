@@ -19,6 +19,14 @@ export interface SceneConfig {
     modelScale: number;
 }
 
+const BASE_INITIAL_CONFIG: SceneConfig = {
+    cameraPos: { x: 8.30, y: 2.10, z: 8.80 },
+    cameraTarget: { x: 0.95, y: 0, z: 0.65 },
+    modelPos: { x: 0.95, y: -1.00, z: 0.65 },
+    modelRot: { x: 0.0, y: 0.05, z: 0.0 },
+    modelScale: 1.5,
+};
+
 // Memoize Environment per evitare flash sulle riflessioni
 const MemoizedEnvironment = React.memo(() => <Environment preset="city" />);
 
@@ -464,6 +472,7 @@ interface VehicleCanvasProps {
   dayFogNear: number;
   dayFogFar: number;
   targetWeatherParams: WeatherParams;
+  uiScale: number;
 }
 
 export default function VehicleCanvas({
@@ -481,6 +490,7 @@ export default function VehicleCanvas({
   dayFogNear,
   dayFogFar,
   targetWeatherParams,
+  uiScale,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -504,13 +514,21 @@ export default function VehicleCanvas({
   const shadowOpacity = 0.5;
   const shadowBlur = 2.5;
 
-  const [initialConfig, ] = useState<SceneConfig>({
-    cameraPos: { x: 8.30, y: 2.10, z: 8.80 },
-    cameraTarget: { x: 0.95, y: 0, z: 0.65 },
-    modelPos: { x: 0.95, y: -1.00, z: 0.65 },
-    modelRot: { x: 0.0, y: 0.05, z: 0.0 },
-    modelScale: 1.5,
-  });
+  const initialConfig = useMemo(() => {
+    if (uiScale === 1.0) {
+      return BASE_INITIAL_CONFIG;
+    }
+    // As scale decreases (e.g., 0.8), zoomFactor increases (1.25), moving camera further away.
+    const zoomFactor = 1 / uiScale;
+    return {
+      ...BASE_INITIAL_CONFIG,
+      cameraPos: {
+        x: BASE_INITIAL_CONFIG.cameraPos.x * zoomFactor,
+        y: BASE_INITIAL_CONFIG.cameraPos.y, // Keep Y the same to avoid weird angles
+        z: BASE_INITIAL_CONFIG.cameraPos.z * zoomFactor,
+      },
+    };
+  }, [uiScale]);
 
   const [runtimeAppOpenConfig, setRuntimeAppOpenConfig] = useState<SceneConfig>(appOpenConfigFromProps);
 
