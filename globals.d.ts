@@ -141,6 +141,24 @@ declare global {
     readonly env: ImportMetaEnv;
   }
 
+  // Add Electron's Webview typings to the global scope for TypeScript.
+  interface HTMLWebViewElement extends HTMLElement {
+    // Methods
+    openDevTools(): void;
+    closeDevTools(): void;
+    isDevToolsOpened(): boolean;
+    executeJavaScript(code: string): Promise<any>;
+
+    // Events
+    addEventListener(type: 'did-fail-load', listener: (e: any) => void): void;
+    addEventListener(type: 'dom-ready', listener: (e: any) => void): void;
+    addEventListener(type: 'console-message', listener: (e: any) => void): void;
+
+    removeEventListener(type: 'did-fail-load', listener: (e: any) => void): void;
+    removeEventListener(type: 'dom-ready', listener: (e: any) => void): void;
+    removeEventListener(type: 'console-message', listener: (e: any) => void): void;
+  }
+
   interface Window {
     SpeechRecognition: SpeechRecognitionStatic;
     webkitSpeechRecognition: SpeechRecognitionStatic;
