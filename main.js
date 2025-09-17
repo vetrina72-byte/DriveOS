@@ -37,17 +37,21 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // THIS IS THE CRITICAL PART: Intercept network requests and remove security headers.
+  // THIS IS THE CRITICAL PART: Intercept network requests and robustly remove security headers.
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        // Remove or overwrite the security headers that prevent embedding.
-        // Assigning an empty array effectively removes them.
-        'X-Frame-Options': [],
-        'Content-Security-Policy': [] 
+    const { responseHeaders } = details;
+    const updatedHeaders = { ...responseHeaders };
+
+    // A more robust way to remove headers: iterate over all keys and delete any that match case-insensitively.
+    const headersToRemove = ['x-frame-options', 'content-security-policy'];
+
+    for (const headerKey of Object.keys(updatedHeaders)) {
+      if (headersToRemove.includes(headerKey.toLowerCase())) {
+        delete updatedHeaders[headerKey];
       }
-    });
+    }
+
+    callback({ responseHeaders: updatedHeaders });
   });
 
   createWindow();
