@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 export default async function handler(req, res) {
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
         
         const { access_token, expires_in, refresh_token: newRefreshToken } = spotifyResponse.data;
 
+        // Spotify può restituire un nuovo refresh_token per rotazione. Aggiorniamo il cookie se succede.
         if (newRefreshToken) {
             res.setHeader('Set-Cookie', `spotify_refresh_token=${newRefreshToken}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`);
         }
@@ -49,6 +51,8 @@ export default async function handler(req, res) {
         const status = error.response?.status || 500;
         const details = error.response?.data || { message: 'An unknown error occurred while refreshing token' };
         
+        // GESTIONE CRUCIALE: Se il refresh token non è più valido, Spotify risponde con `invalid_grant`.
+        // In questo caso, puliamo il cookie e restituiamo 401 per forzare il logout sul frontend.
         if (error.response?.data?.error === 'invalid_grant') {
             res.setHeader('Set-Cookie', 'spotify_refresh_token=; HttpOnly; Secure; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
             return res.status(401).json({ error: 'Invalid refresh token', details });

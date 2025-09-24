@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import axios from 'axios';
 import apiClient from '../api';
@@ -39,8 +40,6 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     isPlayerReady: boolean;
     pauseSpotify: () => void;
     setPlayerAsReadyForAutoplay: () => void;
-    // FIX: Add youTubeFavorites and onToggleYouTubeFavorite to the context type to support
-    // favoriting YouTube playlists.
     youTubeFavorites: string[];
     onToggleYouTubeFavorite: (playlistId: string) => void;
 }
@@ -82,8 +81,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading: false,
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
-    // FIX: Add state and logic for managing favorite YouTube playlists.
-    // This includes loading from and saving to localStorage.
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
 
     useEffect(() => {
@@ -116,55 +113,62 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_expires_at');
+        // Chiama la nostra API per cancellare il cookie HttpOnly
         axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
         setState(initialState);
+        // Assicurati che il loading termini dopo il logout
         setState(s => ({...s, isLoading: false}));
     }, []);
 
-const silentRefreshToken = useCallback(async () => {
-  if (refreshInFlight.current) {
-    return refreshInFlight.current;
-  }
-  refreshInFlight.current = (async () => {
-    console.log("Refreshing Spotify access token (silent)...");
-    try {
-      const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
-      const { access_token, expires_in } = data;
-      const newExpiresAt = Date.now() + expires_in * 1000;
+    const silentRefreshToken = useCallback(async () => {
+      if (refreshInFlight.current) {
+        return refreshInFlight.current;
+      }
+      const promise = (async () => {
+        console.log("Attempting silent token refresh...");
+        try {
+          const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+          const { access_token, expires_in } = data;
+          const newExpiresAt = Date.now() + expires_in * 1000;
 
-      localStorage.setItem('spotify_access_token', access_token);
-      localStorage.setItem('spotify_expires_at', String(newExpiresAt));
-      apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+          localStorage.setItem('spotify_access_token', access_token);
+          localStorage.setItem('spotify_expires_at', String(newExpiresAt));
+          apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
-      setState(s => ({
-        ...s,
-        accessToken: access_token,
-        expiresAt: newExpiresAt,
-      }));
-      console.log("%c[Spotify] Token refreshed ✅", "color: lime; font-weight: bold");
-    } catch (err) {
-      console.error("Silent token refresh failed. Logging out.", err);
-      logout();
-    } finally {
-      refreshInFlight.current = null;
-    }
-  })();
-  return refreshInFlight.current;
-}, [logout]);
+          setState(s => ({
+            ...s,
+            accessToken: access_token,
+            expiresAt: newExpiresAt,
+          }));
+          console.log("%c[Spotify] Token refreshed successfully ✅", "color: lime; font-weight: bold");
+        } catch (err) {
+          console.error("Silent token refresh failed. Forcing logout.", err);
+          logout();
+          // Propaga l'errore per far fallire le chiamate in coda nell'interceptor
+          throw err;
+        } finally {
+          refreshInFlight.current = null;
+        }
+      })();
+      refreshInFlight.current = promise;
+      return promise;
+    }, [logout]);
     
+    // Effetto per il refresh automatico del token prima della scadenza
     useEffect(() => {
         let refreshTimeout: ReturnType<typeof setTimeout>;
 
         if (state.isAuthenticated && state.expiresAt) {
             const now = Date.now();
+            // Pianifica il refresh 2 minuti prima della scadenza per sicurezza
             const timeoutDuration = state.expiresAt - now - 120000; 
 
             if (timeoutDuration > 0) {
                 refreshTimeout = setTimeout(silentRefreshToken, timeoutDuration);
-                console.log(`Spotify token refresh scheduled in ${Math.round(timeoutDuration / 60000)} minutes.`);
             } else {
+                // Se il token è già scaduto o sta per scadere, rinfrescalo subito
                 silentRefreshToken();
             }
         }
@@ -178,13 +182,10 @@ const silentRefreshToken = useCallback(async () => {
 
    const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
         setNowPlaying(s => {
-            // If another source is active, just update spotify in background
             if (s.source !== 'spotify' && s.source !== null) {
                 return { ...s, spotifyState: newState };
             }
 
-            // `isLoading` is set to true when play() is called.
-            // We only turn it off here once we get a valid track state.
             const stillLoading = s.isLoading && !(newState && newState.track_window.current_track);
 
             return {
@@ -206,93 +207,7 @@ const silentRefreshToken = useCallback(async () => {
         }
     }, []);
 
-    const startSpotifyPlayback = useCallback(async () => {
-        if (!deviceId) {
-            console.warn("Attempted to start Spotify playback, but deviceId is not ready.");
-            return;
-        }
-
-        console.log("Executing start/sync Spotify playback logic for session restore.");
-        try {
-            await apiClient.put('/me/player', {
-                device_ids: [deviceId],
-                play: false,
-            });
-            console.log('Playback transferred to this device for session restore.');
-
-            setTimeout(async () => {
-                try {
-                    const { data: playerState } = await apiClient.get('/me/player');
-                    if (playerState && playerState.device && playerState.item) {
-                        await apiClient.put(`/me/player/play?device_id=${deviceId}`);
-                        console.log('Explicit play command sent to resume restored session.');
-                    } else {
-                        console.log("No active playback session found on Spotify's side to resume.");
-                    }
-                } catch (e: any) {
-                    if (e.response?.status !== 404) {
-                        console.error("Error during resync play command", e);
-                    } else {
-                        console.log("No active playback session found on Spotify's side to resume (404).");
-                    }
-                }
-            }, 500);
-        } catch (error: any) {
-            if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-                console.log("No active session to transfer. Player is ready for new playback.");
-            } else {
-                console.error("Error during startup and synchronization:", error.response?.data || error.message);
-            }
-        }
-    }, [deviceId]);
-
-    // NEW session restore useEffect, triggered by the semaphore
-    useEffect(() => {
-        if (!isReadyForAutoplay) {
-            return;
-        }
-
-        console.log("Player is ready. Attempting to restore last session...");
-        
-        try {
-            const savedStateJSON = localStorage.getItem('last_now_playing');
-            if (savedStateJSON) {
-                const savedState = JSON.parse(savedStateJSON) as NowPlayingState;
-                console.log("Found saved session:", savedState);
-
-                if (savedState.source === 'spotify') {
-                    console.log("Last session was Spotify. Triggering playback.");
-                    startSpotifyPlayback();
-                } else if (savedState.source === 'radio' || savedState.source === 'youtube') {
-                    console.log(`Last session was ${savedState.source}. Setting state for autoplay.`);
-                    setNowPlaying(savedState);
-                }
-            } else {
-                 console.log("No saved session found in localStorage.");
-            }
-        } catch (error) {
-            console.error("Failed to restore session from localStorage:", error);
-            localStorage.removeItem('last_now_playing');
-        }
-    }, [isReadyForAutoplay, startSpotifyPlayback]);
-
-    // Save nowPlaying state to localStorage whenever it changes
-    useEffect(() => {
-      if (nowPlaying.source) {
-        if (nowPlaying.source === 'spotify' && !nowPlaying.spotifyState?.track_window.current_track) {
-            return;
-        }
-        if (nowPlaying.source === 'youtube' && !nowPlaying.youtubeTrack) {
-            return;
-        }
-        try {
-          localStorage.setItem('last_now_playing', JSON.stringify(nowPlaying));
-        } catch (e) {
-            console.error("Failed to save session state to localStorage", e);
-        }
-      }
-    }, [nowPlaying]);
-
+    // Effetto principale all'avvio dell'app per tentare di autenticare l'utente
     useEffect(() => {
         const initAuth = async () => {
             try {
@@ -311,7 +226,7 @@ const silentRefreshToken = useCallback(async () => {
                     throw new Error("Failed to fetch user info after token refresh.");
                 }
             } catch (err) {
-                console.log("No valid session found on load.");
+                console.log("No valid session found on load. User needs to login.");
                 logout(); 
             } finally {
                 setState(s => ({...s, isLoading: false}));
@@ -335,6 +250,7 @@ const silentRefreshToken = useCallback(async () => {
         }
     
         try {
+            // Usa la nuova API route per lo scambio
             const response = await axios.post('/api/exchange-token', { code: authCode }, { withCredentials: true });
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
@@ -345,8 +261,6 @@ const silentRefreshToken = useCallback(async () => {
     
             const userData = await fetchUserInfo();
             if (userData) {
-                // The login function now only handles setting the authentication state.
-                // A separate useEffect will react to this change to manage playback source.
                 setState(s => ({
                     ...s,
                     accessToken: access_token,
@@ -367,54 +281,34 @@ const silentRefreshToken = useCallback(async () => {
         }
     }, [fetchUserInfo, logout]);
 
-    // When the user logs in to Spotify, stop any radio playback and activate Spotify.
+    // ** Logica cruciale per il trasferimento del playback **
+    // Questo effetto si attiva SOLO quando siamo autenticati E abbiamo un device ID.
     useEffect(() => {
-      // This effect runs when the user becomes authenticated and we have a device ID.
-      if (state.isAuthenticated && deviceId && state.accessToken) {
-        console.log("[AuthContext] Spotify authenticated, device ready. Switching source and transferring playback.");
+      if (state.isAuthenticated && deviceId) {
+        console.log(`[AuthContext] Authenticated with a valid device ID (${deviceId}). Attempting to transfer playback.`);
     
-        // Stop any radio playback by switching the active source to Spotify.
-        // The MusicPlayer component will see this change and tear down the radio stream.
-        setNowPlaying(prev => {
-            // Prevent re-triggering if the source is already spotify
-            if (prev.source === 'spotify' && !prev.radioStation && !prev.youtubeTrack) {
-                return prev;
-            }
-            return {
-                ...prev,
-                source: 'spotify',
-                radioStation: null, // Explicitly clear radio station
-                radioContext: [],
-                youtubeTrack: null,
-                isLoading: true, // Indicate that Spotify is syncing
-            };
-        });
-    
-        // Attempt to transfer playback to this device.
+        // Tenta di trasferire il controllo a questo device.
+        // 'play: false' è importante per non far partire la musica automaticamente.
         apiClient.put("/me/player", {
           device_ids: [deviceId],
-          play: false // Set to false to prevent race conditions. Let user or session restore initiate play.
+          play: false
         })
         .then(response => {
-            // A 204 No Content is a success for this endpoint.
             if (response.status === 204) {
-              console.log(`[AuthContext] Playback transfer successful to device ${deviceId}.`);
-            } else {
-              console.warn(`[AuthContext] Playback transfer responded with status: ${response.status}.`);
+              console.log(`[AuthContext] Playback transfer successful.`);
             }
         })
         .catch(e => {
             const errorData = e.response?.data?.error;
-            // Gracefully handle common, non-critical errors.
-            if (errorData && (errorData.reason === 'NO_ACTIVE_DEVICE' || errorData.reason === 'PREMIUM_REQUIRED')) {
-                 console.log(`[AuthContext] Playback transfer not needed or possible: ${errorData.reason}`);
+            // Gestisce errori comuni in modo silenzioso, non sono fallimenti critici.
+            if (errorData && (errorData.reason === 'NO_ACTIVE_DEVICE' || errorData.reason === 'PREMIUM_REQUIRED' || e.response?.status === 404)) {
+                 console.log(`[AuthContext] Playback transfer not needed or possible: ${errorData.reason || 'No active player session to transfer.'}`);
             } else {
                 console.error("Error transferring playback:", e.response?.data || e.message);
             }
         });
       }
-    // We depend on isAuthenticated, deviceId, and accessToken to ensure this runs at the right time.
-    }, [state.isAuthenticated, deviceId, state.accessToken]);
+    }, [state.isAuthenticated, deviceId]);
     
     const refreshHomePage = useCallback(() => {
         setRefreshTrigger(prev => prev + 1);
@@ -464,10 +358,8 @@ const silentRefreshToken = useCallback(async () => {
             return;
         }
 
-        // Only show loader if we aren't already playing Spotify.
         const showLoader = nowPlaying.source !== 'spotify' || !nowPlaying.spotifyState || nowPlaying.spotifyState.paused;
 
-        // Set loading state but preserve current track info to prevent UI flicker.
         setNowPlaying(prev => ({
             ...prev,
             source: 'spotify',
@@ -486,10 +378,8 @@ const silentRefreshToken = useCallback(async () => {
             } else if (options.uris) {
                 body.uris = options.uris;
                 if (options.offset) body.offset = options.offset;
-            } else {
-                 // If no URI is provided, it's just a "play" command for the current track.
             }
-
+            
             await apiClient.put(
                 `/me/player/play?device_id=${deviceId}`,
                 body
@@ -497,7 +387,6 @@ const silentRefreshToken = useCallback(async () => {
             refreshHomePage();
         } catch (err) {
             console.error('Failed to start playback', err);
-            // On failure, just stop the loading indicator.
             setNowPlaying(prev => ({ ...prev, isLoading: false }));
         }
     }, [deviceId, refreshHomePage, nowPlaying.source, nowPlaying.spotifyState]);
@@ -505,7 +394,6 @@ const silentRefreshToken = useCallback(async () => {
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => {
         pauseSpotify();
 
-        // Only show loader if we aren't already playing a YouTube video.
         const showLoader = nowPlaying.source !== 'youtube';
         
         setNowPlaying(prev => ({

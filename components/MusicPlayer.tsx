@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import YouTube from 'react-youtube';
@@ -40,12 +41,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
-    const lastSeekTime = useRef(0); // Track when the last seek happened
+    const lastSeekTime = useRef(0);
 
     useEffect(() => {
-        // Only update from Spotify if we are not seeking AND
-        // it's been more than a second since we last seeked.
-        // This prevents the jump-back from an old state update arriving after seek.
         if (!isSeeking && Date.now() - lastSeekTime.current > 1000) {
             setPosition(state.position);
         }
@@ -105,8 +103,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const finalPosition = getSeekPosition(upEvent.clientX);
             player.seek(finalPosition).then(() => {
                 setPosition(finalPosition);
-                lastSeekTime.current = Date.now(); // Record seek time
-                setIsSeeking(false); // Set seeking to false immediately
+                lastSeekTime.current = Date.now();
+                setIsSeeking(false);
             });
         };
         
@@ -148,7 +146,6 @@ const YouTubeProgressBar = ({
     const [localPosition, setLocalPosition] = useState(progress.position);
     const progressRef = useRef<HTMLDivElement>(null);
 
-    // Sync with external state only when not actively seeking
     useEffect(() => {
         if (!isSeeking) {
             setLocalPosition(progress.position);
@@ -157,7 +154,7 @@ const YouTubeProgressBar = ({
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current) return;
-        onSeekStart(); // Tell parent we are starting to seek
+        onSeekStart();
 
         const getSeekPosition = (clientX: number): number => {
             if (!progressRef.current || !progress.duration) return 0;
@@ -167,26 +164,25 @@ const YouTubeProgressBar = ({
         };
 
         const newPos = getSeekPosition(e.clientX);
-        setLocalPosition(newPos); // Update visual state immediately
-        onSeek(newPos); // Tell parent to seek the player immediately (authoritative)
+        setLocalPosition(newPos);
+        onSeek(newPos);
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const movePos = getSeekPosition(moveEvent.clientX);
-            setLocalPosition(movePos); // Update visual state immediately on drag
-            onSeek(movePos); // Tell parent to seek the player immediately (authoritative)
+            setLocalPosition(movePos);
+            onSeek(movePos);
         };
 
         const handleMouseUp = (upEvent: MouseEvent) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
-            onSeekEnd(); // Tell parent we are done seeking
+            onSeekEnd();
         };
 
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
     }, [onSeek, onSeekStart, onSeekEnd, progress.duration]);
 
-    // Display our local, instantly-updated position while seeking, otherwise use the prop from the player.
     const displayPosition = isSeeking ? localPosition : progress.position;
     const progressPercentage = progress.duration > 0 ? (displayPosition / progress.duration) * 100 : 0;
 
@@ -294,10 +290,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
 
     const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
-    const currentTrackId = playerState?.track_window.current_track?.id;
     const internalVolumeUpdate = useRef(false);
-  const tokenRef = useRef<string | null>(accessToken);
-  useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
+    const tokenRef = useRef<string | null>(accessToken);
+    useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
 
     const handleToggleQueue = (source: 'spotify' | 'youtube') => {
         if (visibleQueue === source) {
@@ -417,7 +412,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         );
     
         if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
-            console.log("End of YouTube playlist.");
             return;
         }
     
@@ -439,21 +433,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const position = player.getCurrentTime();
                 const duration = player.getDuration();
                 
-                // Handle progress update
-                if (playerState === 1 && !isYouTubeSeeking) { // PLAYING
+                if (playerState === 1 && !isYouTubeSeeking) {
                     if (duration > 0) {
                         setYouTubeProgress({ position, duration });
                     }
                 }
                 
-                // A track is considered finished if its state is ENDED (0),
-                // OR if its current time is very close to the end. This second condition
-                // helps catch cases where the ENDED event is missed in a throttled background tab.
                 const hasFinished = playerState === 0 || (duration > 0 && position >= duration - 0.6);
 
                 if (hasFinished && !hasEndedRef.current) {
                     hasEndedRef.current = true;
-                    console.log(`Polling detected YouTube track end (state=${playerState}, pos=${position.toFixed(2)}, dur=${duration.toFixed(2)}). Advancing.`);
                     handleYouTubeEnd();
                 }
             }, 500);
@@ -472,23 +461,29 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, [youtubeTrack?.videoId, source]);
 
+    // ** L'effetto più importante per l'SDK **
+    // Viene eseguito solo quando `accessToken` diventa disponibile.
     useEffect(() => {
         if (!accessToken) {
+            // Se il token viene rimosso (logout), distruggiamo l'istanza del player.
             if (playerRef.current) {
                 playerRef.current.disconnect();
                 playerRef.current = null;
             }
             setPlayerStatus('connecting');
             _setPlayerState(null);
+            setDeviceId(null); // Pulisce il device ID
             return;
         }
 
+        // Previene la reinizializzazione se lo script è già presente.
         const scriptId = 'spotify-sdk';
-        if (document.getElementById(scriptId) && window.Spotify && !playerRef.current) {
-             window.onSpotifyWebPlaybackSDKReady();
-             return;
+        if (document.getElementById(scriptId)) {
+            if (!playerRef.current && window.Spotify) {
+                 window.onSpotifyWebPlaybackSDKReady();
+            }
+            return;
         }
-        if (document.getElementById(scriptId)) return;
 
         const script = document.createElement('script');
         script.id = scriptId;
@@ -496,85 +491,71 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         script.async = true;
         document.body.appendChild(script);
 
-    window.onSpotifyWebPlaybackSDKReady = () => {
-         if (playerRef.current || !accessToken) return;
- 
-         setPlayerStatus('connecting');
-         const player = new window.Spotify.Player({
-             name: 'DrivingOS',
-            getOAuthToken: cb => {
-              if (tokenRef.current) cb(tokenRef.current);
-            },
-             volume: 0.5
-         });
- 
-         player.on('ready', async ({ device_id }) => {
-             console.log('Player SDK pronto. Tento di attivare il contesto audio...');
-             await player.activateElement();
-             console.log('Contesto audio attivato.');
-             
-             setDeviceId(device_id);
-             setPlayerStatus('ready');
-             setPlayerAsReadyForAutoplay();
-         });
- 
-         player.on('not_ready', () => {
-             setDeviceId(null);
+        window.onSpotifyWebPlaybackSDKReady = () => {
+             if (playerRef.current || !tokenRef.current) return;
+     
              setPlayerStatus('connecting');
-         });
-         
-         player.on('player_state_changed', (state) => {
-             _setPlayerState(state);
-             player.getVolume().then(sdkVolume => {
-                 if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
-                     internalVolumeUpdate.current = true;
-                     setVolume(sdkVolume);
-                 }
+             const player = new window.Spotify.Player({
+                 name: 'Mio Infotainment',
+                 getOAuthToken: cb => {
+                    // Usa un ref per l'accessToken per evitare che la callback usi un token vecchio.
+                    if (tokenRef.current) cb(tokenRef.current);
+                 },
+                 volume: volume
              });
-         });
- 
-        const handleGenericError = (error: { message: string }) => {
-          console.error("Spotify Player Error:", error.message);
-          setPlayerStatus('error');
-        };
-        player.on('initialization_error', handleGenericError);
-        player.on('account_error', handleGenericError);
-        player.on('authentication_error', async (error: { message: string }) => {
-          console.warn("Spotify authentication_error:", error.message);
-          const wasPaused = playerState?.paused ?? true; // Capture state before refresh
-          try {
-            await silentRefreshToken();
-            // After refresh, the SDK might have a new state. Let's wait a bit for it to settle.
-            setTimeout(async () => {
-                const player = playerRef.current;
-                if (!player) return;
-                const newState = await player.getCurrentState();
-                if (newState && !newState.paused && wasPaused) {
-                    console.log("Correcting playback state after token refresh: Pausing.");
-                    await player.pause();
-                }
-            }, 500); // Small delay to allow state to propagate
-            const state = await player.getCurrentState();
-            if (!state) {
-              console.warn("[Spotify] State nullo dopo refresh → reconnect necessario.");
-              playerRef.current?.disconnect();
-              playerRef.current = null;
-              setPlayerStatus('connecting');
-              if (window.onSpotifyWebPlaybackSDKReady) {
-                window.onSpotifyWebPlaybackSDKReady();
+     
+             // ** Evento cruciale: il device è pronto **
+             player.on('ready', async ({ device_id }) => {
+                 console.log('%c[Spotify SDK] Ready! Device ID:', 'color: lime; font-weight: bold', device_id);
+                 await player.activateElement(); // Attiva il contesto audio per il browser
+                 setDeviceId(device_id); // Invia l'ID al nostro AuthContext
+                 setPlayerStatus('ready');
+                 // Ora che il player è veramente pronto, possiamo tentare di ripristinare la sessione.
+                 setPlayerAsReadyForAutoplay();
+             });
+     
+             player.on('not_ready', ({ device_id }) => {
+                 console.warn('[Spotify SDK] Device has gone offline', device_id);
+                 setDeviceId(null);
+                 setPlayerStatus('connecting');
+             });
+             
+             player.on('player_state_changed', (state) => {
+                 _setPlayerState(state);
+                 player.getVolume().then(sdkVolume => {
+                     if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
+                         internalVolumeUpdate.current = true;
+                         setVolume(sdkVolume);
+                     }
+                 });
+             });
+     
+            player.on('authentication_error', async (error: { message: string }) => {
+              console.warn("Spotify authentication_error:", error.message, "Attempting refresh...");
+              try {
+                await silentRefreshToken();
+              } catch (e) {
+                console.error("Refresh failed after authentication_error. Logging out.", e);
+                logout();
               }
-            } else {
-              console.log("[Spotify] Token refresh ok, playback in corso non interrotto 🎵");
-            }
-          } catch (e) {
-            console.error("Refresh fallito dopo authentication_error. Logout.", e);
-            logout();
-          }
-        });
- 
-         player.connect();
-         playerRef.current = player;
-     };
+            });
+
+            player.on('account_error', (error) => {
+                console.error("Spotify account error:", error.message);
+                setPlayerStatus('error');
+            });
+             player.on('initialization_error', (error) => {
+                console.error("Spotify initialization error:", error.message);
+                setPlayerStatus('error');
+            });
+     
+             player.connect().then(success => {
+                if (success) {
+                    console.log("[Spotify SDK] The Web Playback SDK successfully connected to Spotify!");
+                }
+             });
+             playerRef.current = player;
+         };
         
         return () => {
             if (playerRef.current) {
@@ -582,7 +563,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, volume, silentRefreshToken, setPlayerAsReadyForAutoplay, playerState?.paused]);
+    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, volume, silentRefreshToken, setPlayerAsReadyForAutoplay]);
     
     useEffect(() => {
         const playerEl = playerContainerRef.current;
@@ -619,7 +600,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     useEffect(() => {
         const currentTrackUri = playerState?.track_window?.current_track?.uri;
         if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
-            setVisibleQueue(null); // Close queue popover on track change
+            setVisibleQueue(null);
         }
         prevTrackUri.current = currentTrackUri;
     }, [playerState?.track_window?.current_track?.uri]);
@@ -647,11 +628,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleYoutubeStateChange = (event: { data: number }) => {
         const playerState = event.data;
-        const playerIsPlaying = playerState === 1; // 1 = PLAYING
+        const playerIsPlaying = playerState === 1;
         setIsYouTubePlaying(playerIsPlaying);
     
         if (playerIsPlaying) {
-            hasEndedRef.current = false; // Reset the ended flag when a new video starts
+            hasEndedRef.current = false;
             setNowPlaying(s => ({ ...s, isLoading: false }));
         }
     };
@@ -670,7 +651,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         } else if (source === 'youtube' && youtubePlayerRef.current) {
             const playerState = youtubePlayerRef.current.getPlayerState();
-            if (playerState === 1) { // 1 = playing
+            if (playerState === 1) {
                 youtubePlayerRef.current.pauseVideo();
             } else {
                 youtubePlayerRef.current.playVideo();
@@ -713,7 +694,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const trackId = playerState?.track_window?.current_track?.id;
         if (!trackId) return;
         const originalIsLiked = isLiked;
-        setIsLiked(!originalIsLiked); // Optimistic update
+        setIsLiked(!originalIsLiked);
         try {
             if (originalIsLiked) {
                 await apiClient.delete(`/me/tracks`, { data: { ids: [trackId] } });
@@ -722,7 +703,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         } catch (e) {
             console.error("Failed to update like status", e);
-            setIsLiked(originalIsLiked); // Revert on error
+            setIsLiked(originalIsLiked);
         }
     };
 

@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 export default async function handler(req, res) {
@@ -42,8 +43,11 @@ export default async function handler(req, res) {
     
     const { access_token, refresh_token, expires_in } = spotifyResponse.data;
 
-    res.setHeader('Set-Cookie', `spotify_refresh_token=${refresh_token}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`); // Max-Age = 1 year
+    // Imposta il refresh_token in un cookie sicuro, HttpOnly.
+    // Questo è il pezzo più importante per la sicurezza. Il frontend non vedrà mai questo token.
+    res.setHeader('Set-Cookie', `spotify_refresh_token=${refresh_token}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`); // Max-Age = 1 anno
 
+    // Restituisce solo l'access_token al client.
     res.status(200).json({ access_token, expires_in });
 
   } catch (error) {
