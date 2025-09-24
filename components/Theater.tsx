@@ -1,6 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import WebAppViewer from './WebAppViewer';
+import React, { useRef } from 'react';
+import { motion } from 'framer-motion';
 
 // A self-contained component for the service button with 3D hover effects.
 const ServiceButton = ({ service, isNight, onClick }: { 
@@ -148,7 +147,6 @@ const gridContainerVariant = {
     },
 };
 
-
 const Theater = ({
     onClose,
     isNight,
@@ -160,10 +158,9 @@ const Theater = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
-    const [activeWebAppUrl, setActiveWebAppUrl] = useState<string | null>(null);
 
-    const handleServiceClick = (url: string) => {
-        setActiveWebAppUrl(url);
+    const handleServiceClick = () => {
+        // Functionality removed as per user request.
     };
 
     const services = [
@@ -194,73 +191,64 @@ const Theater = ({
     ];
 
     return (
-        <>
+        <motion.div
+            variants={panelVariant}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="spotify-app-panel shadow-2xl flex"
+            style={{
+                top: `${spotifyPlayerTop}px`,
+                bottom: `${spotifyPlayerBottom}px`,
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="theater-app-title"
+            onClick={(e) => e.stopPropagation()}
+        >
             <motion.div
-                variants={panelVariant}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="spotify-app-panel shadow-2xl flex"
-                style={{
-                    top: `${spotifyPlayerTop}px`,
-                    bottom: `${spotifyPlayerBottom}px`,
-                }}
-                aria-hidden={!!activeWebAppUrl}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="theater-app-title"
-                onClick={(e) => e.stopPropagation()}
+            className="theater-container"
+            variants={contentVariant}
             >
-                <motion.div
-                className="theater-container"
-                variants={contentVariant}
+                <motion.header 
+                    className="theater-header"
+                    initial="initial"
+                    animate="animate"
+                    variants={{ animate: { transition: { delayChildren: 1.5 }}}}
                 >
-                    <motion.header 
-                        className="theater-header"
-                        initial="initial"
-                        animate="animate"
-                        variants={{ animate: { transition: { delayChildren: 1.5 }}}}
+                    <motion.h1 
+                        id="theater-app-title" 
+                        className="driveos-title"
+                        variants={driveOsHeaderVariant}
                     >
-                        <motion.h1 
-                            id="theater-app-title" 
-                            className="driveos-title"
-                            variants={driveOsHeaderVariant}
-                        >
-                            DRIVE OS
-                        </motion.h1>
-                        <motion.h2
-                            variants={otherElementsVariant}
-                            className="theater-title"
-                        >
-                            THEATER
-                        </motion.h2>
-                    </motion.header>
+                        DRIVE OS
+                    </motion.h1>
+                    <motion.h2
+                        variants={otherElementsVariant}
+                        className="theater-title"
+                    >
+                        THEATER
+                    </motion.h2>
+                </motion.header>
 
-                    <motion.main 
-                        variants={gridContainerVariant}
-                        initial="initial"
-                        animate="animate"
-                        className="services-grid"
-                    >
-                        {services.map((service) => (
-                            <motion.div key={service.name} variants={otherElementsVariant}>
-                                <ServiceButton
-                                    service={service}
-                                    isNight={isNight}
-                                    onClick={() => handleServiceClick(service.url)}
-                                />
-                            </motion.div>
-                        ))}
-                    </motion.main>
-                </motion.div>
+                <motion.main 
+                    variants={gridContainerVariant}
+                    initial="initial"
+                    animate="animate"
+                    className="services-grid"
+                >
+                    {services.map((service) => (
+                        <motion.div key={service.name} variants={otherElementsVariant}>
+                            <ServiceButton
+                                service={service}
+                                isNight={isNight}
+                                onClick={handleServiceClick}
+                            />
+                        </motion.div>
+                    ))}
+                </motion.main>
             </motion.div>
-
-            <AnimatePresence>
-                {activeWebAppUrl && (
-                    <WebAppViewer url={activeWebAppUrl} onClose={() => setActiveWebAppUrl(null)} />
-                )}
-            </AnimatePresence>
-        </>
+        </motion.div>
     );
 };
 

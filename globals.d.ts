@@ -143,7 +143,15 @@ declare global {
 
   // Add Electron's Webview typings to the global scope for TypeScript.
   interface HTMLWebViewElement extends HTMLElement {
+    // FIX: Added missing Electron webview methods, properties, and event listeners to the interface
+    // to resolve TypeScript errors in WebAppViewer.tsx.
     // Methods
+    loadURL(url: string): void;
+    canGoBack(): boolean;
+    canGoForward(): boolean;
+    goBack(): void;
+    goForward(): void;
+    reload(): void;
     openDevTools(): void;
     closeDevTools(): void;
     isDevToolsOpened(): boolean;
@@ -153,10 +161,18 @@ declare global {
     addEventListener(type: 'did-fail-load', listener: (e: any) => void): void;
     addEventListener(type: 'dom-ready', listener: (e: any) => void): void;
     addEventListener(type: 'console-message', listener: (e: any) => void): void;
+    addEventListener(type: 'did-start-loading', listener: (e: any) => void): void;
+    addEventListener(type: 'did-stop-loading', listener: (e: any) => void): void;
+    addEventListener(type: 'did-navigate', listener: (e: { url: string }) => void): void;
+    addEventListener(type: 'new-window', listener: (e: { url: string }) => void): void;
 
     removeEventListener(type: 'did-fail-load', listener: (e: any) => void): void;
     removeEventListener(type: 'dom-ready', listener: (e: any) => void): void;
     removeEventListener(type: 'console-message', listener: (e: any) => void): void;
+    removeEventListener(type: 'did-start-loading', listener: (e: any) => void): void;
+    removeEventListener(type: 'did-stop-loading', listener: (e: any) => void): void;
+    removeEventListener(type: 'did-navigate', listener: (e: { url: string }) => void): void;
+    removeEventListener(type: 'new-window', listener: (e: { url: string }) => void): void;
   }
 
   interface Window {

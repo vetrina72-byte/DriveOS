@@ -565,13 +565,13 @@ const wmoCodeToCondition = (code: number): string => {
         51: 'Pioggerella',
         53: 'Pioggerella',
         55: 'Pioggerella',
-        56: 'Pioggerella gelata',
-        57: 'Pioggerella gelata',
+        56: 'Pioggerella',
+        57: 'Pioggerella',
         61: 'Pioggia leggera',
         63: 'Pioggia',
         65: 'Pioggia forte',
-        66: 'Pioggia gelata',
-        67: 'Pioggia gelata',
+        66: 'Pioggia',
+        67: 'Pioggia',
         71: 'Neve leggera',
         73: 'Neve',
         75: 'Neve forte',
@@ -579,13 +579,13 @@ const wmoCodeToCondition = (code: number): string => {
         80: 'Rovescio',
         81: 'Rovescio',
         82: 'Rovescio',
-        85: 'Rovescio di neve',
-        86: 'Rovescio di neve',
+        85: 'Neve',
+        86: 'Neve',
         95: 'Temporale',
-        96: 'Temporale con grandine',
-        99: 'Temporale con grandine',
+        96: 'Temporale',
+        99: 'Temporale',
     };
-    return mapping[code] ?? 'Nuvoloso';
+    return mapping[code] ?? 'Parzialmente nuvoloso';
 };
 
 
