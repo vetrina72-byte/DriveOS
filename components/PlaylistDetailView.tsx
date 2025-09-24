@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
+import { FiPlay, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -216,7 +216,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     };
 
     if (loading) {
-        return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${theme.textSecondary}`} /></div>;
+        return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
     }
 
     if (error || !details) {

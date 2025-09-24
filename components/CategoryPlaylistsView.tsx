@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiLoader, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
 
@@ -104,7 +104,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     const textColor = isNight ? 'text-white' : 'text-black';
 
     if (loading && offset === 0) { // Only show full loader on initial page load
-        return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${themeColor}`} /></div>;
+        return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
     }
 
     if (error) {

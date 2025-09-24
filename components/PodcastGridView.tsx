@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
-import { FiLoader } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
 
@@ -76,7 +75,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
     const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
 
     if (loading) {
-        return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${themeColor}`} /></div>;
+        return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
     }
 
     if (error) {

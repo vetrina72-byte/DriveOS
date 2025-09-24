@@ -4,7 +4,7 @@ import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiLoader
+    FiMusic, FiAlertTriangle, FiHeart, FiRadio
 } from 'react-icons/fi';
 import { 
     IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
@@ -819,7 +819,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className={`h-3 rounded w-1/2 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
                     </div>
                     <div className="flex-shrink-0">
-                        <FiLoader className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'} animate-spin`} />
+                        <div className={`w-7 h-7 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} />
                     </div>
                 </div>
             );

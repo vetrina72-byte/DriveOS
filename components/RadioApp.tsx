@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { FiLoader, FiRadio, FiAlertTriangle, FiSearch, FiX } from 'react-icons/fi';
+import { FiRadio, FiAlertTriangle, FiSearch, FiX } from 'react-icons/fi';
 import type { RadioStation } from '../types';
 import RadioCard from './RadioCard';
 import HorizontalCarousel from './HorizontalCarousel';
@@ -341,7 +341,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
                 <div className="px-6">
                     {isSearching ? (
                         <div className="flex justify-center items-center py-10">
-                            <FiLoader className="animate-spin text-3xl text-zinc-400" />
+                            <div className={`w-8 h-8 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} />
                         </div>
                     ) : searchResults.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">

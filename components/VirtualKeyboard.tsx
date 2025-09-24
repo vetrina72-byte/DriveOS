@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FiMic, FiArrowUp, FiDelete, FiLoader, FiAlertTriangle } from 'react-icons/fi';
+import { FiMic, FiArrowUp, FiDelete, FiAlertTriangle } from 'react-icons/fi';
 
 const qwertyLayoutLower = [
     ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -407,11 +407,11 @@ const VirtualKeyboard = ({
     const getMicKeyConfig = () => {
         switch (voiceStatus) {
             case 'connecting':
-                return { label: <FiLoader className="animate-spin" />, className: isNight ? 'text-white bg-zinc-600' : 'text-black bg-zinc-300' };
+                return { label: <div className="w-5 h-5 rounded-full loading-spinner-border" />, className: isNight ? 'text-white bg-zinc-600' : 'text-black bg-zinc-300' };
             case 'listening':
                 return { label: <FiMic />, className: `mic-listening ${isNight ? 'bg-blue-600 text-white' : 'bg-blue-400 text-white'}` };
             case 'processing':
-                return { label: <FiLoader className="animate-spin" />, className: isNight ? 'bg-blue-600 text-white' : 'bg-blue-400 text-white' };
+                return { label: <div className="w-5 h-5 rounded-full loading-spinner-border" />, className: isNight ? 'bg-blue-600 text-white' : 'bg-blue-400 text-white' };
             case 'error':
                  return { label: <FiAlertTriangle />, className: 'bg-red-600 text-white' };
             case 'idle':
@@ -427,7 +427,7 @@ const VirtualKeyboard = ({
             {isVisible && (
                 <motion.div
                     key="keyboard-backdrop"
-                    className="fixed inset-0 z-[1000] flex items-end"
+                    className="fixed inset-0 z-[9000] flex items-end"
                     initial={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     animate={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     exit={{ backgroundColor: 'rgba(0,0,0,0)' }}

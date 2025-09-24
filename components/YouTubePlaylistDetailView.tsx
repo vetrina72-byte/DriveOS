@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FiLoader, FiChevronLeft, FiPlay, FiMusic, FiHeart } from 'react-icons/fi';
+import { FiChevronLeft, FiPlay, FiMusic, FiHeart } from 'react-icons/fi';
 import type { YouTubeTrackInfo } from '../types';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -95,7 +95,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
     };
 
     if (loading) {
-        return <div className="flex-grow flex justify-center items-center"><FiLoader className={`animate-spin text-4xl ${theme.textSecondary}`} /></div>;
+        return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
     }
 
     if (error && error !== 'quotaExceeded') {

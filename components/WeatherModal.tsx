@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiX, FiLoader, FiAlertTriangle } from 'react-icons/fi';
+import { FiX, FiAlertTriangle } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp, HOT_TEMP, COLD_TEMP } from './WeatherIcon';
 import { ICONS } from '../constants';
 import type { WeatherData, TempUnit } from '../types';
@@ -150,7 +150,7 @@ export default function WeatherModal({ isOpen, onClose, isNight, status, data, e
             const message = status === 'locating' ? 'Sto cercando la tua posizione…' : 'Recupero dati meteo...';
             return (
                 <div className="flex flex-col items-center justify-center h-96">
-                    <FiLoader className={`animate-spin text-4xl ${theme.textSecondary}`} />
+                    <div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} />
                     <p className={`mt-4 ${theme.textSecondary}`}>{message}</p>
                 </div>
             );

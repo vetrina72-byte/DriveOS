@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FiX, FiArrowLeft, FiArrowRight, FiRefreshCw, FiLoader, FiSearch } from 'react-icons/fi';
+import { FiX, FiArrowLeft, FiArrowRight, FiRefreshCw, FiSearch } from 'react-icons/fi';
 
 interface WebAppViewerProps {
     url: string;
@@ -100,7 +100,7 @@ const WebAppViewer: React.FC<WebAppViewerProps> = ({ url: initialUrl, onClose })
                 <button onClick={handleGoBack} disabled={!canGoBack} className="p-2 text-white/70 hover:text-white disabled:text-white/30 disabled:hover:bg-transparent hover:bg-white/10 rounded-full transition-colors" aria-label="Back"><FiArrowLeft size={20} /></button>
                 <button onClick={handleGoForward} disabled={!canGoForward} className="p-2 text-white/70 hover:text-white disabled:text-white/30 disabled:hover:bg-transparent hover:bg-white/10 rounded-full transition-colors" aria-label="Forward"><FiArrowRight size={20} /></button>
                 <button onClick={handleRefresh} disabled={isLoading} className="p-2 text-white/70 hover:text-white disabled:text-white/30 disabled:hover:bg-transparent hover:bg-white/10 rounded-full transition-colors" aria-label="Refresh">
-                    {isLoading ? <FiLoader size={20} className="animate-spin" /> : <FiRefreshCw size={20} />}
+                    {isLoading ? <div className="w-5 h-5 rounded-full loading-spinner-border" /> : <FiRefreshCw size={20} />}
                 </button>
                 <form onSubmit={handleFormSubmit} className="flex-grow relative">
                     <input

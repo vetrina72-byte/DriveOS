@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api';
-import { FiPlay, FiLoader, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
+import { FiPlay, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
@@ -172,7 +172,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         const loadingIndicatorText = isNight ? 'text-zinc-400' : 'text-zinc-600';
         return (
             <div className="flex-grow flex flex-col justify-center items-center">
-                <FiLoader className={`animate-spin text-4xl ${loadingIndicatorText}`} />
+                <div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} />
                 <p className={`mt-4 ${loadingIndicatorText}`}>Caricamento dettagli artista...</p>
             </div>
         );

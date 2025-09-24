@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
-import { FiLoader } from 'react-icons/fi';
 
 const SpotifyLogin: React.FC = () => {
     const { login, isLoading, error, clearError } = useAuth();
@@ -108,7 +107,7 @@ const SpotifyLogin: React.FC = () => {
             >
                 {isLoading ? (
                     <>
-                        <FiLoader className="w-6 h-6 animate-spin" />
+                        <div className="w-6 h-6 rounded-full loading-spinner-border" />
                         <span>Authenticating...</span>
                     </>
                 ) : (
