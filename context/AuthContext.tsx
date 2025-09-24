@@ -391,11 +391,10 @@ const silentRefreshToken = useCallback(async () => {
         });
     
         // Attempt to transfer playback to this device.
-        // By setting play: false, we ensure that if the player was paused during a token refresh,
-        // it remains paused instead of auto-playing.
+        // This will either resume the user's last session or prepare the device for new playback.
         apiClient.put("/me/player", {
           device_ids: [deviceId],
-          play: false 
+          play: true // `play: true` can help resume playback if something was playing elsewhere.
         })
         .then(response => {
             // A 204 No Content is a success for this endpoint.
