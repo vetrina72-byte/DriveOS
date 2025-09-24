@@ -190,6 +190,9 @@ declare global {
 
   // --- Electron <webview> Tag Typings ---
   namespace JSX {
+    // FIX: Corrected typo in interface name from 'IntrinisicElements' to 'IntrinsicElements'.
+    // This was preventing TypeScript from merging this definition with the default React JSX types,
+    // which caused all standard HTML elements to be unrecognized throughout the project.
     interface IntrinsicElements {
       // Define the webview tag as a valid JSX element
       webview: React.DetailedHTMLProps<

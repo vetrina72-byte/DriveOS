@@ -35,17 +35,28 @@ interface MusicPlayerProps {
 
 type PlayerStatus = 'connecting' | 'ready' | 'error';
 
-// Componente per la barra di progresso di Spotify, con animazione fluida e seek.
-const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // 'position' tiene traccia del progresso corrente, animato localmente per fluidità.
+/**
+ * A seekable progress bar for the Spotify player with smooth, real-time updates.
+ * This component uses `requestAnimationFrame` to interpolate the track's progress between
+ * official state updates from the Spotify SDK, providing a fluid user experience. It also
+ * handles user seeking (clicking and dragging) and displays a loading indicator.
+ * 
+ * @param {SpotifyPlayer | null} player - The Spotify Web Playback SDK player instance.
+ * @param {SpotifyPlayerState} state - The current player state from the SDK.
+ * @param {boolean} isLoading - A flag from the AuthContext indicating if a track is being loaded.
+ * @param {boolean} isNight - A flag to determine which theme (light/dark) to apply to the loading spinner.
+ */
+const SpotifyProgressBar = ({ player, state, isLoading, isNight }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, isLoading: boolean, isNight: boolean }) => {
+    // 'position' holds the locally animated progress in milliseconds for a smooth display.
     const [position, setPosition] = useState(state.position);
-    // 'isSeeking' blocca l'animazione e gli aggiornamenti esterni mentre l'utente trascina la barra.
+    // 'isSeeking' is a flag to prevent animation while the user is dragging the progress handle.
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
     const lastStateUpdate = useRef(performance.now());
 
-    // Sincronizza lo stato locale con quello ricevuto da Spotify, ma solo se l'utente non sta interagendo.
+    // Effect to synchronize the local animated position with the actual state from Spotify.
+    // This runs whenever Spotify sends a new position update, but only if the user is not actively seeking.
     useEffect(() => {
         if (!isSeeking) {
             setPosition(state.position);
@@ -53,18 +64,24 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         }
     }, [state.position, isSeeking]);
 
-    // Loop di animazione per un progresso fluido quando la traccia è in riproduzione.
+    // This effect creates the smooth animation loop using requestAnimationFrame.
     useEffect(() => {
+        // Stop the animation if the track is paused or the user is seeking.
         if (state.paused || isSeeking) {
             cancelAnimationFrame(animationFrameRef.current);
             return;
         }
 
         const animate = () => {
+            // Calculate how much time has passed since the last real update from Spotify.
             const elapsed = performance.now() - lastStateUpdate.current;
+            // Predict the new position by adding the elapsed time to the last known position.
             const newPosition = state.position + elapsed;
+            
+            // Update the visual progress, ensuring it doesn't exceed the track's duration.
             if (newPosition < state.duration) {
                 setPosition(newPosition);
+                // Request the next frame to continue the animation.
                 animationFrameRef.current = requestAnimationFrame(animate);
             } else {
                 setPosition(state.duration);
@@ -73,39 +90,49 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         animationFrameRef.current = requestAnimationFrame(animate);
 
+        // Cleanup function to cancel the animation frame when the component unmounts or dependencies change.
         return () => cancelAnimationFrame(animationFrameRef.current);
     }, [state.paused, state.duration, state.position, isSeeking]);
 
-    // Gestisce il click e il trascinamento sulla barra per il seek.
+    // Callback to handle user interaction (mousedown and drag) for seeking.
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player) return;
         
+        // Immediately stop the animation loop.
         setIsSeeking(true);
         
+        // Helper function to calculate the seek position in milliseconds from a mouse coordinate.
         const getSeekPosition = (clientX: number): number => {
             if (!progressRef.current) return 0;
             const rect = progressRef.current.getBoundingClientRect();
+            // Calculate the click position as a ratio (0.0 to 1.0) along the bar's width.
             const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
             return Math.round(state.duration * ratio);
         };
         
+        // Update the visual position instantly for immediate feedback.
         setPosition(getSeekPosition(e.clientX));
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
+            // Update the visual position as the user drags the mouse.
             setPosition(getSeekPosition(moveEvent.clientX));
         };
 
         const handleMouseUp = (upEvent: MouseEvent) => {
+            // Remove the global listeners when the user releases the mouse.
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
             
+            // Calculate the final position and send the 'seek' command to the Spotify player.
             const finalPosition = getSeekPosition(upEvent.clientX);
             player.seek(finalPosition).then(() => {
+                // Once the seek is confirmed, sync our local state and re-enable animations.
                 setPosition(finalPosition);
                 setIsSeeking(false);
             });
         };
         
+        // Add listeners to the window to track mouse movement anywhere on the screen.
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
     }, [player, state.duration]);
@@ -115,7 +142,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     return (
         <div
             ref={progressRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)]"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)]"
             onMouseDown={handleMouseDown}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
@@ -124,6 +151,11 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>
+            {isLoading && (
+                 <div className="absolute inset-0 flex items-center justify-center">
+                    <div className={`${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'} w-4 h-4`} />
+                </div>
+            )}
         </div>
     );
 };
@@ -765,7 +797,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         : 'border-zinc-300';
     
     const renderPlayerContent = () => {
-        if (nowPlaying.isLoading) {
+        if (nowPlaying.isLoading && source !== 'radio') {
             return (
                 <div className="w-full h-full flex items-center gap-5 px-4 animate-pulse" style={{backgroundColor: 'var(--player-bg)'}}>
                     <div className={`w-12 h-12 rounded-lg flex-shrink-0 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
@@ -892,7 +924,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
                     <div className="w-full">
-                        <SpotifyProgressBar player={playerRef.current} state={playerState} />
+                        <SpotifyProgressBar player={playerRef.current} state={playerState} isLoading={nowPlaying.isLoading === true && source === 'spotify'} isNight={isNight} />
                     </div>
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
