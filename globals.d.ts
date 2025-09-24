@@ -1,5 +1,7 @@
 // FIX: Import 'react' to make React's global JSX typings available.
 import * as React from 'react';
+// FIX: Import '@react-three/fiber' to extend the JSX namespace with its custom elements like <mesh>, <group>, etc. This resolves errors where TypeScript does not recognize these components.
+import '@react-three/fiber';
 
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.

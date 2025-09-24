@@ -54,10 +54,14 @@ const SpotifyProgressBar = ({ player, state, isLoading, isNight }: { player: Spo
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
     const lastStateUpdate = useRef(performance.now());
+    const justSoughtRef = useRef(false); // Ref to ignore first state update after seeking
 
     // Effect to synchronize the local animated position with the actual state from Spotify.
-    // This runs whenever Spotify sends a new position update, but only if the user is not actively seeking.
     useEffect(() => {
+        // If we just finished a seek, ignore the next state update because it might be stale.
+        if (justSoughtRef.current) {
+            return;
+        }
         if (!isSeeking) {
             setPosition(state.position);
             lastStateUpdate.current = performance.now();
@@ -100,6 +104,9 @@ const SpotifyProgressBar = ({ player, state, isLoading, isNight }: { player: Spo
         
         // Immediately stop the animation loop.
         setIsSeeking(true);
+        if (justSoughtRef.current) {
+            justSoughtRef.current = false; // Clear any lingering seek flags
+        }
         
         // Helper function to calculate the seek position in milliseconds from a mouse coordinate.
         const getSeekPosition = (clientX: number): number => {
@@ -129,6 +136,12 @@ const SpotifyProgressBar = ({ player, state, isLoading, isNight }: { player: Spo
                 // Once the seek is confirmed, sync our local state and re-enable animations.
                 setPosition(finalPosition);
                 setIsSeeking(false);
+                // Flag that we just sought and should ignore the next state update.
+                justSoughtRef.current = true;
+                // After a short delay, reset the flag to resume normal syncing.
+                setTimeout(() => {
+                    justSoughtRef.current = false;
+                }, 300); // 300ms should be enough for state to propagate.
             });
         };
         

@@ -24,6 +24,7 @@ import YouTubeMusicApp from './components/YouTubeMusicApp';
 import { AnimatePresence, motion } from 'framer-motion';
 import VirtualKeyboard from './components/VirtualKeyboard';
 import { SpotifyItem as MediaItem } from './components/PlaylistItem';
+import WebAppViewer from './components/WebAppViewer';
 
 interface AppDefinition {
   id: string;
@@ -745,6 +746,7 @@ function AppContent() {
   const [virtualKeyboardKeyGapX, setVirtualKeyboardKeyGapX] = useState(2);
   const [virtualKeyboardKeyGapY, setVirtualKeyboardKeyGapY] = useState(2);
   const [virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight] = useState(600);
+  const [webAppUrl, setWebAppUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
@@ -1522,12 +1524,12 @@ function AppContent() {
         </AnimatePresence>
 
         <div
-          className="fixed z-10 flex items-end"
+          className="fixed z-[1000] flex items-end"
           style={{
               bottom: playerFloatingBottom,
               transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-              opacity: isUIOverlayActive || isAppLauncherOpen ? 0 : 1,
-              pointerEvents: isUIOverlayActive || isAppLauncherOpen ? 'none' : 'auto',
+              opacity: isUIOverlayActive ? 0 : 1,
+              pointerEvents: isUIOverlayActive ? 'none' : 'auto',
               left: '50%',
               transform: `translateX(calc(-50% + ${playerFloatingWidth / 2}px + 8px))`,
           }}
@@ -1603,7 +1605,7 @@ function AppContent() {
               e.stopPropagation();
               setIsCustomizing(prev => !prev);
             }}
-            className={`fixed left-1/2 -translate-x-1/2 z-40 px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg
+            className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg
               ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'}
               ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
             style={{
@@ -1632,7 +1634,7 @@ function AppContent() {
         </AnimatePresence>
 
         <footer 
-            className="fixed bottom-0 left-0 right-0 h-20 z-30"
+            className="fixed bottom-0 left-0 right-0 h-20 z-[2000]"
             aria-label="Application Dock"
         >
             {/* Infinite black bar. Using a very large percentage width that will be scaled down with the UI,
@@ -1644,8 +1646,8 @@ function AppContent() {
 
             {/* Content Container */}
             <div className="relative z-10 h-full flex justify-between items-center px-8">
-                <div className="flex-1">
-                    {/* Left Spacer */}
+                <div className="flex-1 flex items-center">
+                    
                 </div>
 
                 <div className="flex justify-center items-center gap-4">
@@ -1729,13 +1731,14 @@ function AppContent() {
                         sliderWidth={volumeSliderWidth}
                         volumeSliderThickness={volumeSliderThickness}
                         sliderPopupWidth={volumeSliderPopupWidth}
-                        // FIX: Corrected typo from `sliderPopupHeight` to `volumeSliderPopupHeight` to match the state variable name.
                         sliderPopupHeight={volumeSliderPopupHeight}
                     />
                 </div>
             </div>
         </footer>
       </div>
+
+       {webAppUrl && <WebAppViewer url={webAppUrl} onClose={() => setWebAppUrl(null)} />}
 
       {isDebugOpen && <DebugControls
         isOpen={isDebugOpen}
@@ -1822,8 +1825,10 @@ function AppContent() {
         setWidgetBgHex={setWidgetBgHex}
         volumeIconSize={volumeIconSize}
         setVolumeIconSize={setVolumeIconSize}
+// FIX: Corrected variable name from sliderOffsetY to volumeSliderOffsetY to match state variable.
         volumeSliderOffsetY={volumeSliderOffsetY}
         setVolumeSliderOffsetY={setVolumeSliderOffsetY}
+// FIX: Corrected variable name from sliderOffsetX to volumeSliderOffsetX to match state variable.
         volumeSliderOffsetX={volumeSliderOffsetX}
         setVolumeSliderOffsetX={setVolumeSliderOffsetX}
         volumeControlMarginRight={volumeControlMarginRight}

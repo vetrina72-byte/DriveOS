@@ -91,7 +91,7 @@ const WebAppViewer: React.FC<WebAppViewerProps> = ({ url: initialUrl, onClose })
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 bg-black z-[9999] flex flex-col"
+            className="fixed inset-0 bg-black z-[10000] flex flex-col"
             role="dialog"
             aria-modal="true"
         >

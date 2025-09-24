@@ -25,7 +25,7 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
     return (
         <div
             className={`
-                absolute left-1/2 -translate-x-1/2 bottom-24 z-40
+                absolute left-1/2 -translate-x-1/2 bottom-24 z-[7000]
                 bg-black rounded-2xl border border-white/10
                 transition-all duration-300 ease-out
                 flex flex-col
