@@ -1,5 +1,5 @@
 // FIX: Import 'react' to make React's global JSX typings available.
-import 'react';
+import * as React from 'react';
 
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.
@@ -186,8 +186,6 @@ declare global {
         Player: new (options: SpotifyPlayerOptions) => SpotifyPlayer;
     };
     Hls: any;
-    // FIX: Add YT namespace for YouTube Iframe API to fix 'YT' does not exist on type 'Window' error.
-    YT: any;
   }
 
   // --- Electron <webview> Tag Typings ---
