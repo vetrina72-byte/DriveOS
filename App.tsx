@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -689,7 +690,7 @@ function AppContent() {
 
   // Spotify Player & Home Widgets
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
-  const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(70);
+  const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(80);
   const [playerDockedWidth, setPlayerDockedWidth] = useState(519);
   const [playerDockedLeft, setPlayerDockedLeft] = useState(66);
   const [playerDockedHeight, setPlayerDockedHeight] = useState(113);

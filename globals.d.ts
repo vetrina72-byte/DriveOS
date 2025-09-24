@@ -186,6 +186,8 @@ declare global {
         Player: new (options: SpotifyPlayerOptions) => SpotifyPlayer;
     };
     Hls: any;
+    // FIX: Add YT namespace for YouTube Iframe API to fix 'YT' does not exist on type 'Window' error.
+    YT: any;
   }
 
   // --- Electron <webview> Tag Typings ---

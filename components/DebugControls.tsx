@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -322,7 +323,7 @@ export default function DebugControls({
     setNightFrontLightIntensity(0.60);
     setNightEnvironmentIntensity(0.55);
     setSpotifyPlayerTop(50);
-    setSpotifyPlayerBottom(70);
+    setSpotifyPlayerBottom(80);
     setPlayerDockedWidth(519);
     setPlayerDockedLeft(66);
     setPlayerDockedHeight(113);
