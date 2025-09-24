@@ -371,7 +371,7 @@ const silentRefreshToken = useCallback(async () => {
     useEffect(() => {
       // This effect runs when the user becomes authenticated and we have a device ID.
       if (state.isAuthenticated && deviceId && state.accessToken) {
-        console.log("[AuthContext] Spotify authenticated, device ready. Switching source.");
+        console.log("[AuthContext] Spotify authenticated, device ready. Switching source and transferring playback.");
     
         // Stop any radio playback by switching the active source to Spotify.
         // The MusicPlayer component will see this change and tear down the radio stream.
@@ -391,10 +391,9 @@ const silentRefreshToken = useCallback(async () => {
         });
     
         // Attempt to transfer playback to this device.
-        // This will either resume the user's last session or prepare the device for new playback.
         apiClient.put("/me/player", {
           device_ids: [deviceId],
-          play: true // `play: true` can help resume playback if something was playing elsewhere.
+          play: false // Set to false to prevent race conditions. Let user or session restore initiate play.
         })
         .then(response => {
             // A 204 No Content is a success for this endpoint.

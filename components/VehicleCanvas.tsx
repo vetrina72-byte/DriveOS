@@ -73,7 +73,9 @@ const Model = forwardRef<THREE.Group, {
     const target = isNight ? 5.0 : 0.0;
     const damp = 1 - Math.exp(-2 * delta);
     Object.values(lightMats.current).forEach(mat => {
-      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, target, damp);
+      // FIX: Cast material to THREE.MeshStandardMaterial to resolve 'emissiveIntensity' property error.
+      const standardMat = mat as THREE.MeshStandardMaterial;
+      standardMat.emissiveIntensity = THREE.MathUtils.lerp(standardMat.emissiveIntensity, target, damp);
     });
   });
 

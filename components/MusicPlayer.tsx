@@ -119,7 +119,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     return (
         <div
             ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)]"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)]"
             onMouseDown={handleMouseDown}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
@@ -541,8 +541,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         player.on('account_error', handleGenericError);
         player.on('authentication_error', async (error: { message: string }) => {
           console.warn("Spotify authentication_error:", error.message);
+          const wasPaused = playerState?.paused ?? true; // Capture state before refresh
           try {
             await silentRefreshToken();
+            // After refresh, the SDK might have a new state. Let's wait a bit for it to settle.
+            setTimeout(async () => {
+                const player = playerRef.current;
+                if (!player) return;
+                const newState = await player.getCurrentState();
+                if (newState && !newState.paused && wasPaused) {
+                    console.log("Correcting playback state after token refresh: Pausing.");
+                    await player.pause();
+                }
+            }, 500); // Small delay to allow state to propagate
             const state = await player.getCurrentState();
             if (!state) {
               console.warn("[Spotify] State nullo dopo refresh → reconnect necessario.");
@@ -571,7 +582,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, volume, silentRefreshToken, setPlayerAsReadyForAutoplay]);
+    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, volume, silentRefreshToken, setPlayerAsReadyForAutoplay, playerState?.paused]);
     
     useEffect(() => {
         const playerEl = playerContainerRef.current;
@@ -701,16 +712,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const handleToggleLike = async () => {
         const trackId = playerState?.track_window?.current_track?.id;
         if (!trackId) return;
+        const originalIsLiked = isLiked;
+        setIsLiked(!originalIsLiked); // Optimistic update
         try {
-            if (isLiked) {
+            if (originalIsLiked) {
                 await apiClient.delete(`/me/tracks`, { data: { ids: [trackId] } });
-                setIsLiked(false);
             } else {
                 await apiClient.put(`/me/tracks`, { ids: [trackId] });
-                setIsLiked(true);
             }
         } catch (e) {
             console.error("Failed to update like status", e);
+            setIsLiked(originalIsLiked); // Revert on error
         }
     };
 
