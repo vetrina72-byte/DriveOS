@@ -1102,7 +1102,6 @@ export default function MapsContainer({
     searchPanelWidth,
     searchPanelTop,
     navigationTarget,
-// FIX: Add missing props to the function signature and type definition.
     spotifyPlayerTop,
     spotifyPlayerBottom,
 }: { 

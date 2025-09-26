@@ -249,16 +249,6 @@ const YouTubeProgressBar = ({
 const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { isNight: boolean, nextTrack: { name: string, description: string, imageUrl: string } | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-                onClose();
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [onClose]);
-
     return ReactDOM.createPortal(
         <div
             ref={popoverRef}
@@ -497,7 +487,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         };
     }, [source, isYouTubePlaying, isYouTubeSeeking, handleYouTubeEnd]);
-
+    
     useEffect(() => {
         if (source === 'youtube') {
             setYouTubeProgress({ position: 0, duration: 1 });
@@ -617,10 +607,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         const calculatePosition = () => {
             const playerRect = playerEl.getBoundingClientRect();
-            const buttonRect = buttonRef.getBoundingClientRect();
             setPopoverPosition({
                 bottom: window.innerHeight - playerRect.top + 16,
-                left: buttonRect.left + buttonRect.width / 2,
+                left: playerRect.left + playerRect.width / 2,
                 transform: 'translateX(-50%)',
             });
         };
@@ -834,8 +823,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                  <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            <img src={thumbnail} alt={title} className="w-12 h-12 rounded-lg object-cover" />
-                            <div className="overflow-hidden">
+                            <img src={thumbnail} alt={title} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 shadow-lg" />
+                            <div className="overflow-hidden flex-grow">
                                 <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{title}</div>
                                 <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
                             </div>
@@ -879,8 +868,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            {favicon ? <img src={favicon} alt={name} className="w-12 h-12 rounded-lg object-contain bg-zinc-800" /> : <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}><FiRadio className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /></div>}
-                            <div className="overflow-hidden">
+                            {favicon ? 
+                                <img src={favicon} alt={name} className="w-12 h-12 rounded-lg object-contain bg-zinc-800 flex-shrink-0 shadow-lg" /> 
+                                : 
+                                <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                    <FiRadio className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                                </div>
+                            }
+                            <div className="overflow-hidden flex-grow">
                                 <div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div>
                                 <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div>
                             </div>
@@ -919,8 +914,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            {imageUrl && <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg" />}
-                            <div className="overflow-hidden">
+                            {imageUrl && (
+                                <div className="flex-shrink-0">
+                                    <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" />
+                                </div>
+                            )}
+                            <div className="overflow-hidden flex-grow">
                                 <div className={`font-semibold text-sm truncate`} style={{ color: songTitleColor }}>{trackName}</div>
                                 <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>
                                     {artists.map(a => a.name).join(', ')}
@@ -982,12 +981,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (activeApp === 'spotify' && !isAuthenticated) {
             return (
                 <div className="flex items-center w-full h-full gap-5 px-4">
-                     <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                     <div className={`w-12 h-12 rounded-lg shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
                         <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                     </div>
                     <div className="overflow-hidden">
-                        <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
-                        <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>Accedi con Spotify</div>
+                        <div className="font-semibold truncate" style={{ color: 'var(--text-primary)'}}>Spotify</div>
+                        <div className="text-sm truncate" style={{ color: 'var(--text-secondary)'}}>Accedi con Spotify</div>
                     </div>
                 </div>
             );

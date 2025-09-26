@@ -105,7 +105,7 @@ const formatTravelTime = (minutes: number | null): string => {
 };
 
 
-const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, dayPlayerButtonColor, nightPlayerButtonColor, homeLocation, workLocation }: { 
+const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, dayPlayerButtonColor, nightPlayerButtonColor, homeLocation, workLocation, darkNavigateInputBg }: { 
     isVisible: boolean, 
     isNight: boolean,
     onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
@@ -116,6 +116,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     nightPlayerButtonColor: string;
     homeLocation: { lat: number, lng: number, name: string } | null;
     workLocation: { lat: number, lng: number, name: string } | null;
+    darkNavigateInputBg: string;
 }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
@@ -233,7 +234,6 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     const theme = {
         bg: 'var(--player-bg)',
         border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
-        inputBg: isNight ? 'bg-zinc-900' : 'bg-zinc-100',
         inputText: isNight ? 'text-zinc-100' : 'text-zinc-800',
         placeholderText: isNight ? 'placeholder:text-zinc-500' : 'placeholder:text-zinc-400',
         iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
@@ -252,7 +252,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
         >
              <div className="p-3 flex flex-col h-full overflow-hidden">
                 <div className="relative flex-shrink-0">
-                    <ICONS.search className={`absolute left-3.5 top-3.5 w-5 h-5 ${theme.iconColor}`} />
+                    <ICONS.search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.iconColor}`} />
                     <textarea
                         ref={inputRef}
                         rows={1}
@@ -268,7 +268,8 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
                             }
                         }, 200)}
                         placeholder="Navigate"
-                        className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors resize-none overflow-y-auto hide-scrollbar ${theme.inputBg} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors resize-none overflow-y-auto hide-scrollbar ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        style={isNight ? { backgroundColor: darkNavigateInputBg } : undefined}
                     />
                 </div>
                 
@@ -704,11 +705,13 @@ function AppContent() {
   const [volumeIconSize, setVolumeIconSize] = useState(30);
   const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
   const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-128);
-  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(20);
+  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(80);
   const [volumeSliderWidth, setVolumeSliderWidth] = useState(177);
-  const [volumeSliderThickness, setVolumeSliderThickness] = useState(6);
+  const [volumeSliderThickness, setVolumeSliderThickness] = useState(5.5);
+  const [volumeSliderThumbOffsetY, setVolumeSliderThumbOffsetY] = useState(2.3);
   const [volumeSliderPopupWidth, setVolumeSliderPopupWidth] = useState(247);
   const [volumeSliderPopupHeight, setVolumeSliderPopupHeight] = useState(40);
+  const [volumeControlZIndex, setVolumeControlZIndex] = useState(5000);
   const [appLauncherWidth, setAppLauncherWidth] = useState(37); // percentage
   const [appLauncherHeight, setAppLauncherHeight] = useState(286); // pixels
 
@@ -727,6 +730,14 @@ function AppContent() {
     const rgb = hexToRgb(widgetBgHex);
     return rgb ? `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})` : 'rgb(255, 255, 255)';
   }, [widgetBgHex]);
+  
+  // Custom Dark Mode Volume Colors
+  const [darkVolumeTrackBg, setDarkVolumeTrackBg] = useState('#4D4D4D');
+  const [darkVolumeThumbBg, setDarkVolumeThumbBg] = useState('#ffffff');
+  const [darkVolumeFillBg, setDarkVolumeFillBg] = useState('#ffffff');
+  const [darkPlayerBg, setDarkPlayerBg] = useState('#212121');
+  const [darkNavigateInputBg, setDarkNavigateInputBg] = useState('#2b2b2b');
+
 
   // App Customization State
   const [isCustomizing, setIsCustomizing] = useState(false);
@@ -1119,6 +1130,23 @@ function AppContent() {
   }, [isNight, effectiveWeatherCondition]);
 
   const useDarkTheme = isNight || isGloomyDay;
+  
+  useEffect(() => {
+    const root = document.documentElement;
+    if (useDarkTheme) {
+        root.style.setProperty('--volume-slider-track-bg', darkVolumeTrackBg);
+        root.style.setProperty('--volume-slider-thumb-bg', darkVolumeThumbBg);
+        root.style.setProperty('--volume-slider-fill-bg', darkVolumeFillBg);
+        root.style.setProperty('--player-bg', darkPlayerBg);
+    } else {
+        // When not in dark theme, remove the overrides so the CSS file's :root variables take effect.
+        root.style.removeProperty('--volume-slider-track-bg');
+        root.style.removeProperty('--volume-slider-thumb-bg');
+        root.style.removeProperty('--volume-slider-fill-bg');
+        root.style.removeProperty('--player-bg');
+    }
+  }, [useDarkTheme, darkVolumeTrackBg, darkVolumeThumbBg, darkVolumeFillBg, darkPlayerBg]);
+
 
   const targetWeatherParams = useMemo(() => {
     return weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'];
@@ -1481,7 +1509,7 @@ function AppContent() {
             spotifyPlayerBottom={spotifyPlayerBottom}
             homeData={youtubeHomeData}
             isHomeDataLoading={youtubeHomeIsLoading}
-            homeDataError={youtubeHomeError}
+            youtubeHomeError={youtubeHomeError}
             homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
             onRetry={fetchYouTubeHomeData}
             onQuotaError={handleGenericQuotaError}
@@ -1526,11 +1554,11 @@ function AppContent() {
         <div
           className="fixed z-[1000] flex items-end"
           style={{
-              bottom: playerFloatingBottom,
               transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
               opacity: isUIOverlayActive ? 0 : 1,
               pointerEvents: isUIOverlayActive ? 'none' : 'auto',
               left: '50%',
+              bottom: `${playerFloatingBottom}px`,
               transform: `translateX(calc(-50% + ${playerFloatingWidth / 2}px + 8px))`,
           }}
         >
@@ -1557,6 +1585,7 @@ function AppContent() {
                 nightPlayerButtonColor={nightPlayerButtonColor}
                 homeLocation={homeLocation}
                 workLocation={workLocation}
+                darkNavigateInputBg={darkNavigateInputBg}
               />
             )}
         </div>
@@ -1634,22 +1663,15 @@ function AppContent() {
         </AnimatePresence>
 
         <footer 
-            className="fixed bottom-0 left-0 right-0 h-20 z-[2000]"
+            className="fixed bottom-0 left-0 right-0 h-20 z-[4500]"
             aria-label="Application Dock"
         >
-            {/* Infinite black bar. Using a very large percentage width that will be scaled down with the UI,
-                but will remain visually wider than the viewport even at the lowest scale settings. */}
             <div 
               className="absolute top-0 left-1/2 -translate-x-1/2 h-full bg-black"
               style={{ width: `${appBarWidth}%` }}
             />
 
-            {/* Content Container */}
-            <div className="relative z-10 h-full flex justify-between items-center px-8">
-                <div className="flex-1 flex items-center">
-                    
-                </div>
-
+            <div className="relative z-10 h-full flex justify-center items-center">
                 <div className="flex justify-center items-center gap-4">
                     {dockApps.map(appId => {
                     const app = ALL_APPS.find(a => a.id === appId);
@@ -1723,7 +1745,7 @@ function AppContent() {
                     )}
                 </div>
                 
-                <div className="flex-1 flex justify-end items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}>
+                <div className="absolute top-0 right-0 h-full flex items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}>
                     <VolumeControl 
                         iconSize={volumeIconSize}
                         sliderOffsetY={volumeSliderOffsetY}
@@ -1732,6 +1754,8 @@ function AppContent() {
                         volumeSliderThickness={volumeSliderThickness}
                         sliderPopupWidth={volumeSliderPopupWidth}
                         sliderPopupHeight={volumeSliderPopupHeight}
+                        zIndex={volumeControlZIndex}
+                        sliderThumbOffsetY={volumeSliderThumbOffsetY}
                     />
                 </div>
             </div>
@@ -1825,10 +1849,8 @@ function AppContent() {
         setWidgetBgHex={setWidgetBgHex}
         volumeIconSize={volumeIconSize}
         setVolumeIconSize={setVolumeIconSize}
-// FIX: Corrected variable name from sliderOffsetY to volumeSliderOffsetY to match state variable.
         volumeSliderOffsetY={volumeSliderOffsetY}
         setVolumeSliderOffsetY={setVolumeSliderOffsetY}
-// FIX: Corrected variable name from sliderOffsetX to volumeSliderOffsetX to match state variable.
         volumeSliderOffsetX={volumeSliderOffsetX}
         setVolumeSliderOffsetX={setVolumeSliderOffsetX}
         volumeControlMarginRight={volumeControlMarginRight}
@@ -1837,10 +1859,14 @@ function AppContent() {
         setVolumeSliderWidth={setVolumeSliderWidth}
         volumeSliderThickness={volumeSliderThickness}
         setVolumeSliderThickness={setVolumeSliderThickness}
+        volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}
+        setVolumeSliderThumbOffsetY={setVolumeSliderThumbOffsetY}
         volumeSliderPopupWidth={volumeSliderPopupWidth}
         setVolumeSliderPopupWidth={setVolumeSliderPopupWidth}
         volumeSliderPopupHeight={volumeSliderPopupHeight}
         setVolumeSliderPopupHeight={setVolumeSliderPopupHeight}
+        volumeControlZIndex={volumeControlZIndex}
+        setVolumeControlZIndex={setVolumeControlZIndex}
         appLauncherWidth={appLauncherWidth}
         setAppLauncherWidth={setAppLauncherWidth}
         appLauncherHeight={appLauncherHeight}
@@ -1865,6 +1891,16 @@ function AppContent() {
         setUiScale={setUiScale}
         appBarWidth={appBarWidth}
         setAppBarWidth={setAppBarWidth}
+        darkVolumeTrackBg={darkVolumeTrackBg}
+        setDarkVolumeTrackBg={setDarkVolumeTrackBg}
+        darkVolumeThumbBg={darkVolumeThumbBg}
+        setDarkVolumeThumbBg={setDarkVolumeThumbBg}
+        darkVolumeFillBg={darkVolumeFillBg}
+        setDarkVolumeFillBg={setDarkVolumeFillBg}
+        darkPlayerBg={darkPlayerBg}
+        setDarkPlayerBg={setDarkPlayerBg}
+        darkNavigateInputBg={darkNavigateInputBg}
+        setDarkNavigateInputBg={setDarkNavigateInputBg}
       />}
     </div>
   );

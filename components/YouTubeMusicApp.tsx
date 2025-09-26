@@ -15,7 +15,7 @@ interface YouTubeMusicAppProps {
     spotifyPlayerBottom: number;
     homeData: { [key: string]: MediaItem[] };
     isHomeDataLoading: boolean;
-    homeDataError: string | null;
+    youtubeHomeError: string | null;
     homeDataQuotaExceeded: boolean;
     onRetry: () => void;
     onQuotaError: () => void;
@@ -68,7 +68,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     spotifyPlayerBottom,
     homeData,
     isHomeDataLoading,
-    homeDataError,
+    youtubeHomeError,
     homeDataQuotaExceeded,
     onRetry,
     onQuotaError,
@@ -223,8 +223,8 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             );
         }
     
-        if (error || homeDataError) {
-            return <div className="flex-grow flex justify-center items-center text-red-400 p-4 text-center">{error || homeDataError}</div>;
+        if (error || youtubeHomeError) {
+            return <div className="flex-grow flex justify-center items-center text-red-400 p-4 text-center">{error || youtubeHomeError}</div>;
         }
 
         if (submittedQuery) {

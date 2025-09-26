@@ -100,10 +100,14 @@ interface DebugControlsProps {
   setVolumeSliderWidth: (width: number) => void;
   volumeSliderThickness: number;
   setVolumeSliderThickness: (thickness: number) => void;
+  volumeSliderThumbOffsetY: number;
+  setVolumeSliderThumbOffsetY: (offset: number) => void;
   volumeSliderPopupWidth: number;
   setVolumeSliderPopupWidth: (width: number) => void;
   volumeSliderPopupHeight: number;
   setVolumeSliderPopupHeight: (height: number) => void;
+  volumeControlZIndex: number;
+  setVolumeControlZIndex: (zIndex: number) => void;
   appLauncherWidth: number;
   setAppLauncherWidth: (width: number) => void;
   appLauncherHeight: number;
@@ -128,6 +132,16 @@ interface DebugControlsProps {
   setUiScale: (scale: number | null) => void;
   appBarWidth: number;
   setAppBarWidth: (width: number) => void;
+  darkVolumeTrackBg: string;
+  setDarkVolumeTrackBg: (color: string) => void;
+  darkVolumeThumbBg: string;
+  setDarkVolumeThumbBg: (color: string) => void;
+  darkVolumeFillBg: string;
+  setDarkVolumeFillBg: (color: string) => void;
+  darkPlayerBg: string;
+  setDarkPlayerBg: (color: string) => void;
+  darkNavigateInputBg: string;
+  setDarkNavigateInputBg: (color: string) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -257,10 +271,14 @@ export default function DebugControls({
   setVolumeSliderWidth,
   volumeSliderThickness,
   setVolumeSliderThickness,
+  volumeSliderThumbOffsetY,
+  setVolumeSliderThumbOffsetY,
   volumeSliderPopupWidth,
   setVolumeSliderPopupWidth,
   volumeSliderPopupHeight,
   setVolumeSliderPopupHeight,
+  volumeControlZIndex,
+  setVolumeControlZIndex,
   appLauncherWidth,
   setAppLauncherWidth,
   appLauncherHeight,
@@ -285,6 +303,16 @@ export default function DebugControls({
   setUiScale,
   appBarWidth,
   setAppBarWidth,
+  darkVolumeTrackBg,
+  setDarkVolumeTrackBg,
+  darkVolumeThumbBg,
+  setDarkVolumeThumbBg,
+  darkVolumeFillBg,
+  setDarkVolumeFillBg,
+  darkPlayerBg,
+  setDarkPlayerBg,
+  darkNavigateInputBg,
+  setDarkNavigateInputBg,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -339,11 +367,13 @@ export default function DebugControls({
     setVolumeIconSize(30);
     setVolumeSliderOffsetY(36);
     setVolumeSliderOffsetX(-128);
-    setVolumeControlMarginRight(100);
+    setVolumeControlMarginRight(80);
     setVolumeSliderWidth(177);
-    setVolumeSliderThickness(6);
+    setVolumeSliderThickness(5.5);
+    setVolumeSliderThumbOffsetY(2.3);
     setVolumeSliderPopupWidth(247);
     setVolumeSliderPopupHeight(40);
+    setVolumeControlZIndex(5000);
     setDayFogNear(13);
     setDayFogFar(52);
     setAppLauncherWidth(37);
@@ -356,6 +386,11 @@ export default function DebugControls({
     setVirtualKeyboardKeyFontWeight(600);
     setUiScale(1.0);
     setAppBarWidth(500);
+    setDarkPlayerBg('#212121');
+    setDarkVolumeTrackBg('#4D4D4D');
+    setDarkVolumeFillBg('#ffffff');
+    setDarkVolumeThumbBg('#ffffff');
+    setDarkNavigateInputBg('#2b2b2b');
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -383,7 +418,7 @@ export default function DebugControls({
   return (
     <div 
       id="debug-panel"
-      className="absolute bottom-36 right-4 z-50 bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto"
+      className="absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto"
       onClick={stopPropagation}
       role="dialog"
       aria-modal="true"
@@ -958,8 +993,12 @@ export default function DebugControls({
               <input id="volume-slider-width" type="range" min="80" max="200" value={volumeSliderWidth} onChange={(e) => setVolumeSliderWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
-              <label htmlFor="volume-slider-thickness">Slider Thickness: {volumeSliderThickness}px</label>
-              <input id="volume-slider-thickness" type="range" min="4" max="16" value={volumeSliderThickness} onChange={(e) => setVolumeSliderThickness(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label htmlFor="volume-slider-thickness">Slider Thickness: {volumeSliderThickness.toFixed(1)}px</label>
+              <input id="volume-slider-thickness" type="range" min="4" max="16" step="0.5" value={volumeSliderThickness} onChange={(e) => setVolumeSliderThickness(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="volume-thumb-offset-y">Thumb Vertical Offset: {volumeSliderThumbOffsetY.toFixed(1)}px</label>
+              <input id="volume-thumb-offset-y" type="range" min="-5" max="5" step="0.1" value={volumeSliderThumbOffsetY} onChange={(e) => setVolumeSliderThumbOffsetY(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
                 <label htmlFor="volume-popup-width">Popup Width: {volumeSliderPopupWidth}px</label>
@@ -968,6 +1007,10 @@ export default function DebugControls({
             <div className="mt-2">
                 <label htmlFor="volume-popup-height">Popup Height: {volumeSliderPopupHeight}px</label>
                 <input id="volume-popup-height" type="range" min="30" max="100" value={volumeSliderPopupHeight} onChange={(e) => setVolumeSliderPopupHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+                <label htmlFor="volume-z-index">Z-Index: {volumeControlZIndex}</label>
+                <input id="volume-z-index" type="range" min="4000" max="10000" step="100" value={volumeControlZIndex} onChange={(e) => setVolumeControlZIndex(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 
@@ -1016,6 +1059,60 @@ export default function DebugControls({
                 type="color"
                 value={widgetBgHex}
                 onChange={(e) => setWidgetBgHex(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
+            </div>
+             <div className="flex items-center justify-between mt-2">
+              <label htmlFor="dark-navigate-input-bg-color" className="font-medium text-zinc-300">Navigate Input BG (Night)</label>
+              <input
+                id="dark-navigate-input-bg-color"
+                type="color"
+                value={darkNavigateInputBg}
+                onChange={(e) => setDarkNavigateInputBg(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
+            </div>
+        </div>
+        
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Volume Colors (Dark Mode)</h3>
+            <div className="flex items-center justify-between mt-2">
+              <label htmlFor="dark-player-bg-color" className="font-medium text-zinc-300">Popup BG</label>
+              <input
+                id="dark-player-bg-color"
+                type="color"
+                value={darkPlayerBg}
+                onChange={(e) => setDarkPlayerBg(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <label htmlFor="dark-volume-track-color" className="font-medium text-zinc-300">Track BG</label>
+              <input
+                id="dark-volume-track-color"
+                type="color"
+                value={darkVolumeTrackBg}
+                onChange={(e) => setDarkVolumeTrackBg(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <label htmlFor="dark-volume-fill-color" className="font-medium text-zinc-300">Fill BG</label>
+              <input
+                id="dark-volume-fill-color"
+                type="color"
+                value={darkVolumeFillBg}
+                onChange={(e) => setDarkVolumeFillBg(e.target.value)}
+                className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <label htmlFor="dark-volume-thumb-color" className="font-medium text-zinc-300">Thumb BG</label>
+              <input
+                id="dark-volume-thumb-color"
+                type="color"
+                value={darkVolumeThumbBg}
+                onChange={(e) => setDarkVolumeThumbBg(e.target.value)}
                 className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
               />
             </div>

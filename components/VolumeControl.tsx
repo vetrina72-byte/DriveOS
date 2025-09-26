@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { FiVolumeX, FiVolume1, FiVolume2 } from 'react-icons/fi';
 import { IoChevronBack, IoChevronForward } from 'react-icons/io5';
@@ -9,16 +10,19 @@ interface VolumeControlProps {
     sliderOffsetX: number;
     sliderWidth: number;
     volumeSliderThickness: number;
+    sliderThumbOffsetY: number;
     sliderPopupWidth: number;
     sliderPopupHeight: number;
+    zIndex: number;
 }
 
-const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, sliderOffsetX, sliderWidth, volumeSliderThickness, sliderPopupWidth, sliderPopupHeight }) => {
+const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, sliderOffsetX, sliderWidth, volumeSliderThickness, sliderThumbOffsetY, sliderPopupWidth, sliderPopupHeight, zIndex }) => {
     const { volume, setVolume, isMuted } = useAuth();
     const [isSliderVisible, setIsSliderVisible] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const autoCloseTimeoutRef = useRef<number | null>(null);
+    const [popupPosition, setPopupPosition] = useState({ bottom: 0, left: 0 });
 
     const VolumeIcon = volume === 0 || isMuted ? FiVolumeX : volume < 0.5 ? FiVolume1 : FiVolume2;
 
@@ -37,7 +41,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
         }
         autoCloseTimeoutRef.current = window.setTimeout(() => {
             handleClose();
-        }, 3000); // Auto-close after 3 seconds of inactivity
+        }, 4000); // Auto-close after 4 seconds of inactivity
     };
 
     useEffect(() => {
@@ -60,10 +64,29 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
         };
     }, [isSliderVisible, isClosing]); // Rerun if visibility or closing state changes
 
+    const calculatePosition = () => {
+        if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setPopupPosition({
+                bottom: window.innerHeight - rect.top + sliderOffsetY,
+                left: rect.left + (rect.width / 2) + sliderOffsetX,
+            });
+        }
+    };
+    
+    useEffect(() => {
+        if (isSliderVisible) {
+            calculatePosition();
+            window.addEventListener('resize', calculatePosition);
+            return () => window.removeEventListener('resize', calculatePosition);
+        }
+    }, [isSliderVisible, sliderOffsetX, sliderOffsetY]);
+
     const handleIconClick = () => {
         if (isSliderVisible) {
             handleClose();
         } else {
+            calculatePosition(); // Calculate fresh position right before opening
             setIsSliderVisible(true);
             resetAutoCloseTimer();
         }
@@ -71,56 +94,58 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
 
     const handleVolumeChange = (newVolume: number) => {
         setVolume(newVolume);
-        // If the slider is not visible, make it visible.
-        // This will handle the case when arrow buttons are clicked.
         if (!isSliderVisible) {
             setIsSliderVisible(true);
         }
-        // Always reset the auto-close timer on any volume interaction.
         resetAutoCloseTimer();
     };
 
-    const thumbSize = volumeSliderThickness * 1.75;
-    const thumbMarginTop = (thumbSize - volumeSliderThickness) / -2;
+    const thumbSize = volumeSliderThickness * 2.2;
+    const thumbMarginTop = ((thumbSize - volumeSliderThickness) / -2) + sliderThumbOffsetY;
+    const progressPercentage = volume * 100;
+
+    const sliderPopup = isSliderVisible && (
+        <div
+            className={`fixed ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            style={{
+                left: `${popupPosition.left}px`,
+                bottom: `${popupPosition.bottom}px`,
+                transform: 'translateX(-50%)',
+                zIndex,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+        >
+            <div 
+                className="volume-slider-popup-container"
+                style={{
+                    width: `${sliderPopupWidth}px`,
+                    height: `${sliderPopupHeight}px`,
+                }}
+            >
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={volume}
+                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                    className="volume-slider"
+                    aria-label="Volume slider"
+                    style={{
+                        background: `linear-gradient(to right, var(--volume-slider-fill-bg) ${progressPercentage}%, var(--volume-slider-track-bg) ${progressPercentage}%)`,
+                        '--volume-track-height': `${volumeSliderThickness}px`,
+                        '--volume-thumb-size': `${thumbSize}px`,
+                        '--volume-thumb-margin-top': `${thumbMarginTop}px`,
+                        width: `${sliderWidth}px`,
+                    } as React.CSSProperties}
+                />
+            </div>
+        </div>
+    );
 
     return (
         <div ref={containerRef} className="relative flex items-center gap-1 text-gray-400">
-            {isSliderVisible && (
-                <div
-                    className={`absolute bottom-full ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
-                    style={{
-                        left: `calc(50% + ${sliderOffsetX}px)`,
-                        transform: 'translateX(-50%)',
-                        marginBottom: `${sliderOffsetY}px`,
-                    }}
-                >
-                    <div 
-                        className="volume-slider-popup-container"
-                        style={{
-                            width: `${sliderPopupWidth}px`,
-                            height: `${sliderPopupHeight}px`,
-                        }}
-                    >
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                            value={volume}
-                            onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                            className="volume-slider"
-                            aria-label="Volume slider"
-                            style={{
-                                '--volume-progress': `${volume * 100}%`,
-                                '--volume-track-height': `${volumeSliderThickness}px`,
-                                '--volume-thumb-size': `${thumbSize}px`,
-                                '--volume-thumb-margin-top': `${thumbMarginTop}px`,
-                                width: `${sliderWidth}px`,
-                            } as React.CSSProperties}
-                        />
-                    </div>
-                </div>
-            )}
+            {sliderPopup && ReactDOM.createPortal(sliderPopup, document.getElementById('portal-root')!)}
 
             <button onClick={() => handleVolumeChange(Math.max(0, volume - 0.1))} className="p-2 hover:text-white transition-colors" aria-label="Decrease volume">
                 <IoChevronBack className="w-5 h-5" />
