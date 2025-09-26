@@ -596,7 +596,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerRef.current = null;
             }
         }
-    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, volume, silentRefreshToken, setPlayerAsReadyForAutoplay]);
+    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay]);
     
     useEffect(() => {
         const playerEl = playerContainerRef.current;
