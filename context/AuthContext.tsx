@@ -68,6 +68,8 @@ const initialState: AuthState = {
     lastVolume: 1,
 };
 
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>(initialState);
     const [deviceId, setDeviceIdState] = useState<string | null>(null);
@@ -83,7 +85,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
-    const hasRestoredPlayback = useRef(false);
+    
+    // Refs for playback restoration
+    const pendingPlaybackRef = useRef<any | null>(null);
+    const shouldAutoplayRef = useRef<boolean>(false);
+    const initialAuthDoneRef = useRef<boolean>(false);
 
     useEffect(() => {
         try {
@@ -115,12 +121,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_expires_at');
-        // Chiama la nostra API per cancellare il cookie HttpOnly
         axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
         setState(initialState);
-        // Assicurati che il loading termini dopo il logout
         setState(s => ({...s, isLoading: false}));
     }, []);
 
@@ -148,7 +152,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (err) {
           console.error("Silent token refresh failed. Forcing logout.", err);
           logout();
-          // Propaga l'errore per far fallire le chiamate in coda nell'interceptor
           throw err;
         } finally {
           refreshInFlight.current = null;
@@ -158,19 +161,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return promise;
     }, [logout]);
     
-    // Effetto per il refresh automatico del token prima della scadenza
     useEffect(() => {
         let refreshTimeout: ReturnType<typeof setTimeout>;
 
         if (state.isAuthenticated && state.expiresAt) {
             const now = Date.now();
-            // Pianifica il refresh 2 minuti prima della scadenza per sicurezza
             const timeoutDuration = state.expiresAt - now - 120000; 
 
             if (timeoutDuration > 0) {
                 refreshTimeout = setTimeout(silentRefreshToken, timeoutDuration);
             } else {
-                // Se il token è già scaduto o sta per scadere, rinfrescalo subito
                 silentRefreshToken();
             }
         }
@@ -209,30 +209,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, []);
 
-    // Effetto principale all'avvio dell'app per tentare di autenticare l'utente
     useEffect(() => {
         const initAuth = async () => {
-            try {
-                const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
-                const { access_token, expires_in } = data;
-                const expiresAt = Date.now() + expires_in * 1000;
-                
-                localStorage.setItem('spotify_access_token', access_token);
-                localStorage.setItem('spotify_expires_at', String(expiresAt));
-                apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-                
-                const user = await fetchUserInfo();
-                if (user) {
-                    setState(s => ({...s, accessToken: access_token, expiresAt, user, isAuthenticated: true}));
-                } else {
-                    throw new Error("Failed to fetch user info after token refresh.");
-                }
-            } catch (err) {
-                console.log("No valid session found on load. User needs to login.");
-                logout(); 
-            } finally {
-                setState(s => ({...s, isLoading: false}));
+          try {
+            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+            const { access_token, expires_in } = data;
+            const expiresAt = Date.now() + expires_in * 1000;
+        
+            localStorage.setItem('spotify_access_token', access_token);
+            localStorage.setItem('spotify_expires_at', String(expiresAt));
+            apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+        
+            const user = await fetchUserInfo();
+            if (!user) {
+              throw new Error("Failed to fetch user info after token refresh.");
             }
+        
+            try {
+              const { data: playerState } = await apiClient.get('/me/player');
+              if (playerState && Object.keys(playerState).length) {
+                pendingPlaybackRef.current = playerState;
+                shouldAutoplayRef.current = !!playerState.is_playing;
+                setNowPlaying(s => ({ ...s, spotifyState: playerState, source: 'spotify' }));
+              } else {
+                pendingPlaybackRef.current = null;
+                shouldAutoplayRef.current = false;
+              }
+            } catch (err) {
+              pendingPlaybackRef.current = null;
+              shouldAutoplayRef.current = false;
+            }
+        
+            setState(s => ({ ...s, accessToken: access_token, expiresAt, user, isAuthenticated: true }));
+            initialAuthDoneRef.current = true;
+          } catch (err) {
+            console.log("No valid session found on load.");
+            logout();
+          } finally {
+            setState(s => ({ ...s, isLoading: false }));
+          }
         };
 
         initAuth();
@@ -252,7 +267,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     
         try {
-            // Usa la nuova API route per lo scambio
             const response = await axios.post('/api/exchange-token', { code: authCode }, { withCredentials: true });
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
@@ -368,73 +382,69 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [deviceId, refreshHomePage, nowPlaying.source, nowPlaying.spotifyState]);
     
     const restorePlaybackOnInit = useCallback(async () => {
-        if (!deviceId || hasRestoredPlayback.current) return;
-    
-        console.log("[Spotify] Attempting to restore previous playback session...");
-        hasRestoredPlayback.current = true;
-    
-        try {
-            const response = await apiClient.get('/me/player');
-    
-            if (!response.data || !response.data.item) {
-                console.log("[Spotify] No active or recent session found to restore.");
-                return;
-            }
-    
-            const { item, is_playing, progress_ms, context } = response.data;
-            
-            if (is_playing) {
-                console.log("[Spotify] Resuming active session...");
-                const playOptions: PlayOptions = {
-                    position_ms: progress_ms,
-                };
-    
-                if (context) {
-                    playOptions.context_uri = context.uri;
-                    playOptions.offset = { uri: item.uri };
-                } else {
-                    playOptions.uris = [item.uri];
-                }
-                
-                await play(playOptions);
-    
-            } else {
-                console.log("[Spotify] Restoring paused session state.");
-                const restoredState: SpotifyPlayerState = {
-                    context: context || { uri: null, metadata: null },
-                    disallows: response.data.actions?.disallows || { pausing: true },
-                    duration: item.duration_ms,
-                    paused: true,
-                    position: progress_ms,
-                    repeat_mode: response.data.repeat_state === 'context' ? 1 : response.data.repeat_state === 'track' ? 2 : 0,
-                    shuffle: response.data.shuffle_state,
-                    track_window: {
-                        current_track: item,
-                        previous_tracks: [],
-                        next_tracks: [],
-                    },
-                    timestamp: Date.now(),
-                };
-                _setPlayerState(restoredState);
-            }
-        } catch (err: any) {
-            const isAxiosErr = 'isAxiosError' in err && err.isAxiosError;
-            const status = isAxiosErr ? err.response?.status : null;
-            if (status !== 404 && status !== 204) {
-                 console.error("[Spotify] Error restoring playback state:", isAxiosErr ? (err.response?.data || err.message) : err);
-            }
+        const playerState = pendingPlaybackRef.current;
+        if (!deviceId || !playerState) {
+          return;
         }
-    }, [deviceId, play, _setPlayerState]);
+      
+        console.log("[AuthContext] Restoring playback on init. shouldAutoplay =", shouldAutoplayRef.current);
+      
+        try {
+          await apiClient.put('/me/player', {
+            device_ids: [deviceId],
+            play: false
+          });
+        } catch (e: any) {
+          console.warn("[AuthContext] Transfer playback returned error (non-fatal):", e.response?.data || e.message);
+        }
+      
+        setNowPlaying(prev => ({
+          ...prev,
+          source: 'spotify',
+          spotifyState: playerState,
+          isLoading: false
+        }));
+      
+        if (shouldAutoplayRef.current) {
+          await sleep(400);
+          try {
+            const body: any = {};
+            if (playerState.context?.uri) {
+              body.context_uri = playerState.context.uri;
+              if (playerState.item?.uri) {
+                  body.offset = { uri: playerState.item.uri };
+              }
+            } else if (playerState.item?.uri) {
+              body.uris = [playerState.item.uri];
+            }
+      
+            await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+      
+            if (typeof playerState.progress_ms === 'number') {
+              await sleep(200);
+              await apiClient.put(`/me/player/seek?position_ms=${playerState.progress_ms}&device_id=${deviceId}`);
+            }
+      
+            console.log("[AuthContext] Autoplay started and seek applied.");
+          } catch (err: any) {
+            console.error("[AuthContext] Failed to start playback on init:", err.response?.data || err.message);
+          }
+        } else {
+          console.log("[AuthContext] Player was paused previously: showing track but not playing.");
+        }
+      
+        pendingPlaybackRef.current = null;
+        shouldAutoplayRef.current = false;
+    }, [deviceId]);
 
     useEffect(() => {
-        if (state.isAuthenticated && deviceId && !hasRestoredPlayback.current) {
-            const restoreTimeout = setTimeout(() => {
-                restorePlaybackOnInit();
-            }, 500);
-
-            return () => clearTimeout(restoreTimeout);
+        if (!isReadyForAutoplay) return;
+        if (!initialAuthDoneRef.current) return;
+      
+        if (pendingPlaybackRef.current) {
+          restorePlaybackOnInit();
         }
-    }, [state.isAuthenticated, deviceId, restorePlaybackOnInit]);
+    }, [isReadyForAutoplay, restorePlaybackOnInit]);
 
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => {
         pauseSpotify();
