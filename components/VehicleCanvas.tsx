@@ -38,7 +38,8 @@ const Model = forwardRef<THREE.Group, {
   isNight: boolean;
 }>(({ position, rotation, scale, isNight }, ref) => {
   const { scene } = useGLTF(MODEL_URL);
-  const lightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
+  // FIX: Using a more generic type for the ref to avoid potential TypeScript inference issues.
+  const lightMats = useRef<Record<string, THREE.Material>>({});
 
   useEffect(() => {
     lightMats.current = {};

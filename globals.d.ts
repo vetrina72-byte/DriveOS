@@ -162,6 +162,12 @@ declare global {
     isDevToolsOpened(): boolean;
     executeJavaScript(code: string): Promise<any>;
 
+    // Properties
+    src: string;
+    useragent: string;
+    partition: string;
+    webpreferences: string;
+
     // Events
     addEventListener(type: 'did-fail-load', listener: (e: any) => void): void;
     addEventListener(type: 'dom-ready', listener: (e: any) => void): void;
@@ -180,36 +186,27 @@ declare global {
     removeEventListener(type: 'new-window', listener: (e: { url: string }) => void): void;
   }
 
-  interface Window {
-    SpeechRecognition: SpeechRecognitionStatic;
-    webkitSpeechRecognition: SpeechRecognitionStatic;
-    onSpotifyWebPlaybackSDKReady: () => void;
-    Spotify: {
-        Player: new (options: SpotifyPlayerOptions) => SpotifyPlayer;
-    };
-    Hls: any;
-  }
-
-  // --- Electron <webview> Tag Typings ---
   namespace JSX {
-    // FIX: Corrected typo in interface name from 'IntrinisicElements' to 'IntrinsicElements'.
-    // This was preventing TypeScript from merging this definition with the default React JSX types,
-    // which caused all standard HTML elements to be unrecognized throughout the project.
+    // FIX: Corrected typo from `IntrinisicElements` to `IntrinsicElements`. This is critical for TypeScript to recognize JSX elements project-wide.
     interface IntrinsicElements {
-      // Define the webview tag as a valid JSX element
-      webview: React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLWebViewElement> & {
-          src: string;
-          useragent?: string;
-          partition?: string;
-          webpreferences?: string;
-        },
-        HTMLWebViewElement
-      >;
+      'webview': React.DetailedHTMLProps<React.WebViewHTMLAttributes<HTMLWebViewElement>, HTMLWebViewElement>;
     }
   }
-}
 
-// This empty export statement is crucial. It turns this file into a module,
-// which allows the `declare global` block to correctly augment the global Window interface.
-export {};
+  // Spotify Web Playback SDK
+  interface Window {
+    Spotify: {
+      Player: {
+        new(options: SpotifyPlayerOptions): SpotifyPlayer;
+      };
+    };
+    onSpotifyWebPlaybackSDKReady: () => void;
+    
+    // Web Speech API
+    SpeechRecognition?: SpeechRecognitionStatic;
+    webkitSpeechRecognition?: SpeechRecognitionStatic;
+    
+    // HLS.js for Radio streaming
+    Hls: any;
+  }
+}

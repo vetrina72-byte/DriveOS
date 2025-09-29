@@ -200,6 +200,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             };
         });
 
+        // Persist playback state to localStorage for restoration
         if (newState && !newState.paused) {
             localStorage.setItem("last_progress_ms", String(newState.position));
             if (newState.track_window.current_track) {
@@ -208,6 +209,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (newState.context && newState.context.uri) {
                 localStorage.setItem("last_context_uri", newState.context.uri);
             } else {
+                // If there's no context (e.g., playing a single track), remove the old context URI
                 localStorage.removeItem("last_context_uri");
             }
         }
@@ -344,19 +346,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return;
         }
     
+        // Immediately save context to localStorage on play command
         if (options.context_uri) {
             localStorage.setItem("last_context_uri", options.context_uri);
             if (options.offset?.uri) {
                 localStorage.setItem("last_track_uri", options.offset.uri);
             } else {
-                localStorage.removeItem("last_track_uri");
+                localStorage.removeItem("last_track_uri"); // Clear track if starting playlist from beginning
             }
         } else if (options.uris?.[0]) {
             localStorage.setItem("last_track_uri", options.uris[0]);
-            localStorage.removeItem("last_context_uri");
+            localStorage.removeItem("last_context_uri"); // Clear context if playing single track
         }
     
-        localStorage.setItem("last_progress_ms", "0");
+        localStorage.setItem("last_progress_ms", "0"); // Reset progress on new play command
 
         const showLoader = nowPlaying.source !== 'spotify' || !nowPlaying.spotifyState || nowPlaying.spotifyState.paused;
 
@@ -377,7 +380,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (options.offset) body.offset = options.offset;
             } else if (options.uris) {
                 body.uris = options.uris;
-                if (options.offset) body.offset = options.offset;
             }
             if (options.position_ms) {
                 body.position_ms = options.position_ms;
@@ -446,10 +448,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
                 // Send the play command to "kickstart" the session on this device.
                 await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+                setNowPlaying(prev => ({...prev, source: 'spotify', isLoading: true}));
+
 
                 // If we have a saved progress, seek to it.
                 if (progressMs && parseInt(progressMs, 10) > 0) {
-                    await sleep(400); // Wait for play command to register
+                    await sleep(500); // Wait for play command to register
                     await apiClient.put(`/me/player/seek?position_ms=${progressMs}&device_id=${deviceId}`);
                 }
                 console.log("[AuthContext] Kickstarted playback from localStorage.");
@@ -460,6 +464,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         } catch (err: any) {
             console.error("[AuthContext] restorePlaybackOnInit failed:", err.response?.data || err.message);
+            setNowPlaying(prev => ({...prev, isLoading: false}));
         }
     }, [deviceId, setNowPlaying]);
 
