@@ -770,8 +770,7 @@ export default function DebugControls({
                     <input
                       id={`${time}-${condition}-sky`}
                       type="color"
-                      // FIX: Use optional chaining and nullish coalescing to prevent runtime errors if a color is not defined for a specific condition.
-                      value={sceneColors[time]?.[condition]?.sky ?? '#ffffff'}
+                      value={sceneColors[time][condition].sky}
                       onChange={e => handleColorChange(time, condition, 'sky', e.target.value)}
                       className="w-8 h-8 p-0 bg-transparent rounded-md border-none cursor-pointer"
                     />
@@ -779,8 +778,7 @@ export default function DebugControls({
                     <input
                       id={`${time}-${condition}-floor`}
                       type="color"
-                      // FIX: Use optional chaining and nullish coalescing to prevent runtime errors if a color is not defined for a specific condition.
-                      value={sceneColors[time]?.[condition]?.floor ?? '#ffffff'}
+                      value={sceneColors[time][condition].floor}
                       onChange={e => handleColorChange(time, condition, 'floor', e.target.value)}
                       className="w-8 h-8 p-0 bg-transparent rounded-md border-none cursor-pointer"
                     />
