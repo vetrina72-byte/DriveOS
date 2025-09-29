@@ -195,7 +195,6 @@ declare global {
     // FIX: Corrected typo in interface name from 'IntrinisicElements' to 'IntrinsicElements'.
     // This was preventing TypeScript from merging this definition with the default React JSX types,
     // which caused all standard HTML elements to be unrecognized throughout the project.
-    // FIX: Corrected typo from IntrinisicElements to IntrinsicElements. This single change fixes all JSX-related errors across the project.
     interface IntrinsicElements {
       // Define the webview tag as a valid JSX element
       webview: React.DetailedHTMLProps<

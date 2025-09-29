@@ -23,6 +23,16 @@ interface AuthState {
     lastVolume: number;
 }
 
+interface PlayOptions {
+    uris?: string[];
+    context_uri?: string;
+    offset?: {
+        position?: number;
+        uri?: string;
+    };
+    position_ms?: number;
+}
+
 interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' | 'expiresIn'> {
     login: (authCode?: string | null, error?: string) => Promise<void>;
     logout: () => void;
@@ -42,15 +52,6 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     setPlayerAsReadyForAutoplay: () => void;
     youTubeFavorites: string[];
     onToggleYouTubeFavorite: (playlistId: string) => void;
-}
-
-interface PlayOptions {
-    uris?: string[];
-    context_uri?: string;
-    offset?: {
-        position?: number;
-        uri?: string;
-    };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -82,6 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
+    const hasRestoredPlayback = useRef(false);
 
     useEffect(() => {
         try {
@@ -280,35 +282,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setState(s => ({...s, error: errorMessage, isLoading: false}));
         }
     }, [fetchUserInfo, logout]);
-
-    // ** Logica cruciale per il trasferimento del playback **
-    // Questo effetto si attiva SOLO quando siamo autenticati E abbiamo un device ID.
-    useEffect(() => {
-      if (state.isAuthenticated && deviceId) {
-        console.log(`[AuthContext] Authenticated with a valid device ID (${deviceId}). Attempting to transfer playback.`);
-    
-        // Tenta di trasferire il controllo a questo device.
-        // 'play: false' è importante per non far partire la musica automaticamente.
-        apiClient.put("/me/player", {
-          device_ids: [deviceId],
-          play: false
-        })
-        .then(response => {
-            if (response.status === 204) {
-              console.log(`[AuthContext] Playback transfer successful.`);
-            }
-        })
-        .catch(e => {
-            const errorData = e.response?.data?.error;
-            // Gestisce errori comuni in modo silenzioso, non sono fallimenti critici.
-            if (errorData && (errorData.reason === 'NO_ACTIVE_DEVICE' || errorData.reason === 'PREMIUM_REQUIRED' || e.response?.status === 404)) {
-                 console.log(`[AuthContext] Playback transfer not needed or possible: ${errorData.reason || 'No active player session to transfer.'}`);
-            } else {
-                console.error("Error transferring playback:", e.response?.data || e.message);
-            }
-        });
-      }
-    }, [state.isAuthenticated, deviceId]);
     
     const refreshHomePage = useCallback(() => {
         setRefreshTrigger(prev => prev + 1);
@@ -370,7 +343,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }));
         
         try {
-            const body: { context_uri?: string; uris?: string[]; offset?: any; } = {};
+            const body: { context_uri?: string; uris?: string[]; offset?: any; position_ms?: number } = {};
 
             if (options.context_uri) {
                 body.context_uri = options.context_uri;
@@ -378,6 +351,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } else if (options.uris) {
                 body.uris = options.uris;
                 if (options.offset) body.offset = options.offset;
+            }
+            if (options.position_ms) {
+                body.position_ms = options.position_ms;
             }
             
             await apiClient.put(
@@ -390,6 +366,75 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setNowPlaying(prev => ({ ...prev, isLoading: false }));
         }
     }, [deviceId, refreshHomePage, nowPlaying.source, nowPlaying.spotifyState]);
+    
+    const restorePlaybackOnInit = useCallback(async () => {
+        if (!deviceId || hasRestoredPlayback.current) return;
+    
+        console.log("[Spotify] Attempting to restore previous playback session...");
+        hasRestoredPlayback.current = true;
+    
+        try {
+            const response = await apiClient.get('/me/player');
+    
+            if (!response.data || !response.data.item) {
+                console.log("[Spotify] No active or recent session found to restore.");
+                return;
+            }
+    
+            const { item, is_playing, progress_ms, context } = response.data;
+            
+            if (is_playing) {
+                console.log("[Spotify] Resuming active session...");
+                const playOptions: PlayOptions = {
+                    position_ms: progress_ms,
+                };
+    
+                if (context) {
+                    playOptions.context_uri = context.uri;
+                    playOptions.offset = { uri: item.uri };
+                } else {
+                    playOptions.uris = [item.uri];
+                }
+                
+                await play(playOptions);
+    
+            } else {
+                console.log("[Spotify] Restoring paused session state.");
+                const restoredState: SpotifyPlayerState = {
+                    context: context || { uri: null, metadata: null },
+                    disallows: response.data.actions?.disallows || { pausing: true },
+                    duration: item.duration_ms,
+                    paused: true,
+                    position: progress_ms,
+                    repeat_mode: response.data.repeat_state === 'context' ? 1 : response.data.repeat_state === 'track' ? 2 : 0,
+                    shuffle: response.data.shuffle_state,
+                    track_window: {
+                        current_track: item,
+                        previous_tracks: [],
+                        next_tracks: [],
+                    },
+                    timestamp: Date.now(),
+                };
+                _setPlayerState(restoredState);
+            }
+        } catch (err: any) {
+            const isAxiosErr = 'isAxiosError' in err && err.isAxiosError;
+            const status = isAxiosErr ? err.response?.status : null;
+            if (status !== 404 && status !== 204) {
+                 console.error("[Spotify] Error restoring playback state:", isAxiosErr ? (err.response?.data || err.message) : err);
+            }
+        }
+    }, [deviceId, play, _setPlayerState]);
+
+    useEffect(() => {
+        if (state.isAuthenticated && deviceId && !hasRestoredPlayback.current) {
+            const restoreTimeout = setTimeout(() => {
+                restorePlaybackOnInit();
+            }, 500);
+
+            return () => clearTimeout(restoreTimeout);
+        }
+    }, [state.isAuthenticated, deviceId, restorePlaybackOnInit]);
 
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => {
         pauseSpotify();

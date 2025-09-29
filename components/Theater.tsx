@@ -106,14 +106,8 @@ const ServiceButton = ({ service, isNight, onClick }: {
 // Framer Motion Variants for the choreographed entry animation
 const panelVariant = {
     initial: { x: '100%' },
-    animate: { x: '0%', transition: { duration: 0.7, ease: [0.2, 0.8, 0.2, 1] as const } },
-    exit: { x: '100%', transition: { duration: 0.5, ease: [0.8, 0.2, 1, 0.2] as const } },
-};
-
-const contentVariant = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 1, delay: 0.3 } },
-    exit: { opacity: 0, transition: { duration: 0.2 } },
+    animate: { x: '0%', transition: { type: 'spring', stiffness: 200, damping: 25 } },
+    exit: { x: '100%', transition: { type: 'spring', stiffness: 300, damping: 30 } },
 };
 
 const driveOsHeaderVariant = {
@@ -206,9 +200,8 @@ const Theater = ({
             aria-labelledby="theater-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <motion.div
-            className="theater-container"
-            variants={contentVariant}
+            <div
+                className="theater-container"
             >
                 <motion.header 
                     className="theater-header"
@@ -247,7 +240,7 @@ const Theater = ({
                         </motion.div>
                     ))}
                 </motion.main>
-            </motion.div>
+            </div>
         </motion.div>
     );
 };
