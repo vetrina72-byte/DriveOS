@@ -123,6 +123,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('last_context_uri');
         localStorage.removeItem('last_track_uri');
         localStorage.removeItem('last_progress_ms');
+        localStorage.removeItem('last_is_playing');
         axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
@@ -200,7 +201,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             };
         });
 
-        if (newState && !newState.paused) {
+        if (newState) {
+            localStorage.setItem("last_is_playing", String(!newState.paused));
             localStorage.setItem("last_progress_ms", String(newState.position));
             if (newState.track_window.current_track) {
                 localStorage.setItem("last_track_uri", newState.track_window.current_track.uri);
@@ -211,7 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 localStorage.removeItem("last_context_uri");
             }
         }
-    }, []);
+    }, [setNowPlaying]);
     
     const fetchUserInfo = useCallback(async () => {
         try {
@@ -357,6 +359,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     
         localStorage.setItem("last_progress_ms", "0");
+        localStorage.setItem("last_is_playing", "true");
 
         const showLoader = nowPlaying.source !== 'spotify' || !nowPlaying.spotifyState || nowPlaying.spotifyState.paused;
 
@@ -411,18 +414,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // 2. If an active session exists on another device, transfer and sync it.
             if (playerState) {
                 console.log("[AuthContext] Active session found on Spotify. Restoring state.");
-                // Transfer playback. If it was playing, it should resume.
                 await apiClient.put('/me/player', { device_ids: [deviceId], play: playerState.is_playing });
-                
-                // Update our UI immediately.
                 setNowPlaying(prev => ({ ...prev, source: 'spotify', spotifyState: playerState, isLoading: false }));
-
-                // If it was playing, also apply the seek to be precise.
-                if (playerState.is_playing && typeof playerState.progress_ms === 'number') {
-                    await sleep(400); // Allow time for play command to take effect.
+                if (typeof playerState.progress_ms === 'number' && playerState.progress_ms > 0) {
+                    await sleep(400);
                     await apiClient.put(`/me/player/seek?position_ms=${playerState.progress_ms}&device_id=${deviceId}`);
                 }
-                return; // Restoration from API is complete.
+                return;
             }
             
             // 3. If NO active session, kickstart from localStorage.
@@ -430,30 +428,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const contextUri = localStorage.getItem("last_context_uri");
             const trackUri = localStorage.getItem("last_track_uri");
             const progressMs = localStorage.getItem("last_progress_ms");
+            const wasPlaying = localStorage.getItem("last_is_playing") === 'true';
 
             if (contextUri || trackUri) {
                 const body: any = {};
                 if (contextUri) {
                     body.context_uri = contextUri;
                     if (trackUri) {
-                        // If we have a context, the track is an offset
                         body.offset = { uri: trackUri };
                     }
                 } else if (trackUri) {
-                    // If no context, the track is the main thing to play
                     body.uris = [trackUri];
                 }
 
-                // Send the play command to "kickstart" the session on this device.
                 await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+                console.log(`[AuthContext] Kickstarted playback from localStorage. Should play: ${wasPlaying}`);
+                await sleep(500); 
 
-                // If we have a saved progress, seek to it.
-                if (progressMs && parseInt(progressMs, 10) > 0) {
-                    await sleep(400); // Wait for play command to register
-                    await apiClient.put(`/me/player/seek?position_ms=${progressMs}&device_id=${deviceId}`);
+                if (!wasPlaying) {
+                    await apiClient.put(`/me/player/pause?device_id=${deviceId}`);
+                    console.log("[AuthContext] Sent pause command as last state was paused.");
+                    await sleep(200);
                 }
-                console.log("[AuthContext] Kickstarted playback from localStorage.");
 
+                if (progressMs && parseInt(progressMs, 10) > 0) {
+                    await apiClient.put(`/me/player/seek?position_ms=${progressMs}&device_id=${deviceId}`);
+                    console.log(`[AuthContext] Sent seek command to ${progressMs}ms.`);
+                }
             } else {
                 console.log("[AuthContext] No state in localStorage. Cannot kickstart.");
             }
