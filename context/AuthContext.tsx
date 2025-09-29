@@ -119,6 +119,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = useCallback(() => {
         localStorage.removeItem('spotify_access_token');
         localStorage.removeItem('spotify_expires_at');
+        // Clear playback state on logout
+        localStorage.removeItem('last_context_uri');
+        localStorage.removeItem('last_track_uri');
+        localStorage.removeItem('last_progress_ms');
         axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
@@ -195,6 +199,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 source: newState ? 'spotify' : null
             };
         });
+
+        if (newState && !newState.paused) {
+            localStorage.setItem("last_progress_ms", String(newState.position));
+            if (newState.track_window.current_track) {
+                localStorage.setItem("last_track_uri", newState.track_window.current_track.uri);
+            }
+            if (newState.context && newState.context.uri) {
+                localStorage.setItem("last_context_uri", newState.context.uri);
+            } else {
+                localStorage.removeItem("last_context_uri");
+            }
+        }
     }, []);
     
     const fetchUserInfo = useCallback(async () => {
@@ -327,11 +343,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             console.error("Cannot play: No active Spotify device ID.");
             return;
         }
-        
-        const uriToSave = options.uris?.[0] || options.offset?.uri || options.context_uri;
-        if (uriToSave) {
-            localStorage.setItem("last_spotify_uri", uriToSave);
+    
+        if (options.context_uri) {
+            localStorage.setItem("last_context_uri", options.context_uri);
+            if (options.offset?.uri) {
+                localStorage.setItem("last_track_uri", options.offset.uri);
+            } else {
+                localStorage.removeItem("last_track_uri");
+            }
+        } else if (options.uris?.[0]) {
+            localStorage.setItem("last_track_uri", options.uris[0]);
+            localStorage.removeItem("last_context_uri");
         }
+    
+        localStorage.setItem("last_progress_ms", "0");
 
         const showLoader = nowPlaying.source !== 'spotify' || !nowPlaying.spotifyState || nowPlaying.spotifyState.paused;
 
@@ -378,50 +403,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const { data } = await apiClient.get('/me/player');
                 playerState = data && Object.keys(data).length ? data : null;
             } catch (e) {
-                console.log("No active player state found on Spotify, will attempt kickstart.");
+                console.log("No active player state on Spotify API, will attempt kickstart from local state.");
                 playerState = null;
             }
 
-            if (!playerState) {
-                console.log("[AuthContext] No active session found. Attempting to kickstart...");
-                const lastUri = localStorage.getItem("last_spotify_uri");
-                if (lastUri) {
-                    const isContext = lastUri.includes(":playlist:") || lastUri.includes(":album:") || lastUri.includes(":artist:");
-                    const body = isContext ? { context_uri: lastUri } : { uris: [lastUri] };
-                    await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
-                    console.log("[AuthContext] Kickstarted playback with last URI:", lastUri);
-                } else {
-                    console.log("[AuthContext] No previous state and no last URI found. Cannot kickstart.");
+            if (playerState) {
+                console.log("[AuthContext] Active session found on Spotify. Restoring state.");
+                await apiClient.put('/me/player', { device_ids: [deviceId], play: playerState.is_playing });
+                setNowPlaying(prev => ({ ...prev, source: 'spotify', spotifyState: playerState, isLoading: false }));
+
+                if (playerState.is_playing && typeof playerState.progress_ms === 'number') {
+                    await sleep(400); // Allow time for play command to take effect.
+                    await apiClient.put(`/me/player/seek?position_ms=${playerState.progress_ms}&device_id=${deviceId}`);
                 }
                 return;
             }
+            
+            console.log("[AuthContext] No active session on Spotify. Attempting kickstart from localStorage.");
+            const contextUri = localStorage.getItem("last_context_uri");
+            const trackUri = localStorage.getItem("last_track_uri");
+            const progressMs = localStorage.getItem("last_progress_ms");
 
-            console.log("[AuthContext] Active session found. Restoring state.");
-            await apiClient.put('/me/player', { device_ids: [deviceId], play: false });
-            setNowPlaying(prev => ({ ...prev, source: 'spotify', spotifyState: playerState, isLoading: false }));
-
-            if (playerState.is_playing) {
-                console.log("[AuthContext] Autoplaying restored session.");
-                await sleep(400);
+            if (contextUri || trackUri) {
                 const body: any = {};
-                if (playerState.context?.uri) {
-                    body.context_uri = playerState.context.uri;
-                    if (playerState.item?.uri) {
-                        body.offset = { uri: playerState.item.uri };
+                if (contextUri) {
+                    body.context_uri = contextUri;
+                    if (trackUri) {
+                        body.offset = { uri: trackUri };
                     }
-                } else if (playerState.item?.uri) {
-                    body.uris = [playerState.item.uri];
+                } else if (trackUri) {
+                    body.uris = [trackUri];
                 }
 
                 await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
 
-                if (typeof playerState.progress_ms === 'number') {
-                    await sleep(200);
-                    await apiClient.put(`/me/player/seek?position_ms=${playerState.progress_ms}&device_id=${deviceId}`);
+                if (progressMs && parseInt(progressMs, 10) > 0) {
+                    await sleep(400); // Wait for play command to register
+                    await apiClient.put(`/me/player/seek?position_ms=${progressMs}&device_id=${deviceId}`);
                 }
-                console.log("[AuthContext] Autoplay started and seek applied.");
+                console.log("[AuthContext] Kickstarted playback from localStorage.");
             } else {
-                console.log("[AuthContext] Player was paused previously: showing track but not playing.");
+                console.log("[AuthContext] No state in localStorage. Cannot kickstart.");
             }
         } catch (err: any) {
             console.error("[AuthContext] restorePlaybackOnInit failed:", err.response?.data || err.message);
@@ -439,9 +461,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => {
         pauseSpotify();
-
         const showLoader = nowPlaying.source !== 'youtube';
-        
         setNowPlaying(prev => ({
             ...prev,
             source: 'youtube',
