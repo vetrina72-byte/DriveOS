@@ -86,7 +86,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
     
     // Refs for playback restoration
-    const initialAuthDoneRef = useRef<boolean>(false);
     const restorePlaybackAttempted = useRef<boolean>(false);
 
     useEffect(() => {
@@ -242,7 +241,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         
             setState(s => ({ ...s, accessToken: access_token, expiresAt, user, isAuthenticated: true }));
-            initialAuthDoneRef.current = true;
           } catch (err) {
             console.log("No valid session found on load.");
             logout();
@@ -397,82 +395,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [deviceId, refreshHomePage, nowPlaying.source, nowPlaying.spotifyState]);
     
-    const restorePlaybackOnInit = useCallback(async () => {
-        if (!deviceId) return;
-
-        try {
-            // 1. First, try to get the current state from Spotify's API.
-            let playerState: any = null;
-            try {
-                const { data } = await apiClient.get('/me/player');
-                playerState = data && Object.keys(data).length ? data : null;
-            } catch (e) {
-                console.log("No active player state on Spotify API, will attempt kickstart from local state.");
-                playerState = null;
-            }
-
-            // 2. If an active session exists on another device, transfer and sync it.
-            if (playerState) {
-                console.log("[AuthContext] Active session found on Spotify. Restoring state.");
-                await apiClient.put('/me/player', { device_ids: [deviceId], play: playerState.is_playing });
-                setNowPlaying(prev => ({ ...prev, source: 'spotify', spotifyState: playerState, isLoading: false }));
-                if (typeof playerState.progress_ms === 'number' && playerState.progress_ms > 0) {
-                    await sleep(400);
-                    await apiClient.put(`/me/player/seek?position_ms=${playerState.progress_ms}&device_id=${deviceId}`);
-                }
-                return;
-            }
-            
-            // 3. If NO active session, kickstart from localStorage.
-            console.log("[AuthContext] No active session on Spotify. Attempting kickstart from localStorage.");
-            const contextUri = localStorage.getItem("last_context_uri");
-            const trackUri = localStorage.getItem("last_track_uri");
-            const progressMs = localStorage.getItem("last_progress_ms");
-            const wasPlaying = localStorage.getItem("last_is_playing") === 'true';
-
-            if (contextUri || trackUri) {
-                const body: any = {};
-                if (contextUri) {
-                    body.context_uri = contextUri;
-                    if (trackUri) {
-                        body.offset = { uri: trackUri };
-                    }
-                } else if (trackUri) {
-                    body.uris = [trackUri];
-                }
-
-                await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
-                console.log(`[AuthContext] Kickstarted playback from localStorage. Should play: ${wasPlaying}`);
-                await sleep(500); 
-
-                if (!wasPlaying) {
-                    await apiClient.put(`/me/player/pause?device_id=${deviceId}`);
-                    console.log("[AuthContext] Sent pause command as last state was paused.");
-                    await sleep(200);
-                }
-
-                if (progressMs && parseInt(progressMs, 10) > 0) {
-                    await apiClient.put(`/me/player/seek?position_ms=${progressMs}&device_id=${deviceId}`);
-                    console.log(`[AuthContext] Sent seek command to ${progressMs}ms.`);
-                }
-            } else {
-                console.log("[AuthContext] No state in localStorage. Cannot kickstart.");
-            }
-
-        } catch (err: any) {
-            console.error("[AuthContext] restorePlaybackOnInit failed:", err.response?.data || err.message);
-        }
-    }, [deviceId, setNowPlaying]);
-
-    useEffect(() => {
-        if (!isReadyForAutoplay || !initialAuthDoneRef.current || restorePlaybackAttempted.current) {
-            return;
-        }
-        
-        restorePlaybackAttempted.current = true;
-        restorePlaybackOnInit();
-    }, [isReadyForAutoplay, restorePlaybackOnInit]);
-
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => {
         pauseSpotify();
         const showLoader = nowPlaying.source !== 'youtube';
@@ -492,6 +414,172 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const isPlayerReady = !!deviceId;
+    
+    const playerRef = useRef<any>(null);
+    // FIX: Use state.accessToken instead of a standalone variable.
+    const tokenRef = useRef<string | null>(state.accessToken);
+    // FIX: Use state.accessToken instead of a standalone variable.
+    useEffect(() => { tokenRef.current = state.accessToken; }, [state.accessToken]);
+    
+    useEffect(() => {
+        // FIX: Use state.accessToken instead of a standalone variable.
+        if (!state.accessToken) {
+            if (playerRef.current) {
+                playerRef.current.disconnect();
+                playerRef.current = null;
+            }
+            setNowPlaying(s => ({...s, spotifyState: null}));
+            setDeviceIdState(null);
+            return;
+        }
+
+        const scriptId = 'spotify-sdk';
+        if (document.getElementById(scriptId)) {
+            if (!playerRef.current && window.Spotify) {
+                 window.onSpotifyWebPlaybackSDKReady();
+            }
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://sdk.scdn.co/spotify-player.js';
+        script.async = true;
+        document.body.appendChild(script);
+
+        window.onSpotifyWebPlaybackSDKReady = () => {
+             if (playerRef.current || !tokenRef.current) return;
+     
+             const player = new window.Spotify.Player({
+                 name: 'Mio Infotainment',
+                 getOAuthToken: cb => {
+                    if (tokenRef.current) cb(tokenRef.current);
+                 },
+                 volume: state.volume
+             });
+     
+             player.on('ready', async ({ device_id }) => {
+                console.log('%c[Spotify SDK] Ready! Device ID:', 'color: lime; font-weight: bold', device_id);
+                await player.activateElement();
+                setDeviceIdState(device_id);
+                setPlayerAsReadyForAutoplay();
+
+                if (restorePlaybackAttempted.current) {
+                    console.log("[AuthContext] Playback restoration already attempted for this session.");
+                    return;
+                }
+                restorePlaybackAttempted.current = true;
+                
+                try {
+                    let playerState: any = null;
+                    try {
+                        const { data, status } = await apiClient.get('/me/player');
+                        if (status === 200 && data && data.item) {
+                            playerState = data;
+                        }
+                    } catch (e: any) {
+                        if (e.response?.status !== 404 && e.response?.status !== 204) {
+                           console.error("Error fetching player state:", e.response?.data || e.message);
+                        }
+                        playerState = null;
+                    }
+
+                    if (playerState) {
+                        console.log("[AuthContext] Active session found on Spotify. Transferring playback.");
+                        await apiClient.put('/me/player', {
+                            device_ids: [device_id],
+                            play: playerState.is_playing
+                        });
+                        setNowPlaying(prev => ({ ...prev, source: 'spotify', spotifyState: playerState, isLoading: false }));
+                        
+                        if (typeof playerState.progress_ms === 'number' && playerState.progress_ms > 0) {
+                           await sleep(400);
+                           await apiClient.put(`/me/player/seek?position_ms=${playerState.progress_ms}&device_id=${device_id}`);
+                        }
+                        console.log("[AuthContext] Playback transferred.");
+                        return;
+                    }
+
+                    console.log("[AuthContext] No active session. Attempting to kickstart from localStorage.");
+                    const contextUri = localStorage.getItem("last_context_uri");
+                    const trackUri = localStorage.getItem("last_track_uri");
+                    const progressMsStr = localStorage.getItem("last_progress_ms");
+                    const wasPlaying = localStorage.getItem("last_is_playing") === 'true';
+
+                    if (!trackUri) {
+                       console.log("[AuthContext] No last track found in localStorage. Cannot restore.");
+                       return;
+                    }
+                    
+                    const body: any = {
+                       position_ms: progressMsStr ? parseInt(progressMsStr, 10) : 0,
+                    };
+                    
+                    if (contextUri) {
+                        body.context_uri = contextUri;
+                        body.offset = { uri: trackUri };
+                    } else {
+                        body.uris = [trackUri];
+                    }
+
+                    await apiClient.put(`/me/player/play?device_id=${device_id}`, body);
+                    console.log(`[AuthContext] Kickstarted playback at ${body.position_ms}ms. Desired state: ${wasPlaying ? 'playing' : 'paused'}.`);
+
+                    if (!wasPlaying) {
+                       await sleep(500);
+                       await apiClient.put(`/me/player/pause?device_id=${device_id}`);
+                       console.log("[AuthContext] Paused playback as per last saved state.");
+                    }
+
+                } catch (err: any) {
+                    console.error("[AuthContext] Error during playback restoration:", err.response?.data || err.message);
+                }
+            });
+     
+             player.on('not_ready', ({ device_id }) => {
+                 console.warn('[Spotify SDK] Device has gone offline', device_id);
+                 setDeviceIdState(null);
+             });
+             
+            // FIX: Renamed `state` parameter to `playerState` to avoid shadowing the component's state.
+             player.on('player_state_changed', (playerState) => {
+                 _setPlayerState(playerState);
+                 player.getVolume().then(sdkVolume => {
+                     if (typeof sdkVolume === 'number' && sdkVolume !== state.volume) {
+                         setVolume(sdkVolume);
+                     }
+                 });
+             });
+     
+            player.on('authentication_error', async (error: { message: string }) => {
+              console.warn("Spotify authentication_error:", error.message, "Attempting refresh...");
+              try {
+                await silentRefreshToken();
+              } catch (e) {
+                console.error("Refresh failed after authentication_error. Logging out.", e);
+                logout();
+              }
+            });
+
+            player.on('account_error', (error) => console.error("Spotify account error:", error.message));
+            player.on('initialization_error', (error) => console.error("Spotify initialization error:", error.message));
+     
+            player.connect().then(success => {
+                if (success) {
+                    console.log("[Spotify SDK] The Web Playback SDK successfully connected to Spotify!");
+                }
+            });
+            playerRef.current = player;
+         };
+        
+        return () => {
+            if (playerRef.current) {
+                playerRef.current.disconnect();
+                playerRef.current = null;
+            }
+        }
+    // FIX: Use state.accessToken instead of a standalone variable.
+    }, [state.accessToken, state.volume, logout, setVolume, _setPlayerState, silentRefreshToken, setPlayerAsReadyForAutoplay]);
 
     return (
     <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay, youTubeFavorites, onToggleYouTubeFavorite }}>
