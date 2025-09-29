@@ -398,6 +398,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!deviceId) return;
 
         try {
+            // 1. First, try to get the current state from Spotify's API.
             let playerState: any = null;
             try {
                 const { data } = await apiClient.get('/me/player');
@@ -407,18 +408,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 playerState = null;
             }
 
+            // 2. If an active session exists on another device, transfer and sync it.
             if (playerState) {
                 console.log("[AuthContext] Active session found on Spotify. Restoring state.");
+                // Transfer playback. If it was playing, it should resume.
                 await apiClient.put('/me/player', { device_ids: [deviceId], play: playerState.is_playing });
+                
+                // Update our UI immediately.
                 setNowPlaying(prev => ({ ...prev, source: 'spotify', spotifyState: playerState, isLoading: false }));
 
+                // If it was playing, also apply the seek to be precise.
                 if (playerState.is_playing && typeof playerState.progress_ms === 'number') {
                     await sleep(400); // Allow time for play command to take effect.
                     await apiClient.put(`/me/player/seek?position_ms=${playerState.progress_ms}&device_id=${deviceId}`);
                 }
-                return;
+                return; // Restoration from API is complete.
             }
             
+            // 3. If NO active session, kickstart from localStorage.
             console.log("[AuthContext] No active session on Spotify. Attempting kickstart from localStorage.");
             const contextUri = localStorage.getItem("last_context_uri");
             const trackUri = localStorage.getItem("last_track_uri");
@@ -429,22 +436,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (contextUri) {
                     body.context_uri = contextUri;
                     if (trackUri) {
+                        // If we have a context, the track is an offset
                         body.offset = { uri: trackUri };
                     }
                 } else if (trackUri) {
+                    // If no context, the track is the main thing to play
                     body.uris = [trackUri];
                 }
 
+                // Send the play command to "kickstart" the session on this device.
                 await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
 
+                // If we have a saved progress, seek to it.
                 if (progressMs && parseInt(progressMs, 10) > 0) {
                     await sleep(400); // Wait for play command to register
                     await apiClient.put(`/me/player/seek?position_ms=${progressMs}&device_id=${deviceId}`);
                 }
                 console.log("[AuthContext] Kickstarted playback from localStorage.");
+
             } else {
                 console.log("[AuthContext] No state in localStorage. Cannot kickstart.");
             }
+
         } catch (err: any) {
             console.error("[AuthContext] restorePlaybackOnInit failed:", err.response?.data || err.message);
         }
