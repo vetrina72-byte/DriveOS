@@ -471,18 +471,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 restorePlaybackAttempted.current = true;
 
                 try {
-                    let response;
-                    try {
-                        response = await apiClient.get('/me/player');
-                    } catch (e: any) {
-                        if (e.response?.status === 204) {
-                            response = { status: 204 };
-                        } else {
-                            throw e;
-                        }
-                    }
-
-                    if (response.status === 200 && response.data && response.data.item) {
+                    // Check if another device is active
+                    const response = await apiClient.get('/me/player').catch(e => {
+                        if (e.response?.status === 204) return { status: 204 };
+                        throw e;
+                    });
+                    
+                    // If a session is active on another device, transfer it.
+                    if (response.status === 200 && response.data?.item) {
                         console.log("[AuthContext] Active session found. Transferring playback...");
                         await apiClient.put('/me/player', {
                             device_ids: [device_id],
@@ -490,28 +486,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                         });
                         console.log("[AuthContext] Playback transferred.");
                     } else {
-                        console.log("[AuthContext] No active session. Restoring from localStorage...");
-                        const lastContextUri = localStorage.getItem('last_context_uri');
-                        const lastTrackUri = localStorage.getItem('last_track_uri');
-                        const lastProgressMs = parseInt(localStorage.getItem('last_progress_ms') || '0', 10);
-                        const lastIsPlaying = localStorage.getItem('last_is_playing') === 'true';
+                        // If no active session, activate this device. This is the key fix.
+                        console.log("[AuthContext] No active session. Activating device...");
+                        await apiClient.put('/me/player', {
+                            device_ids: [device_id],
+                            play: false,
+                        });
 
-                        if (lastContextUri || lastTrackUri) {
-                            const playBody: PlayOptions = { position_ms: lastProgressMs };
-                            if (lastContextUri && lastContextUri !== "null") {
-                                playBody.context_uri = lastContextUri;
-                                if (lastTrackUri && lastTrackUri !== "null") playBody.offset = { uri: lastTrackUri };
-                            } else if (lastTrackUri && lastTrackUri !== "null") {
-                                playBody.uris = [lastTrackUri];
-                            }
-                            
-                            if (playBody.context_uri || playBody.uris) {
-                                await apiClient.put(`/me/player/play?device_id=${device_id}`, playBody);
-                                if (!lastIsPlaying) {
-                                    await sleep(500);
-                                    await apiClient.put(`/me/player/pause?device_id=${device_id}`);
+                        // Then, if the last known state was 'playing', try to resume it.
+                        const lastIsPlaying = localStorage.getItem('last_is_playing') === 'true';
+                        if (lastIsPlaying) {
+                            const lastContextUri = localStorage.getItem('last_context_uri');
+                            const lastTrackUri = localStorage.getItem('last_track_uri');
+                            const lastProgressMs = parseInt(localStorage.getItem('last_progress_ms') || '0', 10);
+                            if (lastContextUri || lastTrackUri) {
+                                const playBody: PlayOptions = { position_ms: lastProgressMs };
+                                if (lastContextUri && lastContextUri !== "null") {
+                                    playBody.context_uri = lastContextUri;
+                                    if (lastTrackUri && lastTrackUri !== "null") playBody.offset = { uri: lastTrackUri };
+                                } else if (lastTrackUri && lastTrackUri !== "null") {
+                                    playBody.uris = [lastTrackUri];
                                 }
-                                console.log("[AuthContext] Playback restored from localStorage.");
+                                if (playBody.context_uri || playBody.uris) {
+                                    await apiClient.put(`/me/player/play?device_id=${device_id}`, playBody);
+                                    console.log("[AuthContext] Resumed last playing session from localStorage.");
+                                }
                             }
                         }
                     }
