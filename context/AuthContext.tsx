@@ -51,8 +51,6 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     youTubeFavorites: string[];
     onToggleYouTubeFavorite: (playlistId: string) => void;
     playerRef: React.RefObject<SpotifyPlayer | null>;
-    isAutoplayBlocked: boolean;
-    unlockAutoplay: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -85,7 +83,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading: false,
     });
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
-    const [isAutoplayBlocked, setAutoplayBlocked] = useState(false);
     
     // Refs for playback restoration
     const restorePlaybackAttempted = useRef<boolean>(false);
@@ -414,17 +411,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setState(s => ({...s, error: null}));
     };
 
-    const unlockAutoplay = useCallback(() => {
-        if (playerRef.current) {
-            playerRef.current.resume().then(() => {
-                setAutoplayBlocked(false);
-                console.log("Autoplay unlocked by user interaction.");
-            }).catch(err => {
-                console.error("Failed to resume playback after user click:", err);
-            });
-        }
-    }, []);
-
     const isPlayerReady = !!deviceId;
     
     useEffect(() => {
@@ -544,13 +530,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               }
             });
 
-            player.on('playback_error', error => {
-                console.error("Spotify playback_error:", error.message);
-                if (error.message.includes('autoplay') || error.message.includes('NotAllowedError')) {
-                    setAutoplayBlocked(true);
-                }
-            });
-
             player.on('account_error', (error) => console.error("Spotify account error:", error.message));
             player.on('initialization_error', (error) => console.error("Spotify initialization error:", error.message));
      
@@ -571,7 +550,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [state.accessToken, state.volume, logout, setVolume, _setPlayerState, silentRefreshToken]);
 
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, playerRef, isAutoplayBlocked, unlockAutoplay }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, playerRef }}>
             {children}
         </AuthContext.Provider>
     );
