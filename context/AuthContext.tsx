@@ -88,6 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [isAutoplayBlocked, setAutoplayBlocked] = useState(false);
     
     // Refs for playback restoration
+    const isInitialLoadOrLogin = useRef(true);
     const restorePlaybackAttempted = useRef<boolean>(false);
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const tokenRef = useRef<string | null>(state.accessToken);
@@ -231,6 +232,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => {
         const initAuth = async () => {
+          isInitialLoadOrLogin.current = true; // Flag for autoplay logic
           try {
             const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
             const { access_token, expires_in } = data;
@@ -258,6 +260,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [fetchUserInfo, logout]);
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
+        isInitialLoadOrLogin.current = true; // Flag for autoplay logic
         setState(s => ({ ...s, isLoading: true, error: null }));
     
         if (authError) {
@@ -467,33 +470,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 console.log('%c[Spotify SDK] Ready! Device ID:', 'color: lime; font-weight: bold', device_id);
                 setDeviceIdState(device_id);
 
-                if (restorePlaybackAttempted.current) return;
-                restorePlaybackAttempted.current = true;
+                const shouldAutoplay = isInitialLoadOrLogin.current;
+                console.log(`[AuthContext] Player ready. Should autoplay? ${shouldAutoplay}`);
 
-                setNowPlaying(s => ({ ...s, isLoading: true, source: 'spotify' }));
+                if (shouldAutoplay) {
+                    if (restorePlaybackAttempted.current) return;
+                    restorePlaybackAttempted.current = true;
+                    setNowPlaying(s => ({ ...s, isLoading: true, source: 'spotify' }));
 
-                try {
-                    const response = await apiClient.get('/me/player').catch(e => {
-                        if (e.response?.status === 204) return { status: 204 };
-                        throw e;
-                    });
-                    
-                    if (response.status === 200 && response.data?.item) {
-                        console.log("[AuthContext] Active session found. Transferring playback...");
-                        await apiClient.put('/me/player', {
-                            device_ids: [device_id],
-                            play: true,
+                    try {
+                        const response = await apiClient.get('/me/player').catch(e => {
+                            if (e.response?.status === 204) return { status: 204 };
+                            throw e;
                         });
-                        console.log("[AuthContext] Playback transferred.");
-                    } else {
-                        console.log("[AuthContext] No active session. Activating device...");
-                        await apiClient.put('/me/player', {
-                            device_ids: [device_id],
-                            play: false,
-                        });
-
-                        const lastIsPlaying = localStorage.getItem('last_is_playing') === 'true';
-                        if (lastIsPlaying) {
+                        
+                        if (response.status === 200 && response.data?.item) {
+                            console.log("[AuthContext] Active session found. Transferring playback with play=true.");
+                            await apiClient.put('/me/player', {
+                                device_ids: [device_id],
+                                play: true,
+                            });
+                        } else {
+                            console.log("[AuthContext] No active session. Forcing restore from localStorage.");
                             const lastContextUri = localStorage.getItem('last_context_uri');
                             const lastTrackUri = localStorage.getItem('last_track_uri');
                             const lastProgressMs = parseInt(localStorage.getItem('last_progress_ms') || '0', 10);
@@ -507,22 +505,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                             }
                             
                             if (playBody.context_uri || playBody.uris) {
+                                console.log("[AuthContext] Forcing resume of last session from localStorage.");
                                 await apiClient.put(`/me/player/play?device_id=${device_id}`, playBody);
-                                console.log("[AuthContext] Resumed last playing session from localStorage.");
                             } else {
-                                await apiClient.put(`/me/player/play?device_id=${device_id}`);
+                                console.log("[AuthContext] No last session in localStorage. Activating device without playing.");
+                                await apiClient.put('/me/player', { device_ids: [device_id], play: false });
                             }
                         }
+                    } catch (err: any) {
+                        console.error("[AuthContext] Error during session sync:", err.response?.data || err.message);
+                        setNowPlaying(s => ({ ...s, isLoading: false }));
                     }
-                } catch (err: any) {
-                    console.error("[AuthContext] Error during session sync:", err.response?.data || err.message);
-                    setNowPlaying(s => ({ ...s, isLoading: false }));
+
+                    setTimeout(() => {
+                        setNowPlaying(s => s.isLoading ? { ...s, isLoading: false } : s);
+                    }, 3000);
+
+                } else {
+                    console.log("[AuthContext] Token refresh: Just activating device, preserving playback state.");
+                    try {
+                        await apiClient.put('/me/player', {
+                            device_ids: [device_id] // Omit 'play' to keep current state
+                        });
+                    } catch(err) {
+                        console.error("[AuthContext] Failed to activate device on token refresh:", err);
+                    }
                 }
                 
-                // Fallback to stop loading if no state update arrives
-                setTimeout(() => {
-                    setNowPlaying(s => s.isLoading ? { ...s, isLoading: false } : s);
-                }, 3000);
+                isInitialLoadOrLogin.current = false;
             });
      
              player.on('not_ready', ({ device_id }) => {
