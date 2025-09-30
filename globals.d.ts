@@ -126,6 +126,7 @@ declare global {
     onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
     // FIX: Added the missing `onend` property to the SpeechRecognition interface
     // to match the Web Speech API and fix the TypeScript error.
+    // FIX: Corrected typo from Speech-Recognition to SpeechRecognition
     onend: ((this: SpeechRecognition, ev: Event) => any) | null;
     onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
     onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null;
