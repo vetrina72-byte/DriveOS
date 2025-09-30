@@ -293,9 +293,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     favoriteStationUUIDs,
     onToggleFavorite,
 }) => {
-  const { accessToken, logout, setDeviceId, isAuthenticated, nowPlaying, setNowPlaying, _setPlayerState, volume, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay, playYouTube } = useAuth();
-    const playerRef = useRef<SpotifyPlayer | null>(null);
-    const [playerStatus, setPlayerStatus] = useState<PlayerStatus>('connecting');
+  const { isAuthenticated, nowPlaying, setNowPlaying, volume, playYouTube, playerRef } = useAuth();
     const playerContainerRef = useRef<HTMLDivElement>(null);
     
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
@@ -322,10 +320,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const hasEndedRef = useRef(false);
 
 
-    const isPlayerActive = playerStatus === 'ready' && playerState && playerState.track_window.current_track;
-    const internalVolumeUpdate = useRef(false);
-    const tokenRef = useRef<string | null>(accessToken);
-    useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
+    const isPlayerActive = playerRef.current && playerState && playerState.track_window.current_track;
 
     const handleToggleQueue = (source: 'spotify' | 'youtube') => {
         if (visibleQueue === source) {
@@ -339,16 +334,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             setVisibleQueue(source);
         }
     };
-
-    useEffect(() => {
-        if (playerRef.current && typeof volume === 'number') {
-            if (internalVolumeUpdate.current) {
-                internalVolumeUpdate.current = false;
-                return;
-            }
-            playerRef.current.setVolume(volume).catch(e => console.error("Failed to set Spotify volume", e));
-        }
-    }, [volume]);
     
     useEffect(() => {
         if (audioRef.current) {
@@ -493,110 +478,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             setYouTubeProgress({ position: 0, duration: 1 });
         }
     }, [youtubeTrack?.videoId, source]);
-
-    // ** L'effetto più importante per l'SDK **
-    // Viene eseguito solo quando `accessToken` diventa disponibile.
-    useEffect(() => {
-        if (!accessToken) {
-            // Se il token viene rimosso (logout), distruggiamo l'istanza del player.
-            if (playerRef.current) {
-                playerRef.current.disconnect();
-                playerRef.current = null;
-            }
-            setPlayerStatus('connecting');
-            _setPlayerState(null);
-            setDeviceId(null); // Pulisce il device ID
-            return;
-        }
-
-        // Previene la reinizializzazione se lo script è già presente.
-        const scriptId = 'spotify-sdk';
-        if (document.getElementById(scriptId)) {
-            if (!playerRef.current && window.Spotify) {
-                 window.onSpotifyWebPlaybackSDKReady();
-            }
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://sdk.scdn.co/spotify-player.js';
-        script.async = true;
-        document.body.appendChild(script);
-
-        window.onSpotifyWebPlaybackSDKReady = () => {
-             if (playerRef.current || !tokenRef.current) return;
-     
-             setPlayerStatus('connecting');
-             const player = new window.Spotify.Player({
-                 name: 'Mio Infotainment',
-                 getOAuthToken: cb => {
-                    // Usa un ref per l'accessToken per evitare che la callback usi un token vecchio.
-                    if (tokenRef.current) cb(tokenRef.current);
-                 },
-                 volume: volume
-             });
-     
-             // ** Evento cruciale: il device è pronto **
-             player.on('ready', async ({ device_id }) => {
-                 console.log('%c[Spotify SDK] Ready! Device ID:', 'color: lime; font-weight: bold', device_id);
-                 await player.activateElement(); // Attiva il contesto audio per il browser
-                 setDeviceId(device_id); // Invia l'ID al nostro AuthContext
-                 setPlayerStatus('ready');
-                 // Ora che il player è veramente pronto, possiamo tentare di ripristinare la sessione.
-                 setPlayerAsReadyForAutoplay();
-             });
-     
-             player.on('not_ready', ({ device_id }) => {
-                 console.warn('[Spotify SDK] Device has gone offline', device_id);
-                 setDeviceId(null);
-                 setPlayerStatus('connecting');
-             });
-             
-             player.on('player_state_changed', (state) => {
-                 _setPlayerState(state);
-                 player.getVolume().then(sdkVolume => {
-                     if (typeof sdkVolume === 'number' && sdkVolume !== volume) {
-                         internalVolumeUpdate.current = true;
-                         setVolume(sdkVolume);
-                     }
-                 });
-             });
-     
-            player.on('authentication_error', async (error: { message: string }) => {
-              console.warn("Spotify authentication_error:", error.message, "Attempting refresh...");
-              try {
-                await silentRefreshToken();
-              } catch (e) {
-                console.error("Refresh failed after authentication_error. Logging out.", e);
-                logout();
-              }
-            });
-
-            player.on('account_error', (error) => {
-                console.error("Spotify account error:", error.message);
-                setPlayerStatus('error');
-            });
-             player.on('initialization_error', (error) => {
-                console.error("Spotify initialization error:", error.message);
-                setPlayerStatus('error');
-            });
-     
-             player.connect().then(success => {
-                if (success) {
-                    console.log("[Spotify SDK] The Web Playback SDK successfully connected to Spotify!");
-                }
-             });
-             playerRef.current = player;
-         };
-        
-        return () => {
-            if (playerRef.current) {
-                playerRef.current.disconnect();
-                playerRef.current = null;
-            }
-        }
-    }, [accessToken, logout, setDeviceId, _setPlayerState, setVolume, silentRefreshToken, setPlayerAsReadyForAutoplay]);
     
     useEffect(() => {
         const playerEl = playerContainerRef.current;
@@ -961,18 +842,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>
-                    </div>
-                </div>
-            );
-        }
-
-        if (playerStatus === 'error') {
-            return (
-                <div className="flex items-center w-full h-full gap-5 px-4 text-red-500">
-                    <FiAlertTriangle className="w-8 h-8 flex-shrink-0"/>
-                    <div className="overflow-hidden">
-                        <div className="font-semibold truncate">Connection Error</div>
-                        <div className="text-sm truncate">Could not connect to Spotify.</div>
                     </div>
                 </div>
             );

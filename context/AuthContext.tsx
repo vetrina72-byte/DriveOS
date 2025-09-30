@@ -48,9 +48,9 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' 
     setNowPlaying: React.Dispatch<React.SetStateAction<NowPlayingState>>;
     isPlayerReady: boolean;
     pauseSpotify: () => void;
-    setPlayerAsReadyForAutoplay: () => void;
     youTubeFavorites: string[];
     onToggleYouTubeFavorite: (playlistId: string) => void;
+    playerRef: React.RefObject<SpotifyPlayer | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -82,11 +82,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         youtubeTrack: null,
         isLoading: false,
     });
-    const [isReadyForAutoplay, setIsReadyForAutoplay] = useState(false);
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
     
     // Refs for playback restoration
     const restorePlaybackAttempted = useRef<boolean>(false);
+    const playerRef = useRef<SpotifyPlayer | null>(null);
+    const tokenRef = useRef<string | null>(state.accessToken);
+    useEffect(() => { tokenRef.current = state.accessToken; }, [state.accessToken]);
 
     useEffect(() => {
         try {
@@ -325,10 +327,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
     }, []);
 
-    const setPlayerAsReadyForAutoplay = useCallback(() => {
-        setIsReadyForAutoplay(true);
-    }, []);
-
     const pauseSpotify = useCallback(async () => {
         if (!deviceId) return;
         try {
@@ -415,10 +413,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const isPlayerReady = !!deviceId;
     
-    const playerRef = useRef<any>(null);
-    const tokenRef = useRef<string | null>(state.accessToken);
-    useEffect(() => { tokenRef.current = state.accessToken; }, [state.accessToken]);
-    
     useEffect(() => {
         if (!state.accessToken) {
             if (playerRef.current) {
@@ -459,24 +453,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 console.log('%c[Spotify SDK] Ready! Device ID:', 'color: lime; font-weight: bold', device_id);
                 setDeviceIdState(device_id);
 
-                // Orchestration starts here, as requested.
                 if (restorePlaybackAttempted.current) return;
                 restorePlaybackAttempted.current = true;
 
                 try {
-                    // 1. Check for an active session elsewhere.
                     let response;
                     try {
                         response = await apiClient.get('/me/player');
                     } catch (e: any) {
                         if (e.response?.status === 204) {
-                            response = { status: 204 }; // Normalize for easier handling
+                            response = { status: 204 };
                         } else {
-                            throw e; // Rethrow other errors
+                            throw e;
                         }
                     }
 
-                    // 2. If a session is active, transfer it.
                     if (response.status === 200 && response.data && response.data.item) {
                         console.log("[AuthContext] Active session found. Transferring playback...");
                         await apiClient.put('/me/player', {
@@ -485,7 +476,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                         });
                         console.log("[AuthContext] Playback transferred.");
                     } else {
-                        // 3. If no session is active (204), restore from localStorage.
                         console.log("[AuthContext] No active session. Restoring from localStorage...");
                         const lastContextUri = localStorage.getItem('last_context_uri');
                         const lastTrackUri = localStorage.getItem('last_track_uri');
@@ -504,7 +494,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                             if (playBody.context_uri || playBody.uris) {
                                 await apiClient.put(`/me/player/play?device_id=${device_id}`, playBody);
                                 if (!lastIsPlaying) {
-                                    await sleep(500); // Give Spotify time to process
+                                    await sleep(500);
                                     await apiClient.put(`/me/player/pause?device_id=${device_id}`);
                                 }
                                 console.log("[AuthContext] Playback restored from localStorage.");
@@ -513,8 +503,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     }
                 } catch (err: any) {
                     console.error("[AuthContext] Error during session sync:", err.response?.data || err.message);
-                } finally {
-                    setPlayerAsReadyForAutoplay();
                 }
             });
      
@@ -559,10 +547,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 playerRef.current = null;
             }
         }
-    }, [state.accessToken, state.volume, logout, setVolume, _setPlayerState, silentRefreshToken, setPlayerAsReadyForAutoplay]);
+    }, [state.accessToken, state.volume, logout, setVolume, _setPlayerState, silentRefreshToken]);
 
     return (
-    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, setPlayerAsReadyForAutoplay, youTubeFavorites, onToggleYouTubeFavorite }}>
+    <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, playerRef }}>
             {children}
         </AuthContext.Provider>
     );
