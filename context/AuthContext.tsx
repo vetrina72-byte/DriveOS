@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import axios from 'axios';
 import apiClient from '../api';
-import type { SpotifyPlayerState } from '@/globals';
+import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import { NowPlayingState, YouTubeTrackInfo } from '../types';
 
 interface SpotifyUser {
@@ -457,87 +457,64 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
      
             player.on('ready', async ({ device_id }) => {
                 console.log('%c[Spotify SDK] Ready! Device ID:', 'color: lime; font-weight: bold', device_id);
-                await player.activateElement();
                 setDeviceIdState(device_id);
-                setPlayerAsReadyForAutoplay();
 
-                if (restorePlaybackAttempted.current) {
-                    console.log("[AuthContext] Playback restoration already attempted for this session.");
-                    return;
-                }
+                // Orchestration starts here, as requested.
+                if (restorePlaybackAttempted.current) return;
                 restorePlaybackAttempted.current = true;
-                
+
                 try {
-                    let playerState: any = null;
-                    // Make a single attempt to get the current player state from Spotify's API
+                    // 1. Check for an active session elsewhere.
+                    let response;
                     try {
-                        const { data, status } = await apiClient.get('/me/player');
-                        if (status === 200 && data && data.item) {
-                            playerState = data;
-                        }
+                        response = await apiClient.get('/me/player');
                     } catch (e: any) {
-                        // A 404 or 204 is expected if nothing is playing anywhere. Don't log it as an error.
-                        if (e.response?.status !== 404 && e.response?.status !== 204) {
-                           console.error("Error fetching player state:", e.response?.data || e.message);
+                        if (e.response?.status === 204) {
+                            response = { status: 204 }; // Normalize for easier handling
+                        } else {
+                            throw e; // Rethrow other errors
                         }
-                        playerState = null;
                     }
 
-                    // If an active session is found on another device, transfer it.
-                    if (playerState) {
-                        console.log("[AuthContext] Active session found on another device. Transferring playback.");
-                        
+                    // 2. If a session is active, transfer it.
+                    if (response.status === 200 && response.data && response.data.item) {
+                        console.log("[AuthContext] Active session found. Transferring playback...");
                         await apiClient.put('/me/player', {
                             device_ids: [device_id],
-                            play: playerState.is_playing
+                            play: response.data.is_playing,
                         });
-                        
-                        console.log("[AuthContext] Playback transferred successfully.");
-                        
+                        console.log("[AuthContext] Playback transferred.");
                     } else {
-                        // If no active session, try to restore from localStorage.
-                        console.log("[AuthContext] No active session. Attempting to restore from localStorage.");
-                        
+                        // 3. If no session is active (204), restore from localStorage.
+                        console.log("[AuthContext] No active session. Restoring from localStorage...");
                         const lastContextUri = localStorage.getItem('last_context_uri');
                         const lastTrackUri = localStorage.getItem('last_track_uri');
                         const lastProgressMs = parseInt(localStorage.getItem('last_progress_ms') || '0', 10);
                         const lastIsPlaying = localStorage.getItem('last_is_playing') === 'true';
 
                         if (lastContextUri || lastTrackUri) {
-                            console.log("[AuthContext] Found saved state:", { lastContextUri, lastTrackUri, lastProgressMs, lastIsPlaying });
-
-                            const playBody: { context_uri?: string; uris?: string[]; offset?: any; position_ms?: number } = {};
-
+                            const playBody: PlayOptions = { position_ms: lastProgressMs };
                             if (lastContextUri && lastContextUri !== "null") {
                                 playBody.context_uri = lastContextUri;
-                                if (lastTrackUri && lastTrackUri !== "null") {
-                                    playBody.offset = { uri: lastTrackUri };
-                                }
+                                if (lastTrackUri && lastTrackUri !== "null") playBody.offset = { uri: lastTrackUri };
                             } else if (lastTrackUri && lastTrackUri !== "null") {
                                 playBody.uris = [lastTrackUri];
                             }
                             
-                            playBody.position_ms = lastProgressMs;
-                            
                             if (playBody.context_uri || playBody.uris) {
                                 await apiClient.put(`/me/player/play?device_id=${device_id}`, playBody);
-
                                 if (!lastIsPlaying) {
-                                    await sleep(500); // Give Spotify time to process the play command
+                                    await sleep(500); // Give Spotify time to process
                                     await apiClient.put(`/me/player/pause?device_id=${device_id}`);
-                                    console.log("[AuthContext] Last state was paused. Sent pause command.");
                                 }
                                 console.log("[AuthContext] Playback restored from localStorage.");
-                            } else {
-                                console.log("[AuthContext] Saved state was incomplete. Player is ready.");
                             }
-                        } else {
-                            console.log("[AuthContext] No saved state in localStorage. Player is ready.");
                         }
                     }
                 } catch (err: any) {
-                    // This will catch errors from the PUT/transfer calls
-                    console.error("[AuthContext] Error during playback restoration/transfer:", err.response?.data || err.message);
+                    console.error("[AuthContext] Error during session sync:", err.response?.data || err.message);
+                } finally {
+                    setPlayerAsReadyForAutoplay();
                 }
             });
      

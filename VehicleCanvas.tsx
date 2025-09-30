@@ -448,7 +448,8 @@ function EnvironmentController({
         const fog = scene.fog as THREE.Fog;
         fog.color.lerp(targetSky, t); // CRASH FIX: Use targetSky which is always a Color, not scene.background.
         fog.near = THREE.MathUtils.lerp(fog.near, targetFog.near, t);
-        fog.far = THREE.MathUtils.lerp(fog.far, t);
+        // FIX: The third argument for lerp (the interpolation factor `t`) was missing.
+        fog.far = THREE.MathUtils.lerp(fog.far, targetFog.far, t);
     } else {
         if (scene.fog) {
             scene.fog = null;

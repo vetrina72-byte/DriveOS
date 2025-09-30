@@ -759,7 +759,6 @@ export default function DebugControls({
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Scene Environment Colors</h3>
-            {/* FIX: The cast `as Array<keyof SceneColors>` was incorrect because `keyof SceneColors` evaluates to `string | number` for an index signature. Casting to the specific known keys (`'day' | 'night'`) is safer and more accurate. */}
             {(Object.keys(sceneColors) as Array<'day' | 'night'>).map(time => (
               <div key={time} className="pl-2 border-l-2 border-zinc-600 mb-3 mt-2">
                 <h4 className="capitalize text-sm font-semibold text-zinc-300 mb-2">{time}</h4>

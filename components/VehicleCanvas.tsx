@@ -446,7 +446,9 @@ function EnvironmentController({
             scene.fog = new THREE.Fog(targetSky, targetFog.near, targetFog.far);
         }
         const fog = scene.fog as THREE.Fog;
-        fog.color.copy(scene.background as THREE.Color);
+        // CRASH FIX: Use a reliable THREE.Color object for the fog color, not the scene background
+        // which could be a texture or null, causing a 'Cannot read properties of null' error.
+        fog.color.copy(targetSky); 
         fog.near = THREE.MathUtils.lerp(fog.near, targetFog.near, t);
         fog.far = THREE.MathUtils.lerp(fog.far, targetFog.far, t);
     } else {
