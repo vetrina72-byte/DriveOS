@@ -699,17 +699,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     );
     
     const renderPlayerContent = () => {
-        if (nowPlaying.isLoading && source !== 'radio') {
+        if ((nowPlaying.source === 'spotify' || nowPlaying.source === 'youtube') && nowPlaying.isLoading) {
             return (
-                <div className="w-full h-full flex items-center gap-5 px-4 animate-pulse" style={{backgroundColor: 'var(--player-bg)'}}>
-                    <div className={`w-12 h-12 rounded-lg flex-shrink-0 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
-                    <div className="flex-grow overflow-hidden space-y-2">
-                        <div className={`h-4 rounded w-3/4 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
-                        <div className={`h-3 rounded w-1/2 ${isNight ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
-                    </div>
-                    <div className="flex-shrink-0">
-                        <div className={`w-7 h-7 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} />
-                    </div>
+                <div className="w-full h-full flex items-center justify-center" style={{backgroundColor: 'var(--player-bg)'}}>
+                    <div className={`w-8 h-8 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} />
                 </div>
             );
         }
