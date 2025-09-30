@@ -450,7 +450,6 @@ function EnvironmentController({
         // which could be a texture or null, causing a 'Cannot read properties of null' error.
         fog.color.copy(targetSky); 
         fog.near = THREE.MathUtils.lerp(fog.near, targetFog.near, t);
-        // FIX: The third argument for lerp (the interpolation factor `t`) was missing.
         fog.far = THREE.MathUtils.lerp(fog.far, targetFog.far, t);
     } else {
         if (scene.fog) {
