@@ -33,8 +33,6 @@ interface MusicPlayerProps {
     onToggleFavorite: (station: RadioStation) => void;
 }
 
-type PlayerStatus = 'connecting' | 'ready' | 'error';
-
 /**
  * A seekable progress bar for the Spotify player with smooth, real-time updates.
  * This component uses `requestAnimationFrame` to interpolate the track's progress between
@@ -293,7 +291,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     favoriteStationUUIDs,
     onToggleFavorite,
 }) => {
-  const { isAuthenticated, nowPlaying, setNowPlaying, volume, playYouTube, playerRef } = useAuth();
+  const { 
+      isAuthenticated, 
+      nowPlaying, 
+      setNowPlaying, 
+      volume, 
+      playYouTube, 
+      playerRef,
+      isAutoplayBlocked,
+      unlockAutoplay
+  } = useAuth();
     const playerContainerRef = useRef<HTMLDivElement>(null);
     
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
@@ -621,12 +628,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleToggleShuffle = () => {
-        if (!playerState) return;
+        if (!playerState || !playerRef.current) return;
         apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
     };
 
     const handleToggleRepeat = () => {
-        if (!playerState) return;
+        if (!playerState || !playerRef.current) return;
         const nextState = (playerState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
@@ -678,6 +685,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const themeClasses = isNight 
         ? 'border-zinc-700/80' 
         : 'border-zinc-300';
+    
+    const AutoplayUnlockOverlay = () => (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 rounded-xl">
+            <p className="text-white font-semibold text-center">L'autoplay è bloccato dal browser.</p>
+            <button
+                onClick={unlockAutoplay}
+                className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-3 px-6 rounded-full text-base transition-all transform hover:scale-105"
+            >
+                Riprendi musica
+            </button>
+        </div>
+    );
     
     const renderPlayerContent = () => {
         if (nowPlaying.isLoading && source !== 'radio') {
@@ -909,6 +928,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 className={`music-player ${themeClasses} backdrop-blur-md border rounded-xl shadow-lg flex items-center gap-5 overflow-hidden`}
                 style={playerStyle}
             >
+                {isAutoplayBlocked && <AutoplayUnlockOverlay />}
                 {renderPlayerContent()}
                 <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
             </div>
