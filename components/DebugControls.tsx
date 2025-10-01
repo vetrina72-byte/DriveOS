@@ -142,6 +142,12 @@ interface DebugControlsProps {
   setDarkPlayerBg: (color: string) => void;
   darkNavigateInputBg: string;
   setDarkNavigateInputBg: (color: string) => void;
+  queuePopoverHeight: number;
+  setQueuePopoverHeight: (height: number) => void;
+  queuePopoverBottomOffset: number;
+  setQueuePopoverBottomOffset: (offset: number) => void;
+  queuePopoverScale: number;
+  setQueuePopoverScale: (scale: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -313,6 +319,12 @@ export default function DebugControls({
   setDarkPlayerBg,
   darkNavigateInputBg,
   setDarkNavigateInputBg,
+  queuePopoverHeight,
+  setQueuePopoverHeight,
+  queuePopoverBottomOffset,
+  setQueuePopoverBottomOffset,
+  queuePopoverScale,
+  setQueuePopoverScale,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -391,6 +403,9 @@ export default function DebugControls({
     setDarkVolumeFillBg('#ffffff');
     setDarkVolumeThumbBg('#ffffff');
     setDarkNavigateInputBg('#2b2b2b');
+    setQueuePopoverHeight(80);
+    setQueuePopoverBottomOffset(16);
+    setQueuePopoverScale(1.0);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1026,6 +1041,22 @@ export default function DebugControls({
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Queue Popover Layout</h3>
+            <div>
+                <label htmlFor="q-pop-height">Height: {queuePopoverHeight}px</label>
+                <input id="q-pop-height" type="range" min="60" max="150" value={queuePopoverHeight} onChange={(e) => setQueuePopoverHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+                <label htmlFor="q-pop-offset">Bottom Offset (Distance): {queuePopoverBottomOffset}px</label>
+                <input id="q-pop-offset" type="range" min="0" max="50" value={queuePopoverBottomOffset} onChange={(e) => setQueuePopoverBottomOffset(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+                <label htmlFor="q-pop-scale">Scale: {queuePopoverScale.toFixed(2)}</label>
+                <input id="q-pop-scale" type="range" min="0.7" max="1.3" step="0.05" value={queuePopoverScale} onChange={(e) => setQueuePopoverScale(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 

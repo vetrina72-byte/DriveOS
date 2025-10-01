@@ -714,6 +714,10 @@ function AppContent() {
   const [volumeControlZIndex, setVolumeControlZIndex] = useState(5000);
   const [appLauncherWidth, setAppLauncherWidth] = useState(37); // percentage
   const [appLauncherHeight, setAppLauncherHeight] = useState(286); // pixels
+  const [queuePopoverHeight, setQueuePopoverHeight] = useState(80);
+  const [queuePopoverBottomOffset, setQueuePopoverBottomOffset] = useState(16);
+  const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
+
 
   // YouTube Music State
   const [youtubeHomeData, setYoutubeHomeData] = useState<{[key: string]: MediaItem[]}>({});
@@ -1615,6 +1619,9 @@ function AppContent() {
           nightPlayerButtonColor={nightPlayerButtonColor}
           favoriteStationUUIDs={favoriteStationUUIDs}
           onToggleFavorite={handleToggleFavorite}
+          queuePopoverHeight={queuePopoverHeight}
+          queuePopoverBottomOffset={queuePopoverBottomOffset}
+          queuePopoverScale={queuePopoverScale}
         />
         
         <AppLauncher
@@ -1901,6 +1908,12 @@ function AppContent() {
         setDarkPlayerBg={setDarkPlayerBg}
         darkNavigateInputBg={darkNavigateInputBg}
         setDarkNavigateInputBg={setDarkNavigateInputBg}
+        queuePopoverHeight={queuePopoverHeight}
+        setQueuePopoverHeight={setQueuePopoverHeight}
+        queuePopoverBottomOffset={queuePopoverBottomOffset}
+        setQueuePopoverBottomOffset={setQueuePopoverBottomOffset}
+        queuePopoverScale={queuePopoverScale}
+        setQueuePopoverScale={setQueuePopoverScale}
       />}
     </div>
   );

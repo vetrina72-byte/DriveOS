@@ -140,6 +140,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (refreshInFlight.current) {
         return refreshInFlight.current;
       }
+      isInitialLoadOrLogin.current = false; // This is a token refresh, not a login/reload
       const promise = (async () => {
         console.log("Attempting silent token refresh...");
         try {
@@ -261,6 +262,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         isInitialLoadOrLogin.current = true; // Flag for autoplay logic
+        restorePlaybackAttempted.current = false;
         setState(s => ({ ...s, isLoading: true, error: null }));
     
         if (authError) {
@@ -479,19 +481,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     setNowPlaying(s => ({ ...s, isLoading: true, source: 'spotify' }));
 
                     try {
+                        // Check for an active session on another device
                         const response = await apiClient.get('/me/player').catch(e => {
-                            if (e.response?.status === 204) return { status: 204 };
+                            if (e.response?.status === 204) return { status: 204 }; // Handle 204 No Content gracefully
                             throw e;
                         });
                         
                         if (response.status === 200 && response.data?.item) {
+                            // Active session found, transfer it and ensure it's playing
                             console.log("[AuthContext] Active session found. Transferring playback with play=true.");
                             await apiClient.put('/me/player', {
                                 device_ids: [device_id],
-                                play: true,
+                                play: true, // Force play on transfer
                             });
                         } else {
-                            console.log("[AuthContext] No active session. Forcing restore from localStorage.");
+                            // No active session, restore from localStorage
+                            console.log("[AuthContext] No active session. Attempting to restore from localStorage.");
                             const lastContextUri = localStorage.getItem('last_context_uri');
                             const lastTrackUri = localStorage.getItem('last_track_uri');
                             const lastProgressMs = parseInt(localStorage.getItem('last_progress_ms') || '0', 10);
@@ -505,23 +510,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                             }
                             
                             if (playBody.context_uri || playBody.uris) {
-                                console.log("[AuthContext] Forcing resume of last session from localStorage.");
+                                console.log("[AuthContext] Found last session in localStorage. Resuming playback.");
                                 await apiClient.put(`/me/player/play?device_id=${device_id}`, playBody);
                             } else {
+                                // Nothing to restore, just make this device available
                                 console.log("[AuthContext] No last session in localStorage. Activating device without playing.");
                                 await apiClient.put('/me/player', { device_ids: [device_id], play: false });
                             }
                         }
                     } catch (err: any) {
-                        console.error("[AuthContext] Error during session sync:", err.response?.data || err.message);
+                        console.error("[AuthContext] Error during autoplay/session sync:", err.response?.data || err.message);
+                        if (err.response?.data?.error?.reason === 'NotAllowed') {
+                            setAutoplayBlocked(true);
+                        }
                         setNowPlaying(s => ({ ...s, isLoading: false }));
                     }
 
+                    // Hide loader after a timeout in case state update is slow
                     setTimeout(() => {
                         setNowPlaying(s => s.isLoading ? { ...s, isLoading: false } : s);
                     }, 3000);
 
                 } else {
+                    // This is a token refresh, not an initial load.
                     console.log("[AuthContext] Token refresh: Just activating device, preserving playback state.");
                     try {
                         await apiClient.put('/me/player', {

@@ -31,6 +31,9 @@ interface MusicPlayerProps {
     activeApp: string | null;
     favoriteStationUUIDs: string[];
     onToggleFavorite: (station: RadioStation) => void;
+    queuePopoverHeight: number;
+    queuePopoverBottomOffset: number;
+    queuePopoverScale: number;
 }
 
 /**
@@ -244,7 +247,7 @@ const YouTubeProgressBar = ({
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { isNight: boolean, nextTrack: { name: string, description: string, imageUrl: string } | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean }) => {
+const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height, scale }: { isNight: boolean, nextTrack: { name: string, description: string, imageUrl: string } | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean, height: number, scale: number }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
     return ReactDOM.createPortal(
@@ -253,23 +256,27 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing }: { is
             style={{
                 bottom: `${position.bottom}px`,
                 left: `${position.left}px`,
-                transform: position.transform,
-                backgroundColor: 'var(--player-bg)'
+                transform: `${position.transform} scale(${scale})`,
+                transformOrigin: 'bottom center',
+                backgroundColor: 'var(--player-bg)',
+                height: `${height}px`,
             }}
-            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
         >
-            <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
-            {nextTrack ? (
-                <div className="flex items-center gap-3 min-w-0">
-                    <img src={nextTrack.imageUrl} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
-                    <div className="overflow-hidden">
-                        <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.name}</p>
-                        <p className="text-xs truncate" style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.description}</p>
+            <p className="text-xs font-bold mb-2 flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
+            <div className="flex-grow flex items-center">
+                {nextTrack ? (
+                    <div className="flex items-center gap-3 min-w-0 w-full">
+                        <img src={nextTrack.imageUrl} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
+                        <div className="overflow-hidden">
+                            <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.name}</p>
+                            <p className="text-xs truncate" style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.description}</p>
+                        </div>
                     </div>
-                </div>
-            ) : (
-                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Nessuna canzone in coda.</p>
-            )}
+                ) : (
+                    <p className="text-sm w-full text-center" style={{ color: 'var(--text-secondary)' }}>Nessuna canzone in coda.</p>
+                )}
+            </div>
         </div>,
         document.getElementById('scaled-portal-root')!
     );
@@ -290,6 +297,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     activeApp,
     favoriteStationUUIDs,
     onToggleFavorite,
+    queuePopoverHeight,
+    queuePopoverBottomOffset,
+    queuePopoverScale,
 }) => {
   const { 
       isAuthenticated, 
@@ -496,7 +506,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const calculatePosition = () => {
             const playerRect = playerEl.getBoundingClientRect();
             setPopoverPosition({
-                bottom: window.innerHeight - playerRect.top + 16,
+                bottom: window.innerHeight - playerRect.top + queuePopoverBottomOffset,
                 left: playerRect.left + playerRect.width / 2,
                 transform: 'translateX(-50%)',
             });
@@ -514,7 +524,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             cancelAnimationFrame(animationFrameId);
             window.removeEventListener('resize', calculatePosition);
         };
-    }, [visibleQueue]);
+    }, [visibleQueue, queuePopoverBottomOffset]);
 
     const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
@@ -823,6 +833,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <button onClick={handleToggleShuffle} className={`transition`} style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}>
                                 <PiShuffleBold className="w-5 h-5" />
                             </button>
+                             {(nowPlaying.source === 'spotify' && nowPlaying.isLoading) && (
+                                <div className={`w-5 h-5 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} />
+                            )}
                             <button onClick={handleToggleRepeat} className={`transition`} style={{ color: playerState.repeat_mode !== 0 ? buttonActiveColor : inactiveButtonColor }}>
                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5"/> : <PiRepeatBold className="w-5 h-5" />}
                             </button>
@@ -932,6 +945,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     position={popoverPosition}
                     isClosing={isQueueClosing}
                     onClose={() => handleToggleQueue(visibleQueue!)}
+                    height={queuePopoverHeight}
+                    scale={queuePopoverScale}
                 />
             )}
             <div style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none', opacity: 0 }}>
