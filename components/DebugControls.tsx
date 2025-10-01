@@ -148,6 +148,10 @@ interface DebugControlsProps {
   setQueuePopoverBottomOffset: (offset: number) => void;
   queuePopoverScale: number;
   setQueuePopoverScale: (scale: number) => void;
+  spinnerSize: number;
+  setSpinnerSize: (size: number) => void;
+  spinnerShuffleGap: number;
+  setSpinnerShuffleGap: (gap: number) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -325,6 +329,10 @@ export default function DebugControls({
   setQueuePopoverBottomOffset,
   queuePopoverScale,
   setQueuePopoverScale,
+  spinnerSize,
+  setSpinnerSize,
+  spinnerShuffleGap,
+  setSpinnerShuffleGap,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -406,6 +414,8 @@ export default function DebugControls({
     setQueuePopoverHeight(80);
     setQueuePopoverBottomOffset(16);
     setQueuePopoverScale(1.0);
+    setSpinnerSize(16);
+    setSpinnerShuffleGap(6);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1041,6 +1051,14 @@ export default function DebugControls({
             <div className="mt-2">
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="player-spinner-size">Spinner Size: {spinnerSize}px</label>
+              <input id="player-spinner-size" type="range" min="8" max="32" value={spinnerSize} onChange={(e) => setSpinnerSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+              <label htmlFor="player-spinner-gap">Spinner/Shuffle Gap: {spinnerShuffleGap}px</label>
+              <input id="player-spinner-gap" type="range" min="0" max="24" value={spinnerShuffleGap} onChange={(e) => setSpinnerShuffleGap(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
         </div>
 

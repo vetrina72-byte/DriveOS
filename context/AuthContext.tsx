@@ -432,6 +432,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const isPlayerReady = !!deviceId;
     
+    // Main SDK initialization effect
     useEffect(() => {
         if (!state.accessToken) {
             if (playerRef.current) {
@@ -594,7 +595,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 playerRef.current = null;
             }
         }
-    }, [state.accessToken, state.volume, logout, setVolume, _setPlayerState, silentRefreshToken]);
+    }, [state.accessToken, logout, setVolume, _setPlayerState, silentRefreshToken]);
+
+    // Debounced effect for setting volume
+    const volumeDebounceTimeout = useRef<number | null>(null);
+    useEffect(() => {
+        if (volumeDebounceTimeout.current) {
+            clearTimeout(volumeDebounceTimeout.current);
+        }
+
+        volumeDebounceTimeout.current = window.setTimeout(() => {
+            if (isPlayerReady && playerRef.current) {
+                playerRef.current.getVolume().then(currentSdkVolume => {
+                    if (currentSdkVolume !== null && Math.abs(currentSdkVolume - state.volume) > 0.01) {
+                        playerRef.current?.setVolume(state.volume).catch(err => {
+                            console.warn("Failed to set volume on Spotify SDK. The device may be inactive.", err);
+                        });
+                    }
+                });
+            }
+        }, 300);
+
+        return () => {
+            if (volumeDebounceTimeout.current) {
+                clearTimeout(volumeDebounceTimeout.current);
+            }
+        };
+    }, [state.volume, isPlayerReady]);
+
 
     return (
     <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, playerRef, isAutoplayBlocked, unlockAutoplay }}>

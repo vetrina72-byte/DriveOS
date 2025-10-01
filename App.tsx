@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyApp from './components/SpotifyPlayer';
+// FIX: MusicPlayer is not a default export, so it must be imported using curly braces. Changed to a default export in the source file.
 import MusicPlayer from './components/MusicPlayer';
 import MapsContainer from './components/MapsContainer';
 import AppLauncher from './components/AppLauncher';
@@ -702,6 +703,8 @@ function AppContent() {
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
+  const [spinnerSize, setSpinnerSize] = useState(16);
+  const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
   const [volumeIconSize, setVolumeIconSize] = useState(30);
   const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
   const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-128);
@@ -1614,6 +1617,8 @@ function AppContent() {
           playerControlsSize={playerControlsSize}
           playerControlsGap={playerControlsGap}
           playerControlsVerticalPosition={playerControlsVerticalPosition}
+          spinnerSize={spinnerSize}
+          spinnerShuffleGap={spinnerShuffleGap}
           widgetBgColor={widgetBgColor}
           dayPlayerButtonColor={dayPlayerButtonColor}
           nightPlayerButtonColor={nightPlayerButtonColor}
@@ -1914,6 +1919,10 @@ function AppContent() {
         setQueuePopoverBottomOffset={setQueuePopoverBottomOffset}
         queuePopoverScale={queuePopoverScale}
         setQueuePopoverScale={setQueuePopoverScale}
+        spinnerSize={spinnerSize}
+        setSpinnerSize={setSpinnerSize}
+        spinnerShuffleGap={spinnerShuffleGap}
+        setSpinnerShuffleGap={setSpinnerShuffleGap}
       />}
     </div>
   );
