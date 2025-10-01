@@ -705,6 +705,7 @@ function AppContent() {
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
   const [spinnerSize, setSpinnerSize] = useState(16);
   const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
+  const [debugSpinner, setDebugSpinner] = useState(false);
   const [volumeIconSize, setVolumeIconSize] = useState(30);
   const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
   const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-128);
@@ -720,6 +721,8 @@ function AppContent() {
   const [queuePopoverHeight, setQueuePopoverHeight] = useState(80);
   const [queuePopoverBottomOffset, setQueuePopoverBottomOffset] = useState(16);
   const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
+  const [queuePopoverWidth, setQueuePopoverWidth] = useState(288);
+  const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(0);
 
 
   // YouTube Music State
@@ -1619,6 +1622,7 @@ function AppContent() {
           playerControlsVerticalPosition={playerControlsVerticalPosition}
           spinnerSize={spinnerSize}
           spinnerShuffleGap={spinnerShuffleGap}
+          debugSpinner={debugSpinner}
           widgetBgColor={widgetBgColor}
           dayPlayerButtonColor={dayPlayerButtonColor}
           nightPlayerButtonColor={nightPlayerButtonColor}
@@ -1627,6 +1631,8 @@ function AppContent() {
           queuePopoverHeight={queuePopoverHeight}
           queuePopoverBottomOffset={queuePopoverBottomOffset}
           queuePopoverScale={queuePopoverScale}
+          queuePopoverWidth={queuePopoverWidth}
+          queuePopoverOffsetX={queuePopoverOffsetX}
         />
         
         <AppLauncher
@@ -1919,10 +1925,16 @@ function AppContent() {
         setQueuePopoverBottomOffset={setQueuePopoverBottomOffset}
         queuePopoverScale={queuePopoverScale}
         setQueuePopoverScale={setQueuePopoverScale}
+        queuePopoverWidth={queuePopoverWidth}
+        setQueuePopoverWidth={setQueuePopoverWidth}
+        queuePopoverOffsetX={queuePopoverOffsetX}
+        setQueuePopoverOffsetX={setQueuePopoverOffsetX}
         spinnerSize={spinnerSize}
         setSpinnerSize={setSpinnerSize}
         spinnerShuffleGap={spinnerShuffleGap}
         setSpinnerShuffleGap={setSpinnerShuffleGap}
+        debugSpinner={debugSpinner}
+        setDebugSpinner={setDebugSpinner}
       />}
     </div>
   );

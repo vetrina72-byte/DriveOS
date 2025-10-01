@@ -312,25 +312,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const setVolume = useCallback((level: number) => {
         const newVolume = Math.max(0, Math.min(1, level));
-        setState(s => {
-            if (s.volume === newVolume) return s;
-            return {
-                ...s,
-                volume: newVolume,
-                isMuted: newVolume === 0,
-                ...(newVolume > 0 && { lastVolume: newVolume }),
-            };
-        });
+
+        // Direct call to Spotify SDK for real-time update
+        if (playerRef.current) {
+            playerRef.current.setVolume(newVolume).catch(err => {
+                console.warn("Failed to set volume on Spotify SDK. The device may be inactive.", err);
+            });
+        }
+    
+        setState(s => ({
+            ...s,
+            volume: newVolume,
+            isMuted: newVolume === 0,
+            ...(newVolume > 0 && { lastVolume: newVolume }),
+        }));
     }, []);
 
     const toggleMute = useCallback(() => {
         setState(s => {
             const newMuted = !s.isMuted;
             const newVolume = newMuted ? 0 : (s.lastVolume > 0 ? s.lastVolume : 0.5);
+            
+            // Also update the player SDK
+            if (playerRef.current) {
+                playerRef.current.setVolume(newVolume).catch(err => {
+                    console.warn("Failed to set volume on Spotify SDK (toggleMute).", err);
+                });
+            }
+
             return {
                 ...s,
                 volume: newVolume,
-                isMuted: newVolume === 0,
+                isMuted: newMuted,
             };
         });
     }, []);
@@ -596,33 +609,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
     }, [state.accessToken, logout, setVolume, _setPlayerState, silentRefreshToken]);
-
-    // Debounced effect for setting volume
-    const volumeDebounceTimeout = useRef<number | null>(null);
-    useEffect(() => {
-        if (volumeDebounceTimeout.current) {
-            clearTimeout(volumeDebounceTimeout.current);
-        }
-
-        volumeDebounceTimeout.current = window.setTimeout(() => {
-            if (isPlayerReady && playerRef.current) {
-                playerRef.current.getVolume().then(currentSdkVolume => {
-                    if (currentSdkVolume !== null && Math.abs(currentSdkVolume - state.volume) > 0.01) {
-                        playerRef.current?.setVolume(state.volume).catch(err => {
-                            console.warn("Failed to set volume on Spotify SDK. The device may be inactive.", err);
-                        });
-                    }
-                });
-            }
-        }, 300);
-
-        return () => {
-            if (volumeDebounceTimeout.current) {
-                clearTimeout(volumeDebounceTimeout.current);
-            }
-        };
-    }, [state.volume, isPlayerReady]);
-
 
     return (
     <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, setDeviceId: setDeviceIdState, refreshTrigger, _setPlayerState, setVolume, toggleMute, silentRefreshToken, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, playerRef, isAutoplayBlocked, unlockAutoplay }}>

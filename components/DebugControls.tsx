@@ -148,10 +148,16 @@ interface DebugControlsProps {
   setQueuePopoverBottomOffset: (offset: number) => void;
   queuePopoverScale: number;
   setQueuePopoverScale: (scale: number) => void;
+  queuePopoverWidth: number;
+  setQueuePopoverWidth: (width: number) => void;
+  queuePopoverOffsetX: number;
+  setQueuePopoverOffsetX: (offset: number) => void;
   spinnerSize: number;
   setSpinnerSize: (size: number) => void;
   spinnerShuffleGap: number;
   setSpinnerShuffleGap: (gap: number) => void;
+  debugSpinner: boolean;
+  setDebugSpinner: (debug: boolean) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -329,10 +335,16 @@ export default function DebugControls({
   setQueuePopoverBottomOffset,
   queuePopoverScale,
   setQueuePopoverScale,
+  queuePopoverWidth,
+  setQueuePopoverWidth,
+  queuePopoverOffsetX,
+  setQueuePopoverOffsetX,
   spinnerSize,
   setSpinnerSize,
   spinnerShuffleGap,
   setSpinnerShuffleGap,
+  debugSpinner,
+  setDebugSpinner,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -414,8 +426,11 @@ export default function DebugControls({
     setQueuePopoverHeight(80);
     setQueuePopoverBottomOffset(16);
     setQueuePopoverScale(1.0);
+    setQueuePopoverWidth(288);
+    setQueuePopoverOffsetX(0);
     setSpinnerSize(16);
     setSpinnerShuffleGap(6);
+    setDebugSpinner(false);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1052,6 +1067,10 @@ export default function DebugControls({
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
+            <div className="flex items-center justify-between mt-2">
+              <label htmlFor="debug-spinner-checkbox" className="font-medium text-zinc-300">Attiva rotella per debug</label>
+              <input id="debug-spinner-checkbox" type="checkbox" checked={debugSpinner} onChange={(e) => setDebugSpinner(e.target.checked)} className="form-checkbox h-5 w-5 bg-zinc-700 border-zinc-600 rounded text-blue-500 focus:ring-blue-500"/>
+            </div>
             <div className="mt-2">
               <label htmlFor="player-spinner-size">Spinner Size: {spinnerSize}px</label>
               <input id="player-spinner-size" type="range" min="8" max="32" value={spinnerSize} onChange={(e) => setSpinnerSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
@@ -1069,8 +1088,16 @@ export default function DebugControls({
                 <input id="q-pop-height" type="range" min="60" max="150" value={queuePopoverHeight} onChange={(e) => setQueuePopoverHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
+                <label htmlFor="q-pop-width">Width: {queuePopoverWidth}px</label>
+                <input id="q-pop-width" type="range" min="200" max="400" value={queuePopoverWidth} onChange={(e) => setQueuePopoverWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
                 <label htmlFor="q-pop-offset">Bottom Offset (Distance): {queuePopoverBottomOffset}px</label>
                 <input id="q-pop-offset" type="range" min="0" max="50" value={queuePopoverBottomOffset} onChange={(e) => setQueuePopoverBottomOffset(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+                <label htmlFor="q-pop-offset-x">Horizontal Offset: {queuePopoverOffsetX}px</label>
+                <input id="q-pop-offset-x" type="range" min="-200" max="200" value={queuePopoverOffsetX} onChange={(e) => setQueuePopoverOffsetX(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
                 <label htmlFor="q-pop-scale">Scale: {queuePopoverScale.toFixed(2)}</label>
