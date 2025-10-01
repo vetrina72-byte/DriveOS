@@ -704,7 +704,7 @@ function AppContent() {
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
   const [spinnerSize, setSpinnerSize] = useState(16);
-  const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
+  const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(24);
   const [debugSpinner, setDebugSpinner] = useState(false);
   const [volumeIconSize, setVolumeIconSize] = useState(30);
   const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
@@ -723,6 +723,7 @@ function AppContent() {
   const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
   const [queuePopoverWidth, setQueuePopoverWidth] = useState(288);
   const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(0);
+  const [showQueueOnTrackEnd, setShowQueueOnTrackEnd] = useState(false);
 
 
   // YouTube Music State
@@ -863,8 +864,8 @@ function AppContent() {
   const arrivalTimeoutRef = useRef<number | null>(null);
   const [tripInfo, setTripInfo] = useState<{ time: number, distance: number } | null>(null);
   const [throttledPosition, setThrottledPosition] = useState(currentPosition);
-  const [homeLocation, setHomeLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
-  const [workLocation, setWorkLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [homeLocation, setHomeLocation] = useState<{ lat: number, lng: number, name: string } | null>(null);
+  const [workLocation, setWorkLocation] = useState<{ lat: number, lng: number, name: string } | null>(null);
   const [favoriteLocations, setFavoriteLocations] = useState<{ lat: number, lng: number, name: string }[]>([]);
 
   // States for trip simulation
@@ -1633,6 +1634,7 @@ function AppContent() {
           queuePopoverScale={queuePopoverScale}
           queuePopoverWidth={queuePopoverWidth}
           queuePopoverOffsetX={queuePopoverOffsetX}
+          showQueueOnTrackEnd={showQueueOnTrackEnd}
         />
         
         <AppLauncher
@@ -1935,6 +1937,8 @@ function AppContent() {
         setSpinnerShuffleGap={setSpinnerShuffleGap}
         debugSpinner={debugSpinner}
         setDebugSpinner={setDebugSpinner}
+        showQueueOnTrackEnd={showQueueOnTrackEnd}
+        setShowQueueOnTrackEnd={setShowQueueOnTrackEnd}
       />}
     </div>
   );
