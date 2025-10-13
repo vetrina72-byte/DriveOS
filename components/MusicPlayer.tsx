@@ -4,7 +4,7 @@ import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiPlay
+    FiMusic, FiAlertTriangle, FiHeart, FiRadio
 } from 'react-icons/fi';
 import { 
     IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
@@ -36,10 +36,6 @@ interface MusicPlayerProps {
     queuePopoverHeight: number;
     queuePopoverBottomOffset: number;
     queuePopoverScale: number;
-    queuePopoverWidth: number;
-    queuePopoverOffsetX: number;
-    debugSpinner: boolean;
-    showQueueOnTrackEnd: boolean;
 }
 
 /**
@@ -253,7 +249,7 @@ const YouTubeProgressBar = ({
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height, scale, width }: { isNight: boolean, nextTrack: { name: string, description: string, imageUrl: string } | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean, height: number, scale: number, width: number }) => {
+const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height, scale }: { isNight: boolean, nextTrack: { name: string, description: string, imageUrl: string } | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean, height: number, scale: number }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
     return ReactDOM.createPortal(
@@ -266,9 +262,8 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
                 transformOrigin: 'bottom center',
                 backgroundColor: 'var(--player-bg)',
                 height: `${height}px`,
-                width: `${width}px`,
             }}
-            className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
+            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
         >
             <p className="text-xs font-bold mb-2 flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
             <div className="flex-grow flex items-center">
@@ -289,9 +284,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
     );
 };
 
-const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap }: { 
-    showSpinner: boolean; isNight: boolean; playerControlsSize: number; playerControlsGap: number; playerControlsVerticalPosition: number; dayPlayerButtonColor: string; nightPlayerButtonColor: string; spinnerSize: number; spinnerShuffleGap: number; 
-}) => {
+const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor'> & { showSpinner: boolean }) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
@@ -312,12 +305,12 @@ const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerCo
                 {/* Shuffle/Repeat etc. */}
                 <div className="flex items-center gap-5">
                      <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}>
-                        {showSpinner && (
-                            <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
-                        )}
                         <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
+                        {showSpinner && (
+                            <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
+                        )}
                     </div>
                     <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
                         <PiRepeatBold className="w-5 h-5" />
@@ -355,7 +348,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     playerControlsVerticalPosition,
     spinnerSize,
     spinnerShuffleGap,
-    debugSpinner,
     widgetBgColor,
     dayPlayerButtonColor,
     nightPlayerButtonColor,
@@ -366,9 +358,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     queuePopoverHeight,
     queuePopoverBottomOffset,
     queuePopoverScale,
-    queuePopoverWidth,
-    queuePopoverOffsetX,
-    showQueueOnTrackEnd,
 }) => {
   const { 
       isAuthenticated, 
@@ -405,54 +394,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
 
-    const popoverShownForTrack = useRef<string | null>(null);
-    const prevTrackUriForPopover = useRef<string | undefined>(undefined);
 
     const isPlayerActive = playerRef.current && playerState && playerState.track_window.current_track;
-
-    // Auto-show queue popover near end of track
-    useEffect(() => {
-        const interval = setInterval(() => {
-            const currentSpotifyState = nowPlaying.spotifyState;
-            const isSpotifyActive = playerRef.current && currentSpotifyState && currentSpotifyState.track_window.current_track;
-
-            if (!showQueueOnTrackEnd || !currentSpotifyState || currentSpotifyState.paused || !isSpotifyActive) {
-                return;
-            }
-
-            const { duration, position, track_window } = currentSpotifyState;
-            const currentTrack = track_window.current_track;
-            const hasNextTrack = track_window.next_tracks.length > 0;
-            
-            if (!currentTrack) return;
-            
-            // Reset trigger if track has changed
-            if (popoverShownForTrack.current !== currentTrack.uri) {
-                popoverShownForTrack.current = null;
-            }
-
-            const remainingTime = duration - position;
-
-            // Show condition: less than 15s remaining, has a next track, and not already shown for this track
-            if (remainingTime < 15000 && remainingTime > 0 && hasNextTrack && popoverShownForTrack.current !== currentTrack.uri) {
-                setVisibleQueue('spotify');
-                popoverShownForTrack.current = currentTrack.uri;
-            }
-
-        }, 1000); // Check every second
-
-        return () => clearInterval(interval);
-    }, [nowPlaying.spotifyState, showQueueOnTrackEnd, playerRef]);
-    
-    // Hide popover on track change
-    useEffect(() => {
-        const currentTrackUri = nowPlaying.spotifyState?.track_window?.current_track?.uri;
-        if (prevTrackUriForPopover.current && prevTrackUriForPopover.current !== currentTrackUri) {
-            setVisibleQueue(null);
-        }
-        prevTrackUriForPopover.current = currentTrackUri;
-    }, [nowPlaying.spotifyState?.track_window?.current_track?.uri]);
-
 
     const handleToggleQueue = (source: 'spotify' | 'youtube') => {
         if (visibleQueue === source) {
@@ -623,7 +566,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             setPopoverPosition({
                 bottom: window.innerHeight - playerRect.top + queuePopoverBottomOffset,
                 left: playerRect.left + playerRect.width / 2,
-                transform: `translateX(calc(-50% + ${queuePopoverOffsetX}px))`,
+                transform: 'translateX(-50%)',
             });
         };
         
@@ -639,7 +582,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             cancelAnimationFrame(animationFrameId);
             window.removeEventListener('resize', calculatePosition);
         };
-    }, [visibleQueue, queuePopoverBottomOffset, queuePopoverOffsetX]);
+    }, [visibleQueue, queuePopoverBottomOffset]);
+
+    const prevTrackUri = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        const currentTrackUri = playerState?.track_window?.current_track?.uri;
+        if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
+            setVisibleQueue(null);
+        }
+        prevTrackUri.current = currentTrackUri;
+    }, [playerState?.track_window?.current_track?.uri]);
+
 
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -655,23 +608,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
         checkIsLiked();
     }, [playerState?.track_window?.current_track?.id]);
-
-    const handleToggleLike = async () => {
-        const trackId = playerState?.track_window?.current_track?.id;
-        if (!trackId) return;
-        const originalIsLiked = isLiked;
-        setIsLiked(!originalIsLiked);
-        try {
-            if (originalIsLiked) {
-                await apiClient.delete(`/me/tracks`, { data: { ids: [trackId] } });
-            } else {
-                await apiClient.put(`/me/tracks`, { ids: [trackId] });
-            }
-        } catch (e) {
-            console.error("Failed to toggle like status", e);
-            setIsLiked(originalIsLiked); // Revert on error
-        }
-    };
 
     const handleYoutubeReady = (event: { target: any }) => {
         youtubePlayerRef.current = event.target;
@@ -742,240 +678,335 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     };
 
-    const handleToggleShuffle = () => playerRef.current?.setShuffle(!playerState?.shuffle);
-    const handleToggleRepeat = () => playerRef.current?.setRepeatMode((playerState?.repeat_mode + 1) % 3);
-    
-    const handleYouTubeSeek = (position: number) => {
-        setYouTubeProgress(prev => ({ ...prev, position }));
-        if (youtubePlayerRef.current) {
-            youtubePlayerRef.current.seekTo(position);
+    const handleToggleLike = async () => {
+        const trackId = playerState?.track_window?.current_track?.id;
+        if (!trackId) return;
+        const originalIsLiked = isLiked;
+        setIsLiked(!originalIsLiked);
+        try {
+            if (originalIsLiked) {
+                await apiClient.delete(`/me/tracks`, { data: { ids: [trackId] } });
+            } else {
+                await apiClient.put(`/me/tracks`, { ids: [trackId] });
+            }
+        } catch (e) {
+            console.error("Failed to update like status", e);
+            setIsLiked(originalIsLiked);
         }
     };
 
-    const currentTrack: SpotifyTrack | null = playerState?.track_window.current_track ?? null;
-    const isReady = !!(isAuthenticated && playerRef.current);
+    const handleToggleShuffle = () => {
+        if (!playerState || !playerRef.current) return;
+        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
+    };
 
-    const isShowingPlayer = (source === 'spotify' && isPlayerActive) || source === 'radio' || source === 'youtube';
-    const showSpinner = nowPlaying.isLoading || debugSpinner;
-
-    if (!isShowingPlayer) {
-        return (
-             <div 
-                ref={playerContainerRef}
-                className="music-player backdrop-blur-md border rounded-xl shadow-lg transition-all"
-                style={{
-                    width: `${isAnyAppOpen ? dockedConfig.width : floatingConfig.width}px`,
-                    height: `${isAnyAppOpen ? dockedConfig.height : floatingConfig.height}px`,
-                    bottom: isAnyAppOpen ? '20px' : `${floatingConfig.bottom}px`,
-                    left: isAnyAppOpen ? `${dockedConfig.left}px` : '50%',
-                    transform: isAnyAppOpen ? 'none' : `translateX(calc(-50% - ${floatingConfig.otherWidgetWidth / 2 + 8}px))`,
-                    backgroundColor: !isNight ? widgetBgColor : 'var(--player-bg)',
-                    borderColor: isNight ? 'rgba(55, 55, 55, 0.8)' : 'rgba(200, 200, 200, 0.5)',
-                }}
-            >
-                <DisabledPlayerView
-                    showSpinner={showSpinner}
-                    isNight={isNight}
-                    playerControlsSize={playerControlsSize}
-                    playerControlsGap={playerControlsGap}
-                    playerControlsVerticalPosition={playerControlsVerticalPosition}
-                    spinnerSize={spinnerSize}
-                    spinnerShuffleGap={spinnerShuffleGap}
-                    dayPlayerButtonColor={dayPlayerButtonColor}
-                    nightPlayerButtonColor={nightPlayerButtonColor}
-                />
-            </div>
-        );
-    }
-    
-    const PlayPauseIcon = (source === 'spotify' && playerState?.paused === false) ||
-                         (source === 'radio' && isRadioPlaying) ||
-                         (source === 'youtube' && isYouTubePlaying)
-                         ? IoPauseSharp : IoPlaySharp;
-    
-    const isStationFavorite = favoriteStationUUIDs.includes(radioStation?.stationuuid ?? '');
-
-    const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-    const inactiveButtonColor = isNight ? '#a0a0a0' : '#808080';
-    const activeShuffleRepeatColor = isNight ? '#1DB954' : '#188b43';
-
-    const getRepeatIcon = () => {
-        if(playerState?.repeat_mode === 2) return <PiRepeatOnceBold className="w-5 h-5" />;
-        return <PiRepeatBold className="w-5 h-5" />;
+    const handleToggleRepeat = () => {
+        if (!playerState || !playerRef.current) return;
+        const nextState = (playerState.repeat_mode + 1) % 3;
+        const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
+        apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
     
+    const handleSeekYouTube = useCallback((position: number) => {
+        if (youtubePlayerRef.current) {
+            youtubePlayerRef.current.seekTo(position, true);
+        }
+    }, []);
+    
+    const handleYouTubeSeekStart = useCallback(() => {
+        setIsYouTubeSeeking(true);
+    }, []);
+    
+    const handleYouTubeSeekEnd = useCallback(() => {
+        setIsYouTubeSeeking(false);
+        if (youtubePlayerRef.current) {
+            const position = youtubePlayerRef.current.getCurrentTime();
+            const duration = youtubePlayerRef.current.getDuration();
+            setYouTubeProgress({ position, duration });
+        }
+    }, []);
+
+    const playerStyle: React.CSSProperties = useMemo(() => {
+        let baseStyle: React.CSSProperties;
+        if (isAnyAppOpen) {
+            baseStyle = {
+                width: `${dockedConfig.width}px`,
+                height: `${dockedConfig.height}px`,
+                bottom: `${dockedConfig.bottom}px`,
+                left: `${dockedConfig.left}px`,
+                transform: 'translateX(0)',
+            };
+        } else {
+            const { width, bottom, height, otherWidgetWidth } = floatingConfig;
+            baseStyle = {
+                width: `${width}px`,
+                height: `${height}px`,
+                bottom: `${bottom}px`,
+                left: '50%',
+                transform: `translateX(calc(-50% - (${otherWidgetWidth}px / 2) - 8px))`,
+            };
+        }
+        baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
+        baseStyle.transition = 'all 309ms ease-in-out';
+        return baseStyle;
+    }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
+
+    const themeClasses = isNight 
+        ? 'border-zinc-700/80' 
+        : 'border-zinc-300';
+    
+    const AutoplayUnlockOverlay = () => (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 rounded-xl">
+            <p className="text-white font-semibold text-center">L'autoplay è bloccato dal browser.</p>
+            <button
+                onClick={unlockAutoplay}
+                className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-3 px-6 rounded-full text-base transition-all transform hover:scale-105"
+            >
+                Riprendi musica
+            </button>
+        </div>
+    );
+    
+    const renderPlayerContent = () => {
+        const showSpinner = nowPlaying.isLoading ?? false;
+
+        if (source === 'youtube' && youtubeTrack) {
+            const { title, channelTitle, thumbnail } = youtubeTrack;
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
+
+            return (
+                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <img src={thumbnail} alt={title} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 shadow-lg" />
+                            <div className="overflow-hidden flex-grow">
+                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{title}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <YouTubeProgressBar 
+                        progress={youTubeProgress} 
+                        isSeeking={isYouTubeSeeking}
+                        onSeek={handleSeekYouTube}
+                        onSeekStart={handleYouTubeSeekStart}
+                        onSeekEnd={handleYouTubeSeekEnd}
+                    />
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                        <div className="flex-1 flex justify-start"></div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap * 0.8}px` }}>
+                            <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
+                                {isYouTubePlaying
+                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                }
+                            </button>
+                            <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                        </div>
+                        <div className="flex-1 flex justify-end items-center">
+                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                                <BsList style={{ width: '20px', height: '20px'}} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (source === 'radio' && radioStation) {
+            const { name, favicon, tags } = radioStation;
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const isFavorite = favoriteStationUUIDs.includes(radioStation.stationuuid);
+            
+            return (
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            {favicon ? 
+                                <img src={favicon} alt={name} className="w-12 h-12 rounded-lg object-contain bg-zinc-800 flex-shrink-0 shadow-lg" /> 
+                                : 
+                                <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                    <FiRadio className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                                </div>
+                            }
+                            <div className="overflow-hidden flex-grow">
+                                <div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                        <div className="flex-1 flex justify-start"></div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                            <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
+                                {isRadioPlaying
+                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                }
+                            </button>
+                            <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} />
+                            </button>
+                        </div>
+                        <div className="flex-1 flex justify-end items-center"></div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (source === 'spotify' && isPlayerActive) {
+            const { name: trackName, album, artists } = playerState.track_window.current_track!;
+            const imageUrl = album.images[0]?.url;
+            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
+            const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
+            
+            return (
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                            {imageUrl && (
+                                <div className="flex-shrink-0">
+                                    <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" />
+                                </div>
+                            )}
+                            <div className="overflow-hidden flex-grow">
+                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div>
+                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-5">
+                            <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}>
+                                <button
+                                    onClick={handleToggleShuffle}
+                                    className="transition"
+                                    style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}
+                                    aria-label={playerState.shuffle ? "Disable shuffle" : "Enable shuffle"}
+                                >
+                                    <PiShuffleBold className="w-5 h-5" />
+                                </button>
+                                {showSpinner && (
+                                    <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
+                                )}
+                            </div>
+                            <button
+                                onClick={handleToggleRepeat}
+                                className="transition"
+                                style={{ color: playerState.repeat_mode > 0 ? buttonActiveColor : inactiveButtonColor }}
+                                aria-label={`Set repeat mode. Current: ${playerState.repeat_mode === 0 ? 'off' : playerState.repeat_mode === 1 ? 'context' : 'track'}`}
+                            >
+                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5" /> : <PiRepeatBold className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <SpotifyProgressBar player={playerRef.current} state={playerState} isLoading={showSpinner} isNight={isNight} />
+                    
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                         <div className="flex-1 flex justify-start"></div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                            <button onClick={handlePrevTrack} className="transition" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
+                                {playerState.paused 
+                                    ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
+                                    : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                }
+                            </button>
+                            <button onClick={handleNextTrack} className="transition" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button
+                                onClick={handleToggleLike}
+                                className="transition"
+                                style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}
+                            >
+                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
+                            </button>
+                        </div>
+                         <div className="flex-1 flex justify-end items-center">
+                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: visibleQueue === 'spotify' ? buttonActiveColor : inactiveButtonColor }}>
+                                <BsList style={{ width: '20px', height: '20px'}} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // Default / Initial State
+        return <DisabledPlayerView {...{ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap }} />;
+    };
+
     const nextSpotifyTrack = playerState?.track_window.next_tracks[0];
-    const nextYouTubeTrack = youtubePlaylist && youtubeTrack
-        ? youtubePlaylist[youtubePlaylist.findIndex(t => t.videoId === youtubeTrack.videoId) + 1]
+    const nextYouTubeTrack = nowPlaying.youtubePlaylist && nowPlaying.youtubeTrack
+        ? nowPlaying.youtubePlaylist[nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId) + 1]
         : null;
 
-    let nextTrackInfo = null;
-    if (visibleQueue === 'spotify' && nextSpotifyTrack) {
-        nextTrackInfo = {
-            name: nextSpotifyTrack.name,
-            description: nextSpotifyTrack.artists.map(a => a.name).join(', '),
-            imageUrl: nextSpotifyTrack.album.images[0].url,
-        };
-    } else if (visibleQueue === 'youtube' && nextYouTubeTrack) {
-        nextTrackInfo = {
-            name: nextYouTubeTrack.title,
-            description: nextYouTubeTrack.channelTitle,
-            imageUrl: nextYouTubeTrack.thumbnail,
-        };
-    }
+    const nextTrackDetails = useMemo(() => {
+        if (visibleQueue === 'spotify' && nextSpotifyTrack) {
+            return {
+                name: nextSpotifyTrack.name,
+                description: nextSpotifyTrack.artists.map(a => a.name).join(', '),
+                imageUrl: nextSpotifyTrack.album.images[0]?.url,
+            };
+        }
+        if (visibleQueue === 'youtube' && nextYouTubeTrack) {
+            return {
+                name: nextYouTubeTrack.title,
+                description: nextYouTubeTrack.channelTitle,
+                imageUrl: nextYouTubeTrack.thumbnail,
+            };
+        }
+        return null;
+    }, [visibleQueue, nextSpotifyTrack, nextYouTubeTrack]);
 
     return (
         <>
-            <audio ref={audioRef} className="hidden" />
-            <div className="hidden">
-                 {currentYouTubeVideoId && (
-                     <YouTube
+            <div 
+                ref={playerContainerRef}
+                className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg ${themeClasses}`}
+                style={playerStyle}
+            >
+                {isAutoplayBlocked && <AutoplayUnlockOverlay />}
+                {renderPlayerContent()}
+                <audio ref={audioRef} playsInline crossOrigin="anonymous" />
+                <div style={{ display: 'none' }}>
+                    <YouTube
                         videoId={currentYouTubeVideoId}
                         opts={{
-                            height: '0',
-                            width: '0',
-                            playerVars: { autoplay: 1, controls: 0 },
+                            height: '195',
+                            width: '320',
+                            playerVars: {
+                                autoplay: 1,
+                                controls: 0,
+                                disablekb: 1,
+                                modestbranding: 1,
+                                playsinline: 1,
+                            },
                         }}
                         onReady={handleYoutubeReady}
                         onStateChange={handleYoutubeStateChange}
                         onEnd={handleYouTubeEnd}
                     />
-                 )}
-            </div>
-            
-            <div 
-                ref={playerContainerRef}
-                className="music-player backdrop-blur-md border rounded-xl shadow-lg transition-all"
-                style={{
-                    width: `${isAnyAppOpen ? dockedConfig.width : floatingConfig.width}px`,
-                    height: `${isAnyAppOpen ? dockedConfig.height : floatingConfig.height}px`,
-                    bottom: isAnyAppOpen ? '20px' : `${floatingConfig.bottom}px`,
-                    left: isAnyAppOpen ? `${dockedConfig.left}px` : '50%',
-                    transform: isAnyAppOpen ? 'none' : `translateX(calc(-50% - ${floatingConfig.otherWidgetWidth / 2 + 8}px))`,
-                    backgroundColor: !isNight ? widgetBgColor : 'var(--player-bg)',
-                    borderColor: isNight ? 'rgba(55, 55, 55, 0.8)' : 'rgba(200, 200, 200, 0.5)',
-                }}
-            >
-                {/* Autoplay Unlocker */}
-                {isAutoplayBlocked && (
-                     <div 
-                        className="absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center gap-4 text-white text-center rounded-xl p-4"
-                        onClick={unlockAutoplay}
-                     >
-                        <FiPlay className="w-12 h-12" />
-                        <p className="font-semibold">Clicca per attivare la riproduzione</p>
-                    </div>
-                )}
-                
-                {/* Main Content */}
-                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
-                    {/* Top part: Track info & extra controls */}
-                    <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 min-w-0">
-                            {/* Album art */}
-                            <div className="w-12 h-12 rounded-lg shadow-lg flex-shrink-0">
-                                {source === 'spotify' && currentTrack && <img src={currentTrack.album.images[0].url} alt={currentTrack.album.name} className="w-full h-full rounded-lg object-cover" />}
-                                {source === 'radio' && radioStation && (
-                                    radioStation.favicon ?
-                                    <img src={radioStation.favicon} alt={radioStation.name} className={`w-full h-full rounded-lg object-contain ${isNight ? 'bg-zinc-800' : 'bg-white'} p-1`} />
-                                    : <div className={`w-full h-full rounded-lg flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}><FiRadio className="w-7 h-7 text-zinc-500"/></div>
-                                )}
-                                {source === 'youtube' && youtubeTrack && <img src={youtubeTrack.thumbnail} alt={youtubeTrack.title} className="w-full h-full rounded-lg object-cover" />}
-                            </div>
-                            {/* Track details */}
-                             <div className="overflow-hidden flex-grow">
-                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)'}}>{
-                                    (source === 'spotify' && currentTrack?.name) ||
-                                    (source === 'radio' && radioStation?.name) ||
-                                    (source === 'youtube' && youtubeTrack?.title) ||
-                                    'Nessun brano in riproduzione'
-                                }</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{
-                                    (source === 'spotify' && currentTrack?.artists.map(a => a.name).join(', ')) ||
-                                    (source === 'radio' && 'Stazione Radio') ||
-                                    (source === 'youtube' && youtubeTrack?.channelTitle) ||
-                                    'Scegli qualcosa da ascoltare'
-                                }</div>
-                            </div>
-                        </div>
-                        {/* Shuffle, Repeat etc */}
-                         <div className="flex items-center gap-5">
-                            {source === 'spotify' && (
-                                <>
-                                    <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}>
-                                        {showSpinner && (
-                                            <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
-                                        )}
-                                        <button onClick={handleToggleShuffle} disabled={!isReady} className="transition" style={{ color: playerState?.shuffle ? activeShuffleRepeatColor : inactiveButtonColor }}>
-                                            <PiShuffleBold className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                    <button onClick={handleToggleRepeat} disabled={!isReady} className="transition" style={{ color: playerState?.repeat_mode !== 0 ? activeShuffleRepeatColor : inactiveButtonColor }}>
-                                        {getRepeatIcon()}
-                                    </button>
-                                </>
-                            )}
-                            {source === 'radio' && radioStation && (
-                                 <button onClick={() => onToggleFavorite(radioStation)} className="transition">
-                                    <FiHeart className={`w-5 h-5 ${isStationFavorite ? 'fill-current text-red-500' : ''}`} style={{ color: isStationFavorite ? '' : inactiveButtonColor }} />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="w-full">
-                        {source === 'spotify' && playerState && <SpotifyProgressBar player={playerRef.current} state={playerState} isLoading={nowPlaying.isLoading ?? false} isNight={isNight}/>}
-                        {source === 'radio' && <div className="w-full h-1.5 rounded-full bg-green-500/50" />}
-                        {source === 'youtube' && <YouTubeProgressBar progress={youTubeProgress} isSeeking={isYouTubeSeeking} onSeek={handleYouTubeSeek} onSeekStart={() => setIsYouTubeSeeking(true)} onSeekEnd={() => setIsYouTubeSeeking(false)} />}
-                    </div>
-                    
-                    {/* Main Controls */}
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                        {/* Placeholder for spacing */}
-                        <div className="flex-1 flex justify-start"></div>
-
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button onClick={handlePrevTrack} disabled={!isReady} className="disabled:opacity-40 transition" style={{ color: buttonColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={handleTogglePlay} disabled={!isReady} className="disabled:opacity-40 transition" style={{ color: buttonColor }}><PlayPauseIcon style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
-                            <button onClick={handleNextTrack} disabled={!isReady} className="disabled:opacity-40 transition" style={{ color: buttonColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            
-                            {source === 'spotify' && (
-                                <button onClick={handleToggleLike} disabled={!isReady || !currentTrack} className="disabled:opacity-40 transition" style={{ color: isLiked ? activeShuffleRepeatColor : buttonColor }}>
-                                    <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={isLiked ? 'fill-current' : ''} />
-                                </button>
-                            )}
-                        </div>
-                        
-                        <div className="flex-1 flex justify-end items-center">
-                            {(source === 'spotify' && playerState && playerState.track_window.next_tracks.length > 0) && (
-                                 <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${visibleQueue === 'spotify' ? 'bg-white/20' : ''}`} style={{ color: inactiveButtonColor }}>
-                                    <BsList style={{ width: '20px', height: '20px'}} />
-                                </button>
-                            )}
-                             {(source === 'youtube' && nextYouTubeTrack) && (
-                                 <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200 ${visibleQueue === 'youtube' ? 'bg-white/20' : ''}`} style={{ color: inactiveButtonColor }}>
-                                    <BsList style={{ width: '20px', height: '20px'}} />
-                                </button>
-                            )}
-                        </div>
-                    </div>
                 </div>
             </div>
             {visibleQueue && (
                 <QueuePopover
                     isNight={isNight}
-                    nextTrack={nextTrackInfo}
+                    nextTrack={nextTrackDetails}
                     position={popoverPosition}
-                    onClose={() => handleToggleQueue(visibleQueue)}
+                    onClose={() => setVisibleQueue(null)}
                     isClosing={isQueueClosing}
                     height={queuePopoverHeight}
                     scale={queuePopoverScale}
-                    width={queuePopoverWidth}
                 />
             )}
         </>
     );
 };
 
-export default MusicPlayer;
+// FIX: Add a default export to the MusicPlayer component to resolve the module import error in App.tsx.
+export default React.memo(MusicPlayer);

@@ -129,7 +129,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('last_track_uri');
         localStorage.removeItem('last_progress_ms');
         localStorage.removeItem('last_is_playing');
-        axios.post('/api/logout', {}, { withCredentials: true }).catch(err => {
+        axios.post(`${window.location.origin}/api/logout`, {}, { withCredentials: true }).catch(err => {
             console.error("Logout API call failed:", err);
         });
         setState(initialState);
@@ -144,7 +144,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const promise = (async () => {
         console.log("Attempting silent token refresh...");
         try {
-          const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+          const { data } = await axios.post(`${window.location.origin}/api/refresh-token`, {}, { withCredentials: true });
           const { access_token, expires_in } = data;
           const newExpiresAt = Date.now() + expires_in * 1000;
 
@@ -235,7 +235,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const initAuth = async () => {
           isInitialLoadOrLogin.current = true; // Flag for autoplay logic
           try {
-            const { data } = await axios.post('/api/refresh-token', {}, { withCredentials: true });
+            const { data } = await axios.post(`${window.location.origin}/api/refresh-token`, {}, { withCredentials: true });
             const { access_token, expires_in } = data;
             const expiresAt = Date.now() + expires_in * 1000;
         
@@ -276,7 +276,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     
         try {
-            const response = await axios.post('/api/exchange-token', { code: authCode }, { withCredentials: true });
+            const response = await axios.post(`${window.location.origin}/api/exchange-token`, { code: authCode }, { withCredentials: true });
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
     

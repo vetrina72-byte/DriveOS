@@ -64,8 +64,8 @@ const SpotifyPlayer = ({
     const [view, setView] = useState<ViewState>({ type: 'home' });
     const [viewHistory, setViewHistory] = useState<ViewState[]>([]);
 
-    const openingBoxSpeed = 4.5;
-    const closingBoxSpeed = 8.6;
+    const openingBoxSpeed = 4.365;
+    const closingBoxSpeed = 8.342;
 
     useEffect(() => {
         if (isOpen && !startFetching) {

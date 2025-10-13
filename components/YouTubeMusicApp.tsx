@@ -86,8 +86,8 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const [selectedPlaylist, setSelectedPlaylist] = useState<{ id: string; name: string; images?: { url: string }[], description?: string } | null>(null);
     const [isQuotaModalDismissed, setIsQuotaModalDismissed] = useState(false);
 
-    const openingBoxSpeed = 4.5;
-    const closingBoxSpeed = 8.6;
+    const openingBoxSpeed = 4.365;
+    const closingBoxSpeed = 8.342;
     
     useEffect(() => {
         // Reset dismissed state if the quota error is resolved and comes back later

@@ -1,0 +1,22 @@
+import authStore from './auth-cache.js';
+
+export default function handler(req, res) {
+  const { sessionId } = req.query;
+
+  if (!sessionId) {
+    return res.status(400).json({ error: 'Session ID is required.' });
+  }
+
+  if (authStore.has(sessionId)) {
+    const { code } = authStore.get(sessionId);
+    
+    // The code is retrieved, so we can remove it from the store to prevent reuse.
+    authStore.delete(sessionId);
+    
+    // Return the code to the polling client (the infotainment unit)
+    res.status(200).json({ code });
+  } else {
+    // No code found for this session yet, tell the client to keep polling.
+    res.status(202).json({ status: 'pending' });
+  }
+}

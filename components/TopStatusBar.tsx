@@ -21,6 +21,7 @@ export default function TopStatusBar({
   scale,
   offsetY,
   mapStyle,
+  isMapVisible,
 }: { 
   isNight: boolean, 
   onWeatherClick: () => void, 
@@ -35,6 +36,7 @@ export default function TopStatusBar({
   scale: number,
   offsetY: number,
   mapStyle: string,
+  isMapVisible: boolean,
 }) {
   const [use24HourFormat, setUse24HourFormat] = useState(false);
   const [timeParts, setTimeParts] = useState<TimeParts>({ time: '', ampm: null });
@@ -133,8 +135,9 @@ export default function TopStatusBar({
   const lowerCond = weatherCondition.toLowerCase();
   const isGloomyDay = !isNight && (lowerCond.includes('pioggia') || lowerCond.includes('temporale') || lowerCond.includes('rovescio'));
   const isSatellite = mapStyle === 'satellite';
-  const textColor = (isNight || isGloomyDay || isSatellite) ? 'text-white' : 'text-gray-800';
-  const shadowClass = isSatellite ? 'text-shadow' : '';
+  const isSatelliteAndVisible = isSatellite && isMapVisible;
+  const textColor = (isNight || isGloomyDay || isSatelliteAndVisible) ? 'text-white' : 'text-gray-800';
+  const shadowClass = isSatelliteAndVisible ? 'text-shadow' : '';
 
   return (
     <header 

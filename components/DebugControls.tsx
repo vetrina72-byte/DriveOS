@@ -158,8 +158,6 @@ interface DebugControlsProps {
   setSpinnerShuffleGap: (gap: number) => void;
   debugSpinner: boolean;
   setDebugSpinner: (debug: boolean) => void;
-  showQueueOnTrackEnd: boolean;
-  setShowQueueOnTrackEnd: (show: boolean) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -347,8 +345,6 @@ export default function DebugControls({
   setSpinnerShuffleGap,
   debugSpinner,
   setDebugSpinner,
-  showQueueOnTrackEnd,
-  setShowQueueOnTrackEnd,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -433,9 +429,8 @@ export default function DebugControls({
     setQueuePopoverWidth(288);
     setQueuePopoverOffsetX(0);
     setSpinnerSize(16);
-    setSpinnerShuffleGap(24);
+    setSpinnerShuffleGap(6);
     setDebugSpinner(false);
-    setShowQueueOnTrackEnd(false);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1107,10 +1102,6 @@ export default function DebugControls({
             <div className="mt-2">
                 <label htmlFor="q-pop-scale">Scale: {queuePopoverScale.toFixed(2)}</label>
                 <input id="q-pop-scale" type="range" min="0.7" max="1.3" step="0.05" value={queuePopoverScale} onChange={(e) => setQueuePopoverScale(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-            </div>
-            <div className="flex items-center justify-between mt-3">
-              <label htmlFor="show-queue-end-checkbox" className="font-medium text-zinc-300">Mostra coda a fine brano</label>
-              <input id="show-queue-end-checkbox" type="checkbox" checked={showQueueOnTrackEnd} onChange={(e) => setShowQueueOnTrackEnd(e.target.checked)} className="form-checkbox h-5 w-5 bg-zinc-700 border-zinc-600 rounded text-blue-500 focus:ring-blue-500"/>
             </div>
         </div>
 

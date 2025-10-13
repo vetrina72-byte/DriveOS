@@ -95,8 +95,8 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
     const [isSearching, setIsSearching] = useState(false);
     const searchDebounceRef = useRef<number | null>(null);
 
-    const openingBoxSpeed = 4.5;
-    const closingBoxSpeed = 8.6;
+    const openingBoxSpeed = 4.365;
+    const closingBoxSpeed = 8.342;
 
     const radioBrowserApi = useMemo(() => {
         const servers = [

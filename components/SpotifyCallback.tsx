@@ -1,27 +1,47 @@
-
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { FaSpotify, FaCheckCircle } from 'react-icons/fa';
+import { FiXCircle } from 'react-icons/fi';
 
 const SpotifyCallback: React.FC = () => {
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState('');
+
   useEffect(() => {
-    console.log("POPUP: Componente Callback caricato.");
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const error = params.get('error');
+    const sessionId = params.get('state'); // The session ID is in the 'state' parameter
 
-    if (code) {
-      console.log(`POPUP: Codice trovato: ${code}`);
-      if (window.opener) {
-        console.log("POPUP: Invio messaggio alla finestra principale...");
-        window.opener.postMessage({ type: 'spotifyAuth', code: code }, '*');
-        console.log("POPUP: Tento di chiudere la finestra.");
-        window.close();
-      }
-    } else if (error) {
-      console.log(`POPUP: Spotify ha restituito un errore: ${error}`);
-      if (window.opener) {
-        window.opener.postMessage({ type: 'spotifyAuth', error: error }, '*');
-      }
-      window.close();
+    if (error) {
+      setErrorMessage(error);
+      setStatus('error');
+      return;
+    }
+
+    if (code && sessionId) {
+      // Send the code and session ID to our backend endpoint
+      fetch('/api/register-auth-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code, sessionId }),
+      })
+      .then(response => {
+        if (response.ok) {
+          setStatus('success');
+        } else {
+          return response.json().then(err => Promise.reject(err));
+        }
+      })
+      .catch(err => {
+        console.error('Failed to register auth code:', err);
+        setErrorMessage(err.message || 'Could not communicate with the vehicle.');
+        setStatus('error');
+      });
+    } else {
+        setErrorMessage('Invalid authentication response from Spotify.');
+        setStatus('error');
     }
   }, []);
 
@@ -38,11 +58,36 @@ const SpotifyCallback: React.FC = () => {
       padding: '2rem',
       textAlign: 'center'
     }}>
-      <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Autenticazione in corso...</h1>
-      <p style={{ color: '#9ca3af' }}>
-        Stiamo completando il processo di autenticazione con Spotify.
-        Questa finestra si chiuderà automaticamente.
-      </p>
+      <FaSpotify style={{ fontSize: '4rem', color: '#1DB954', marginBottom: '1.5rem' }} />
+      
+      {status === 'loading' && (
+        <>
+            <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Finalizzazione...</h1>
+            <p style={{ color: '#9ca3af' }}>
+                Trasferimento dell'autenticazione al veicolo in corso.
+            </p>
+        </>
+      )}
+
+      {status === 'success' && (
+        <>
+            <FaCheckCircle style={{ fontSize: '3rem', color: '#1DB954', marginBottom: '1.5rem' }} />
+            <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Successo!</h1>
+            <p style={{ color: '#9ca3af' }}>
+                Sei stato autenticato. Puoi chiudere questa finestra.
+            </p>
+        </>
+      )}
+
+      {status === 'error' && (
+        <>
+            <FiXCircle style={{ fontSize: '3rem', color: '#EF4444', marginBottom: '1.5rem' }} />
+            <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Errore</h1>
+            <p style={{ color: '#9ca3af' }}>
+                {errorMessage || 'Si è verificato un errore durante l\'autenticazione.'}
+            </p>
+        </>
+      )}
     </div>
   );
 };

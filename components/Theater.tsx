@@ -106,8 +106,8 @@ const ServiceButton = ({ service, isNight, onClick }: {
 // Framer Motion Variants for the choreographed entry animation
 const panelVariant = {
     initial: { x: '100%' },
-    animate: { x: '0%', transition: { type: 'spring', stiffness: 200, damping: 25 } },
-    exit: { x: '100%', transition: { type: 'spring', stiffness: 300, damping: 30 } },
+    animate: { x: '0%', transition: { type: 'spring', stiffness: 194, damping: 26 } },
+    exit: { x: '100%', transition: { type: 'spring', stiffness: 291, damping: 31 } },
 };
 
 const driveOsHeaderVariant = {
