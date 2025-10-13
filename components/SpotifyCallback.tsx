@@ -5,6 +5,7 @@ import { FiXCircle } from 'react-icons/fi';
 const SpotifyCallback: React.FC = () => {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  console.log("✅ [CALLBACK] Pagina di callback caricata.");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -13,12 +14,14 @@ const SpotifyCallback: React.FC = () => {
     const sessionId = params.get('state'); // The session ID is in the 'state' parameter
 
     if (error) {
+      console.error("❌ [CALLBACK] Errore ricevuto da Spotify:", error);
       setErrorMessage(error);
       setStatus('error');
       return;
     }
 
     if (code && sessionId) {
+      console.log("➡️ [CALLBACK] Codice e SessionId ricevuti. Sto per registrarli sul server...");
       // Send the code and session ID to our backend to be stored.
       fetch('/api/register-auth-code', {
         method: 'POST',
@@ -31,14 +34,16 @@ const SpotifyCallback: React.FC = () => {
         if (!res.ok) {
           throw new Error('Failed to register authentication code with the server.');
         }
+        console.log("✅ [CALLBACK] Codice registrato con successo sul server.");
         setStatus('success');
       })
       .catch(e => {
-        console.error('Failed to communicate with server:', e);
+        console.error("❌ [CALLBACK] Fallimento nella comunicazione con il server:", e);
         setErrorMessage('Could not communicate with the vehicle. Please try again.');
         setStatus('error');
       });
     } else {
+        console.error("❌ [CALLBACK] Risposta non valida da Spotify (manca codice o sessionId).");
         setErrorMessage('Invalid authentication response from Spotify.');
         setStatus('error');
     }

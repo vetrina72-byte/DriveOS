@@ -261,22 +261,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [fetchUserInfo, logout]);
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
+        console.log("✅ [AUTH_CONTEXT] Funzione 'login' chiamata.");
         isInitialLoadOrLogin.current = true; // Flag for autoplay logic
         restorePlaybackAttempted.current = false;
         setState(s => ({ ...s, isLoading: true, error: null }));
     
         if (authError) {
+            console.error("❌ [AUTH_CONTEXT] Errore di autorizzazione ricevuto:", authError);
              setState(s => ({...s, error: authError, isLoading: false}));
              return;
         }
     
         if (!authCode) {
+            console.error("❌ [AUTH_CONTEXT] Il codice di autorizzazione è mancante.");
             setState(s => ({...s, error: 'Authorization code is missing.', isLoading: false}));
             return;
         }
     
         try {
+            console.log("➡️ [AUTH_CONTEXT] Sto per scambiare il codice con un token chiamando /api/exchange-token...");
             const response = await axios.post(`${window.location.origin}/api/exchange-token`, { code: authCode }, { withCredentials: true });
+            console.log("✅ [AUTH_CONTEXT] Scambio del token avvenuto con successo.");
             const { access_token, expires_in } = response.data;
             const expiresAt = Date.now() + expires_in * 1000;
     
@@ -284,8 +289,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             localStorage.setItem('spotify_expires_at', String(expiresAt));
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
     
+            console.log("➡️ [AUTH_CONTEXT] Sto per recuperare le informazioni dell'utente...");
             const userData = await fetchUserInfo();
             if (userData) {
+                console.log("✅ [AUTH_CONTEXT] Informazioni utente recuperate:", userData.display_name);
                 setState(s => ({
                     ...s,
                     accessToken: access_token,
@@ -299,7 +306,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                  throw new Error("Failed to fetch user info after login.");
             }
         } catch (err: any) {
-            console.error('Login process failed:', err);
+            console.error('❌ [AUTH_CONTEXT] Il processo di login è fallito:', err);
             const errorMessage = err.response?.data?.details?.error_description || 'Failed to complete login.';
             logout(); 
             setState(s => ({...s, error: errorMessage, isLoading: false}));
