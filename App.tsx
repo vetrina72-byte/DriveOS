@@ -605,8 +605,12 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   } : null;
 }
 
+// FIX: Changed SceneColors to use explicit 'day' and 'night' keys for better type safety.
 export type SceneColors = {
-  [time: string]: {
+  day: {
+    [condition: string]: { sky: string; floor: string };
+  };
+  night: {
     [condition: string]: { sky: string; floor: string };
   };
 };

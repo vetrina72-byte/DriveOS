@@ -428,9 +428,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }));
     }, [pauseSpotify, nowPlaying.source]);
 
-    const clearError = () => {
+    const clearError = useCallback(() => {
         setState(s => ({...s, error: null}));
-    };
+    }, []);
 
     const unlockAutoplay = useCallback(() => {
         if (playerRef.current) {

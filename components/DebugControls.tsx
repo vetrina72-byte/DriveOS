@@ -799,7 +799,8 @@ export default function DebugControls({
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Scene Environment Colors</h3>
-            {(Object.keys(sceneColors) as Array<'day' | 'night'>).map(time => (
+            {/* FIX: Removed the incorrect type cast. The type of `time` will be correctly inferred as 'day' | 'night' after updating the `SceneColors` type in App.tsx. */}
+            {(Object.keys(sceneColors) as ('day' | 'night')[]).map(time => (
               <div key={time} className="pl-2 border-l-2 border-zinc-600 mb-3 mt-2">
                 <h4 className="capitalize text-sm font-semibold text-zinc-300 mb-2">{time}</h4>
                 {Object.keys(sceneColors[time]).map(condition => (
