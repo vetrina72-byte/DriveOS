@@ -55,21 +55,31 @@ const SpotifyLogin: React.FC = () => {
         setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl.toString())}&bgcolor=0-0-0&color=fff&qzone=1`);
         setStatusMessage('Scansiona il QR code con il tuo telefono per accedere.');
 
-        // Start polling LOCAL STORAGE to check for the auth code
-        pollingIntervalRef.current = window.setInterval(() => {
+        // Start polling our backend to check for the auth code
+        pollingIntervalRef.current = window.setInterval(async () => {
             try {
-                const code = localStorage.getItem(sessionId);
-                if (code) {
+                const res = await fetch(`/api/check-auth-status?sessionId=${sessionId}`);
+                
+                if (res.status === 200) {
+                    const data = await res.json();
+                    if (data.code) {
+                        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                        setStatusMessage('Autenticazione riuscita!');
+                        login(data.code); // The auth code has been received, proceed with login
+                    }
+                } else if (res.status !== 202) {
+                    // An actual error occurred during polling
+                    console.error('Polling failed with status:', res.status);
                     if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-                    localStorage.removeItem(sessionId); // Clean up
-                    setStatusMessage('Autenticazione riuscita!');
-                    login(code); // The auth code has been received, proceed with login
+                    setStatusMessage('Errore durante il processo di login. Riprova.');
                 }
+                // If status is 202, we just continue polling.
             } catch (err) {
-                console.error("LocalStorage polling failed:", err);
+                console.error("Polling request failed:", err);
                 if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                setStatusMessage('Errore di connessione. Controlla la rete e riprova.');
             }
-        }, 2000); // Poll every 2 seconds
+        }, 2500); // Poll every 2.5 seconds
 
         // Cleanup on component unmount
         return () => {
