@@ -248,17 +248,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               throw new Error("Failed to fetch user info after token refresh.");
             }
         
-            setState(s => ({ ...s, accessToken: access_token, expiresAt, user, isAuthenticated: true }));
+            setState(s => ({ ...s, accessToken: access_token, expiresAt, user, isAuthenticated: true, isLoading: false }));
           } catch (err) {
-            console.log("No valid session found on load.");
-            logout();
-          } finally {
+            console.log("No valid session found on initial load. User is not logged in.");
+            // Instead of calling logout(), which causes a re-render loop, just finish loading.
             setState(s => ({ ...s, isLoading: false }));
           }
         };
 
         initAuth();
-    }, [fetchUserInfo, logout]);
+    }, [fetchUserInfo]);
 
     const login = useCallback(async (authCode?: string | null, authError?: string) => {
         console.log("✅ [AUTH_CONTEXT] Funzione 'login' chiamata.");

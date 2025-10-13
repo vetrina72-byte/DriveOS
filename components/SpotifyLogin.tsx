@@ -97,7 +97,7 @@ const SpotifyLogin: React.FC = () => {
                 clearInterval(pollingIntervalRef.current);
             }
         };
-    }, [login, clearError]);
+    }, []); // The dependency array is now empty to ensure this runs only ONCE.
 
     return (
         <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-lg bg-zinc-900/50">
