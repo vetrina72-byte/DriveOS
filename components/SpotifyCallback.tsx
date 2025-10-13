@@ -19,26 +19,15 @@ const SpotifyCallback: React.FC = () => {
     }
 
     if (code && sessionId) {
-      // Send the code and session ID to our backend endpoint
-      fetch(`${window.location.origin}/api/register-auth-code`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ code, sessionId }),
-      })
-      .then(response => {
-        if (response.ok) {
-          setStatus('success');
-        } else {
-          return response.json().then(err => Promise.reject(err));
-        }
-      })
-      .catch(err => {
-        console.error('Failed to register auth code:', err);
-        setErrorMessage(err.message || 'Could not communicate with the vehicle.');
+      // Store the code in localStorage using the sessionId as the key
+      try {
+        localStorage.setItem(sessionId, code);
+        setStatus('success');
+      } catch (e) {
+        console.error('Failed to write to localStorage:', e);
+        setErrorMessage('Could not communicate with the vehicle. Please ensure cookies/site data are not blocked.');
         setStatus('error');
-      });
+      }
     } else {
         setErrorMessage('Invalid authentication response from Spotify.');
         setStatus('error');

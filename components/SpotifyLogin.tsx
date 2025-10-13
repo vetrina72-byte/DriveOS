@@ -55,22 +55,21 @@ const SpotifyLogin: React.FC = () => {
         setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl.toString())}&bgcolor=0-0-0&color=fff&qzone=1`);
         setStatusMessage('Scansiona il QR code con il tuo telefono per accedere.');
 
-        // Start polling the server to check for the auth code
-        pollingIntervalRef.current = window.setInterval(async () => {
+        // Start polling LOCAL STORAGE to check for the auth code
+        pollingIntervalRef.current = window.setInterval(() => {
             try {
-                const response = await fetch(`${window.location.origin}/api/check-auth-status?sessionId=${sessionId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.code) {
-                        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-                        setStatusMessage('Autenticazione riuscita!');
-                        login(data.code); // The auth code has been received, proceed with login
-                    }
+                const code = localStorage.getItem(sessionId);
+                if (code) {
+                    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                    localStorage.removeItem(sessionId); // Clean up
+                    setStatusMessage('Autenticazione riuscita!');
+                    login(code); // The auth code has been received, proceed with login
                 }
             } catch (err) {
-                console.error("Polling failed:", err);
+                console.error("LocalStorage polling failed:", err);
+                if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
             }
-        }, 3000); // Poll every 3 seconds
+        }, 2000); // Poll every 2 seconds
 
         // Cleanup on component unmount
         return () => {
