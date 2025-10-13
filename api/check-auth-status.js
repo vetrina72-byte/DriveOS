@@ -1,4 +1,4 @@
-import authStore from './auth-cache.js';
+import authStore from './_auth-cache.js';
 
 export default function handler(req, res) {
   const { sessionId } = req.query;
