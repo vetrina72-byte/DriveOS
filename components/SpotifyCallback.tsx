@@ -20,7 +20,7 @@ const SpotifyCallback: React.FC = () => {
 
     if (code && sessionId) {
       // Send the code and session ID to our backend endpoint
-      fetch('/api/register-auth-code', {
+      fetch(`${window.location.origin}/api/register-auth-code`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

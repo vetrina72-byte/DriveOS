@@ -26,6 +26,7 @@ interface MusicPlayerProps {
     playerControlsVerticalPosition: number;
     spinnerSize: number;
     spinnerShuffleGap: number;
+    debugSpinner: boolean;
     widgetBgColor: string;
     dayPlayerButtonColor: string;
     nightPlayerButtonColor: string;
@@ -36,6 +37,8 @@ interface MusicPlayerProps {
     queuePopoverHeight: number;
     queuePopoverBottomOffset: number;
     queuePopoverScale: number;
+    queuePopoverWidth: number;
+    queuePopoverOffsetX: number;
 }
 
 /**
@@ -249,7 +252,17 @@ const YouTubeProgressBar = ({
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height, scale }: { isNight: boolean, nextTrack: { name: string, description: string, imageUrl: string } | null, position: { bottom: number, left: number, transform: string }, onClose: () => void, isClosing: boolean, height: number, scale: number }) => {
+const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height, scale, width, offsetX }: { 
+    isNight: boolean, 
+    nextTrack: { name: string, description: string, imageUrl: string } | null, 
+    position: { bottom: number, left: number, transform: string }, 
+    onClose: () => void, 
+    isClosing: boolean, 
+    height: number, 
+    scale: number,
+    width: number,
+    offsetX: number,
+}) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
     return ReactDOM.createPortal(
@@ -257,13 +270,14 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
             ref={popoverRef}
             style={{
                 bottom: `${position.bottom}px`,
-                left: `${position.left}px`,
+                left: `${position.left + offsetX}px`,
                 transform: `${position.transform} scale(${scale})`,
                 transformOrigin: 'bottom center',
                 backgroundColor: 'var(--player-bg)',
                 height: `${height}px`,
+                width: `${width}px`,
             }}
-            className={`fixed w-72 p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
+            className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
         >
             <p className="text-xs font-bold mb-2 flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
             <div className="flex-grow flex items-center">
@@ -284,7 +298,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
     );
 };
 
-const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor'> & { showSpinner: boolean }) => {
+const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap, debugSpinner }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor'> & { showSpinner: boolean }) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
@@ -308,7 +322,7 @@ const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerCo
                         <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
-                        {showSpinner && (
+                        {(showSpinner || debugSpinner) && (
                             <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
                         )}
                     </div>
@@ -348,6 +362,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     playerControlsVerticalPosition,
     spinnerSize,
     spinnerShuffleGap,
+    debugSpinner,
     widgetBgColor,
     dayPlayerButtonColor,
     nightPlayerButtonColor,
@@ -358,6 +373,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     queuePopoverHeight,
     queuePopoverBottomOffset,
     queuePopoverScale,
+    queuePopoverWidth,
+    queuePopoverOffsetX,
 }) => {
   const { 
       isAuthenticated, 
@@ -890,7 +907,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 >
                                     <PiShuffleBold className="w-5 h-5" />
                                 </button>
-                                {showSpinner && (
+                                {(showSpinner || debugSpinner) && (
                                     <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
                                 )}
                             </div>
@@ -937,7 +954,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
         
         // Default / Initial State
-        return <DisabledPlayerView {...{ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap }} />;
+        return <DisabledPlayerView {...{ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap, debugSpinner }} />;
     };
 
     const nextSpotifyTrack = playerState?.track_window.next_tracks[0];
@@ -1002,6 +1019,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     isClosing={isQueueClosing}
                     height={queuePopoverHeight}
                     scale={queuePopoverScale}
+                    width={queuePopoverWidth}
+                    offsetX={queuePopoverOffsetX}
                 />
             )}
         </>

@@ -58,7 +58,7 @@ const SpotifyLogin: React.FC = () => {
         // Start polling the server to check for the auth code
         pollingIntervalRef.current = window.setInterval(async () => {
             try {
-                const response = await fetch(`/api/check-auth-status?sessionId=${sessionId}`);
+                const response = await fetch(`${window.location.origin}/api/check-auth-status?sessionId=${sessionId}`);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.code) {
