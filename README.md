@@ -30,7 +30,7 @@ This project includes a small Node.js server to handle the Spotify authenticatio
     # .env
     SPOTIFY_CLIENT_ID=ecc9e126d442404b92e8081c7d95ecca
     SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET
-    VITE_REDIRECT_URI=http://localhost:5173/spotify-callback
+    VITE_REDIRECT_URI=http://localhost:5173/api/spotify-callback
     MAPTILER_API_KEY=YOUR_MAPTILER_API_KEY
     ```
 
@@ -40,6 +40,6 @@ This project includes a small Node.js server to handle the Spotify authenticatio
     The server will run on `http://localhost:8888`.
 
 4.  **Configure Spotify Redirect URI**: In your Spotify Developer Dashboard, go to your application's settings and make sure you have added the following URL to your "Redirect URIs":
-    `http://localhost:5173/spotify-callback`
+    `http://localhost:5173/api/spotify-callback`
 
-    For production (e.g., on Vercel), you will need to set these same environment variables in your deployment settings, replacing the `VITE_REDIRECT_URI` with your production URL.
+    For production (e.g., on Vercel), you will need to set these same environment variables in your deployment settings. The `VITE_REDIRECT_URI` must be your full production URL, including the `/api/spotify-callback` path. For example: `https://your-app-name.vercel.app/api/spotify-callback`.

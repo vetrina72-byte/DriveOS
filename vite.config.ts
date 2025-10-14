@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     // we provide a default value to ensure the app works locally.
     // For production, this variable MUST be set in the deployment environment (e.g., Vercel).
     if (mode === 'development' && !env.VITE_REDIRECT_URI) {
-        env.VITE_REDIRECT_URI = 'http://localhost:5173/spotify-callback';
+        env.VITE_REDIRECT_URI = 'http://localhost:5173/api/spotify-callback';
     }
 
     return {
