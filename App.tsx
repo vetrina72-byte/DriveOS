@@ -13,7 +13,6 @@ import WeatherModal from './components/WeatherModal';
 import MiniMap from './components/MiniMap';
 import { WeatherData, TempUnit, WeatherParams, RadioStation, NowPlayingState } from './types';
 import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
-import SpotifyCallback from './components/SpotifyCallback';
 import { routeStore } from './components/routeStore';
 import VehicleArrowIcon from './components/VehicleArrowIcon';
 import DebugControls from './components/DebugControls';
@@ -1947,13 +1946,7 @@ function AppContent() {
   );
 }
 
-function App() {
-  const isSpotifyCallback = window.location.pathname === '/spotify-callback';
-
-  if (isSpotifyCallback) {
-    return <SpotifyCallback />;
-  }
-  
+function App() {  
   return (
     <AuthProvider>
       <VehicleProvider>

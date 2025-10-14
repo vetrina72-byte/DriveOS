@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { motion } from 'framer-motion';
+// FIX: Import `Variants` type from framer-motion to resolve type error.
+import { motion, Variants } from 'framer-motion';
 
 // A self-contained component for the service button with 3D hover effects.
 const ServiceButton = ({ service, isNight, onClick }: { 
@@ -104,7 +105,8 @@ const ServiceButton = ({ service, isNight, onClick }: {
 
 
 // Framer Motion Variants for the choreographed entry animation
-const panelVariant = {
+// FIX: Explicitly type `panelVariant` as `Variants` to fix type incompatibility with the 'type' property in transitions.
+const panelVariant: Variants = {
     initial: { x: '100%' },
     animate: { x: '0%', transition: { type: 'spring', stiffness: 194, damping: 26 } },
     exit: { x: '100%', transition: { type: 'spring', stiffness: 291, damping: 31 } },
