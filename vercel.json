@@ -1,8 +1,1 @@
-{
-  "functions": {
-    "api/**/*.js": {
-      "includeFiles": "node_modules/@vercel/kv/dist/index.js",
-      "network": "public"
-    }
-  }
-}
+{}

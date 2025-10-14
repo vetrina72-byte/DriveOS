@@ -112,7 +112,8 @@ const panelVariant: Variants = {
     exit: { x: '100%', transition: { type: 'spring', stiffness: 291, damping: 31 } },
 };
 
-const driveOsHeaderVariant = {
+// FIX: Explicitly type variants with the `Variants` type.
+const driveOsHeaderVariant: Variants = {
     initial: { opacity: 0, y: 'calc(50vh - 150px)', scale: 1.5 },
     animate: {
         opacity: [0, 1, 1],
@@ -122,7 +123,8 @@ const driveOsHeaderVariant = {
     },
 };
 
-const otherElementsVariant = {
+// FIX: Explicitly type variants with the `Variants` type.
+const otherElementsVariant: Variants = {
     initial: { opacity: 0, y: 50 },
     animate: {
       opacity: 1,
@@ -133,7 +135,8 @@ const otherElementsVariant = {
     }
 };
 
-const gridContainerVariant = {
+// FIX: Explicitly type variants with the `Variants` type.
+const gridContainerVariant: Variants = {
     initial: {},
     animate: {
       transition: {

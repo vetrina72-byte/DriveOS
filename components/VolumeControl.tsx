@@ -6,17 +6,17 @@ import { IoChevronBack, IoChevronForward } from 'react-icons/io5';
 
 interface VolumeControlProps {
     iconSize: number;
-    sliderOffsetY: number;
-    sliderOffsetX: number;
-    sliderWidth: number;
+    volumeSliderOffsetY: number;
+    volumeSliderOffsetX: number;
+    volumeSliderWidth: number;
     volumeSliderThickness: number;
-    sliderThumbOffsetY: number;
-    sliderPopupWidth: number;
-    sliderPopupHeight: number;
+    volumeSliderThumbOffsetY: number;
+    volumeSliderPopupWidth: number;
+    volumeSliderPopupHeight: number;
     zIndex: number;
 }
 
-const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, sliderOffsetX, sliderWidth, volumeSliderThickness, sliderThumbOffsetY, sliderPopupWidth, sliderPopupHeight, zIndex }) => {
+const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOffsetY, volumeSliderOffsetX, volumeSliderWidth, volumeSliderThickness, volumeSliderThumbOffsetY, volumeSliderPopupWidth, volumeSliderPopupHeight, zIndex }) => {
     const { volume, setVolume, isMuted } = useAuth();
     const [isSliderVisible, setIsSliderVisible] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -68,8 +68,8 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
         if (containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect();
             setPopupPosition({
-                bottom: window.innerHeight - rect.top + sliderOffsetY,
-                left: rect.left + (rect.width / 2) + sliderOffsetX,
+                bottom: window.innerHeight - rect.top + volumeSliderOffsetY,
+                left: rect.left + (rect.width / 2) + volumeSliderOffsetX,
             });
         }
     };
@@ -80,7 +80,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
             window.addEventListener('resize', calculatePosition);
             return () => window.removeEventListener('resize', calculatePosition);
         }
-    }, [isSliderVisible, sliderOffsetX, sliderOffsetY]);
+    }, [isSliderVisible, volumeSliderOffsetX, volumeSliderOffsetY]);
 
     const handleIconClick = () => {
         if (isSliderVisible) {
@@ -101,7 +101,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
     };
 
     const thumbSize = volumeSliderThickness * 2.2;
-    const thumbMarginTop = ((thumbSize - volumeSliderThickness) / -2) + sliderThumbOffsetY;
+    const thumbMarginTop = ((thumbSize - volumeSliderThickness) / -2) + volumeSliderThumbOffsetY;
     const progressPercentage = volume * 100;
 
     const sliderPopup = isSliderVisible && (
@@ -118,8 +118,8 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
             <div 
                 className="volume-slider-popup-container"
                 style={{
-                    width: `${sliderPopupWidth}px`,
-                    height: `${sliderPopupHeight}px`,
+                    width: `${volumeSliderPopupWidth}px`,
+                    height: `${volumeSliderPopupHeight}px`,
                 }}
             >
                 <input
@@ -136,7 +136,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, sliderOffsetY, 
                         '--volume-track-height': `${volumeSliderThickness}px`,
                         '--volume-thumb-size': `${thumbSize}px`,
                         '--volume-thumb-margin-top': `${thumbMarginTop}px`,
-                        width: `${sliderWidth}px`,
+                        width: `${volumeSliderWidth}px`,
                     } as React.CSSProperties}
                 />
             </div>
