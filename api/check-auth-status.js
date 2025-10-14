@@ -14,9 +14,9 @@ export default function handler(req, res) {
     authStore.delete(sessionId);
     
     // Return the code to the polling client (the infotainment unit)
-    res.status(200).json({ code });
+    res.status(200).json({ status: 'completed', code });
   } else {
     // No code found for this session yet, tell the client to keep polling.
-    res.status(202).json({ status: 'pending' });
+    res.status(200).json({ status: 'pending' });
   }
 }
