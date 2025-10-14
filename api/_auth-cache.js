@@ -1,37 +1,52 @@
 // File: /api/_auth-cache.js
 import { createClient } from '@vercel/kv';
 
-// Se non trova le variabili KV_, prova a usare REDIS_URL.
-// Questo rende il codice compatibile con la configurazione che Vercel ha creato per te.
-const redisUrl = process.env.REDIS_URL || process.env.KV_URL;
-if (!redisUrl) {
-  throw new Error("La variabile d'ambiente REDIS_URL o KV_URL non è stata trovata.");
+console.log('[AUTH_CACHE] Inizializzazione. Controllo variabili d\'ambiente...');
+console.log('[AUTH_CACHE] - KV_REST_API_URL:', process.env.KV_REST_API_URL ? 'Trovata' : '!!! MANCANTE !!!');
+console.log('[AUTH_CACHE] - KV_REST_API_TOKEN:', process.env.KV_REST_API_TOKEN ? 'Trovata' : '!!! MANCANTE !!!');
+
+// Variabili per creare il client
+const apiUrl = process.env.KV_REST_API_URL;
+const apiToken = process.env.KV_REST_API_TOKEN;
+
+let kvClient;
+let initializationError = null;
+
+// Controlliamo esplicitamente che le variabili esistano
+if (!apiUrl || !apiToken) {
+  initializationError = new Error("ERRORE CRITICO: Una o entrambe le variabili d'ambiente KV_REST_API_URL e KV_REST_API_TOKEN non sono state trovate. Controlla la dashboard di Vercel.");
+  console.error(initializationError.message);
+} else {
+  try {
+    // Creiamo il client SOLO con le variabili corrette
+    kvClient = createClient({
+      url: apiUrl,
+      token: apiToken,
+    });
+    console.log('[AUTH_CACHE] Client KV creato con successo. La connessione è pronta.');
+  } catch (error) {
+    initializationError = error;
+    console.error('[AUTH_CACHE] ERRORE CRITICO in fase di creazione del client:', error);
+  }
 }
 
-// Il client si connette usando l'URL che Vercel ci ha fornito.
-const kv = createClient({
-  url: redisUrl,
-  // Il token è già incluso nell'URL per questa configurazione,
-  // quindi non serve passarlo separatamente.
-});
-
 const authStore = {
-  // Salva un dato per 5 minuti (300 secondi)
   set: (key, value) => {
+    if (initializationError) return Promise.reject(initializationError);
     console.log(`[AUTH_CACHE] Sto salvando la chiave: ${key}`);
-    return kv.set(key, value, { ex: 300 });
+    return kvClient.set(key, value, { ex: 300 }); // Salva per 5 minuti
   },
-  // Legge un dato
-  get: async (key) => {
+  get: (key) => {
+    if (initializationError) return Promise.reject(initializationError);
     console.log(`[AUTH_CACHE] Sto leggendo la chiave: ${key}`);
-    const value = await kv.get(key);
+    const value = kvClient.get(key);
     console.log(`[AUTH_CACHE] Valore trovato per ${key}:`, value);
     return value;
   },
-  // Elimina un dato
   delete: (key) => {
+    if (initializationError) return Promise.reject(initializationError);
     console.log(`[AUTH_CACHE] Sto eliminando la chiave: ${key}`);
-    return kv.del(key);
+    return kvClient.del(key);
   },
 };
 
