@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/genai": "latest",
+    "@vercel/kv": "latest",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-leaflet": "^5.0.0",
