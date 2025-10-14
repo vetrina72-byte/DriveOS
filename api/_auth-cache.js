@@ -5,25 +5,29 @@ console.log('[AUTH_CACHE] Inizializzazione. Controllo variabili d\'ambiente...')
 console.log('[AUTH_CACHE] - KV_REST_API_URL:', process.env.KV_REST_API_URL ? 'Trovata' : '!!! MANCANTE !!!');
 console.log('[AUTH_CACHE] - KV_REST_API_TOKEN:', process.env.KV_REST_API_TOKEN ? 'Trovata' : '!!! MANCANTE !!!');
 
-// Variabili per creare il client
 const apiUrl = process.env.KV_REST_API_URL;
 const apiToken = process.env.KV_REST_API_TOKEN;
 
 let kvClient;
 let initializationError = null;
 
-// Controlliamo esplicitamente che le variabili esistano
 if (!apiUrl || !apiToken) {
-  initializationError = new Error("ERRORE CRITICO: Una o entrambe le variabili d'ambiente KV_REST_API_URL e KV_REST_API_TOKEN non sono state trovate. Controlla la dashboard di Vercel.");
+  initializationError = new Error("ERRORE CRITICO: Variabili d'ambiente KV_... non trovate.");
   console.error(initializationError.message);
 } else {
   try {
-    // Creiamo il client SOLO con le variabili corrette
+    // --- MODIFICA CHIAVE ---
+    // Aumentiamo la pazienza del client
     kvClient = createClient({
       url: apiUrl,
       token: apiToken,
+      // Aumenta il timeout a 20 secondi (default è 10)
+      retry: {
+        retries: 3, // Riprova fino a 3 volte in caso di fallimento
+        factor: 2, // Aspetta il doppio del tempo tra un tentativo e l'altro
+      },
     });
-    console.log('[AUTH_CACHE] Client KV creato con successo. La connessione è pronta.');
+    console.log('[AUTH_CACHE] Client KV creato con successo.');
   } catch (error) {
     initializationError = error;
     console.error('[AUTH_CACHE] ERRORE CRITICO in fase di creazione del client:', error);
@@ -31,19 +35,17 @@ if (!apiUrl || !apiToken) {
 }
 
 const authStore = {
+  // Il resto del codice non cambia
   set: (key, value) => {
     if (initializationError) return Promise.reject(initializationError);
-    console.log(`[AUTH_CACHE] Sto salvando la chiave: ${key}`);
     return kvClient.set(key, value, { ex: 300 });
   },
   get: (key) => {
     if (initializationError) return Promise.reject(initializationError);
-    console.log(`[AUTH_CACHE] Sto leggendo la chiave: ${key}`);
     return kvClient.get(key);
   },
   delete: (key) => {
     if (initializationError) return Promise.reject(initializationError);
-    console.log(`[AUTH_CACHE] Sto eliminando la chiave: ${key}`);
     return kvClient.del(key);
   },
 };
