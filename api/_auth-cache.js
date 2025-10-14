@@ -1,5 +1,6 @@
 // File: /api/_auth-cache.js
 import { createClient } from '@vercel/kv';
+import { Agent } from 'undici';
 
 console.log('[AUTH_CACHE] Inizializzazione. Controllo variabili d\'ambiente...');
 console.log('[AUTH_CACHE] - KV_REST_API_URL:', process.env.KV_REST_API_URL ? 'Trovata' : '!!! MANCANTE !!!');
@@ -16,18 +17,23 @@ if (!apiUrl || !apiToken) {
   console.error(initializationError.message);
 } else {
   try {
-    // --- MODIFICA CHIAVE ---
-    // Aumentiamo la pazienza del client
+    // --- VERSIONE CORAZZATA ---
     kvClient = createClient({
       url: apiUrl,
       token: apiToken,
-      // Aumenta il timeout a 20 secondi (default è 10)
+      // 1. Mantiene la connessione attiva per migliorare la performance
+      agent: new Agent({
+        keepAliveTimeout: 30000, // 30 secondi
+        keepAliveMaxTimeout: 60000, // 1 minuto
+      }),
+      // 2. Riprova aggressivamente in caso di fallimento
       retry: {
-        retries: 3, // Riprova fino a 3 volte in caso di fallimento
-        factor: 2, // Aspetta il doppio del tempo tra un tentativo e l'altro
+        retries: 5,     // Riprova fino a 5 volte
+        factor: 2,      // Raddoppia il tempo di attesa a ogni tentativo
+        maxTimeout: 15000 // Tempo massimo di attesa: 15 secondi
       },
     });
-    console.log('[AUTH_CACHE] Client KV creato con successo.');
+    console.log('[AUTH_CACHE] Client KV "Corazzato" creato con successo.');
   } catch (error) {
     initializationError = error;
     console.error('[AUTH_CACHE] ERRORE CRITICO in fase di creazione del client:', error);
@@ -35,9 +41,9 @@ if (!apiUrl || !apiToken) {
 }
 
 const authStore = {
-  // Il resto del codice non cambia
   set: (key, value) => {
     if (initializationError) return Promise.reject(initializationError);
+    // Vercel KV's .set() now returns a promise. We must await it to ensure completion.
     return kvClient.set(key, value, { ex: 300 });
   },
   get: (key) => {
