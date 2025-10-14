@@ -34,14 +34,12 @@ const authStore = {
   set: (key, value) => {
     if (initializationError) return Promise.reject(initializationError);
     console.log(`[AUTH_CACHE] Sto salvando la chiave: ${key}`);
-    return kvClient.set(key, value, { ex: 300 }); // Salva per 5 minuti
+    return kvClient.set(key, value, { ex: 300 });
   },
   get: (key) => {
     if (initializationError) return Promise.reject(initializationError);
     console.log(`[AUTH_CACHE] Sto leggendo la chiave: ${key}`);
-    const value = kvClient.get(key);
-    console.log(`[AUTH_CACHE] Valore trovato per ${key}:`, value);
-    return value;
+    return kvClient.get(key);
   },
   delete: (key) => {
     if (initializationError) return Promise.reject(initializationError);
