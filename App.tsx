@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyApp from './components/SpotifyPlayer';
-// FIX: MusicPlayer is not a default export, so it must be imported using curly braces. Changed to a default export in the source file.
+// FIX: MusicPlayer is a default export. The import is correct.
 import MusicPlayer from './components/MusicPlayer';
 import MapsContainer from './components/MapsContainer';
 import AppLauncher from './components/AppLauncher';
@@ -1771,14 +1771,14 @@ function AppContent() {
                     {/* FIX: Corrected variable names passed as props from slider... to volumeSlider... */}
                     <VolumeControl 
                         iconSize={volumeIconSize}
-                        sliderOffsetY={volumeSliderOffsetY}
-                        sliderOffsetX={volumeSliderOffsetX}
-                        sliderWidth={volumeSliderWidth}
+                        volumeSliderOffsetY={volumeSliderOffsetY}
+                        volumeSliderOffsetX={volumeSliderOffsetX}
+                        volumeSliderWidth={volumeSliderWidth}
                         volumeSliderThickness={volumeSliderThickness}
-                        sliderPopupWidth={volumeSliderPopupWidth}
-                        sliderPopupHeight={volumeSliderPopupHeight}
+                        volumeSliderPopupWidth={volumeSliderPopupWidth}
+                        volumeSliderPopupHeight={volumeSliderPopupHeight}
                         zIndex={volumeControlZIndex}
-                        sliderThumbOffsetY={volumeSliderThumbOffsetY}
+                        volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}
                     />
                 </div>
             </div>
