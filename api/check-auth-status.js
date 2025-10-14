@@ -8,18 +8,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (authStore.has(sessionId)) {
-      const { code } = authStore.get(sessionId);
+    // Chiediamo direttamente il valore. Sarà l'oggetto { code: '...' } o null.
+    const sessionData = await authStore.get(sessionId);
+
+    if (sessionData && sessionData.code) {
+      // Trovato! La sessione è completata.
       
-      // The code is retrieved, so we can remove it from the store to prevent reuse.
+      // Puliamo la cache per evitare riutilizzi
       authStore.delete(sessionId);
       
-      // Return the code to the polling client (the infotainment unit)
-      res.status(200).json({ status: 'completed', code });
+      // Restituiamo il successo al client
+      res.status(200).json({ status: 'completed', code: sessionData.code });
+
     } else {
-      // No code found for this session yet, tell the client to keep polling.
+      // Non trovato. La sessione è ancora in attesa.
       res.status(200).json({ status: 'pending' });
     }
+
   } catch (error) {
     console.error(`Error checking status for session ${sessionId}:`, error);
     res.status(500).json({ error: 'Internal Server Error' });
