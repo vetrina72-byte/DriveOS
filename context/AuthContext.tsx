@@ -507,7 +507,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                             throw e;
                         });
                         
-                        if (response.status === 200 && response.data?.item) {
+                        // FIX: Added a type guard ('data' in response) to safely access the 'data' property. This resolves a TypeScript error because the preceding .catch() block can return a plain object { status: 204 } which does not have a 'data' property, making the response type a union.
+                        if ('data' in response && response.status === 200 && response.data?.item) {
                             // Active session found, transfer it and ensure it's playing
                             console.log("[AuthContext] Active session found. Transferring playback with play=true.");
                             await apiClient.put('/me/player', {
