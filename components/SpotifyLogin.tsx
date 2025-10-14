@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 // Funzione helper per generare l'URL del QR code
@@ -11,26 +11,19 @@ const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/
   return v.toString(16);
 });
 
+
 function SpotifyLogin() {
   const { login } = useAuth();
-  const [uiState, setUiState] = useState('INIZIALIZZAZIONE');
+  const [uiState, setUiState] = useState('CARICAMENTO...');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const sessionIdRef = useRef<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
-  // --- FASE 1: Creazione della sessione (UNA SOLA VOLTA) ---
+  // --- EFFETTO #1: CREAZIONE SESSIONE (GIRA UNA SOLA VOLTA) ---
   useEffect(() => {
-    // This check prevents re-running if a parent component causes a re-render
-    if (sessionIdRef.current) {
-        console.log("[INIT] Sessione già esistente. Salto la creazione.");
-        return;
-    }
-
-    console.log("[INIT] Avvio componente. Creo una nuova sessione client-side.");
-    setUiState('CREAZIONE SESSIONE...');
+    console.log('[INIT] Eseguo la creazione della sessione (una sola volta)...');
     
-    const sessionId = generateUUID();
-    sessionIdRef.current = sessionId;
-
+    const newSessionId = generateUUID();
+    
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
     const redirectUri = process.env.VITE_REDIRECT_URI;
     const scope = [
@@ -48,22 +41,21 @@ function SpotifyLogin() {
         redirect_uri: redirectUri,
         scope: scope,
         show_dialog: 'true',
-        state: sessionId
+        state: newSessionId
     }).toString();
 
-    console.log(`[INIT] Sessione creata con ID: ${sessionId}`);
+    console.log(`[INIT] Sessione creata con ID: ${newSessionId}`);
+    setSessionId(newSessionId);
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
-    setUiState('IN ATTESA DI LOGIN');
-
+    setUiState('IN ATTESA DI SCANSIONE');
   }, []); // L'array vuoto garantisce che questo venga eseguito UNA SOLA VOLTA.
 
-  // --- FASE 2: Inizio del polling (parte quando abbiamo un sessionId) ---
+  // --- EFFETTO #2: POLLING (PARTE SOLO DOPO CHE ABBIAMO UN SESSION ID) ---
   useEffect(() => {
-    if (uiState !== 'IN ATTESA DI LOGIN' || !sessionIdRef.current) {
-      return; // Non fare nulla se non siamo nello stato di attesa
+    if (!sessionId) {
+      return;
     }
 
-    const sessionId = sessionIdRef.current;
     console.log(`[POLLING] Avvio l'ascolto per la sessione ${sessionId}. Controllo ogni 3 secondi.`);
     
     const intervalId = setInterval(() => {
@@ -81,7 +73,7 @@ function SpotifyLogin() {
             console.log("🎉🎉🎉 [POLLING] RICEVUTO! Lo stato è COMPLETED! Fermo l'ascolto e avvio il login.");
             clearInterval(intervalId);
             setUiState('LOGIN COMPLETATO');
-            login(data.code); // This is the final step
+            login(data.code);
           }
         })
         .catch(error => {
@@ -91,17 +83,15 @@ function SpotifyLogin() {
         });
     }, 3000);
 
-    // Funzione di pulizia: se il componente viene smontato, ferma il polling
     return () => clearInterval(intervalId);
+  }, [sessionId, login]);
 
-  }, [uiState, login]); // Questo effetto si riattiva quando uiState cambia
-
-  // --- FASE 3: Rendering della UI ---
+  // --- RENDER DELLA UI ---
   return (
     <div className="flex flex-col items-center justify-center p-8 text-white">
       <h1 className="text-2xl font-bold mb-4 bg-black/50 px-4 py-2 rounded-lg font-mono">Stato: {uiState}</h1>
       
-      {uiState === 'IN ATTESA DI LOGIN' && qrCodeUrl && (
+      {uiState === 'IN ATTESA DI SCANSIONE' && qrCodeUrl && (
         <div className="text-center">
           <p className="mb-4">Scansiona il QR code per accedere a Spotify</p>
           <div className="w-64 h-64 p-4 bg-white rounded-lg shadow-2xl">
@@ -118,7 +108,7 @@ function SpotifyLogin() {
          </div>
       )}
 
-       {(uiState.startsWith('ERRORE') || uiState === 'CREAZIONE SESSIONE...' || uiState === 'INIZIALIZZAZIONE') && (
+       {(uiState.startsWith('ERRORE') || uiState === 'CARICAMENTO...') && (
          <div className="w-64 h-64 flex items-center justify-center bg-zinc-800 rounded-lg">
             <div className="w-10 h-10 rounded-full loading-spinner-border" />
         </div>
