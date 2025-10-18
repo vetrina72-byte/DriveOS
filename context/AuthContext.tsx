@@ -32,8 +32,13 @@ interface PlayOptions {
     position_ms?: number;
 }
 
+interface TokenData {
+    access_token: string;
+    expires_in: number;
+}
+
 interface AuthContextType extends Omit<AuthState, 'lastVolume' | 'refreshToken' | 'expiresIn'> {
-    login: (authCode?: string | null, error?: string) => Promise<void>;
+    login: (tokenData?: TokenData | null, error?: string) => Promise<void>;
     logout: () => void;
     clearError: () => void;
     play: (options: PlayOptions) => void;
@@ -259,29 +264,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         initAuth();
     }, [fetchUserInfo]);
 
-    const login = useCallback(async (authCode?: string | null, authError?: string) => {
+    const login = useCallback(async (tokenData?: TokenData | null, authError?: string) => {
         console.log("✅ [AUTH_CONTEXT] Funzione 'login' chiamata.");
-        isInitialLoadOrLogin.current = true; // Flag for autoplay logic
+        isInitialLoadOrLogin.current = true;
         restorePlaybackAttempted.current = false;
         setState(s => ({ ...s, isLoading: true, error: null }));
     
         if (authError) {
             console.error("❌ [AUTH_CONTEXT] Errore di autorizzazione ricevuto:", authError);
-             setState(s => ({...s, error: authError, isLoading: false}));
-             return;
+            setState(s => ({...s, error: authError, isLoading: false}));
+            return;
         }
-    
-        if (!authCode) {
-            console.error("❌ [AUTH_CONTEXT] Il codice di autorizzazione è mancante.");
-            setState(s => ({...s, error: 'Authorization code is missing.', isLoading: false}));
+
+        if (!tokenData?.access_token) {
+            console.error("❌ [AUTH_CONTEXT] Dati del token mancanti.");
+            setState(s => ({...s, error: 'Token data is missing.', isLoading: false}));
             return;
         }
     
         try {
-            console.log("➡️ [AUTH_CONTEXT] Sto per scambiare il codice con un token chiamando /api/exchange-token...");
-            const response = await axios.post(`${window.location.origin}/api/exchange-token`, { code: authCode }, { withCredentials: true });
-            console.log("✅ [AUTH_CONTEXT] Scambio del token avvenuto con successo.");
-            const { access_token, expires_in } = response.data;
+            console.log("✅ [AUTH_CONTEXT] Ricevuti i token dal server, procedo con il login.");
+            const { access_token, expires_in } = tokenData;
             const expiresAt = Date.now() + expires_in * 1000;
     
             localStorage.setItem('spotify_access_token', access_token);

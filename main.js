@@ -32,18 +32,47 @@ function createAuthServer() {
     }
   }, 60 * 1000);
 
-  // New endpoint to serve the success page on the user's device
-  server.get('/api/spotify-callback', (req, res) => {
-    res.sendFile(path.join(__dirname, 'callback.html'));
-  });
+  server.get('/api/spotify-callback', async (req, res) => {
+    const { code, state: sessionId, error } = req.query;
 
-  server.post('/api/register-auth-code', (req, res) => {
-    const { sessionId, code } = req.body;
-    if (!sessionId || !code) {
-      return res.status(400).json({ error: 'Session ID and code are required.' });
+    if (error) {
+        console.error('Spotify callback error:', error);
+        return res.status(400).send(`<h1>Authentication Error</h1><p>Spotify returned an error: ${error}</p>`);
     }
-    authStore.set(sessionId, { code, timestamp: Date.now() });
-    res.status(200).json({ message: 'Code registered successfully.' });
+    if (!code || !sessionId) {
+        return res.status(400).send('<h1>Authentication Error</h1><p>Missing required parameters (code or session ID).</p>');
+    }
+
+    const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
+    const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
+    const params = new URLSearchParams();
+    params.append('grant_type', 'authorization_code');
+    params.append('code', code);
+    params.append('redirect_uri', VITE_REDIRECT_URI);
+
+    try {
+        const spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': authHeader,
+            },
+        });
+        
+        const { access_token, refresh_token, expires_in } = spotifyResponse.data;
+
+        // Securely set the refresh token in an HttpOnly cookie
+        res.setHeader('Set-Cookie', `spotify_refresh_token=${refresh_token}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`);
+
+        // Store the access token for the client to fetch via polling
+        authStore.set(sessionId, { status: 'completed', tokens: { access_token, expires_in }, timestamp: Date.now() });
+        
+        // Send the success page to the user's phone
+        res.sendFile(path.join(__dirname, 'callback.html'));
+
+    } catch (exchangeError) {
+        console.error('Error exchanging token:', exchangeError.response ? exchangeError.response.data : exchangeError.message);
+        res.status(500).send('<h1>Authentication Failed</h1><p>Could not exchange the authorization code for an access token.</p>');
+    }
   });
 
   server.get('/api/check-auth-status', (req, res) => {
@@ -51,42 +80,16 @@ function createAuthServer() {
     if (!sessionId) {
       return res.status(400).json({ error: 'Session ID is required.' });
     }
-    if (authStore.has(sessionId)) {
-      const { code } = authStore.get(sessionId);
-      authStore.delete(sessionId);
-      res.status(200).json({ code });
+    const sessionData = authStore.get(sessionId);
+
+    if (sessionData && sessionData.status === 'completed') {
+      authStore.delete(sessionId); // This is a one-time use token
+      res.status(200).json({ status: 'completed', tokens: sessionData.tokens });
     } else {
-      res.status(202).json({ status: 'pending' });
+      res.status(202).json({ status: 'pending' }); // 202 Accepted means "not ready yet, keep polling"
     }
   });
-
-  server.post('/api/exchange-token', async (req, res) => {
-    const { code } = req.body;
-    if (!code) {
-      return res.status(400).json({ error: 'Authorization code is missing' });
-    }
-    const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
-    const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
-    const params = new URLSearchParams();
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', VITE_REDIRECT_URI);
-    try {
-      const spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': authHeader,
-        },
-      });
-      const { access_token, refresh_token, expires_in } = spotifyResponse.data;
-      res.setHeader('Set-Cookie', `spotify_refresh_token=${refresh_token}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`);
-      res.status(200).json({ access_token, expires_in });
-    } catch (error) {
-      console.error('Error exchanging token:', error.response ? error.response.data : error.message);
-      res.status(error.response?.status || 500).json({ error: 'Failed to exchange token' });
-    }
-  });
-
+  
   server.post('/api/refresh-token', async (req, res) => {
     const { spotify_refresh_token: refreshToken } = req.cookies;
     if (!refreshToken) {

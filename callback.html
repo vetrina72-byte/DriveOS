@@ -18,20 +18,5 @@
     <p>Hai eseguito l'accesso con successo. Torna al tuo infotainment: verrà aggiornato automaticamente.</p>
     <button onclick="window.close()">Chiudi</button>
   </div>
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const sessionId = params.get('state');
-
-    if (code && sessionId) {
-      // "Fire and forget" POST request to the backend.
-      // This sends the code and session ID to be stored for the polling mechanism.
-      fetch('/api/register-auth-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, code })
-      }).catch(console.error);
-    }
-  </script>
 </body>
 </html>

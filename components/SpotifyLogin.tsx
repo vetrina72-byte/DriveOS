@@ -73,11 +73,11 @@ function SpotifyLogin() {
           return res.json();
         })
         .then(data => {
-          if (data && data.code) {
+          if (data && data.status === 'completed' && data.tokens) {
             console.log("🎉🎉🎉 [POLLING] RICEVUTO! Lo stato è COMPLETED! Fermo l'ascolto e avvio il login.");
             clearInterval(intervalId);
             setUiState('LOGIN COMPLETATO');
-            login(data.code);
+            login(data.tokens);
           }
         })
         .catch(error => {
