@@ -1,11 +1,14 @@
 // File: /api/spotify-callback.js
-import authStore from './_auth-cache.js';
 import axios from 'axios';
+import { getRedis } from '../lib/redis.js';
+
+const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 export default async function handler(req, res) {
   const { code, state: sessionId, error } = req.query;
 
   if (error) {
+    console.error(`[spotify-callback] Spotify returned an error: ${error}`);
     return res.status(400).send(`<h1>Authentication Error</h1><p>Spotify returned an error: ${error}</p>`);
   }
   if (!code || !sessionId) {
@@ -18,62 +21,55 @@ export default async function handler(req, res) {
     console.error('SERVER ERROR: Spotify environment variables are not configured on Vercel.');
     return res.status(500).send('<h1>Server Error</h1><p>Application is not configured correctly.</p>');
   }
-  
-  const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
-  const params = new URLSearchParams();
-  params.append('grant_type', 'authorization_code');
-  params.append('code', code);
-  params.append('redirect_uri', VITE_REDIRECT_URI);
 
   try {
-    const spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, {
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': authHeader,
-        },
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: VITE_REDIRECT_URI,
+      client_id: SPOTIFY_CLIENT_ID,
+      client_secret: SPOTIFY_CLIENT_SECRET,
     });
-    
-    const { access_token, refresh_token, expires_in } = spotifyResponse.data;
 
-    // Set HttpOnly cookie for refresh token for secure, subsequent token refreshes
+    const tokenResp = await axios.post(TOKEN_URL, body.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15000,
+    });
+
+    if (tokenResp.status !== 200) {
+      console.error('[spotify-callback] Token exchange failed', tokenResp.status, tokenResp.data);
+      return res.status(502).send('Spotify token exchange failed');
+    }
+
+    const { access_token, refresh_token, expires_in } = tokenResp.data;
+
+    // Save session to Redis
+    const redis = getRedis();
+    const key = `session:${sessionId}`;
+    const payload = {
+      authenticated: true,
+      accessToken: access_token,
+      refreshToken: refresh_token,
+      expiresAt: Date.now() + expires_in * 1000,
+    };
+    await redis.set(key, JSON.stringify(payload), 'EX', 60 * 60 * 24); // 24h TTL
+    console.log(`[spotify-callback] Saved session ${sessionId}`);
+
+    // Set HttpOnly cookie for secure, subsequent token refreshes
     res.setHeader('Set-Cookie', `spotify_refresh_token=${refresh_token}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`);
-
-    // Store access token in KV store for the client to poll and fetch
-    await authStore.set(sessionId, { 
-        status: 'completed', 
-        tokens: { access_token, expires_in } 
-    });
 
     // Respond with a user-friendly success page to the user's phone.
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(`
-      <!doctype html>
-      <html>
-      <head>
-      <meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Accesso completato</title>
-      <style>
-        body{display:flex;align-items:center;justify-content:center;height:100vh;background:#0b0b0c;color:#fff;font-family:system-ui,Segoe UI;}
-        .card{width:90%;max-width:420px;padding:24px;border-radius:12px;text-align:center;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));backdrop-filter: blur(6px);}
-        .spinner{width:64px;height:64px;border-radius:50%;border:6px solid rgba(255,255,255,0.08);border-top-color:#1DB954;animation:spin 1s linear infinite;margin:12px auto;}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        button{margin-top:10px;padding:10px 16px;border-radius:8px;border:0;background:#1DB954;color:#000;font-weight:700}
-      </style>
-      </head>
-      <body>
-        <div class="card">
-          <div class="spinner"></div>
-          <h2>Accesso completato</h2>
-          <p>Hai eseguito l'accesso con successo. Torna al tuo infotainment: verrà aggiornato automaticamente.</p>
-          <button onclick="window.close()">Chiudi</button>
-        </div>
-        <script>setTimeout(() => window.close(), 3000);</script>
-      </body>
-      </html>
+      <html><body style="font-family:sans-serif;text-align:center;padding:2rem">
+        <h2>✅ Accesso completato</h2>
+        <p>Puoi chiudere questa finestra. L'infotainment si aggiornerà automaticamente.</p>
+        <script>setTimeout(()=>window.close(),2500)</script>
+      </body></html>
     `);
 
-  } catch (exchangeError) {
-    console.error('Error exchanging token:', exchangeError.response ? exchangeError.response.data : exchangeError.message);
-    res.status(500).send('<h1>Authentication Failed</h1><p>Could not exchange the authorization code for an access token.</p>');
+  } catch (err) {
+    console.error('[spotify-callback] Error exchanging token:', err.response ? err.response.data : (err.message || err));
+    return res.status(500).send('Internal error during Spotify callback');
   }
 }

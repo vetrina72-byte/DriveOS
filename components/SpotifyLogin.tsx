@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 // Funzione helper per generare l'URL del QR code
@@ -17,6 +17,42 @@ function SpotifyLogin() {
   const [uiState, setUiState] = useState('CARICAMENTO...');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
+
+  const startPolling = useCallback((delay: number) => {
+    if (!sessionId) return;
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    console.log(`[POLLING] Avvio l'ascolto per la sessione ${sessionId}. Controllo ogni ${delay / 1000} secondi.`);
+
+    pollIntervalRef.current = window.setInterval(() => {
+      console.log(`[POLLING] ...controllo lo stato...`);
+
+      fetch(`/api/check-auth-status?sessionId=${sessionId}`)
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`Server responded with status ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (data && data.authenticated && data.tokens) {
+            console.log("🎉🎉🎉 [POLLING] RICEVUTO! Lo stato è authenticated! Fermo l'ascolto e avvio il login.");
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setUiState('LOGIN COMPLETATO');
+            login(data.tokens);
+          } else if (data && data.error === 'redis_unreachable') {
+              console.warn('[POLLING] Redis non raggiungibile, riprovo tra 5s.');
+              startPolling(5000); // Riprova con un ritardo maggiore
+          }
+        })
+        .catch(error => {
+          console.error("[POLLING] Errore durante il controllo dello stato:", error);
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          setUiState('ERRORE DURANTE IL POLLING');
+        });
+    }, delay);
+  }, [sessionId, login]);
 
   // --- EFFETTO #1: CREAZIONE SESSIONE (GIRA UNA SOLA VOLTA) ---
   useEffect(() => {
@@ -48,47 +84,20 @@ function SpotifyLogin() {
     setSessionId(newSessionId);
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('IN ATTESA DI SCANSIONE');
-  }, []); // L'array vuoto garantisce che questo venga eseguito UNA SOLA VOLTA.
+  }, []);
 
   // --- EFFETTO #2: POLLING (PARTE SOLO DOPO CHE ABBIAMO UN SESSION ID) ---
   useEffect(() => {
-    if (!sessionId) {
-      return;
+    if (sessionId) {
+      startPolling(3000); // Inizia a pollare con il ritardo standard
     }
 
-    console.log(`[POLLING] Avvio l'ascolto per la sessione ${sessionId}. Controllo ogni 3 secondi.`);
-    
-    const intervalId = setInterval(() => {
-      console.log(`[POLLING] ...controllo lo stato...`);
-
-      fetch(`/api/check-auth-status?sessionId=${sessionId}`)
-        .then(res => {
-          if (res.status === 202) {
-              // Status is pending, continue polling
-              return null;
-          }
-          if (!res.ok) {
-            throw new Error(`Server responded with status ${res.status}`);
-          }
-          return res.json();
-        })
-        .then(data => {
-          if (data && data.status === 'completed' && data.tokens) {
-            console.log("🎉🎉🎉 [POLLING] RICEVUTO! Lo stato è COMPLETED! Fermo l'ascolto e avvio il login.");
-            clearInterval(intervalId);
-            setUiState('LOGIN COMPLETATO');
-            login(data.tokens);
-          }
-        })
-        .catch(error => {
-          console.error("[POLLING] Errore durante il controllo dello stato:", error);
-          clearInterval(intervalId);
-          setUiState('ERRORE DURANTE IL POLLING');
-        });
-    }, 3000);
-
-    return () => clearInterval(intervalId);
-  }, [sessionId, login]);
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [sessionId, startPolling]);
 
   // --- RENDER DELLA UI ---
   return (

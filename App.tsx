@@ -1872,7 +1872,6 @@ function AppContent() {
         setWidgetBgHex={setWidgetBgHex}
         volumeIconSize={volumeIconSize}
         setVolumeIconSize={setVolumeIconSize}
-        // FIX: Corrected variable names passed as props from slider... to volumeSlider...
         volumeSliderOffsetY={volumeSliderOffsetY}
         setVolumeSliderOffsetY={setVolumeSliderOffsetY}
         volumeSliderOffsetX={volumeSliderOffsetX}
