@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Accesso completato</title>
+<style>
+  body{display:flex;align-items:center;justify-content:center;height:100vh;background:#0b0b0c;color:#fff;font-family:system-ui,Segoe UI;}
+  .card{width:90%;max-width:420px;padding:24px;border-radius:12px;text-align:center;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));backdrop-filter: blur(6px);}
+  .spinner{width:64px;height:64px;border-radius:50%;border:6px solid rgba(255,255,255,0.08);border-top-color:#1DB954;animation:spin 1s linear infinite;margin:12px auto;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  button{margin-top:10px;padding:10px 16px;border-radius:8px;border:0;background:#1DB954;color:#000;font-weight:700}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <h2>Accesso completato</h2>
+    <p>Hai eseguito l'accesso con successo. Torna al tuo infotainment: verrà aggiornato automaticamente.</p>
+    <button onclick="window.close()">Chiudi</button>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const sessionId = params.get('state');
+
+    if (code && sessionId) {
+      // "Fire and forget" POST request to the backend.
+      // This sends the code and session ID to be stored for the polling mechanism.
+      fetch('/api/register-auth-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, code })
+      }).catch(console.error);
+    }
+  </script>
+</body>
+</html>

@@ -32,6 +32,11 @@ function createAuthServer() {
     }
   }, 60 * 1000);
 
+  // New endpoint to serve the success page on the user's device
+  server.get('/api/spotify-callback', (req, res) => {
+    res.sendFile(path.join(__dirname, 'callback.html'));
+  });
+
   server.post('/api/register-auth-code', (req, res) => {
     const { sessionId, code } = req.body;
     if (!sessionId || !code) {

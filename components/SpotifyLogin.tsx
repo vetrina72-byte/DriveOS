@@ -63,13 +63,17 @@ function SpotifyLogin() {
 
       fetch(`/api/check-auth-status?sessionId=${sessionId}`)
         .then(res => {
+          if (res.status === 202) {
+              // Status is pending, continue polling
+              return null;
+          }
           if (!res.ok) {
             throw new Error(`Server responded with status ${res.status}`);
           }
           return res.json();
         })
         .then(data => {
-          if (data && data.status === 'completed' && data.code) {
+          if (data && data.code) {
             console.log("🎉🎉🎉 [POLLING] RICEVUTO! Lo stato è COMPLETED! Fermo l'ascolto e avvio il login.");
             clearInterval(intervalId);
             setUiState('LOGIN COMPLETATO');
