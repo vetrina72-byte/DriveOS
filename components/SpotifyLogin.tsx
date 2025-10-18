@@ -46,42 +46,16 @@ const CheckmarkIcon = () => (
 
 function SpotifyLogin() {
   const { login } = useAuth();
-  const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE'>('CARICAMENTO');
+  const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
 
-  const startPolling = useCallback((delay: number) => {
-    if (!sessionId) return;
+  const startLoginProcess = useCallback(() => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-
-    pollIntervalRef.current = window.setInterval(() => {
-      fetch(`/api/check-auth-status?sessionId=${sessionId}`)
-        .then(res => {
-          if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
-          return res.json();
-        })
-        .then(data => {
-          if (data && data.authenticated && data.tokens) {
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-            setUiState('LOGIN_COMPLETATO');
-            setTimeout(() => login(data.tokens), 1500); // Wait for animation before logging in
-          } else if (data && data.error === 'redis_unreachable') {
-              console.warn('[POLLING] Redis non raggiungibile, riprovo tra 5s.');
-              startPolling(5000);
-          }
-        })
-        .catch(error => {
-          console.error("[POLLING] Errore durante il controllo dello stato:", error);
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          setUiState('ERRORE');
-        });
-    }, delay);
-  }, [sessionId, login]);
-
-  useEffect(() => {
-    const newSessionId = generateUUID();
+    setUiState('CARICAMENTO');
     
+    const newSessionId = generateUUID();
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
     const redirectUri = process.env.VITE_REDIRECT_URI;
     const scope = [
@@ -102,15 +76,56 @@ function SpotifyLogin() {
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('ATTESA_SCANSIONE');
   }, []);
+  
+  const startPolling = useCallback((delay: number) => {
+    if (!sessionId) return;
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    pollIntervalRef.current = window.setInterval(() => {
+      fetch(`/api/check-auth-status?sessionId=${sessionId}`)
+        .then(res => {
+          if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          if (data && data.authenticated && data.tokens) {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setUiState('LOGIN_COMPLETATO');
+            setTimeout(() => login(data.tokens), 1500);
+          } else if (data && data.expired === true) {
+            console.warn('[POLLING] Session expired (invalid_grant). Regenerating QR code.');
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setUiState('SCADUTO');
+            setTimeout(() => {
+              startLoginProcess();
+            }, 2500);
+          } else if (data && data.error === 'redis_unreachable') {
+              console.warn('[POLLING] Redis not reachable, retrying in 5s.');
+              startPolling(5000);
+          }
+        })
+        .catch(error => {
+          console.error("[POLLING] Error checking auth status:", error);
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          setUiState('ERRORE');
+        });
+    }, delay);
+  }, [sessionId, login, startLoginProcess]);
 
   useEffect(() => {
-    if (sessionId) {
+    startLoginProcess();
+    // This effect should only run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (uiState === 'ATTESA_SCANSIONE' && sessionId) {
       startPolling(3000);
     }
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [sessionId, startPolling]);
+  }, [uiState, sessionId, startPolling]);
 
   return (
     <div className="w-full h-full flex items-center justify-center p-8 bg-[var(--spotify-panel-bg)]">
@@ -150,7 +165,7 @@ function SpotifyLogin() {
                 </motion.div>
             )}
 
-            {(uiState === 'CARICAMENTO' || uiState === 'ERRORE') && (
+            {(uiState === 'CARICAMENTO' || uiState === 'ERRORE' || uiState === 'SCADUTO') && (
                 <motion.div
                     key="loader-error-view"
                     initial={{ opacity: 0 }}
@@ -158,9 +173,16 @@ function SpotifyLogin() {
                     exit={{ opacity: 0 }}
                     className="flex flex-col items-center justify-center text-center"
                 >
-                    {uiState === 'CARICAMENTO' ? (
+                    {uiState === 'CARICAMENTO' && (
                         <div className="w-12 h-12 spotify-spinner" />
-                    ) : (
+                    )}
+                     {uiState === 'SCADUTO' && (
+                        <>
+                            <p className="text-yellow-400 text-lg">QR Code scaduto.</p>
+                            <p className="text-zinc-400 mt-1">Sto generando un nuovo codice...</p>
+                        </>
+                    )}
+                    {uiState === 'ERRORE' && (
                         <>
                             <p className="text-red-400 text-lg">Si è verificato un errore.</p>
                             <p className="text-zinc-400 mt-1">Controlla la connessione e riprova.</p>
