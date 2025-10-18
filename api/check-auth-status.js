@@ -19,13 +19,8 @@ export default async function handler(req, res) {
 
     const session = JSON.parse(raw);
 
-    // Check for the specific expired code error from the callback
-    if (session.error === 'token_exchange_failed' && session.token_error?.error === 'invalid_grant') {
-      return res.status(200).json({ authenticated: false, expired: true });
-    }
-
+    // Case 1: Success - session is authenticated
     if (session.authenticated) {
-      // Session data found, return tokens and delete it to prevent reuse
       const tokens = {
         access_token: session.accessToken,
         expires_in: Math.round((session.expiresAt - Date.now()) / 1000),
@@ -35,10 +30,16 @@ export default async function handler(req, res) {
       await redis.del(key);
       
       return res.status(200).json({ authenticated: true, tokens: tokens });
-    } else {
-      // Still pending or some other non-critical error
-      return res.status(200).json({ authenticated: false });
     }
+    
+    // Case 2: Expired - auth code was invalid, client needs to generate a new QR code
+    if (session.expired === true) {
+      return res.status(200).json({ authenticated: false, expired: true });
+    }
+
+    // Case 3: Other errors or still pending
+    return res.status(200).json({ authenticated: false });
+
   } catch (err) {
     console.error('[check-auth-status] redis error', err && err.message ? err.message : err);
     // Do not return 500 on Redis errors.
