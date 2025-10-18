@@ -18,24 +18,22 @@ async function safeDel(redis, key) {
   try { await redis.del(key); } catch (e) { console.error(`[spotify-callback] safeDel error for key ${key}:`, e && e.message ? e.message : e); }
 }
 
-// --- STYLED HTML RESPONSE BUILDERS (NO TEMPLATE LITERALS) ---
+// --- STYLED HTML RESPONSE BUILDERS ---
 
 function sendSuccessPage(res) {
   const parts = [
     '<!doctype html>',
     '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accesso completato</title>',
     '<style>',
-    'html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }',
-    'body { display: flex; align-items: center; justify-content: center; background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; text-align: center; }',
-    '.container { padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3rem; height: 100%; box-sizing: border-box; }',
-    '.spotify-logo { width: 132px; height: auto; }',
-    '.message { color: #fff; font-size: 1.3rem; font-weight: 500; line-height: 1.5; max-width: 340px; margin: 0; }',
-    '.success-icon { width: 64px; height: 64px; }',
+      'html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }',
+      'body { display: flex; align-items: center; justify-content: center; background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; text-align: center; }',
+      '.container { padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3.5rem; height: 100%; padding-top: 20vh; box-sizing: border-box; }',
+      '.spotify-logo { width: 132px; height: auto; }',
+      '.success-icon { width: 48px; height: 48px; }',
+      '.message { color: #fff; font-size: 1.25rem; font-weight: 500; line-height: 1.5; max-width: 340px; margin: 0; }',
     '</style></head><body>',
     '<div class="container">',
-      '<svg class="spotify-logo" viewBox="0 0 168 50" fill="white" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="Spotify Logo">',
-        '<path d="M83.996.277C37.747.277.253 37.77.253 84.019c0 46.25 37.494 83.743 83.743 83.743 46.25 0 83.744-37.493 83.744-83.743C167.74 37.77 130.246.277 83.996.277zM123.11 119.588c-1.878 3.12-5.31 4.1-8.432 2.222-3.123-1.878-4.1-5.31-2.222-8.432 1.878-3.123 5.31-4.1 8.432-2.222 3.122 1.878 4.1 5.31 2.222 8.432zm7.23-15.31c-2.31 1.543-5.743.36-7.285-1.95-1.543-2.31.36-5.743 1.95-7.285 2.31-1.543 5.743-.36 7.285 1.95 1.543 2.31-.36 5.743-1.95 7.285zm8.503-14.704c-2.822 1.785-6.6- P-.02-8.384-2.843-1.785-2.822 1.02-6.6 2.842-8.384 2.822-1.785 6.6.02 8.384 2.843 1.785 2.822-1.02 6.6-2.842 8.384z"/>',
-      '</svg>',
+      '<svg class="spotify-logo" viewBox="0 0 168 50" fill="white" xmlns="http://www.w3.org/2000/svg" aria-label="Spotify Logo"><path d="M83.996 25.001c0 13.808-11.193 25.001-25.001 25.001C45.187 50.002 34 38.809 34 25.001 34 11.193 45.187 0 58.995 0c13.808 0 25.001 11.193 25.001 25.001zM70.36 23.185c-2.9-5.25-9.18-7.05-15.11-3.84a1.56 1.56 0 00-1.89 1.34 1.56 1.56 0 001.34 1.89c5.12-2.82 10.45-1.34 12.8 2.91a1.55 1.55 0 002.164 1.155 1.55 1.55 0 00.7-3.455zM71.46 16.665c-3.41-6.26-10.74-8.3-17.5-4.57a1.88 1.88 0 00-2.27 1.6 1.88 1.88 0 001.6 2.27c5.6-3.14 11.85-1.4 14.83 4.05a1.88 1.88 0 002.53.74 1.88 1.88 0 00.81-4.09zM69.878 30.473c-2.734-4.223-8.15-5.222-13.568-2.887a1.25 1.25 0 00-1.51 1.074 1.25 1.25 0 001.074 1.51c4.71-2.07 9.42-1.22 11.75 2.5a1.24 1.24 0 001.741.93 1.24 1.24 0 00.513-3.127z"></path><path d="M96.38 31.57v-1.6c-2.28 2.5-5.2 3.9-9.3 3.9-9.2 0-16.4-7.2-16.4-17.1s7.2-17.2 15.4-17.2c4.4 0 7.8 1.4 10.3 4.1V19.37h6.2v23.2h-6.2zM90.88 18c-5.8 0-10.5 4.7-10.5 10.6s4.7 10.6 10.5 10.6c5.8 0 10.5-4.7 10.5-10.6s-4.7-10.6-10.5-10.6zM130.41 18.97c-9.5 0-15.5 6-15.5 14.8 0 8.2 5.2 12.3 13.3 12.3 4.2 0 7.8-1.5 10.2-4.4l-3.8-3.4c-1.6 1.8-3.6 2.7-6.2 2.7-4.1 0-6.6-2.5-7.4-6.3h24.4v-0.1c0-9.2-6.5-15-14.8-15zm-7.1 11.7c0.7-4.1 3.5-6.7 7.2-6.7 3.8 0 6.3 2.6 7 6.7h-14.2zM161.44 19.37h-9.2l-7.2 23.2h6.4l2-6.2h8.9l2 6.2h6.4l-7.2-23.2zm-1.1 12.3l3.5-10.9 3.5 10.9h-7z"></path></svg>',
       '<svg class="success-icon" viewBox="0 0 48 48" fill="white" xmlns="http://www.w3.org/2000/svg" aria-label="Success checkmark">',
         '<path fill-rule="evenodd" clip-rule="evenodd" d="M24,0 C10.745,0 0,10.745 0,24 C0,37.255 10.745,48 24,48 C37.255,48 48,37.255 48,24 C48,10.745 37.255,0 24,0 Z M35.707,18.707 C36.098,18.317 36.098,17.683 35.707,17.293 C35.317,16.902 34.683,16.902 34.293,17.293 L23,28.586 L15.707,21.293 C15.317,20.902 14.683,20.902 14.293,21.293 C13.902,21.683 13.902,22.317 14.293,22.707 L22.293,30.707 C22.683,31.098 23.317,31.098 23.707,30.707 L35.707,18.707 Z"/>',
       '</svg>',
@@ -53,16 +51,16 @@ function sendExpiredPage(res) {
     '<!doctype html>',
     '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Autenticazione Fallita</title>',
     '<style>',
-    'html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }',
-    'body { display: flex; align-items: center; justify-content: center; background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; text-align: center; }',
-    '.container { padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2rem; height: 100%; box-sizing: border-box; }',
-    '.spotify-logo { width: 132px; height: auto; }',
-    '.message { color: #d1d5db; font-size: 1.1rem; font-weight: 500; line-height: 1.5; max-width: 340px; margin: 0; }',
-    '.title { font-size: 1.5rem; font-weight: 600; color: white; }',
-    '.error-icon { width: 48px; height: 48px; color: #f87171; }',
+      'html, body { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }',
+      'body { display: flex; align-items: center; justify-content: center; background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; text-align: center; }',
+      '.container { padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2.5rem; height: 100%; padding-top: 20vh; box-sizing: border-box; }',
+      '.spotify-logo { width: 132px; height: auto; }',
+      '.message { color: #d1d5db; font-size: 1.1rem; font-weight: 500; line-height: 1.5; max-width: 340px; margin: 0; }',
+      '.title { font-size: 1.5rem; font-weight: 600; color: white; margin: 0; }',
+      '.error-icon { width: 48px; height: 48px; color: #f87171; }',
     '</style></head><body>',
     '<div class="container">',
-      '<svg class="spotify-logo" viewBox="0 0 168 50" fill="white" xmlns="http://www.w3.org/2000/svg" aria-label="Spotify Logo"><path d="M83.996.277C37.747.277.253 37.77.253 84.019c0 46.25 37.494 83.743 83.743 83.743 46.25 0 83.744-37.493 83.744-83.743C167.74 37.77 130.246.277 83.996.277zM123.11 119.588c-1.878 3.12-5.31 4.1-8.432 2.222-3.123-1.878-4.1-5.31-2.222-8.432 1.878-3.123 5.31-4.1 8.432-2.222 3.122 1.878 4.1 5.31 2.222 8.432zm7.23-15.31c-2.31 1.543-5.743.36-7.285-1.95-1.543-2.31.36-5.743 1.95-7.285 2.31-1.543 5.743-.36 7.285 1.95 1.543 2.31-.36 5.743-1.95 7.285zm8.503-14.704c-2.822 1.785-6.6- P-.02-8.384-2.843-1.785-2.822 1.02-6.6 2.842-8.384 2.822-1.785 6.6.02 8.384 2.843 1.785 2.822-1.02 6.6-2.842 8.384z"/></svg>',
+      '<svg class="spotify-logo" viewBox="0 0 168 50" fill="white" xmlns="http://www.w3.org/2000/svg" aria-label="Spotify Logo"><path d="M83.996 25.001c0 13.808-11.193 25.001-25.001 25.001C45.187 50.002 34 38.809 34 25.001 34 11.193 45.187 0 58.995 0c13.808 0 25.001 11.193 25.001 25.001zM70.36 23.185c-2.9-5.25-9.18-7.05-15.11-3.84a1.56 1.56 0 00-1.89 1.34 1.56 1.56 0 001.34 1.89c5.12-2.82 10.45-1.34 12.8 2.91a1.55 1.55 0 002.164 1.155 1.55 1.55 0 00.7-3.455zM71.46 16.665c-3.41-6.26-10.74-8.3-17.5-4.57a1.88 1.88 0 00-2.27 1.6 1.88 1.88 0 001.6 2.27c5.6-3.14 11.85-1.4 14.83 4.05a1.88 1.88 0 002.53.74 1.88 1.88 0 00.81-4.09zM69.878 30.473c-2.734-4.223-8.15-5.222-13.568-2.887a1.25 1.25 0 00-1.51 1.074 1.25 1.25 0 001.074 1.51c4.71-2.07 9.42-1.22 11.75 2.5a1.24 1.24 0 001.741.93 1.24 1.24 0 00.513-3.127z"></path><path d="M96.38 31.57v-1.6c-2.28 2.5-5.2 3.9-9.3 3.9-9.2 0-16.4-7.2-16.4-17.1s7.2-17.2 15.4-17.2c4.4 0 7.8 1.4 10.3 4.1V19.37h6.2v23.2h-6.2zM90.88 18c-5.8 0-10.5 4.7-10.5 10.6s4.7 10.6 10.5 10.6c5.8 0 10.5-4.7 10.5-10.6s-4.7-10.6-10.5-10.6zM130.41 18.97c-9.5 0-15.5 6-15.5 14.8 0 8.2 5.2 12.3 13.3 12.3 4.2 0 7.8-1.5 10.2-4.4l-3.8-3.4c-1.6 1.8-3.6 2.7-6.2 2.7-4.1 0-6.6-2.5-7.4-6.3h24.4v-0.1c0-9.2-6.5-15-14.8-15zm-7.1 11.7c0.7-4.1 3.5-6.7 7.2-6.7 3.8 0 6.3 2.6 7 6.7h-14.2zM161.44 19.37h-9.2l-7.2 23.2h6.4l2-6.2h8.9l2 6.2h6.4l-7.2-23.2zm-1.1 12.3l3.5-10.9 3.5 10.9h-7z"></path></svg>',
       '<svg class="error-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
       '<h2 class="title">Autenticazione non valida</h2>',
       '<p class="message">Il codice è scaduto. Torna al tuo infotainment, un nuovo QR code verrà generato automaticamente.</p>',
@@ -73,6 +71,7 @@ function sendExpiredPage(res) {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   return res.status(200).end(parts.join(''));
 }
+
 
 export default async function handler(req, res) {
   try {
