@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { FaSpotify } from 'react-icons/fa';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Funzione helper per generare l'URL del QR code
-const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=0-0-0&color=fff&qzone=1`;
+const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
 
 // Client-side UUID generation for session tracking
 const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -11,10 +13,40 @@ const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/
   return v.toString(16);
 });
 
+const CheckmarkIcon = () => (
+    <motion.svg
+        className="w-24 h-24"
+        viewBox="0 0 50 50"
+        initial="hidden"
+        animate="visible"
+    >
+        <motion.circle
+            cx="25"
+            cy="25"
+            r="24"
+            stroke="#1DB954"
+            strokeWidth="2"
+            fill="none"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1, transition: { duration: 0.5, ease: "easeOut" } }}
+        />
+        <motion.path
+            d="M14 27 L 22 35 L 37 20"
+            fill="transparent"
+            strokeWidth="3"
+            stroke="#1DB954"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1, transition: { duration: 0.4, ease: "easeInOut", delay: 0.3 } }}
+        />
+    </motion.svg>
+);
+
 
 function SpotifyLogin() {
   const { login } = useAuth();
-  const [uiState, setUiState] = useState('CARICAMENTO...');
+  const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
@@ -23,41 +55,31 @@ function SpotifyLogin() {
     if (!sessionId) return;
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
-    console.log(`[POLLING] Avvio l'ascolto per la sessione ${sessionId}. Controllo ogni ${delay / 1000} secondi.`);
-
     pollIntervalRef.current = window.setInterval(() => {
-      console.log(`[POLLING] ...controllo lo stato...`);
-
       fetch(`/api/check-auth-status?sessionId=${sessionId}`)
         .then(res => {
-          if (!res.ok) {
-            throw new Error(`Server responded with status ${res.status}`);
-          }
+          if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
           return res.json();
         })
         .then(data => {
           if (data && data.authenticated && data.tokens) {
-            console.log("🎉🎉🎉 [POLLING] RICEVUTO! Lo stato è authenticated! Fermo l'ascolto e avvio il login.");
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-            setUiState('LOGIN COMPLETATO');
-            login(data.tokens);
+            setUiState('LOGIN_COMPLETATO');
+            setTimeout(() => login(data.tokens), 1500); // Wait for animation before logging in
           } else if (data && data.error === 'redis_unreachable') {
               console.warn('[POLLING] Redis non raggiungibile, riprovo tra 5s.');
-              startPolling(5000); // Riprova con un ritardo maggiore
+              startPolling(5000);
           }
         })
         .catch(error => {
           console.error("[POLLING] Errore durante il controllo dello stato:", error);
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          setUiState('ERRORE DURANTE IL POLLING');
+          setUiState('ERRORE');
         });
     }, delay);
   }, [sessionId, login]);
 
-  // --- EFFETTO #1: CREAZIONE SESSIONE (GIRA UNA SOLA VOLTA) ---
   useEffect(() => {
-    console.log('[INIT] Eseguo la creazione della sessione (una sola volta)...');
-    
     const newSessionId = generateUUID();
     
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
@@ -72,60 +94,81 @@ function SpotifyLogin() {
     
     const authUrl = new URL("https://accounts.spotify.com/authorize");
     authUrl.search = new URLSearchParams({
-        client_id: clientId,
-        response_type: 'code',
-        redirect_uri: redirectUri,
-        scope: scope,
-        show_dialog: 'true',
-        state: newSessionId
+        client_id: clientId, response_type: 'code', redirect_uri: redirectUri,
+        scope: scope, show_dialog: 'true', state: newSessionId
     }).toString();
 
-    console.log(`[INIT] Sessione creata con ID: ${newSessionId}`);
     setSessionId(newSessionId);
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
-    setUiState('IN ATTESA DI SCANSIONE');
+    setUiState('ATTESA_SCANSIONE');
   }, []);
 
-  // --- EFFETTO #2: POLLING (PARTE SOLO DOPO CHE ABBIAMO UN SESSION ID) ---
   useEffect(() => {
     if (sessionId) {
-      startPolling(3000); // Inizia a pollare con il ritardo standard
+      startPolling(3000);
     }
-
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, [sessionId, startPolling]);
 
-  // --- RENDER DELLA UI ---
   return (
-    <div className="flex flex-col items-center justify-center p-8 text-white">
-      <h1 className="text-2xl font-bold mb-4 bg-black/50 px-4 py-2 rounded-lg font-mono">Stato: {uiState}</h1>
-      
-      {uiState === 'IN ATTESA DI SCANSIONE' && qrCodeUrl && (
-        <div className="text-center">
-          <p className="mb-4">Scansiona il QR code per accedere a Spotify</p>
-          <div className="w-64 h-64 p-4 bg-white rounded-lg shadow-2xl">
-              <img src={qrCodeUrl} alt="QR Code per login Spotify" className="w-full h-full object-contain" />
-          </div>
-        </div>
-      )}
+    <div className="w-full h-full flex items-center justify-center p-8 bg-[var(--spotify-panel-bg)]">
+        <AnimatePresence mode="wait">
+            {uiState === 'ATTESA_SCANSIONE' && (
+                <motion.div
+                    key="qr-view"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex items-center gap-12 bg-zinc-900/50 p-12 rounded-2xl shadow-2xl border border-white/10"
+                >
+                    <div className="flex-shrink-0 w-64 h-64 p-4 bg-white rounded-lg shadow-lg">
+                        <img src={qrCodeUrl} alt="QR Code per login Spotify" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="text-left">
+                        <FaSpotify className="w-12 h-12 text-white mb-6" />
+                        <h1 className="text-3xl font-bold text-white mb-2">Accedi al tuo account Spotify</h1>
+                        <p className="text-zinc-400 text-lg">Scansiona il codice QR con il tuo telefono per iniziare.</p>
+                    </div>
+                </motion.div>
+            )}
 
-      {uiState === 'LOGIN COMPLETATO' && (
-         <div className="w-64 h-64 flex flex-col items-center justify-center bg-zinc-800 rounded-lg">
-            <div className="w-12 h-12 rounded-full loading-spinner-border mb-4" />
-            <p className="text-zinc-300">Accesso Riuscito!</p>
-            <p className="text-zinc-300">Autenticazione...</p>
-         </div>
-      )}
+            {uiState === 'LOGIN_COMPLETATO' && (
+                <motion.div
+                    key="success-view"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex flex-col items-center justify-center text-center"
+                >
+                    <CheckmarkIcon />
+                    <h2 className="text-2xl font-bold text-white mt-6">Accesso completato!</h2>
+                    <p className="text-zinc-400 mt-1">Stiamo caricando la tua musica...</p>
+                </motion.div>
+            )}
 
-       {(uiState.startsWith('ERRORE') || uiState === 'CARICAMENTO...') && (
-         <div className="w-64 h-64 flex items-center justify-center bg-zinc-800 rounded-lg">
-            <div className="w-10 h-10 rounded-full loading-spinner-border" />
-        </div>
-      )}
+            {(uiState === 'CARICAMENTO' || uiState === 'ERRORE') && (
+                <motion.div
+                    key="loader-error-view"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center justify-center text-center"
+                >
+                    {uiState === 'CARICAMENTO' ? (
+                        <div className="w-12 h-12 spotify-spinner" />
+                    ) : (
+                        <>
+                            <p className="text-red-400 text-lg">Si è verificato un errore.</p>
+                            <p className="text-zinc-400 mt-1">Controlla la connessione e riprova.</p>
+                        </>
+                    )}
+                </motion.div>
+            )}
+        </AnimatePresence>
     </div>
   );
 }
