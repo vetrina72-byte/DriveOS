@@ -1,6 +1,6 @@
 // pages/api/spotify-callback.js
 import fetch from 'node-fetch';
-import { getRedis } from '../../lib/redis.js'; // adatta il path se diverso
+import { getRedis } from '../lib/redis.js'; // adatta il path se diverso
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
@@ -23,9 +23,9 @@ function sendSuccessPage(res) {
     '<!doctype html>',
     '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accesso completato</title>',
     '<style>',
-      'body { background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; height: 100vh; margin: 0; padding: 20vh 1rem 1rem; box-sizing: border-box; text-align: center; }',
+      'body { background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; height: 100vh; margin: 0; padding: 15vh 1rem 1rem; box-sizing: border-box; text-align: center; }',
       '.container { display: flex; flex-direction: column; align-items: center; gap: 3.5rem; }',
-      '.spotify-logo { width: 140px; height: auto; }',
+      '.spotify-logo { width: 132px; height: auto; }',
       '.success-icon svg { width: 64px; height: 64px; }',
       '.message { font-size: 1.25rem; font-weight: 500; max-width: 320px; line-height: 1.5; }',
     '</style></head>',
@@ -50,7 +50,7 @@ function sendExpiredPage(res) {
   const p = [
     '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Autenticazione non valida</title></head>',
     '<style>',
-      'body { background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; height: 100vh; margin: 0; padding: 20vh 1rem 1rem; box-sizing: border-box; text-align: center; }',
+      'body { background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Circular", "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; height: 100vh; margin: 0; padding: 15vh 1rem 1rem; box-sizing: border-box; text-align: center; }',
       '.container { display: flex; flex-direction: column; align-items: center; gap: 2.5rem; }',
       '.spotify-logo { width: 132px; height: auto; }',
       '.error-icon svg { width: 64px; height: 64px; color: #f87171; }',
