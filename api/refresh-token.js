@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 
 export default async function handler(req, res) {
@@ -38,7 +37,11 @@ export default async function handler(req, res) {
 
         // Spotify può restituire un nuovo refresh_token per rotazione. Aggiorniamo il cookie se succede.
         if (newRefreshToken) {
-            res.setHeader('Set-Cookie', `spotify_refresh_token=${newRefreshToken}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`);
+            let cookieString = `spotify_refresh_token=${newRefreshToken}; HttpOnly; Path=/; SameSite=Strict; Max-Age=31536000`;
+            if (process.env.NODE_ENV === 'production') {
+                cookieString += '; Secure';
+            }
+            res.setHeader('Set-Cookie', cookieString);
         }
 
         res.status(200).json({
@@ -54,7 +57,11 @@ export default async function handler(req, res) {
         // GESTIONE CRUCIALE: Se il refresh token non è più valido, Spotify risponde con `invalid_grant`.
         // In questo caso, puliamo il cookie e restituiamo 401 per forzare il logout sul frontend.
         if (error.response?.data?.error === 'invalid_grant') {
-            res.setHeader('Set-Cookie', 'spotify_refresh_token=; HttpOnly; Secure; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+            let cookieString = 'spotify_refresh_token=; HttpOnly; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            if (process.env.NODE_ENV === 'production') {
+                cookieString += '; Secure';
+            }
+            res.setHeader('Set-Cookie', cookieString);
             return res.status(401).json({ error: 'Invalid refresh token', details });
         }
         res.status(status).json({

@@ -61,7 +61,11 @@ function createAuthServer() {
         const { access_token, refresh_token, expires_in } = spotifyResponse.data;
 
         // Securely set the refresh token in an HttpOnly cookie
-        res.setHeader('Set-Cookie', `spotify_refresh_token=${refresh_token}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`);
+        let cookieString = `spotify_refresh_token=${refresh_token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=31536000`;
+        if (!isDev) {
+            cookieString += '; Secure';
+        }
+        res.setHeader('Set-Cookie', cookieString);
 
         // Store the access token for the client to fetch via polling
         authStore.set(sessionId, { status: 'completed', tokens: { access_token, expires_in }, timestamp: Date.now() });
@@ -109,13 +113,21 @@ function createAuthServer() {
       });
       const { access_token, expires_in, refresh_token: newRefreshToken } = spotifyResponse.data;
       if (newRefreshToken) {
-        res.setHeader('Set-Cookie', `spotify_refresh_token=${newRefreshToken}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=31536000`);
+        let cookieString = `spotify_refresh_token=${newRefreshToken}; HttpOnly; Path=/; SameSite=Strict; Max-Age=31536000`;
+        if (!isDev) {
+            cookieString += '; Secure';
+        }
+        res.setHeader('Set-Cookie', cookieString);
       }
       res.status(200).json({ access_token, expires_in });
     } catch (error) {
       console.error('Error refreshing token:', error.response ? error.response.data : error.message);
        if (error.response?.data?.error === 'invalid_grant') {
-            res.setHeader('Set-Cookie', 'spotify_refresh_token=; HttpOnly; Secure; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+            let cookieString = 'spotify_refresh_token=; HttpOnly; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            if (!isDev) {
+                cookieString += '; Secure';
+            }
+            res.setHeader('Set-Cookie', cookieString);
             return res.status(401).json({ error: 'Invalid refresh token' });
         }
       res.status(error.response?.status || 500).json({ error: 'Failed to refresh token' });
@@ -123,7 +135,11 @@ function createAuthServer() {
   });
 
   server.post('/api/logout', (req, res) => {
-    res.setHeader('Set-Cookie', 'spotify_refresh_token=; HttpOnly; Secure; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+    let cookieString = 'spotify_refresh_token=; HttpOnly; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    if (!isDev) {
+        cookieString += '; Secure';
+    }
+    res.setHeader('Set-Cookie', cookieString);
     res.status(200).json({ message: 'Logged out successfully' });
   });
 
