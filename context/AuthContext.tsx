@@ -99,6 +99,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const refreshTimeoutId = useRef<number | null>(null);
     const playerRef = useRef<SpotifyPlayer | null>(null);
     const restorePlaybackAttempted = useRef<boolean>(false);
+    const volumeQueuePromise = useRef(Promise.resolve());
+    const lastVolumeTimeout = useRef<number | null>(null);
     
     useEffect(() => {
         try {
@@ -130,6 +132,68 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
     }, []);
     
+    const attemptRefreshAndRecover = useCallback(async (): Promise<boolean> => {
+      console.log('🕒 [TOKEN MANAGER] Attempting silent token refresh from volume error path...');
+      const sessionId = sessionIdRef.current;
+      if (!sessionId) {
+        console.warn('⚠️ [TOKEN MANAGER] no sessionId present; cannot refresh');
+        return false;
+      }
+      try {
+        const r = await fetch('/api/refresh-token', { method: 'POST', headers: { 'x-session-id': sessionId } });
+        if (r.status === 200) {
+          const data = await r.json();
+          localStorage.setItem('accessToken', data.access_token);
+          localStorage.setItem('expiresAt', String(data.expires_at));
+          setState(s => ({ ...s, accessToken: data.access_token, expiresAt: data.expires_at }));
+          console.log('🟢 [TOKEN MANAGER] refresh OK after volume error');
+          const player = playerRef.current;
+          if (player) {
+            try {
+              console.warn('⚠️ [PLAYER] disconnect prevented. (Note: attempting safe reconnect sequence)');
+              await player.disconnect().catch(()=>{});
+              await player.connect();
+              console.log('🔁 [PLAYER] reconnect attempted after token refresh');
+            } catch(e){
+              console.warn('⚠️ [PLAYER] reconnect attempt failed', e);
+            }
+          }
+          return true;
+        } else {
+          const body = await r.text();
+          console.warn('⚠️ [TOKEN MANAGER] refresh failed', r.status, body);
+          // Only force logout on invalid_grant specifically or repeated failures (handled elsewhere)
+           if (r.status === 401 || body.includes('invalid_grant')) {
+              logout();
+           }
+          return false;
+        }
+      } catch (err) {
+        console.error('❌ [TOKEN MANAGER] exception during refresh', err);
+        return false;
+      }
+    }, [logout]);
+    
+    useEffect(() => {
+        const handleUnhandledRejection = (ev: PromiseRejectionEvent) => {
+          console.warn('🔧 [GLOBAL] unhandledrejection', ev.reason);
+          // Log but DO NOT force logout
+          // If the error contains invalid_grant -> trigger controlled refresh
+          if ((ev.reason && ev.reason.message && ev.reason.message.includes('invalid_grant')) ||
+              (ev.reason && ev.reason.status === 401)) {
+            // Controlled call to the token manager (not logout)
+            attemptRefreshAndRecover();
+          }
+          // Prevent default crash in some embed environments
+          ev.preventDefault();
+        };
+
+        window.addEventListener('unhandledrejection', handleUnhandledRejection);
+        return () => {
+            window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+        };
+    }, [attemptRefreshAndRecover]);
+    
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
         const sessionId = sessionIdRef.current;
         console.log('🕒 [TOKEN MANAGER] Attempting silent token refresh...', { sessionId });
@@ -154,7 +218,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 setState(s => ({ ...s, accessToken: data.access_token, expiresAt: data.expires_at, isAuthenticated: true }));
                 console.log(`🟢 [TOKEN MANAGER] Nuovo access token valido fino a ${new Date(data.expires_at).toLocaleTimeString()}`);
                 
-                // This is the critical part for the SDK
                 const player = playerRef.current;
                 if (player && player._options) {
                     await player.connect();
@@ -182,14 +245,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         const expiresAt = parseInt(localStorage.getItem('expiresAt') || '0', 10);
         if (!expiresAt || expiresAt < Date.now()) {
-            if (localStorage.getItem('accessToken')) { // If we have a token but it's expired
+            if (localStorage.getItem('accessToken')) {
                 attemptRefreshAndUpdatePlayerToken();
             }
             return;
         }
 
         const msLeft = expiresAt - Date.now();
-        const refreshIn = Math.max(msLeft - 60000, 5000); // 60s before expiry, or 5s from now if sooner
+        const refreshIn = Math.max(msLeft - 60000, 5000);
         
         console.log(`[TOKEN MANAGER] session=${sessionIdRef.current} token valido ancora per ${Math.round(msLeft/1000)}s. Next refresh in ${Math.round(refreshIn/1000)}s.`);
         
@@ -243,7 +306,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (user) {
                     setState(s => ({ ...s, user, isAuthenticated: true, isLoading: false }));
                 } else {
-                    logout(); // Token is invalid if we can't get user
+                    logout();
                 }
             } else {
                 setState(s => ({ ...s, isLoading: false }));
@@ -377,7 +440,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             player.addListener('authentication_error', async ({ message }) => {
               console.warn('📣 [PLAYER EVENT] authentication_error', message);
               console.log('📣 [PLAYER EVENT] Provando refresh token invece di logout immediato...');
-              const ok = await attemptRefreshAndUpdatePlayerToken();
+              const ok = await attemptRefreshAndRecover();
               if (ok) {
                 console.log('✅ [PLAYER EVENT] Refresh riuscito, il player si è riconnesso.');
               } else {
@@ -396,14 +459,55 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
          };
         
         return () => { if (playerRef.current) { playerRef.current.disconnect(); playerRef.current = null; } }
-    }, [state.accessToken, logout, state.volume, _setPlayerState, attemptRefreshAndUpdatePlayerToken]);
+    }, [state.accessToken, logout, state.volume, _setPlayerState, attemptRefreshAndRecover, attemptRefreshAndUpdatePlayerToken]);
     
-    const setVolume = useCallback((level: number) => {
-        const newVolume = Math.max(0, Math.min(1, level));
-        playerRef.current?.setVolume(newVolume).catch(err => console.warn("Failed to set volume on SDK.", err));
-        setState(s => ({ ...s, volume: newVolume, isMuted: newVolume === 0, ...(newVolume > 0 && { lastVolume: newVolume }) }));
-    }, []);
-    const toggleMute = useCallback(() => { setState(s => { const newMuted = !s.isMuted; const newVolume = newMuted ? 0 : (s.lastVolume > 0 ? s.lastVolume : 0.5); playerRef.current?.setVolume(newVolume).catch(err => console.warn("Failed to set volume on SDK.", err)); return { ...s, volume: newVolume, isMuted: newMuted }; }); }, []);
+    const setVolume = useCallback((rawValue: number) => {
+        const clampVolume = (value: any) => {
+          let v = Number(value);
+          if (isNaN(v)) v = 0;
+          if (v > 1 && v <= 100) v = v / 100;
+          if (v < 0) v = 0;
+          if (v > 1) v = 1;
+          return v;
+        };
+        
+        const vol = clampVolume(rawValue);
+        setState(s => ({ ...s, volume: vol, isMuted: vol === 0, ...(vol > 0 && { lastVolume: vol }) }));
+
+        if (lastVolumeTimeout.current) clearTimeout(lastVolumeTimeout.current);
+
+        lastVolumeTimeout.current = window.setTimeout(() => {
+            volumeQueuePromise.current = volumeQueuePromise.current
+                .catch(() => {})
+                .then(async () => {
+                    const player = playerRef.current;
+                    console.log('🔈 [VOLUME] attempt', { vol });
+                    try {
+                        if (!player || typeof player.setVolume !== 'function') {
+                            console.warn('⚠️ [VOLUME] player not ready, aborting volume set');
+                            return;
+                        }
+                        await player.setVolume(vol);
+                        console.log('🔈 [VOLUME] success', { vol });
+                    } catch (err) {
+                        console.error('🔈 [VOLUME] failed', err);
+                        const checkIfAuthError = (e: any): boolean => {
+                          if (!e) return false;
+                          const msg = (e.message || '').toString().toLowerCase();
+                          if (msg.includes('401') || msg.includes('authentication') || msg.includes('invalid')) return true;
+                          if ((e as any).status === 401) return true;
+                          return false;
+                        };
+                        if (checkIfAuthError(err)) {
+                            console.warn('🔈 [VOLUME] detected auth error while setting volume — attempting refresh before forcing anything.');
+                            await attemptRefreshAndRecover();
+                        }
+                    }
+                });
+        }, 120);
+    }, [attemptRefreshAndRecover]);
+
+    const toggleMute = useCallback(() => { setState(s => { const newMuted = !s.isMuted; const newVolume = newMuted ? 0 : (s.lastVolume > 0 ? s.lastVolume : 0.5); setVolume(newVolume); return { ...s, isMuted: newMuted }; }); }, [setVolume]);
     const pauseSpotify = useCallback(async () => { playerRef.current?.pause(); }, []);
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => { pauseSpotify(); setNowPlaying(prev => ({ ...prev, source: 'youtube', youtubeTrack: track, youtubePlaylist: playlist, radioStation: null, isLoading: prev.source !== 'youtube' })); }, [pauseSpotify]);
     const clearError = useCallback(() => { setState(s => ({...s, error: null})); }, []);
