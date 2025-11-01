@@ -1,72 +1,37 @@
-import axios from 'axios';
+import { getRedis } from '../lib/redis.js';
+import { ensureSpotifyToken } from '../lib/spotifySessionManager.js';
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        res.setHeader('Allow', ['POST']);
-        return res.status(405).json({ message: 'Method Not Allowed' });
-    }
+  const sessionId = req.body?.sessionId || req.query?.sessionId;
+  console.log(`🔄 [REFRESH-ENDPOINT] Request di refresh per session=${sessionId}`);
 
-    const { spotify_refresh_token: refreshToken } = req.cookies;
+  if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
 
-    if (!refreshToken) {
-        return res.status(401).json({ error: 'Refresh token missing from cookies' });
-    }
+  // Chiama la logica che fa lock+refresh se necessario
+  const updated = await ensureSpotifyToken(sessionId);
 
-    const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
-    const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+  // Se updated === null controlla Redis: è stato marcato expired?
+  const redis = getRedis();
+  const raw = await redis.get(`spotify:${sessionId}`);
 
-    const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
+  if (updated && updated.access_token) {
+    return res.status(200).json({ ok: true, access_token: updated.access_token, expires_at: updated.expires_at });
+  }
 
-    const params = new URLSearchParams();
-    params.append('grant_type', 'refresh_token');
-    params.append('refresh_token', refreshToken);
-
+  if (raw) {
     try {
-        const spotifyResponse = await axios.post(
-            'https://accounts.spotify.com/api/token',
-            params,
-            {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': authHeader,
-                },
-            }
-        );
-        
-        const { access_token, expires_in, refresh_token: newRefreshToken } = spotifyResponse.data;
+      const parsed = JSON.parse(raw);
+      if (parsed.expired) {
+        console.log(`⛔ [REFRESH-ENDPOINT] Session marked expired for ${sessionId}`);
+        return res.status(401).json({ error: 'invalid_grant', description: 'Refresh token invalid or revoked' });
+      }
+      // refresh temporaneo fallito ma sessione ancora presente -> chiedi retry al client
+      console.log(`⚠️ [REFRESH-ENDPOINT] Refresh non effettuato ora per ${sessionId}, ritenta tra poco`);
+      return res.status(503).json({ error: 'refresh_failed_try_again' });
+    } catch(e){}
+  }
 
-        // Spotify può restituire un nuovo refresh_token per rotazione. Aggiorniamo il cookie se succede.
-        if (newRefreshToken) {
-            let cookieString = `spotify_refresh_token=${newRefreshToken}; HttpOnly; Path=/; SameSite=Strict; Max-Age=31536000`;
-            if (process.env.NODE_ENV === 'production') {
-                cookieString += '; Secure';
-            }
-            res.setHeader('Set-Cookie', cookieString);
-        }
-
-        res.status(200).json({
-            access_token,
-            expires_in,
-        });
-
-    } catch (error) {
-        console.error('Error refreshing token with Spotify:', error.response ? error.response.data : error.message);
-        const status = error.response?.status || 500;
-        const details = error.response?.data || { message: 'An unknown error occurred while refreshing token' };
-        
-        // GESTIONE CRUCIALE: Se il refresh token non è più valido, Spotify risponde con `invalid_grant`.
-        // In questo caso, puliamo il cookie e restituiamo 401 per forzare il logout sul frontend.
-        if (error.response?.data?.error === 'invalid_grant') {
-            let cookieString = 'spotify_refresh_token=; HttpOnly; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
-            if (process.env.NODE_ENV === 'production') {
-                cookieString += '; Secure';
-            }
-            res.setHeader('Set-Cookie', cookieString);
-            return res.status(401).json({ error: 'Invalid refresh token', details });
-        }
-        res.status(status).json({
-            error: 'Failed to refresh token with Spotify',
-            details,
-        });
-    }
+  // nessuna session trovata
+  console.log(`❌ [REFRESH-ENDPOINT] Nessuna session trovata per ${sessionId}`);
+  return res.status(401).json({ error: 'session_not_found' });
 }

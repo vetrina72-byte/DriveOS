@@ -4,8 +4,23 @@ const apiClient = axios.create({
   baseURL: 'https://api.spotify.com/v1' // NESSUNO SLASH ALLA FINE
 });
 
-// --- Robust Token Refresh Logic ---
+// Interceptor to add the token to every request
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('spotify_access_token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
+/*
+// --- Robust Token Refresh Logic ---
+// THIS INTERCEPTOR IS NOW DEPRECATED AND REPLACED BY LOGIC IN AuthContext.tsx
 let isRefreshing = false;
 let failedQueue: { resolve: (value?: any) => void; reject: (reason?: any) => void; }[] = [];
 
@@ -20,19 +35,6 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-// Interceptor to add the token to every request
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('spotify_access_token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
 
 // Interceptor to handle expired tokens and automatically refresh them
 apiClient.interceptors.response.use(
@@ -97,5 +99,6 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+*/
 
 export default apiClient;

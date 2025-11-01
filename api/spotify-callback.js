@@ -76,48 +76,22 @@ function sendExpiredPage(res) {
 export default async function handler(req, res) {
   try {
     const code = req.query.code || req.body?.code;
-    const sid = req.query.state || req.query.session || req.body?.session;
-    if (!code || !sid) {
+    const sessionId = req.query.state || req.query.session || req.body?.session;
+    if (!code || !sessionId) {
       return res.status(400).send('Missing code or session/state');
     }
 
     const redis = getRedis();
-    const sessionKey = 'session:' + sid;
-    const lockKey = 'lock:spotify-exchange:' + sid;
+    const sessionKey = `spotify:${sessionId}`;
+    const lockKey = `lock:spotify-exchange:${sessionId}`;
 
-    // 0) Idempotency check
-    try {
-      const existing = await redis.get(sessionKey);
-      if (existing) {
-        const parsed = JSON.parse(existing);
-        if (parsed && parsed.authenticated) {
-          console.log('[spotify-callback] OK: already authenticated for', sid);
-          return sendSuccessPage(res);
-        }
-      }
-    } catch (e) {
-      console.warn('[spotify-callback] warning reading existing session', e && e.message ? e.message : e);
-    }
-
-    // 1) Try acquire lock
     const lockAcquired = await redis.set(lockKey, '1', 'NX', 'EX', 25);
     if (!lockAcquired) {
-      console.log('[spotify-callback] lock busy for', sid, '-> wait & recheck');
-      for (let i = 0; i < 6; i++) {
-        await new Promise(r => setTimeout(r, 500));
-        const now = await redis.get(sessionKey);
-        if (now) {
-          try {
-            const p = JSON.parse(now);
-            if (p && p.authenticated) return sendSuccessPage(res);
-            if (p && p.expired) return sendExpiredPage(res);
-          } catch (e) { /* ignore parse error */ }
-        }
-      }
+      console.log('[spotify-callback] lock busy for', sessionId, '-> wait & recheck');
+      await new Promise(r => setTimeout(r, 1000)); // Wait a bit
       return res.status(202).send('<html><body style="background:#000;color:#fff">Processing authentication...</body></html>');
     }
 
-    // 2) Perform token exchange
     const authHeader = 'Basic ' + Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString('base64');
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -125,50 +99,41 @@ export default async function handler(req, res) {
       redirect_uri: process.env.VITE_REDIRECT_URI
     }).toString();
 
-    let tokenResp;
-    try {
-      tokenResp = await axios.post(TOKEN_URL, body, {
+    const tokenResp = await axios.post(TOKEN_URL, body, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Authorization': authHeader
         },
         timeout: 15000
-      });
-    } catch (err) {
-      console.error('[spotify-callback] network error during token exchange', err && err.message ? err.message : err);
-      await safeSet(redis, sessionKey, { authenticated: false, error: 'exchange_network_error' }, 300);
-      await safeDel(redis, lockKey);
-      return res.status(500).send('Network error during token exchange; please retry.');
-    }
+    });
 
-    const tokenJson = tokenResp.data;
+    const tokenData = tokenResp.data;
 
-    if (tokenResp.status !== 200) {
-      console.error('[spotify-callback] token exchange failed', tokenResp.status, tokenJson);
-      if (tokenJson && tokenJson.error === 'invalid_grant') {
-        await safeSet(redis, sessionKey, { authenticated: false, expired: true, token_error: tokenJson }, 300);
+    if (tokenResp.status !== 200 || tokenData.error) {
+      console.error('[spotify-callback] token exchange failed', tokenResp.status, tokenData);
+      if (tokenData && tokenData.error === 'invalid_grant') {
+        await safeSet(redis, sessionKey, { authenticated: false, expired: true, token_error: tokenData }, 300);
         await safeDel(redis, lockKey);
         return sendExpiredPage(res);
       }
-      await safeSet(redis, sessionKey, { authenticated: false, error: 'token_exchange_failed', token_error: tokenJson }, 300);
+      await safeSet(redis, sessionKey, { authenticated: false, error: 'token_exchange_failed', token_error: tokenData }, 300);
       await safeDel(redis, lockKey);
       return res.status(502).send('Token exchange failed');
     }
 
-    // OK: Save session
-    const { access_token, refresh_token, expires_in = 3600 } = tokenJson;
+    const { access_token, refresh_token, expires_in = 3600 } = tokenData;
     const payload = {
-      authenticated: true,
-      accessToken: access_token,
-      refreshToken: refresh_token,
-      expiresAt: Date.now() + expires_in * 1000
+      access_token: access_token,
+      refresh_token: refresh_token,
+      expires_at: Date.now() + expires_in * 1000,
+      refresh_failures: 0
     };
 
-    await safeSet(redis, sessionKey, payload, 60 * 60 * 24);
+    await redis.set(sessionKey, JSON.stringify(payload), 'EX', 60*60*24*30); // 30 days
+    console.log(`💾 [SPOTIFY-CALLBACK] Saved session ${sessionId}, expires at ${new Date(payload.expires_at).toLocaleTimeString()}`);
     
     // Set HttpOnly cookie for refresh token
     let cookieString = `spotify_refresh_token=${refresh_token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=31536000`;
-    // Vercel sets NODE_ENV to 'production' for production builds.
     if (process.env.NODE_ENV === 'production') {
         cookieString += '; Secure';
     }
@@ -176,7 +141,6 @@ export default async function handler(req, res) {
 
     await safeDel(redis, lockKey);
 
-    console.log('[spotify-callback] OK: Saved session', sid, 'in Redis.');
     return sendSuccessPage(res);
   } catch (err) {
     console.error('[spotify-callback] unexpected error', err && err.message ? err.message : err);

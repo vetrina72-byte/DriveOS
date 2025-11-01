@@ -13,6 +13,16 @@ const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/
   return v.toString(16);
 });
 
+// Retrieves or creates a persistent session ID from localStorage
+const getSessionId = () => {
+    let sid = localStorage.getItem('spotify_session_id');
+    if (!sid) {
+        sid = generateUUID();
+        localStorage.setItem('spotify_session_id', sid);
+    }
+    return sid;
+};
+
 const CheckmarkIcon = () => (
     <motion.svg
         className="w-24 h-24"
@@ -48,14 +58,14 @@ function SpotifyLogin() {
   const { login } = useAuth();
   const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId] = useState<string>(getSessionId());
   const pollIntervalRef = useRef<number | null>(null);
 
   const startLoginProcess = useCallback(() => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setUiState('CARICAMENTO');
     
-    const newSessionId = generateUUID();
+    const newSessionId = getSessionId(); // Use persistent session ID
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
     const redirectUri = process.env.VITE_REDIRECT_URI;
     const scope = [
@@ -72,7 +82,6 @@ function SpotifyLogin() {
         scope: scope, show_dialog: 'true', state: newSessionId
     }).toString();
 
-    setSessionId(newSessionId);
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('ATTESA_SCANSIONE');
   }, []);
@@ -88,10 +97,14 @@ function SpotifyLogin() {
           return res.json();
         })
         .then(data => {
-          if (data && data.authenticated && data.tokens) {
+          if (data && data.authenticated && data.access_token) {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setUiState('LOGIN_COMPLETATO');
-            setTimeout(() => login(data.tokens), 1500);
+            const tokenData = {
+                access_token: data.access_token,
+                expires_in: data.expires_at ? (data.expires_at - Date.now()) / 1000 : 3600,
+            };
+            setTimeout(() => login(tokenData), 1500);
           } else if (data && data.expired === true) {
             console.warn('[POLLING] Session expired (invalid_grant). Regenerating QR code.');
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);

@@ -1,5 +1,6 @@
 
 
+
 import React, { createContext, useReducer, useContext, useEffect } from 'react';
 import { VehicleState, Action, VehicleContextType, DriveMode, ClimateState } from '../types';
 
@@ -62,7 +63,8 @@ const vehicleReducer = (state: VehicleState, action: Action): VehicleState => {
 
 const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
 
-export const VehicleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// FIX: Refactored the provider to not use React.FC to avoid issues with the `children` prop typing in newer versions of @types/react.
+export const VehicleProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, dispatch] = useReducer(vehicleReducer, initialState);
 
   useEffect(() => {
