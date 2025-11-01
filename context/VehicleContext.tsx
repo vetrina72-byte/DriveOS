@@ -1,6 +1,3 @@
-
-
-
 import React, { createContext, useReducer, useContext, useEffect } from 'react';
 import { VehicleState, Action, VehicleContextType, DriveMode, ClimateState } from '../types';
 
