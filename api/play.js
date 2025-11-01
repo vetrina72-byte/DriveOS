@@ -1,3 +1,4 @@
+
 import { ensureSpotifyToken } from '../lib/spotifySessionManager.js';
 
 export default async function handler(req, res) {
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
 
     const text = await spotifyRes.text();
     if (!spotifyRes.ok) {
-      console.error(`❌ [PROXY PLAY] spotify returned ${spotifyRes.status}`, text);
+      console.error(`❌ [PROXY PLAY] spotify returned ${spotifyRes.status} ${text}`);
       res.setHeader('Content-Type', 'application/json');
       return res.status(spotifyRes.status).send(text);
     }

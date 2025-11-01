@@ -74,6 +74,10 @@ export interface SpotifyPlayer {
     on(event: 'ready' | 'not_ready', cb: (data: { device_id: string }) => void): void;
     on(event: 'player_state_changed', cb: (state: SpotifyPlayerState | null) => void): void;
     on(event: 'initialization_error' | 'authentication_error' | 'account_error' | 'playback_error', cb: (error: { message: string }) => void): void;
+    // FIX: Add 'addListener' method to match the SDK's API and fix errors in AuthContext.tsx.
+    addListener(event: 'ready' | 'not_ready', cb: (data: { device_id: string }) => void): void;
+    addListener(event: 'player_state_changed', cb: (state: SpotifyPlayerState | null) => void): void;
+    addListener(event: 'initialization_error' | 'authentication_error' | 'account_error' | 'playback_error', cb: (error: { message: string }) => void): void;
     removeListener(event: 'ready' | 'not_ready' | 'player_state_changed' | 'initialization_error' | 'authentication_error' | 'account_error' | 'playback_error', cb?: (...args: any[]) => void): boolean;
 }
 
