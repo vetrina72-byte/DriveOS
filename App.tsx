@@ -706,9 +706,13 @@ function AppContent() {
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
   const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
-  const [spinnerSize, setSpinnerSize] = useState(16);
+  const [spinnerSize, setSpinnerSize] = useState(18);
   const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
   const [debugSpinner, setDebugSpinner] = useState(false);
+  const [spinnerTop, setSpinnerTop] = useState<number | undefined>(22);
+  const [spinnerRight, setSpinnerRight] = useState<number | undefined>(100);
+  const [spinnerBottom, setSpinnerBottom] = useState<number | undefined>(undefined);
+  const [spinnerLeft, setSpinnerLeft] = useState<number | undefined>(undefined);
   const [volumeIconSize, setVolumeIconSize] = useState(30);
   const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
   const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-128);
@@ -866,8 +870,8 @@ function AppContent() {
   const arrivalTimeoutRef = useRef<number | null>(null);
   const [tripInfo, setTripInfo] = useState<{ time: number, distance: number } | null>(null);
   const [throttledPosition, setThrottledPosition] = useState(currentPosition);
-  const [homeLocation, setHomeLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
-  const [workLocation, setWorkLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [homeLocation, setHomeLocation] = useState<{ lat: number, lng: number, name: string } | null>(null);
+  const [workLocation, setWorkLocation] = useState<{ lat: number, lng: number, name: string } | null>(null);
   const [favoriteLocations, setFavoriteLocations] = useState<{ lat: number, lng: number, name: string }[]>([]);
 
   // States for trip simulation
@@ -1637,6 +1641,10 @@ function AppContent() {
           queuePopoverScale={queuePopoverScale}
           queuePopoverWidth={queuePopoverWidth}
           queuePopoverOffsetX={queuePopoverOffsetX}
+          spinnerTop={spinnerTop}
+          spinnerRight={spinnerRight}
+          spinnerBottom={spinnerBottom}
+          spinnerLeft={spinnerLeft}
         />
         
         <AppLauncher
@@ -1940,6 +1948,14 @@ function AppContent() {
         setSpinnerShuffleGap={setSpinnerShuffleGap}
         debugSpinner={debugSpinner}
         setDebugSpinner={setDebugSpinner}
+        spinnerTop={spinnerTop}
+        setSpinnerTop={setSpinnerTop}
+        spinnerRight={spinnerRight}
+        setSpinnerRight={setSpinnerRight}
+        spinnerBottom={spinnerBottom}
+        setSpinnerBottom={setSpinnerBottom}
+        spinnerLeft={spinnerLeft}
+        setSpinnerLeft={setSpinnerLeft}
       />}
     </div>
   );

@@ -41,6 +41,10 @@ interface MusicPlayerProps {
     queuePopoverScale: number;
     queuePopoverWidth: number;
     queuePopoverOffsetX: number;
+    spinnerTop: number | undefined;
+    spinnerRight: number | undefined;
+    spinnerBottom: number | undefined;
+    spinnerLeft: number | undefined;
 }
 
 /**
@@ -300,7 +304,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
     );
 };
 
-const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner'>) => {
+const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft'>) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
@@ -374,6 +378,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     queuePopoverScale,
     queuePopoverWidth,
     queuePopoverOffsetX,
+    spinnerTop,
+    spinnerRight,
+    spinnerBottom,
+    spinnerLeft,
 }) => {
   const { 
       isAuthenticated, 
@@ -412,7 +420,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     useEffect(() => {
         const show = nowPlaying.isLoading || debugSpinner;
         if (show) {
-            console.log('🔄 [SPINNER] show target=top-right');
+            console.log('🔄 [SPINNER] show');
         } else {
             console.log('🔄 [SPINNER] hide');
         }
@@ -986,6 +994,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         return null;
     }, [visibleQueue, nextSpotifyTrack, nextYouTubeTrack]);
 
+    const spinnerStyle: React.CSSProperties = {
+        top: spinnerTop !== undefined ? `${spinnerTop}px` : 'auto',
+        right: spinnerRight !== undefined ? `${spinnerRight}px` : 'auto',
+        bottom: spinnerBottom !== undefined ? `${spinnerBottom}px` : 'auto',
+        left: spinnerLeft !== undefined ? `${spinnerLeft}px` : 'auto',
+    };
+    
+    const spinnerVisualDivStyle: React.CSSProperties = {
+        width: `${spinnerSize}px`,
+        height: `${spinnerSize}px`,
+        borderWidth: `${Math.max(2, spinnerSize / 8)}px`,
+    };
+
     return (
         <>
             <div 
@@ -995,8 +1016,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             >
                 <div className="relative w-full h-full">
                     {(nowPlaying.isLoading || debugSpinner) && (
-                        <div className="player-spinner-overlay top-right">
-                            <div className="spinner-visual"></div>
+                        <div className="player-spinner-overlay" style={spinnerStyle}>
+                            <div className="spinner-visual" style={spinnerVisualDivStyle}></div>
                         </div>
                     )}
                     {isAutoplayBlocked && <AutoplayUnlockOverlay />}

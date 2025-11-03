@@ -159,6 +159,14 @@ interface DebugControlsProps {
   setSpinnerShuffleGap: (gap: number) => void;
   debugSpinner: boolean;
   setDebugSpinner: (debug: boolean) => void;
+  spinnerTop: number | undefined;
+  setSpinnerTop: (val: number | undefined) => void;
+  spinnerRight: number | undefined;
+  setSpinnerRight: (val: number | undefined) => void;
+  spinnerBottom: number | undefined;
+  setSpinnerBottom: (val: number | undefined) => void;
+  spinnerLeft: number | undefined;
+  setSpinnerLeft: (val: number | undefined) => void;
 }
 
 const WEATHER_CONDITIONS = [
@@ -346,6 +354,14 @@ export default function DebugControls({
   setSpinnerShuffleGap,
   debugSpinner,
   setDebugSpinner,
+  spinnerTop,
+  setSpinnerTop,
+  spinnerRight,
+  setSpinnerRight,
+  spinnerBottom,
+  setSpinnerBottom,
+  spinnerLeft,
+  setSpinnerLeft,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -429,9 +445,13 @@ export default function DebugControls({
     setQueuePopoverScale(1.0);
     setQueuePopoverWidth(288);
     setQueuePopoverOffsetX(0);
-    setSpinnerSize(16);
+    setSpinnerSize(18);
     setSpinnerShuffleGap(6);
     setDebugSpinner(false);
+    setSpinnerTop(22);
+    setSpinnerRight(100);
+    setSpinnerBottom(undefined);
+    setSpinnerLeft(undefined);
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -455,6 +475,41 @@ export default function DebugControls({
         },
     }));
   };
+  
+  const PositionSlider = ({ label, value, setValue }: { label: string, value: number | undefined, setValue: (v: number | undefined) => void }) => {
+    const isEnabled = value !== undefined;
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setValue(Number(e.target.value));
+    };
+    const handleToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) {
+            setValue(0); // Default to 0 when enabled
+        } else {
+            setValue(undefined);
+        }
+    };
+
+    return (
+        <div className="mt-2">
+            <div className="flex items-center gap-2">
+                <input type="checkbox" checked={isEnabled} onChange={handleToggle} id={`toggle-${label.toLowerCase()}`} />
+                <label htmlFor={`toggle-${label.toLowerCase()}`} className="font-medium text-zinc-300 capitalize">
+                    {label}: {isEnabled ? `${value}px` : 'auto'}
+                </label>
+            </div>
+            <input
+                type="range"
+                min="-100"
+                max="200"
+                step="1"
+                value={value ?? 0}
+                onChange={handleChange}
+                disabled={!isEnabled}
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+            />
+        </div>
+    );
+};
 
   return (
     <div 
@@ -1097,12 +1152,17 @@ export default function DebugControls({
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Spinner</h3>
             <div>
                 <label htmlFor="spinner-size">Spinner Size: {spinnerSize}px</label>
-                <input id="spinner-size" type="range" min="10" max="32" value={spinnerSize} onChange={(e) => setSpinnerSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                <input id="spinner-size" type="range" min="10" max="48" value={spinnerSize} onChange={(e) => setSpinnerSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
                 <label htmlFor="spinner-shuffle-gap">Spinner/Shuffle Gap: {spinnerShuffleGap}px</label>
-                <input id="spinner-shuffle-gap" type="range" min="0" max="20" value={spinnerShuffleGap} onChange={(e) => setSpinnerShuffleGap(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+                <input id="spinner-shuffle-gap" type="range" min="0" max="40" value={spinnerShuffleGap} onChange={(e) => setSpinnerShuffleGap(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
+             <h4 className="text-sm font-semibold text-zinc-300 mt-3 mb-1">Positioning</h4>
+            <PositionSlider label="Top" value={spinnerTop} setValue={setSpinnerTop} />
+            <PositionSlider label="Right" value={spinnerRight} setValue={setSpinnerRight} />
+            <PositionSlider label="Bottom" value={spinnerBottom} setValue={setSpinnerBottom} />
+            <PositionSlider label="Left" value={spinnerLeft} setValue={setSpinnerLeft} />
             <div className="mt-2 flex items-center gap-2">
                 <input id="debug-spinner-toggle" type="checkbox" checked={debugSpinner} onChange={(e) => setDebugSpinner(e.target.checked)} />
                 <label htmlFor="debug-spinner-toggle">Always Show Spinner (Debug)</label>
