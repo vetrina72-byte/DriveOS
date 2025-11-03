@@ -142,6 +142,7 @@ interface DebugControlsProps {
   setDarkPlayerBg: (color: string) => void;
   darkNavigateInputBg: string;
   setDarkNavigateInputBg: (color: string) => void;
+  // FIX: Add missing props for Music Player Queue Popover and Spinner.
   queuePopoverHeight: number;
   setQueuePopoverHeight: (height: number) => void;
   queuePopoverBottomOffset: number;
@@ -799,7 +800,6 @@ export default function DebugControls({
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
             <h3 className="text-md font-semibold text-zinc-200 mb-2">Scene Environment Colors</h3>
-            {/* FIX: Removed the incorrect type cast. The type of `time` will be correctly inferred as 'day' | 'night' after updating the `SceneColors` type in App.tsx. */}
             {(Object.keys(sceneColors) as ('day' | 'night')[]).map(time => (
               <div key={time} className="pl-2 border-l-2 border-zinc-600 mb-3 mt-2">
                 <h4 className="capitalize text-sm font-semibold text-zinc-300 mb-2">{time}</h4>
@@ -1068,41 +1068,44 @@ export default function DebugControls({
               <label htmlFor="player-controls-v-pos">Vertical Position: {playerControlsVerticalPosition}px</label>
               <input id="player-controls-v-pos" type="range" min="-50" max="50" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
-            <div className="flex items-center justify-between mt-2">
-              <label htmlFor="debug-spinner-checkbox" className="font-medium text-zinc-300">Attiva rotella per debug</label>
-              <input id="debug-spinner-checkbox" type="checkbox" checked={debugSpinner} onChange={(e) => setDebugSpinner(e.target.checked)} className="form-checkbox h-5 w-5 bg-zinc-700 border-zinc-600 rounded text-blue-500 focus:ring-blue-500"/>
-            </div>
-            <div className="mt-2">
-              <label htmlFor="player-spinner-size">Spinner Size: {spinnerSize}px</label>
-              <input id="player-spinner-size" type="range" min="8" max="32" value={spinnerSize} onChange={(e) => setSpinnerSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-            </div>
-            <div className="mt-2">
-              <label htmlFor="player-spinner-gap">Spinner/Shuffle Gap: {spinnerShuffleGap}px</label>
-              <input id="player-spinner-gap" type="range" min="0" max="24" value={spinnerShuffleGap} onChange={(e) => setSpinnerShuffleGap(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
-            </div>
         </div>
 
         <div className="pt-2 mt-2 border-t border-zinc-700">
-            <h3 className="text-md font-semibold text-zinc-200 mb-2">Queue Popover Layout</h3>
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Queue Popover</h3>
             <div>
-                <label htmlFor="q-pop-height">Height: {queuePopoverHeight}px</label>
-                <input id="q-pop-height" type="range" min="60" max="150" value={queuePopoverHeight} onChange={(e) => setQueuePopoverHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label htmlFor="q-pop-height">Height: {queuePopoverHeight}px</label>
+              <input id="q-pop-height" type="range" min="50" max="150" value={queuePopoverHeight} onChange={(e) => setQueuePopoverHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
-                <label htmlFor="q-pop-width">Width: {queuePopoverWidth}px</label>
-                <input id="q-pop-width" type="range" min="200" max="400" value={queuePopoverWidth} onChange={(e) => setQueuePopoverWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label htmlFor="q-pop-bottom">Bottom Offset: {queuePopoverBottomOffset}px</label>
+              <input id="q-pop-bottom" type="range" min="0" max="50" value={queuePopoverBottomOffset} onChange={(e) => setQueuePopoverBottomOffset(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
-                <label htmlFor="q-pop-offset">Bottom Offset (Distance): {queuePopoverBottomOffset}px</label>
-                <input id="q-pop-offset" type="range" min="0" max="50" value={queuePopoverBottomOffset} onChange={(e) => setQueuePopoverBottomOffset(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label htmlFor="q-pop-scale">Scale: {queuePopoverScale.toFixed(2)}</label>
+              <input id="q-pop-scale" type="range" min="0.8" max="1.2" step="0.01" value={queuePopoverScale} onChange={(e) => setQueuePopoverScale(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
-                <label htmlFor="q-pop-offset-x">Horizontal Offset: {queuePopoverOffsetX}px</label>
-                <input id="q-pop-offset-x" type="range" min="-200" max="200" value={queuePopoverOffsetX} onChange={(e) => setQueuePopoverOffsetX(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label htmlFor="q-pop-width">Width: {queuePopoverWidth}px</label>
+              <input id="q-pop-width" type="range" min="200" max="400" value={queuePopoverWidth} onChange={(e) => setQueuePopoverWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
             </div>
             <div className="mt-2">
-                <label htmlFor="q-pop-scale">Scale: {queuePopoverScale.toFixed(2)}</label>
-                <input id="q-pop-scale" type="range" min="0.7" max="1.3" step="0.05" value={queuePopoverScale} onChange={(e) => setQueuePopoverScale(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+              <label htmlFor="q-pop-offset-x">Horizontal Offset: {queuePopoverOffsetX}px</label>
+              <input id="q-pop-offset-x" type="range" min="-100" max="100" value={queuePopoverOffsetX} onChange={(e) => setQueuePopoverOffsetX(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+        </div>
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">Music Player Spinner</h3>
+            <div>
+                <label htmlFor="spinner-size">Spinner Size: {spinnerSize}px</label>
+                <input id="spinner-size" type="range" min="10" max="32" value={spinnerSize} onChange={(e) => setSpinnerSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2">
+                <label htmlFor="spinner-shuffle-gap">Spinner/Shuffle Gap: {spinnerShuffleGap}px</label>
+                <input id="spinner-shuffle-gap" type="range" min="0" max="20" value={spinnerShuffleGap} onChange={(e) => setSpinnerShuffleGap(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+                <input id="debug-spinner-toggle" type="checkbox" checked={debugSpinner} onChange={(e) => setDebugSpinner(e.target.checked)} />
+                <label htmlFor="debug-spinner-toggle">Always Show Spinner (Debug)</label>
             </div>
         </div>
 

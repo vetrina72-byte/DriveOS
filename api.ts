@@ -7,7 +7,8 @@ const apiClient = axios.create({
 // Interceptor to add the token to every request
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('spotify_access_token');
+    // FIX: Use 'accessToken' to match the key used in AuthContext.
+    const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
