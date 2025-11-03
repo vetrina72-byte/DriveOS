@@ -1,10 +1,9 @@
-
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import apiClient from '../api';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
-import { NowPlayingState, YouTubeTrackInfo } from '../types';
+import { NowPlayingState, YouTubeTrackInfo, PlayOptions } from '../types';
 import { getSessionId } from '../lib/sessionId';
-import { initSpotifyPlayerOnce, setVolumeDebounced, safePlay, getPlayerInstance, getDeviceId } from '../lib/spotify-player';
+import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal, getPlayerInstance, getDeviceId, safePlay } from '../lib/spotify-player';
 
 interface SpotifyUser {
     display_name: string;
@@ -24,16 +23,6 @@ interface AuthState {
     lastVolume: number;
 }
 
-export interface PlayOptions {
-    uris?: string[];
-    context_uri?: string;
-    offset?: {
-        position?: number;
-        uri?: string;
-    };
-    position_ms?: number;
-}
-
 interface TokenData {
     access_token: string;
     expires_in: number;
@@ -48,7 +37,8 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
     playYouTube: (track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => void;
     refreshTrigger: number;
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
-    setVolume: (level: number) => void;
+    setVolumeLive: (level: number) => void;
+    setVolumeFinal: (level: number) => void;
     toggleMute: () => void;
     nowPlaying: NowPlayingState;
     setNowPlaying: React.Dispatch<React.SetStateAction<NowPlayingState>>;
@@ -323,13 +313,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
     }, [state.isAuthenticated, state.accessToken, getAccessTokenForPlayer, _setPlayerState, logout, attemptRefreshAndUpdatePlayerToken]);
     
-    const setVolume = useCallback((rawValue: number) => {
+    const setVolumeLive = useCallback((rawValue: number) => {
         const clampedVolume = Math.max(0, Math.min(1, rawValue));
         setState(s => ({ ...s, volume: clampedVolume, isMuted: clampedVolume === 0, ...(clampedVolume > 0 && { lastVolume: clampedVolume }) }));
-        setVolumeDebounced(clampedVolume);
+        setVolumeThrottled(clampedVolume);
     }, []);
 
-    const toggleMute = useCallback(() => { setState(s => { const newMuted = !s.isMuted; const newVolume = newMuted ? 0 : (s.lastVolume > 0 ? s.lastVolume : 0.5); setVolume(newVolume); return { ...s, isMuted: newMuted }; }); }, [setVolume]);
+    const setVolumeFinal = useCallback((rawValue: number) => {
+        const clampedVolume = Math.max(0, Math.min(1, rawValue));
+        setState(s => ({ ...s, volume: clampedVolume, isMuted: clampedVolume === 0, ...(clampedVolume > 0 && { lastVolume: clampedVolume }) }));
+        setVolumeFinal(clampedVolume).catch(() => {});
+    }, []);
+
+    const toggleMute = useCallback(() => {
+        const newVolume = state.isMuted
+            ? (state.lastVolume > 0 ? state.lastVolume : 0.5) // unmuting
+            : 0; // muting
+        setVolumeFinal(newVolume); // This will update state and call SDK
+    }, [state.isMuted, state.lastVolume, setVolumeFinal]);
+
     const pauseSpotify = useCallback(async () => { getPlayerInstance()?.pause(); }, []);
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => { pauseSpotify(); setNowPlaying(prev => ({ ...prev, source: 'youtube', youtubeTrack: track, youtubePlaylist: playlist, radioStation: null, isLoading: prev.source !== 'youtube' })); }, [pauseSpotify]);
     const clearError = useCallback(() => { setState(s => ({...s, error: null})); }, []);
@@ -337,13 +339,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const isPlayerReady = isPlayerSdkReady && !!getDeviceId();
     
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, _setPlayerState, setVolume, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, _setPlayerState, setVolumeLive, setVolumeFinal, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay }}>
             {children}
         </AuthContext.Provider>
     );
 };
 
-export const useAuth = (): Omit<AuthContextType, 'playerRef' | 'setDeviceId'> => {
+export const useAuth = (): AuthContextType => {
     const context = useContext(AuthContext);
     if (!context) throw new Error('useAuth must be used within an AuthProvider');
     return context;

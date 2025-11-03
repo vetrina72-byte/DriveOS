@@ -17,7 +17,7 @@ interface VolumeControlProps {
 }
 
 const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOffsetY, volumeSliderOffsetX, volumeSliderWidth, volumeSliderThickness, volumeSliderThumbOffsetY, volumeSliderPopupWidth, volumeSliderPopupHeight, zIndex }) => {
-    const { volume, setVolume, isMuted } = useAuth();
+    const { volume, setVolumeLive, setVolumeFinal, isMuted } = useAuth();
     const [isSliderVisible, setIsSliderVisible] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -91,12 +91,17 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
             resetAutoCloseTimer();
         }
     };
-
-    const handleVolumeChange = (newVolume: number) => {
-        setVolume(newVolume);
+    
+    const handleVolumeInput = (newVolume: number) => {
+        setVolumeLive(newVolume);
         if (!isSliderVisible) {
             setIsSliderVisible(true);
         }
+        resetAutoCloseTimer();
+    };
+    
+    const handleVolumeChange = (newVolume: number) => {
+        setVolumeFinal(newVolume);
         resetAutoCloseTimer();
     };
 
@@ -128,7 +133,9 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
                     max="1"
                     step="0.01"
                     value={volume}
-                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                    onInput={(e) => handleVolumeInput(parseFloat((e.target as HTMLInputElement).value))}
+                    onChange={(e) => handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
+                    onPointerUp={(e) => handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
                     className="volume-slider"
                     aria-label="Volume slider"
                     style={{

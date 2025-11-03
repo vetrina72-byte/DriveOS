@@ -1,6 +1,6 @@
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import { getSessionId } from './sessionId';
-import type { PlayOptions } from '../context/AuthContext';
+import type { PlayOptions } from '../types';
 
 let spotifyPlayer: SpotifyPlayer | null = null;
 let spotifyDeviceId: string | null = null;
@@ -99,58 +99,84 @@ export function getDeviceId(): string | null {
     return spotifyDeviceId;
 }
 
-let volumeTimer: number | null = null;
-async function attemptTransferAndRetryVolume(volume: number): Promise<boolean> {
-    try {
-        console.log('▶️ [VOLUME] transfer attempt because setVolume failed');
-        const sessionId = getSessionId();
-        const resp = await fetch('/api/transfer-player', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
-        });
-
-        if (resp.ok) {
-            console.log('▶️ [VOLUME] transfer ok, retrying setVolume');
-            await new Promise(r => setTimeout(r, 300));
-            if (spotifyPlayer) {
-                await spotifyPlayer.setVolume(volume);
-                console.log('🔈 [VOLUME] retry success');
-                return true;
-            }
-            return false;
-        } else {
-            console.warn('▶️ [VOLUME] transfer failed', await resp.text());
-            return false;
+// Throttle with leading + trailing behavior
+function throttle<T extends (...args: any[]) => any>(func: T, wait = 150) {
+    let last = 0;
+    let timeout: number | null = null;
+    let lastArgs: Parameters<T> | null = null;
+  
+    return function throttled(...args: Parameters<T>) {
+      const now = Date.now();
+      lastArgs = args;
+  
+      const invoke = () => {
+        last = Date.now();
+        timeout = null;
+        if (lastArgs) {
+            const argsToUse = lastArgs;
+            lastArgs = null;
+            func(...argsToUse);
         }
-    } catch (err: any) {
-        console.error('▶️ [VOLUME] transfer exception', err.message);
+      };
+  
+      if (now - last >= wait) {
+        // leading call
+        invoke();
+      } else if (!timeout) {
+        // schedule trailing call
+        timeout = window.setTimeout(invoke, wait - (now - last));
+      }
+    };
+  }
+
+const VLOG = (...args: any[]) => console.log('🔈 [VOLUME]', ...args);
+
+// Funzione sicura che prova setVolume e fallback transfer se necessario
+async function setVolumeSafe(volume: number) {
+  if (!playerReady || !spotifyPlayer) {
+    VLOG('player not ready - ignoring', volume);
+    return false;
+  }
+  try {
+    VLOG('live attempt', volume);
+    await spotifyPlayer.setVolume(volume); // SDK call: 0..1
+    VLOG('success', volume);
+    return true;
+  } catch (err: any) {
+    VLOG('failed', err);
+    // fallback: attempt transfer + retry once
+    try {
+      VLOG('▶️ [VOLUME] transfer attempt because setVolume failed');
+      const sessionId = getSessionId();
+      const resp = await fetch('/api/transfer-player', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
+      });
+      if (resp.ok) {
+        await new Promise(r => setTimeout(r, 250)); // wait device settle
+        await spotifyPlayer.setVolume(volume);
+        VLOG('retry success', volume);
+        return true;
+      } else {
+        VLOG('transfer failed', resp.status, await resp.text().catch(()=>null));
         return false;
+      }
+    } catch (ex: any) {
+      VLOG('transfer/ex retry exception', ex);
+      return false;
     }
+  }
 }
 
-export function setVolumeDebounced(volume: number): Promise<boolean> {
-    const clampedVolume = Math.min(1, Math.max(0, volume));
-    if (!playerReady || !spotifyPlayer) {
-        console.warn('[VOLUME] player not ready - ignoring setVolume');
-        return Promise.resolve(false);
-    }
+// Throttled version used while sliding
+export const setVolumeThrottled = throttle((volume: number) => {
+  setVolumeSafe(volume).catch(()=>{});
+}, 150);
 
-    return new Promise((resolve) => {
-        if (volumeTimer) clearTimeout(volumeTimer);
-        volumeTimer = window.setTimeout(async () => {
-            try {
-                console.log(`🔈 [VOLUME] attempt ${clampedVolume}`);
-                await spotifyPlayer!.setVolume(clampedVolume);
-                console.log(`🔈 [VOLUME] success ${clampedVolume}`);
-                resolve(true);
-            } catch (err: any) {
-                console.warn('🔈 [VOLUME] failed', err.message);
-                const ok = await attemptTransferAndRetryVolume(clampedVolume);
-                resolve(ok);
-            }
-        }, 200);
-    });
+// Final setter (ensures the final value is applied when user releases)
+export async function setVolumeFinal(volume: number) {
+  return await setVolumeSafe(volume);
 }
 
 export async function safePlay(options: PlayOptions, attemptRefresh: () => Promise<boolean>): Promise<boolean> {
