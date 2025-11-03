@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { FiVolumeX, FiVolume1, FiVolume2 } from 'react-icons/fi';
@@ -16,6 +16,40 @@ interface VolumeControlProps {
     zIndex: number;
 }
 
+const useHoldRepeat = (callback: () => void, delay = 300, interval = 120) => {
+    const intervalRef = useRef<number | null>(null);
+    const timeoutRef = useRef<number | null>(null);
+    const savedCallback = useRef(callback);
+
+    useEffect(() => {
+        savedCallback.current = callback;
+    }, [callback]);
+
+    const stop = useCallback(() => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        timeoutRef.current = null;
+        intervalRef.current = null;
+    }, []);
+
+    const start = useCallback((e: React.PointerEvent) => {
+        e.preventDefault();
+        savedCallback.current();
+        
+        timeoutRef.current = window.setTimeout(() => {
+            intervalRef.current = window.setInterval(() => savedCallback.current(), interval);
+        }, delay);
+    }, [delay, interval]);
+
+    return {
+        onPointerDown: start,
+        onPointerUp: stop,
+        onPointerLeave: stop,
+        onTouchEnd: stop, // For mobile
+    };
+};
+
+
 const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOffsetY, volumeSliderOffsetX, volumeSliderWidth, volumeSliderThickness, volumeSliderThumbOffsetY, volumeSliderPopupWidth, volumeSliderPopupHeight, zIndex }) => {
     const { volume, setVolumeLive, setVolumeFinal, isMuted } = useAuth();
     const [isSliderVisible, setIsSliderVisible] = useState(false);
@@ -23,6 +57,11 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
     const containerRef = useRef<HTMLDivElement>(null);
     const autoCloseTimeoutRef = useRef<number | null>(null);
     const [popupPosition, setPopupPosition] = useState({ bottom: 0, left: 0 });
+
+    const volumeRef = useRef(volume);
+    useEffect(() => {
+        volumeRef.current = volume;
+    }, [volume]);
 
     const VolumeIcon = volume === 0 || isMuted ? FiVolumeX : volume < 0.5 ? FiVolume1 : FiVolume2;
 
@@ -105,6 +144,24 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         resetAutoCloseTimer();
     };
 
+    const STEP = 0.05;
+    const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(n, max));
+
+    const handleVolumeUp = useCallback(() => {
+        const newVol = clamp(volumeRef.current + STEP, 0, 1);
+        setVolumeFinal(newVol);
+        console.log(`🔈 [VOLUME] arrow action newVol=${newVol.toFixed(2)} method=hold`);
+    }, [setVolumeFinal]);
+
+    const handleVolumeDown = useCallback(() => {
+        const newVol = clamp(volumeRef.current - STEP, 0, 1);
+        setVolumeFinal(newVol);
+        console.log(`🔈 [VOLUME] arrow action newVol=${newVol.toFixed(2)} method=hold`);
+    }, [setVolumeFinal]);
+    
+    const upHandlers = useHoldRepeat(handleVolumeUp);
+    const downHandlers = useHoldRepeat(handleVolumeDown);
+
     const thumbSize = volumeSliderThickness * 2.2;
     const thumbMarginTop = ((thumbSize - volumeSliderThickness) / -2) + volumeSliderThumbOffsetY;
     const progressPercentage = volume * 100;
@@ -154,7 +211,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         <div ref={containerRef} className="relative flex items-center gap-1 text-gray-400">
             {sliderPopup && ReactDOM.createPortal(sliderPopup, document.getElementById('portal-root')!)}
 
-            <button onClick={() => handleVolumeChange(Math.max(0, volume - 0.1))} className="p-2 hover:text-white transition-colors" aria-label="Decrease volume">
+            <button {...downHandlers} className="p-2 hover:text-white transition-colors" aria-label="Decrease volume">
                 <IoChevronBack className="w-5 h-5" />
             </button>
 
@@ -162,7 +219,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
                 <VolumeIcon style={{ width: `${iconSize}px`, height: `${iconSize}px` }} />
             </button>
 
-            <button onClick={() => handleVolumeChange(Math.min(1, volume + 0.1))} className="p-2 hover:text-white transition-colors" aria-label="Increase volume">
+            <button {...upHandlers} className="p-2 hover:text-white transition-colors" aria-label="Increase volume">
                 <IoChevronForward className="w-5 h-5" />
             </button>
         </div>

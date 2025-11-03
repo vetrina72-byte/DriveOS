@@ -3,7 +3,7 @@ import apiClient from '../api';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import { NowPlayingState, YouTubeTrackInfo, PlayOptions } from '../types';
 import { getSessionId } from '../lib/sessionId';
-import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal, getPlayerInstance, getDeviceId, safePlay } from '../lib/spotify-player';
+import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalPlayer, getPlayerInstance, getDeviceId, safePlay } from '../lib/spotify-player';
 
 interface SpotifyUser {
     display_name: string;
@@ -109,9 +109,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
         const sessionId = sessionIdRef.current;
-        console.log(`🕒 [TOKEN MANAGER] Attempting silent token refresh for session=${sessionId}`);
+        console.log(`🔄 [TOKEN] refresh attempt... session=${sessionId}`);
         if (!sessionId) {
-            console.error('🛑 [TOKEN MANAGER] sessionId undefined, cannot refresh');
+            console.log('❌ [TOKEN] refresh failed', new Error('sessionId undefined, cannot refresh'));
             logout();
             return false;
         }
@@ -128,21 +128,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 localStorage.setItem('expiresAt', String(data.expires_at));
                 
                 setState(s => ({ ...s, accessToken: data.access_token, expiresAt: data.expires_at, isAuthenticated: true }));
-                console.log(`🟢 [TOKEN MANAGER] refresh OK — new token valid until ${new Date(data.expires_at).toLocaleTimeString()}`);
+                console.log(`✅ [TOKEN] refresh success. new expiresAt=${new Date(data.expires_at).toISOString()}`);
                 
                 return true;
             }
 
             if (res.status === 401 || data?.error === 'invalid_grant') {
-                console.error('⛔ [TOKEN MANAGER] invalid_grant, forcing re-login');
+                 console.log('❌ [TOKEN] refresh failed', { status: res.status, body: data, message: 'invalid_grant' });
                 logout();
                 return false;
             }
             
-            console.warn('⚠️ [TOKEN MANAGER] refresh failed', res.status, data);
+            console.log('❌ [TOKEN] refresh failed', { status: res.status, body: data });
             return false;
         } catch (err: any) {
-            console.error('❌ [TOKEN MANAGER] exception during refresh', err);
+            console.log('❌ [TOKEN] refresh failed', err);
             return false;
         }
     }, [logout]);
@@ -161,7 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const msLeft = expiresAt - Date.now();
         const refreshIn = Math.max(msLeft - 60000, 5000);
         
-        console.log(`[TOKEN MANAGER] session=${sessionIdRef.current} token valid for ${Math.round(msLeft/1000)}s. Next refresh in ${Math.round(refreshIn/1000)}s.`);
+        console.log(`🔄 [TOKEN] waiting refresh... session=${sessionIdRef.current}. Next attempt in ${Math.round(refreshIn/1000)}s.`);
         
         refreshTimeoutId.current = window.setTimeout(() => {
             attemptRefreshAndUpdatePlayerToken();
@@ -322,7 +322,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const setVolumeFinal = useCallback((rawValue: number) => {
         const clampedVolume = Math.max(0, Math.min(1, rawValue));
         setState(s => ({ ...s, volume: clampedVolume, isMuted: clampedVolume === 0, ...(clampedVolume > 0 && { lastVolume: clampedVolume }) }));
-        setVolumeFinal(clampedVolume).catch(() => {});
+        setVolumeFinalPlayer(clampedVolume).catch(() => {});
     }, []);
 
     const toggleMute = useCallback(() => {

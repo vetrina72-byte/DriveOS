@@ -300,7 +300,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
     );
 };
 
-const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap, debugSpinner }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor'> & { showSpinner: boolean }) => {
+const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner'>) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
@@ -320,13 +320,10 @@ const DisabledPlayerView = ({ showSpinner, isNight, playerControlsSize, playerCo
                 </div>
                 {/* Shuffle/Repeat etc. */}
                 <div className="flex items-center gap-5">
-                     <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}>
+                     <div className="flex items-center">
                         <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
-                        {(showSpinner || debugSpinner) && (
-                            <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
-                        )}
                     </div>
                     <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
                         <PiRepeatBold className="w-5 h-5" />
@@ -411,6 +408,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
+
+    useEffect(() => {
+        const show = nowPlaying.isLoading || debugSpinner;
+        if (show) {
+            console.log('🔄 [SPINNER] show target=top-right');
+        } else {
+            console.log('🔄 [SPINNER] hide');
+        }
+    }, [nowPlaying.isLoading, debugSpinner]);
 
     // FIX: Get player instance from the library.
     const player = getPlayerInstance();
@@ -910,9 +916,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 >
                                     <PiShuffleBold className="w-5 h-5" />
                                 </button>
-                                {(showSpinner || debugSpinner) && (
-                                    <div className="spotify-spinner" style={{ width: `${spinnerSize}px`, height: `${spinnerSize}px` }}/>
-                                )}
                             </div>
                             <button
                                 onClick={handleToggleRepeat}
@@ -957,7 +960,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
         
         // Default / Initial State
-        return <DisabledPlayerView {...{ showSpinner, isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor, spinnerSize, spinnerShuffleGap, debugSpinner }} />;
+        return <DisabledPlayerView {...{ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }} />;
     };
 
     const nextSpotifyTrack = playerState?.track_window.next_tracks[0];
@@ -990,27 +993,34 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg ${themeClasses}`}
                 style={playerStyle}
             >
-                {isAutoplayBlocked && <AutoplayUnlockOverlay />}
-                {renderPlayerContent()}
-                <audio ref={audioRef} playsInline crossOrigin="anonymous" />
-                <div style={{ display: 'none' }}>
-                    <YouTube
-                        videoId={currentYouTubeVideoId}
-                        opts={{
-                            height: '195',
-                            width: '320',
-                            playerVars: {
-                                autoplay: 1,
-                                controls: 0,
-                                disablekb: 1,
-                                modestbranding: 1,
-                                playsinline: 1,
-                            },
-                        }}
-                        onReady={handleYoutubeReady}
-                        onStateChange={handleYoutubeStateChange}
-                        onEnd={handleYouTubeEnd}
-                    />
+                <div className="relative w-full h-full">
+                    {(nowPlaying.isLoading || debugSpinner) && (
+                        <div className="player-spinner-overlay top-right">
+                            <div className="spinner-visual"></div>
+                        </div>
+                    )}
+                    {isAutoplayBlocked && <AutoplayUnlockOverlay />}
+                    {renderPlayerContent()}
+                    <audio ref={audioRef} playsInline crossOrigin="anonymous" />
+                    <div style={{ display: 'none' }}>
+                        <YouTube
+                            videoId={currentYouTubeVideoId}
+                            opts={{
+                                height: '195',
+                                width: '320',
+                                playerVars: {
+                                    autoplay: 1,
+                                    controls: 0,
+                                    disablekb: 1,
+                                    modestbranding: 1,
+                                    playsinline: 1,
+                                },
+                            }}
+                            onReady={handleYoutubeReady}
+                            onStateChange={handleYoutubeStateChange}
+                            onEnd={handleYouTubeEnd}
+                        />
+                    </div>
                 </div>
             </div>
             {visibleQueue && (
