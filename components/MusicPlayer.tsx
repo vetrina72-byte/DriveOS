@@ -51,14 +51,12 @@ interface MusicPlayerProps {
  * A seekable progress bar for the Spotify player with smooth, real-time updates.
  * This component uses `requestAnimationFrame` to interpolate the track's progress between
  * official state updates from the Spotify SDK, providing a fluid user experience. It also
- * handles user seeking (clicking and dragging) and displays a loading indicator.
+ * handles user seeking (clicking and dragging).
  * 
  * @param {SpotifyPlayer | null} player - The Spotify Web Playback SDK player instance.
  * @param {SpotifyPlayerState} state - The current player state from the SDK.
- * @param {boolean} isLoading - A flag from the AuthContext indicating if a track is being loaded.
- * @param {boolean} isNight - A flag to determine which theme (light/dark) to apply to the loading spinner.
  */
-const SpotifyProgressBar = ({ player, state, isLoading, isNight }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, isLoading: boolean, isNight: boolean }) => {
+const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // 'position' holds the locally animated progress in milliseconds for a smooth display.
     const [position, setPosition] = useState(state.position);
     // 'isSeeking' is a flag to prevent animation while the user is dragging the progress handle.
@@ -176,11 +174,6 @@ const SpotifyProgressBar = ({ player, state, isLoading, isNight }: { player: Spo
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>
-            {isLoading && (
-                 <div className="absolute inset-0 flex items-center justify-center">
-                    <div className={`spotify-spinner w-4 h-4`} />
-                </div>
-            )}
         </div>
     );
 };
@@ -936,7 +929,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
                     
-                    <SpotifyProgressBar player={player} state={playerState} isLoading={showSpinner} isNight={isNight} />
+                    <SpotifyProgressBar player={player} state={playerState} />
                     
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                          <div className="flex-1 flex justify-start"></div>
