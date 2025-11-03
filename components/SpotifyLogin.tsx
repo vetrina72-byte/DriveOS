@@ -2,26 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getSessionId } from '../lib/sessionId';
 
 // Funzione helper per generare l'URL del QR code
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
-
-// Client-side UUID generation for session tracking
-const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-  const r = Math.random() * 16 | 0;
-  const v = c === 'x' ? r : (r & 0x3 | 0x8);
-  return v.toString(16);
-});
-
-// Retrieves or creates a persistent session ID from localStorage
-const getSessionId = () => {
-    let sid = localStorage.getItem('spotify_session_id');
-    if (!sid) {
-        sid = generateUUID();
-        localStorage.setItem('spotify_session_id', sid);
-    }
-    return sid;
-};
 
 const CheckmarkIcon = () => (
     <motion.svg
@@ -103,6 +87,7 @@ function SpotifyLogin() {
             const tokenData = {
                 access_token: data.access_token,
                 expires_in: data.expires_at ? (data.expires_at - Date.now()) / 1000 : 3600,
+                expires_at: data.expires_at,
             };
             setTimeout(() => login(tokenData), 1500);
           } else if (data && data.expired === true) {

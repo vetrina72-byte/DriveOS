@@ -15,6 +15,8 @@ import {
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo } from '../types';
+// FIX: Import getPlayerInstance to access the Spotify player instance.
+import { getPlayerInstance } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
     isAnyAppOpen: boolean;
@@ -382,7 +384,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setNowPlaying, 
       volume, 
       playYouTube, 
-      playerRef,
       isAutoplayBlocked,
       unlockAutoplay
   } = useAuth();
@@ -411,8 +412,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
 
+    // FIX: Get player instance from the library.
+    const player = getPlayerInstance();
 
-    const isPlayerActive = playerRef.current && playerState && playerState.track_window.current_track;
+    const isPlayerActive = player && playerState && playerState.track_window.current_track;
 
     const handleToggleQueue = (source: 'spotify' | 'youtube') => {
         if (visibleQueue === source) {
@@ -644,7 +647,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleTogglePlay = () => {
         if (source === 'spotify') {
-            playerRef.current?.togglePlay();
+            player?.togglePlay();
         } else if (source === 'radio') {
             const audio = audioRef.current;
             if (audio) {
@@ -666,7 +669,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleNextTrack = () => {
         if (source === 'spotify') {
-            playerRef.current?.nextTrack();
+            player?.nextTrack();
         } else if (source === 'radio') {
             onStationChange('next');
         } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
@@ -681,7 +684,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
     const handlePrevTrack = () => {
         if (source === 'spotify') {
-            playerRef.current?.previousTrack();
+            player?.previousTrack();
         } else if (source === 'radio') {
             onStationChange('prev');
         } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
@@ -713,12 +716,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleToggleShuffle = () => {
-        if (!playerState || !playerRef.current) return;
+        if (!playerState || !player) return;
         apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
     };
 
     const handleToggleRepeat = () => {
-        if (!playerState || !playerRef.current) return;
+        if (!playerState || !player) return;
         const nextState = (playerState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
@@ -922,7 +925,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
                     
-                    <SpotifyProgressBar player={playerRef.current} state={playerState} isLoading={showSpinner} isNight={isNight} />
+                    <SpotifyProgressBar player={player} state={playerState} isLoading={showSpinner} isNight={isNight} />
                     
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                          <div className="flex-1 flex justify-start"></div>

@@ -110,3 +110,14 @@ export interface NowPlayingState {
   youtubePlaylist?: YouTubeTrackInfo[];
   isLoading?: boolean;
 }
+
+// Export PlayOptions to be used by the spotify-player utility
+export interface PlayOptions {
+    uris?: string[];
+    context_uri?: string;
+    offset?: {
+        position?: number;
+        uri?: string;
+    };
+    position_ms?: number;
+}

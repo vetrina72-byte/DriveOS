@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
         'process.env.MAPTILER_API_KEY': JSON.stringify(env.MAPTILER_API_KEY),
         'process.env.VITE_REDIRECT_URI': JSON.stringify(env.VITE_REDIRECT_URI),
         'process.env.VITE_YOUTUBE_API_KEY': JSON.stringify(env.VITE_YOUTUBE_API_KEY),
+        'process.env.SESSION_ID': JSON.stringify(env.SESSION_ID),
       },
       resolve: {
         alias: {

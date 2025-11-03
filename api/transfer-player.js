@@ -1,0 +1,44 @@
+import { ensureSpotifyToken } from '../lib/spotifySessionManager.js';
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  const { sessionId, device_id } = req.body;
+
+  if (!sessionId) return res.status(400).json({ error: 'missing_session_id' });
+  if (!device_id) return res.status(400).json({ error: 'missing_device_id' });
+
+  const session = await ensureSpotifyToken(sessionId);
+  if (!session || !session.access_token) {
+    return res.status(401).json({ error: 'no_session_or_invalid_token' });
+  }
+
+  const accessToken = session.access_token;
+  const url = 'https://api.spotify.com/v1/me/player';
+
+  try {
+    console.log('▶️ [PROXY TRANSFER] Calling spotify /v1/me/player for device', device_id);
+    const spotifyRes = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ device_ids: [device_id], play: false })
+    });
+
+    if (spotifyRes.status === 204) {
+      return res.status(200).json({ ok: true });
+    }
+
+    const text = await spotifyRes.text();
+    console.warn(`▶️ [PROXY TRANSFER] failed ${spotifyRes.status} ${text}`);
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(spotifyRes.status).send(text || `{ "error": "transfer_failed", "status": ${spotifyRes.status} }`);
+  } catch (e) {
+    console.error('❌ [PROXY TRANSFER] exception', e.message);
+    return res.status(500).json({ error: 'proxy_failed' });
+  }
+}
