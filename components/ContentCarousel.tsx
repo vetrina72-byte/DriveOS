@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import PlaylistItem, { SpotifyItem as MediaItem } from './PlaylistItem';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { motion } from 'framer-motion';
@@ -30,18 +30,49 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
   if (validItems.length === 0) return null;
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const buttonBg = isNight ? 'bg-black/60 hover:bg-black/90' : 'bg-white/80 hover:bg-white';
   const buttonIconColor = isNight ? 'text-white' : 'text-black';
 
+  const checkScrollability = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const isScrollable = el.scrollWidth > el.clientWidth;
+    setCanScrollLeft(isScrollable && el.scrollLeft > 5);
+    setCanScrollRight(isScrollable && el.scrollLeft < el.scrollWidth - el.clientWidth - 5);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    checkScrollability();
+    el.addEventListener('scroll', checkScrollability, { passive: true });
+    window.addEventListener('resize', checkScrollability);
+    
+    const resizeObserver = new ResizeObserver(checkScrollability);
+    resizeObserver.observe(el);
+
+    const mutationObserver = new MutationObserver(checkScrollability);
+    mutationObserver.observe(el, { childList: true, subtree: true });
+
+    return () => {
+      el.removeEventListener('scroll', checkScrollability);
+      window.removeEventListener('resize', checkScrollability);
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, [checkScrollability]);
+
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
-        const scrollAmount = direction === 'left' ? -500 : 500;
+        const scrollAmount = (scrollRef.current.clientWidth * 0.8) * (direction === 'left' ? -1 : 1);
         scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
   };
 
   return (
-    <section className="mb-8 relative group">
+    <section className="mb-8 relative">
       <h2 
         className="text-2xl font-bold mb-4 px-6" 
         style={{ color: `var(--heading-color)` }}
@@ -51,14 +82,16 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
 
       <button
           onClick={() => scroll('left')}
-          className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-md transition-all duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 ${buttonBg}`}
+          disabled={!canScrollLeft}
+          className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-md transition-opacity duration-300 disabled:opacity-0 disabled:pointer-events-none ${buttonBg}`}
           aria-label="Scroll left"
       >
           <FiChevronLeft className={`w-6 h-6 ${buttonIconColor}`} />
       </button>
       <button
           onClick={() => scroll('right')}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-md transition-all duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 ${buttonBg}`}
+          disabled={!canScrollRight}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-md transition-opacity duration-300 disabled:opacity-0 disabled:pointer-events-none ${buttonBg}`}
           aria-label="Scroll right"
       >
           <FiChevronRight className={`w-6 h-6 ${buttonIconColor}`} />

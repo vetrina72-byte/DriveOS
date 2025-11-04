@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
+import ContentCarousel from './ContentCarousel';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -168,6 +169,11 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/5',
     };
 
+    const discographyItems = useMemo(() => discography.map(item => ({
+        ...item,
+        description: `${new Date(item.release_date).getFullYear()} • ${item.album_type}`
+    })), [discography]);
+
     if (isLoading) {
         const loadingIndicatorText = isNight ? 'text-zinc-400' : 'text-zinc-600';
         return (
@@ -261,18 +267,13 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
             </div>
 
             <div className="mt-8">
-                <h2 className={`text-2xl font-bold mb-4 px-6 ${theme.textPrimary}`}>Discografia</h2>
-                <div className="spotify-carousel gap-4 px-6">
-                    {discography.map((item, index) => (
-                        <motion.div variants={itemVariants} key={`${item.id}-${index}`}>
-                            <PlaylistItem 
-                                item={{...item, description: `${new Date(item.release_date).getFullYear()} • ${item.album_type}`}} 
-                                isNight={isNight} 
-                                onSelectItem={onSelectItem} 
-                            />
-                        </motion.div>
-                    ))}
-                </div>
+                <ContentCarousel
+                    title="Discografia"
+                    items={discographyItems}
+                    isNight={isNight}
+                    onSelectItem={onSelectItem}
+                    keyPrefix="artist-discog"
+                />
             </div>
         </div>
     );
