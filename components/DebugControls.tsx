@@ -428,7 +428,7 @@ export default function DebugControls({
     setVolumeControlZIndex(5000);
     setDayFogNear(13);
     setDayFogFar(52);
-    setAppLauncherWidth(37);
+    setAppLauncherWidth(30);
     setAppLauncherHeight(286);
     setVirtualKeyboardKeySize(41);
     setVirtualKeyboardHeight(38);

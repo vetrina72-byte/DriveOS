@@ -722,7 +722,7 @@ function AppContent() {
   const [volumeSliderPopupWidth, setVolumeSliderPopupWidth] = useState(247);
   const [volumeSliderPopupHeight, setVolumeSliderPopupHeight] = useState(40);
   const [volumeControlZIndex, setVolumeControlZIndex] = useState(5000);
-  const [appLauncherWidth, setAppLauncherWidth] = useState(37); // percentage
+  const [appLauncherWidth, setAppLauncherWidth] = useState(30); // percentage
   const [appLauncherHeight, setAppLauncherHeight] = useState(286); // pixels
   const [queuePopoverHeight, setQueuePopoverHeight] = useState(80);
   const [queuePopoverBottomOffset, setQueuePopoverBottomOffset] = useState(16);
