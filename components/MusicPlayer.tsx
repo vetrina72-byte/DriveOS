@@ -755,13 +755,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const playerStyle: React.CSSProperties = useMemo(() => {
         let baseStyle: React.CSSProperties;
+    
         if (isAnyAppOpen) {
             baseStyle = {
                 width: `${dockedConfig.width}px`,
                 height: `${dockedConfig.height}px`,
                 bottom: `${dockedConfig.bottom}px`,
                 left: `${dockedConfig.left}px`,
-                transform: 'translateX(0)',
+                transform: 'none',
             };
         } else {
             const { width, bottom, height, otherWidgetWidth } = floatingConfig;
@@ -769,12 +770,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 width: `${width}px`,
                 height: `${height}px`,
                 bottom: `${bottom}px`,
-                left: '50%',
-                transform: `translateX(calc(-50% - (${otherWidgetWidth}px / 2) - 8px))`,
+                left: `calc(50% - ${otherWidgetWidth / 2}px - 8px - ${width / 2}px)`,
+                transform: 'none',
             };
         }
         baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
-        baseStyle.transition = 'all 309ms ease-in-out';
+        // Use a more specific transition property to avoid animating background-color
+        baseStyle.transition = 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
         return baseStyle;
     }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
 

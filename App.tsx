@@ -105,8 +105,7 @@ const formatTravelTime = (minutes: number | null): string => {
 };
 
 
-const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition, width, widgetBgColor, dayPlayerButtonColor, nightPlayerButtonColor, homeLocation, workLocation, darkNavigateInputBg }: { 
-    isVisible: boolean, 
+const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, widgetBgColor, dayPlayerButtonColor, nightPlayerButtonColor, homeLocation, workLocation, darkNavigateInputBg }: { 
     isNight: boolean,
     onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
     currentPosition: { lat: number; lng: number } | null,
@@ -243,7 +242,7 @@ const NavigateTool = ({ isVisible, isNight, onSelectDestination, currentPosition
     return (
         <div 
             ref={containerRef}
-            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border} ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border}`}
             style={{ 
                 width: `${width}px`,
                 height: `${isExpanded ? expandedHeight : baseHeight}px`,
@@ -1421,6 +1420,47 @@ function AppContent() {
   };
 
   const isUIOverlayActive = activeApp !== null;
+  const isHomeScreenDocked = isUIOverlayActive || isAppLauncherOpen;
+  
+    const navigateToolStyle = useMemo(() => {
+        const baseStyle: React.CSSProperties = {
+            transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+            position: 'fixed',
+            zIndex: 1000,
+            bottom: `${playerFloatingBottom}px`,
+            transform: 'none', // Unified transform property
+        };
+    
+        const homeLeft = `calc(50% + (${playerFloatingWidth}px / 2) + 8px - (${navigateToolWidth}px / 2))`;
+        
+        // Symmetrical position adjustment for when the launcher is open.
+        // This moves the nav tool further from the right edge to balance the wider music player on the left.
+        const launcherOpenRightOffset = playerDockedLeft + 90; 
+        const launcherOpenLeft = `calc(100% - ${launcherOpenRightOffset}px - ${navigateToolWidth}px)`;
+
+        if (isAppLauncherOpen) { // State 3: Launcher Open
+            return {
+                ...baseStyle,
+                opacity: 1,
+                pointerEvents: 'auto',
+                left: launcherOpenLeft,
+            };
+        } else if (isUIOverlayActive) { // State 2: App Open (e.g., Spotify)
+            return {
+                ...baseStyle,
+                opacity: 0,
+                pointerEvents: 'none',
+                left: homeLeft, // Keep position during fade-out to prevent jump
+            };
+        } else { // State 1: Home Screen (Floating)
+            return {
+                ...baseStyle,
+                opacity: 1,
+                pointerEvents: 'auto',
+                left: homeLeft,
+            };
+        }
+    }, [isAppLauncherOpen, isUIOverlayActive, playerFloatingBottom, playerDockedLeft, playerFloatingWidth, navigateToolWidth, playerDockedWidth]);
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
@@ -1536,7 +1576,7 @@ function AppContent() {
       </AnimatePresence>
         
       <MiniMap 
-          isVisible={!isUIOverlayActive && !isCanvasInteracting && !isAppLauncherOpen} 
+          isVisible={!isUIOverlayActive && !isCanvasInteracting} 
           position={currentPosition} 
           bearing={bearing}
           isNight={isNight}
@@ -1570,15 +1610,8 @@ function AppContent() {
         </AnimatePresence>
 
         <div
-          className="fixed z-[1000] flex items-end"
-          style={{
-              transition: 'opacity 0.3s ease-in-out, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-              opacity: isUIOverlayActive ? 0 : 1,
-              pointerEvents: isUIOverlayActive ? 'none' : 'auto',
-              left: '50%',
-              bottom: `${playerFloatingBottom}px`,
-              transform: `translateX(calc(-50% + ${playerFloatingWidth / 2}px + 8px))`,
-          }}
+          className="flex items-end"
+          style={navigateToolStyle}
         >
             {navigationTarget ? (
               <NavigationStatus
@@ -1593,7 +1626,6 @@ function AppContent() {
               />
             ) : (
               <NavigateTool 
-                isVisible={!isUIOverlayActive} 
                 isNight={useDarkTheme}
                 onSelectDestination={handleSelectDestination}
                 currentPosition={currentPosition}
@@ -1611,7 +1643,7 @@ function AppContent() {
         <MusicPlayer
           activeApp={activeApp}
           onStationChange={handleStationChange}
-          isAnyAppOpen={isUIOverlayActive}
+          isAnyAppOpen={isHomeScreenDocked}
           isNight={useDarkTheme}
           dockedConfig={{
             width: playerDockedWidth,
@@ -1956,6 +1988,7 @@ function AppContent() {
         setSpinnerBottom={setSpinnerBottom}
         spinnerLeft={spinnerLeft}
         setSpinnerLeft={setSpinnerLeft}
+        homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
       />}
     </div>
   );

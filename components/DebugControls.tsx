@@ -167,6 +167,8 @@ interface DebugControlsProps {
   setSpinnerBottom: (val: number | undefined) => void;
   spinnerLeft: number | undefined;
   setSpinnerLeft: (val: number | undefined) => void;
+  // FIX: Add missing homeDataQuotaExceeded prop to fix error in App.tsx
+  homeDataQuotaExceeded: boolean;
 }
 
 const WEATHER_CONDITIONS = [
@@ -362,6 +364,7 @@ export default function DebugControls({
   setSpinnerBottom,
   spinnerLeft,
   setSpinnerLeft,
+  homeDataQuotaExceeded,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -1254,6 +1257,14 @@ export default function DebugControls({
                 onChange={(e) => setDarkVolumeThumbBg(e.target.value)}
                 className="w-10 h-10 p-1 bg-zinc-700 rounded-md border border-zinc-600"
               />
+            </div>
+        </div>
+
+        <div className="pt-2 mt-2 border-t border-zinc-700">
+            <h3 className="text-md font-semibold text-zinc-200 mb-2">API Status</h3>
+            <div className="flex items-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${homeDataQuotaExceeded ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                <span className="font-medium text-zinc-300">YouTube API Quota: {homeDataQuotaExceeded ? 'Exceeded' : 'OK'}</span>
             </div>
         </div>
 
