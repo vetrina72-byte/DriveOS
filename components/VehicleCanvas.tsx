@@ -7,8 +7,36 @@ import WeatherEffects from './WeatherEffects';
 import type { SceneColors } from '../App';
 import type { WeatherParams } from '../types';
 
+// Simple Error Boundary for the 3D model
+class ModelErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    // Update state so the next render will show the fallback UI.
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    // Log the error to the console
+    console.error("Error loading 3D Model, hiding it from the scene:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      // As per the request, render nothing if the model fails to load.
+      // The rest of the UI will remain functional.
+      return null;
+    }
+
+    return this.props.children;
+  }
+}
+
 // URL del modello GLTF
-const MODEL_URL = 'https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/cybertruck/model.gltf';
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/pmndrs/drei-assets@master/models/cybertruck.gltf';
 
 // Interfaccia per la configurazione della scena, mantenuta per la logica di animazione interna
 export interface SceneConfig {
@@ -58,7 +86,7 @@ const Model = forwardRef<THREE.Group, {
             mat.opacity = 0.5;
             child.castShadow = false;
           }
-          if (name === 'lights_emissive') {
+          if (name === 'lights_emissive' || name === 'lights') {
             mat.emissive = new THREE.Color('#ffffff');
             mat.toneMapped = false;
             lightMats.current[mat.uuid] = mat;
@@ -90,7 +118,6 @@ const Model = forwardRef<THREE.Group, {
   );
 });
 Model.displayName = 'Model';
-useGLTF.preload(MODEL_URL);
 
 // This component adjusts the camera's Field of View based on the aspect ratio
 // to ensure the scene composition remains consistent across different screen sizes.
@@ -553,42 +580,46 @@ export default function VehicleCanvas({
     <>
       <Canvas shadows={{ type: THREE.PCFSoftShadowMap }} camera={{ fov: 48, position: [initialConfig.cameraPos.x, initialConfig.cameraPos.y, initialConfig.cameraPos.z] }}>
         <Suspense fallback={null}>
-          <group
-            ref={modelRef}
-            position={[initialConfig.modelPos.x, initialConfig.modelPos.y, initialConfig.modelPos.z]}
-            rotation={[initialConfig.modelRot.x, initialConfig.modelRot.y, initialConfig.modelRot.z]}
-            scale={initialConfig.modelScale}
-          >
-            <Model
-              position={{ x: 0, y: 0, z: 0 }}
-              rotation={{ x: 0, y: 0, z: 0 }}
-              scale={1}
-              isNight={isNight}
-            />
-
-            <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}>
-              <planeGeometry args={[10, 10]} />
-              <shadowMaterial transparent opacity={shadowOpacity} />
-            </mesh>
-            
-            <VolumetricHeadlight
-              position={[0, headlightPosition.y, headlightPosition.z]}
-              beamLength={beamLength}
-              beamAngle={beamAngle}
-              beamRoll={beamRoll}
-              intensity={beamIntensity}
-              fade={beamFade}
-              visible={isNight}
-              beamStartWidth={beamStartWidth}
-              beamEndWidth={beamEndWidth}
-              beamStartHeight={beamStartHeight}
-              beamEndHeight={beamEndHeight}
-            />
-          </group>
-
           <MemoizedEnvironment />
           <WeatherEffects targetParams={targetWeatherParams} effectiveWeatherCondition={effectiveWeatherCondition} />
         </Suspense>
+
+        <ModelErrorBoundary>
+          <Suspense fallback={null}>
+            <group
+              ref={modelRef}
+              position={[initialConfig.modelPos.x, initialConfig.modelPos.y, initialConfig.modelPos.z]}
+              rotation={[initialConfig.modelRot.x, initialConfig.modelRot.y, initialConfig.modelRot.z]}
+              scale={initialConfig.modelScale}
+            >
+              <Model
+                position={{ x: 0, y: 0, z: 0 }}
+                rotation={{ x: 0, y: 0, z: 0 }}
+                scale={1}
+                isNight={isNight}
+              />
+
+              <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}>
+                <planeGeometry args={[10, 10]} />
+                <shadowMaterial transparent opacity={shadowOpacity} />
+              </mesh>
+              
+              <VolumetricHeadlight
+                position={[0, headlightPosition.y, headlightPosition.z]}
+                beamLength={beamLength}
+                beamAngle={beamAngle}
+                beamRoll={beamRoll}
+                intensity={beamIntensity}
+                fade={beamFade}
+                visible={isNight}
+                beamStartWidth={beamStartWidth}
+                beamEndWidth={beamEndWidth}
+                beamStartHeight={beamStartHeight}
+                beamEndHeight={beamEndHeight}
+              />
+            </group>
+          </Suspense>
+        </ModelErrorBoundary>
 
         <ambientLight ref={ambientLightRef} />
 
