@@ -154,8 +154,9 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         if (!isSliderVisible) {
             calculatePosition();
             setIsSliderVisible(true);
+        } else {
+            resetAutoCloseTimer();
         }
-        resetAutoCloseTimer();
         changeVolume(direction);
     }, [isSliderVisible, resetAutoCloseTimer, changeVolume, calculatePosition]);
     

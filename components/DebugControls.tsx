@@ -696,4 +696,17 @@ export default function DebugControls({
             </div>
             <div className="mt-2">
               <label htmlFor="app-launcher-height">Height: {appLauncherHeight}px</label>
-              <input id="app-launcher-height" type="range" min="50" max
+              <input id="app-launcher-height" type="range" min="50" max="500" step="1" value={appLauncherHeight} onChange={(e) => setAppLauncherHeight(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"/>
+            </div>
+        </div>
+
+        <button 
+          onClick={handleReset} 
+          className="w-full mt-4 p-2 bg-blue-600 hover:bg-blue-500 rounded-md font-semibold"
+        >
+          Reset All to Defaults
+        </button>
+      </div>
+    </div>
+  );
+}
