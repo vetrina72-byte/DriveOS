@@ -65,23 +65,33 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
 
     const VolumeIcon = volume === 0 || isMuted ? FiVolumeX : volume < 0.5 ? FiVolume1 : FiVolume2;
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
         if (autoCloseTimeoutRef.current) clearTimeout(autoCloseTimeoutRef.current);
         setIsClosing(true);
         setTimeout(() => {
             setIsSliderVisible(false);
             setIsClosing(false); // Reset for next open
         }, 300); // Must match fade-out animation duration
-    };
+    }, []);
 
-    const resetAutoCloseTimer = () => {
+    const resetAutoCloseTimer = useCallback(() => {
         if (autoCloseTimeoutRef.current) {
             clearTimeout(autoCloseTimeoutRef.current);
         }
         autoCloseTimeoutRef.current = window.setTimeout(() => {
             handleClose();
-        }, 4000); // Auto-close after 4 seconds of inactivity
-    };
+        }, 5000); // Auto-close after 5 seconds of inactivity
+    }, [handleClose]);
+
+    const calculatePosition = useCallback(() => {
+        if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setPopupPosition({
+                bottom: window.innerHeight - rect.top + volumeSliderOffsetY,
+                left: rect.left + (rect.width / 2) + volumeSliderOffsetX,
+            });
+        }
+    }, [volumeSliderOffsetX, volumeSliderOffsetY]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -101,25 +111,16 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
             document.removeEventListener('mousedown', handleClickOutside);
             if (autoCloseTimeoutRef.current) clearTimeout(autoCloseTimeoutRef.current);
         };
-    }, [isSliderVisible, isClosing]); // Rerun if visibility or closing state changes
+    }, [isSliderVisible, isClosing, handleClose]); 
 
-    const calculatePosition = () => {
-        if (containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            setPopupPosition({
-                bottom: window.innerHeight - rect.top + volumeSliderOffsetY,
-                left: rect.left + (rect.width / 2) + volumeSliderOffsetX,
-            });
-        }
-    };
-    
     useEffect(() => {
         if (isSliderVisible) {
             calculatePosition();
             window.addEventListener('resize', calculatePosition);
+            resetAutoCloseTimer();
             return () => window.removeEventListener('resize', calculatePosition);
         }
-    }, [isSliderVisible, volumeSliderOffsetX, volumeSliderOffsetY]);
+    }, [isSliderVisible, calculatePosition, resetAutoCloseTimer]);
 
     const handleIconClick = () => {
         if (isSliderVisible) {
@@ -127,15 +128,11 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         } else {
             calculatePosition(); // Calculate fresh position right before opening
             setIsSliderVisible(true);
-            resetAutoCloseTimer();
         }
     };
     
     const handleVolumeInput = (newVolume: number) => {
         setVolumeLive(newVolume);
-        if (!isSliderVisible) {
-            setIsSliderVisible(true);
-        }
         resetAutoCloseTimer();
     };
     
@@ -147,20 +144,23 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
     const STEP = 0.05;
     const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(n, max));
 
-    const handleVolumeUp = useCallback(() => {
-        const newVol = clamp(volumeRef.current + STEP, 0, 1);
+    const changeVolume = useCallback((direction: 'up' | 'down') => {
+        const currentVol = volumeRef.current;
+        const newVol = clamp(currentVol + (direction === 'up' ? STEP : -STEP), 0, 1);
         setVolumeFinal(newVol);
-        console.log(`🔈 [VOLUME] arrow action newVol=${newVol.toFixed(2)} method=hold`);
     }, [setVolumeFinal]);
 
-    const handleVolumeDown = useCallback(() => {
-        const newVol = clamp(volumeRef.current - STEP, 0, 1);
-        setVolumeFinal(newVol);
-        console.log(`🔈 [VOLUME] arrow action newVol=${newVol.toFixed(2)} method=hold`);
-    }, [setVolumeFinal]);
+    const handleArrowPress = useCallback((direction: 'up' | 'down') => {
+        if (!isSliderVisible) {
+            calculatePosition();
+            setIsSliderVisible(true);
+        }
+        resetAutoCloseTimer();
+        changeVolume(direction);
+    }, [isSliderVisible, resetAutoCloseTimer, changeVolume, calculatePosition]);
     
-    const upHandlers = useHoldRepeat(handleVolumeUp);
-    const downHandlers = useHoldRepeat(handleVolumeDown);
+    const upHandlers = useHoldRepeat(() => handleArrowPress('up'));
+    const downHandlers = useHoldRepeat(() => handleArrowPress('down'));
 
     const thumbSize = volumeSliderThickness * 2.2;
     const thumbMarginTop = ((thumbSize - volumeSliderThickness) / -2) + volumeSliderThumbOffsetY;

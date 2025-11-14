@@ -724,11 +724,11 @@ function AppContent() {
   const [volumeControlZIndex, setVolumeControlZIndex] = useState(5000);
   const [appLauncherWidth, setAppLauncherWidth] = useState(30); // percentage
   const [appLauncherHeight, setAppLauncherHeight] = useState(286); // pixels
-  const [queuePopoverHeight, setQueuePopoverHeight] = useState(80);
+  const [queuePopoverHeight, setQueuePopoverHeight] = useState(89);
   const [queuePopoverBottomOffset, setQueuePopoverBottomOffset] = useState(16);
   const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
   const [queuePopoverWidth, setQueuePopoverWidth] = useState(288);
-  const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(0);
+  const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(-29);
 
 
   // YouTube Music State
@@ -1519,62 +1519,6 @@ function AppContent() {
           tempUnit={tempUnit}
       />
         
-      <MapsContainer 
-          isOpen={activeApp === 'maps' || isMapsLayered}
-          onClose={handleCloseMaps}
-          isNight={useDarkTheme}
-          searchPanelWidth={mapsSearchPanelWidth}
-          searchPanelTop={mapsSearchPanelTop}
-          navigationTarget={navigationTarget}
-          spotifyPlayerTop={spotifyPlayerTop}
-          spotifyPlayerBottom={spotifyPlayerBottom}
-      />
-      
-      <SpotifyApp 
-          isOpen={activeApp === 'spotify'} 
-          onClose={() => toggleApp('spotify')} 
-          isNight={useDarkTheme}
-          spotifyPlayerTop={spotifyPlayerTop}
-          spotifyPlayerBottom={spotifyPlayerBottom}
-      />
-      
-      <AnimatePresence>
-        {activeApp === 'theater' && (
-          <TheaterApp
-            onClose={() => toggleApp('theater')}
-            isNight={useDarkTheme}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-          />
-        )}
-        {activeApp === 'radio' && (
-          <RadioApp
-            isOpen={activeApp === 'radio'}
-            onClose={() => toggleApp('radio')}
-            isNight={useDarkTheme}
-            onPlayStation={handlePlayStation}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-            favoriteStationUUIDs={favoriteStationUUIDs}
-          />
-        )}
-         {activeApp === 'youtube-music' && (
-          <YouTubeMusicApp
-            isOpen={activeApp === 'youtube-music'}
-            onClose={() => toggleApp('youtube-music')}
-            isNight={useDarkTheme}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-            homeData={youtubeHomeData}
-            isHomeDataLoading={youtubeHomeIsLoading}
-            youtubeHomeError={youtubeHomeError}
-            homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
-            onRetry={fetchYouTubeHomeData}
-            onQuotaError={handleGenericQuotaError}
-          />
-        )}
-      </AnimatePresence>
-        
       <MiniMap 
           isVisible={!isUIOverlayActive && !isCanvasInteracting} 
           position={currentPosition} 
@@ -1595,6 +1539,63 @@ function AppContent() {
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
         
+        {/* All scalable fixed-position UI elements go here */}
+        <MapsContainer 
+            isOpen={activeApp === 'maps' || isMapsLayered}
+            onClose={handleCloseMaps}
+            isNight={useDarkTheme}
+            searchPanelWidth={mapsSearchPanelWidth}
+            searchPanelTop={mapsSearchPanelTop}
+            navigationTarget={navigationTarget}
+            spotifyPlayerTop={spotifyPlayerTop}
+            spotifyPlayerBottom={spotifyPlayerBottom}
+        />
+        
+        <SpotifyApp 
+            isOpen={activeApp === 'spotify'} 
+            onClose={() => toggleApp('spotify')} 
+            isNight={useDarkTheme}
+            spotifyPlayerTop={spotifyPlayerTop}
+            spotifyPlayerBottom={spotifyPlayerBottom}
+        />
+        
+        <AnimatePresence>
+          {activeApp === 'theater' && (
+            <TheaterApp
+              onClose={() => toggleApp('theater')}
+              isNight={useDarkTheme}
+              spotifyPlayerTop={spotifyPlayerTop}
+              spotifyPlayerBottom={spotifyPlayerBottom}
+            />
+          )}
+          {activeApp === 'radio' && (
+            <RadioApp
+              isOpen={activeApp === 'radio'}
+              onClose={() => toggleApp('radio')}
+              isNight={useDarkTheme}
+              onPlayStation={handlePlayStation}
+              spotifyPlayerTop={spotifyPlayerTop}
+              spotifyPlayerBottom={spotifyPlayerBottom}
+              favoriteStationUUIDs={favoriteStationUUIDs}
+            />
+          )}
+           {activeApp === 'youtube-music' && (
+            <YouTubeMusicApp
+              isOpen={activeApp === 'youtube-music'}
+              onClose={() => toggleApp('youtube-music')}
+              isNight={useDarkTheme}
+              spotifyPlayerTop={spotifyPlayerTop}
+              spotifyPlayerBottom={spotifyPlayerBottom}
+              homeData={youtubeHomeData}
+              isHomeDataLoading={youtubeHomeIsLoading}
+              youtubeHomeError={youtubeHomeError}
+              homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
+              onRetry={fetchYouTubeHomeData}
+              onQuotaError={handleGenericQuotaError}
+            />
+          )}
+        </AnimatePresence>
+
         <AnimatePresence>
             {arrivalMessage && (
                 <motion.div

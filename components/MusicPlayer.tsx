@@ -409,6 +409,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
+    const [autoPopoverDismissedFor, setAutoPopoverDismissedFor] = useState<string|null>(null);
 
     useEffect(() => {
         const show = nowPlaying.isLoading || debugSpinner;
@@ -423,9 +424,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const player = getPlayerInstance();
 
     const isPlayerActive = player && playerState && playerState.track_window.current_track;
+    const currentTrack = playerState?.track_window.current_track;
+    const currentTrackUri = currentTrack?.uri;
 
-    const handleToggleQueue = (source: 'spotify' | 'youtube') => {
+    const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
         if (visibleQueue === source) {
+            if (source === 'spotify' && currentTrackUri) {
+                setAutoPopoverDismissedFor(currentTrackUri);
+            }
             setIsQueueClosing(true);
             setTimeout(() => {
                 setVisibleQueue(null);
@@ -435,7 +441,32 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             setIsQueueClosing(false);
             setVisibleQueue(source);
         }
-    };
+    }, [visibleQueue, currentTrackUri]);
+
+    // Effect for showing popover near end of track
+    useEffect(() => {
+        if (!playerState || playerState.paused || !currentTrackUri) {
+            return;
+        }
+        const { position, duration } = playerState;
+        const isNearEnd = duration > 15000 && (duration - position) < 15000;
+
+        if (isNearEnd && visibleQueue !== 'spotify' && autoPopoverDismissedFor !== currentTrackUri) {
+            setVisibleQueue('spotify');
+        }
+    }, [playerState, currentTrackUri, visibleQueue, autoPopoverDismissedFor]);
+
+    // Effect for hiding popover on track change
+    const prevTrackUri = useRef<string | undefined>();
+    useEffect(() => {
+        if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
+            if (visibleQueue === 'spotify') {
+                handleToggleQueue('spotify'); // Close it
+            }
+            setAutoPopoverDismissedFor(null); // Reset dismissal on track change
+        }
+        prevTrackUri.current = currentTrackUri;
+    }, [currentTrackUri, visibleQueue, handleToggleQueue]);
     
     useEffect(() => {
         if (audioRef.current) {
@@ -610,17 +641,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             window.removeEventListener('resize', calculatePosition);
         };
     }, [visibleQueue, queuePopoverBottomOffset]);
-
-    const prevTrackUri = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        const currentTrackUri = playerState?.track_window?.current_track?.uri;
-        if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
-            setVisibleQueue(null);
-        }
-        prevTrackUri.current = currentTrackUri;
-    }, [playerState?.track_window?.current_track?.uri]);
-
-
+    
     useEffect(() => {
         const checkIsLiked = async () => {
             const trackId = playerState?.track_window?.current_track?.id;
