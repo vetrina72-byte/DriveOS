@@ -55,17 +55,17 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 setPlaylists([]);
             }
             try {
-                // FIX: Switched to the /search endpoint with a genre filter for more robust playlist fetching,
-                // as the /browse/categories/{id}/playlists endpoint was proving unreliable.
-                const response = await apiClient.get('/search', {
-                    params: {
-                        q: `genre:"${title}"`,
-                        type: 'playlist',
-                        market: 'IT',
-                        limit,
-                        offset
+                // FIX: Use the correct endpoint to fetch playlists for a category by its ID.
+                const response = await apiClient.get(
+                    `/browse/categories/${categoryId}/playlists`,
+                    {
+                        params: {
+                            country: 'IT',
+                            limit,
+                            offset,
+                        }
                     }
-                });
+                );
                 
                 if (response.data?.playlists?.items) {
                     setPlaylists(response.data.playlists.items);
@@ -87,7 +87,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
         if (categoryId) {
             fetchPlaylists();
         }
-    }, [categoryId, title, offset, limit]);
+    }, [categoryId, offset, limit]);
 
     const handlePrev = () => {
         setOffset(prev => Math.max(0, prev - limit));
