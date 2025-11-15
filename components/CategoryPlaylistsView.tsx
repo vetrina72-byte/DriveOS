@@ -44,7 +44,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     // Effect to reset offset when category changes
     useEffect(() => {
         setOffset(0);
-    }, [title]);
+    }, [categoryId]);
 
     useEffect(() => {
         const fetchPlaylists = async () => {
@@ -55,20 +55,17 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                 setPlaylists([]);
             }
             try {
-                const encodedCategoryName = encodeURIComponent(title);
-                
-                // First attempt: search by genre tag
-                let response = await apiClient.get(
-                    `/search?q=genre:"${encodedCategoryName}"&type=playlist&limit=${limit}&offset=${offset}`
+                // FIX: Use the correct endpoint to fetch playlists for a category by its ID.
+                const response = await apiClient.get(
+                    `/browse/categories/${categoryId}/playlists`,
+                    {
+                        params: {
+                            country: 'IT',
+                            limit,
+                            offset,
+                        }
+                    }
                 );
-                
-                // Fallback logic: if genre search yields no results, try a general text search
-                if (response.data?.playlists?.items?.length === 0) {
-                    console.log(`Genre search for "${title}" returned no results. Trying fallback search.`);
-                    response = await apiClient.get(
-                        `/search?q="${encodedCategoryName}"&type=playlist&limit=${limit}&offset=${offset}`
-                    );
-                }
                 
                 if (response.data?.playlists?.items) {
                     setPlaylists(response.data.playlists.items);
@@ -78,7 +75,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                     setHasNextPage(false);
                 }
             } catch (err: any) {
-                 console.error(`Failed to fetch playlists for category "${title}"`, err);
+                 console.error(`Failed to fetch playlists for category "${categoryId}"`, err);
                  setError('Could not load playlists for this category.');
                  setPlaylists([]);
                  setHasNextPage(false);
@@ -87,10 +84,10 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
             }
         };
 
-        if (title) {
+        if (categoryId) {
             fetchPlaylists();
         }
-    }, [title, offset, limit]);
+    }, [categoryId, offset, limit]);
 
     const handlePrev = () => {
         setOffset(prev => Math.max(0, prev - limit));
