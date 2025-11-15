@@ -253,17 +253,28 @@ const SpotifyPlayer = ({
         }
     }, [refreshTrigger, user, startFetching, fetchData, fetchRecentlyPlayed]);
 
-    const lastPlayedTrackUri = useRef<string | null>(null);
+    const previousTrackUri = useRef<string | undefined>();
+    const currentTrackUri = nowPlaying.spotifyState?.track_window.current_track?.uri;
+
     useEffect(() => {
-        const currentTrack = nowPlaying.spotifyState?.track_window.current_track;
-        if (currentTrack && currentTrack.uri !== lastPlayedTrackUri.current) {
-            const timer = setTimeout(() => {
-                fetchRecentlyPlayed();
-            }, 3000); // Delay to allow Spotify API to update
-            lastPlayedTrackUri.current = currentTrack.uri;
-            return () => clearTimeout(timer);
+        // Only trigger if the track URI has actually changed from the previous render
+        // and if there is a new track URI (not null/undefined).
+        if (currentTrackUri && currentTrackUri !== previousTrackUri.current) {
+            // Only fetch if the player is open and has started fetching content.
+            if (user && startFetching) {
+                // A short delay gives Spotify's API time to register the new "recently played" track.
+                // This is a good compromise between "immediacy" and "correctness", preventing a race condition.
+                const timer = setTimeout(() => {
+                    fetchRecentlyPlayed();
+                }, 500);
+
+                return () => clearTimeout(timer);
+            }
         }
-    }, [nowPlaying.spotifyState, fetchRecentlyPlayed]);
+        
+        // Update the ref for the next render.
+        previousTrackUri.current = currentTrackUri;
+    }, [currentTrackUri, fetchRecentlyPlayed, user, startFetching]);
     
     // --- End Data Fetching ---
 
