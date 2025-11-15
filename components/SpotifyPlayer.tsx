@@ -256,12 +256,13 @@ const SpotifyPlayer = ({
     // New effect to refresh "Continue Listening" after a play action is initiated.
     useEffect(() => {
         if (lastPlayInitiated > 0) {
-            if (user && startFetching) {
-                // Fetch immediately on play action to provide a more responsive UI.
+            // A play action should always trigger a refresh of recently played,
+            // regardless of the initial home content loading state.
+            if (user) {
                 fetchRecentlyPlayed();
             }
         }
-    }, [lastPlayInitiated, user, startFetching, fetchRecentlyPlayed]);
+    }, [lastPlayInitiated, user, fetchRecentlyPlayed]);
     
     // --- End Data Fetching ---
 

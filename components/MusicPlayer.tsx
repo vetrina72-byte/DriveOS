@@ -19,6 +19,8 @@ import type { RadioStation, YouTubeTrackInfo } from '../types';
 import { getPlayerInstance } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
+    activeApp: string | null;
+    onStationChange: (direction: 'next' | 'prev') => void;
     isAnyAppOpen: boolean;
     isNight: boolean;
     dockedConfig: { width: number; bottom: number; left: number; height: number; };
@@ -32,8 +34,6 @@ interface MusicPlayerProps {
     widgetBgColor: string;
     dayPlayerButtonColor: string;
     nightPlayerButtonColor: string;
-    onStationChange: (direction: 'next' | 'prev') => void;
-    activeApp: string | null;
     favoriteStationUUIDs: string[];
     onToggleFavorite: (station: RadioStation) => void;
     queuePopoverHeight: number;
@@ -468,12 +468,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     useEffect(() => {
         if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
             if (visibleQueue === 'spotify') {
-                handleToggleQueue('spotify'); // Close it
+                // Manually hide popover without calling handleToggleQueue
+                // to preserve isAutoQueueEnabled state.
+                setIsQueueClosing(true);
+                setTimeout(() => {
+                    setVisibleQueue(null);
+                    setIsQueueClosing(false);
+                }, 300);
             }
             setAutoPopoverDismissedFor(null); // Reset dismissal on track change
         }
         prevTrackUri.current = currentTrackUri;
-    }, [currentTrackUri, visibleQueue, handleToggleQueue]);
+    }, [currentTrackUri, visibleQueue]);
     
     useEffect(() => {
         if (audioRef.current) {
