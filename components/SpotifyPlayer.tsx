@@ -55,7 +55,7 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
-    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, refreshTrigger } = useAuth();
+    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, refreshTrigger, nowPlaying } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
@@ -110,19 +110,23 @@ const SpotifyPlayer = ({
         const unifiedList: MediaItem[] = [];
         const addedUris = new Set<string>();
         const contextDetailsCache = new Map<string, any>();
-        const likedTracksUris = new Set<string>();
 
-        try {
-            let nextUrl: string | null = '/me/tracks?limit=50';
-            while (nextUrl) {
-                const response = await apiClient.get(nextUrl);
-                response.data.items.forEach((item: any) => {
-                    if (item.track?.uri) likedTracksUris.add(item.track.uri);
-                });
-                nextUrl = response.data.next;
+        const tracksWithoutContext = items.filter(item => item.track && !item.context);
+        const trackIdsToCheck = tracksWithoutContext.map(item => item.track.id).filter(Boolean);
+        const likedStatusMap = new Map<string, boolean>();
+
+        if (trackIdsToCheck.length > 0) {
+            for (let i = 0; i < trackIdsToCheck.length; i += 50) {
+                const chunk = trackIdsToCheck.slice(i, i + 50);
+                try {
+                    const response = await apiClient.get(`/me/tracks/contains?ids=${chunk.join(',')}`);
+                    response.data.forEach((isLiked: boolean, index: number) => {
+                        likedStatusMap.set(chunk[index], isLiked);
+                    });
+                } catch (e) {
+                    console.error("Failed to check liked status for tracks", e);
+                }
             }
-        } catch (e) {
-            console.error("Failed to fetch user's liked tracks for context check", e);
         }
 
         const likedSongsItem: MediaItem = { id: 'liked-songs', name: 'Brani che ti piacciono', type: 'playlist', uri: 'special:liked-songs', description: 'La tua collezione personale.' };
@@ -150,7 +154,7 @@ const SpotifyPlayer = ({
         for (const item of items) {
             if (!item.track) continue;
             let itemToAdd: MediaItem | null = null;
-            if (item.context?.type === 'collection' || (!item.context && likedTracksUris.has(item.track.uri))) {
+            if (item.context?.type === 'collection' || likedStatusMap.get(item.track.id)) {
                 itemToAdd = likedSongsItem;
             } else if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
                 const contextDetails = contextDetailsCache.get(item.context.uri)!;
@@ -170,6 +174,17 @@ const SpotifyPlayer = ({
         return unifiedList.slice(0, 10);
     }, []);
 
+    const fetchRecentlyPlayed = useCallback(async () => {
+        if (!user) return;
+        try {
+            const recents = await apiClient.get('/me/player/recently-played?limit=50');
+            const processedItems = await processRecentPlays(recents.data.items);
+            setContinueListeningItems(processedItems);
+        } catch (err) {
+            console.error("Failed to fetch recently played items", err);
+        }
+    }, [user, processRecentPlays]);
+
     const fetchData = useCallback(async () => {
         if (!user || hasFetchedHomeContent) return;
         setHomeContentLoading(true);
@@ -177,7 +192,6 @@ const SpotifyPlayer = ({
 
         try {
             const promises = [
-                apiClient.get('/me/player/recently-played?limit=50'),
                 apiClient.get('/me/playlists?limit=10'),
                 apiClient.get('/me/top/artists?time_range=medium_term&limit=10'),
                 apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'),
@@ -194,8 +208,7 @@ const SpotifyPlayer = ({
             results.forEach((result, index) => {
                 if (result.status === 'rejected') console.log(`API call at index ${index} failed:`, result.reason.response?.data || result.reason.message);
             });
-            const [recents, playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew] = results;
-            if (recents.status === 'fulfilled') processRecentPlays(recents.value.data.items).then(setContinueListeningItems);
+            const [playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew] = results;
             if (playlists.status === 'fulfilled') setUserPlaylists(playlists.value.data.items);
             if (artists.status === 'fulfilled') {
                 const topArtistsData = artists.value.data.items;
@@ -221,22 +234,36 @@ const SpotifyPlayer = ({
         } finally {
             setHomeContentLoading(false);
         }
-    }, [user, hasFetchedHomeContent, processRecentPlays]);
+    }, [user, hasFetchedHomeContent]);
 
     useEffect(() => {
         if (user && startFetching && !hasFetchedHomeContent) {
+            fetchRecentlyPlayed();
             fetchData();
         }
-    }, [user, startFetching, hasFetchedHomeContent, fetchData]);
+    }, [user, startFetching, hasFetchedHomeContent, fetchData, fetchRecentlyPlayed]);
     
     useEffect(() => {
         if (refreshTrigger > 0) {
             setHasFetchedHomeContent(false); // Allow refetch on trigger
             if (user && startFetching) {
+                fetchRecentlyPlayed();
                 fetchData();
             }
         }
-    }, [refreshTrigger, user, startFetching, fetchData]);
+    }, [refreshTrigger, user, startFetching, fetchData, fetchRecentlyPlayed]);
+
+    const lastPlayedTrackUri = useRef<string | null>(null);
+    useEffect(() => {
+        const currentTrack = nowPlaying.spotifyState?.track_window.current_track;
+        if (currentTrack && currentTrack.uri !== lastPlayedTrackUri.current) {
+            const timer = setTimeout(() => {
+                fetchRecentlyPlayed();
+            }, 3000); // Delay to allow Spotify API to update
+            lastPlayedTrackUri.current = currentTrack.uri;
+            return () => clearTimeout(timer);
+        }
+    }, [nowPlaying.spotifyState, fetchRecentlyPlayed]);
     
     // --- End Data Fetching ---
 
