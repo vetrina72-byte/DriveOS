@@ -324,23 +324,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const processedItemsFromApi = await processRecentPlays(recents.data.items);
             
             setContinueListeningItems(currentItems => {
-                if (currentItems.length === 0) {
-                    return processedItemsFromApi;
+                // New, more robust reconciliation logic:
+                // Start with the current (optimistic) state, which is the most up-to-date view.
+                const combinedItems = [...currentItems];
+                const currentUris = new Set(currentItems.map(i => i.uri));
+
+                // Add items from the API response only if they aren't already in our optimistic list.
+                // This preserves all recent user actions while back-filling with historical data.
+                for (const apiItem of processedItemsFromApi) {
+                    if (!currentUris.has(apiItem.uri)) {
+                        combinedItems.push(apiItem);
+                    }
                 }
                 
-                const optimisticItem = currentItems[0];
-                const apiHasCaughtUp = processedItemsFromApi.length > 0 && processedItemsFromApi[0].uri === optimisticItem.uri;
-                
-                if (apiHasCaughtUp) {
-                    // The API response is up-to-date and includes our item as the most recent. Trust the API.
-                    return processedItemsFromApi;
-                } else {
-                    // The API is stale. Our optimistic item is still the most recent.
-                    // Prepend it to the API response and filter out any potential duplicates of it further down the list.
-                    const filteredApiItems = processedItemsFromApi.filter(item => item.uri !== optimisticItem.uri);
-                    const mergedItems = [optimisticItem, ...filteredApiItems];
-                    return mergedItems.slice(0, 10);
-                }
+                // Return the merged and truncated list.
+                return combinedItems.slice(0, 10);
             });
     
         } catch (err) {
