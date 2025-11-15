@@ -36,6 +36,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
     play: (options: PlayOptions) => void;
     playYouTube: (track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => void;
     refreshTrigger: number;
+    triggerDataRefresh: () => void;
     _setPlayerState: (state: SpotifyPlayerState | null) => void;
     setVolumeLive: (level: number) => void;
     setVolumeFinal: (level: number) => void;
@@ -74,6 +75,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
+
+    const triggerDataRefresh = useCallback(() => setRefreshTrigger(p => p + 1), []);
 
     useEffect(() => {
         try {
@@ -339,7 +342,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const isPlayerReady = isPlayerSdkReady && !!getDeviceId();
     
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, _setPlayerState, setVolumeLive, setVolumeFinal, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, triggerDataRefresh, _setPlayerState, setVolumeLive, setVolumeFinal, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay }}>
             {children}
         </AuthContext.Provider>
     );

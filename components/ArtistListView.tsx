@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -28,23 +29,31 @@ const ArtistListView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectI
     const [artists, setArtists] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { refreshTrigger } = useAuth();
 
     useEffect(() => {
         const fetchArtists = async () => {
             setLoading(true);
             setError(null);
             try {
-                const response = await apiClient.get('/me/top/artists?limit=50&time_range=long_term');
-                setArtists(response.data.items);
+                const allArtists: SpotifyItem[] = [];
+                let nextUrl: string | null = '/me/following?type=artist&limit=50';
+
+                while(nextUrl) {
+                    const response = await apiClient.get(nextUrl);
+                    allArtists.push(...response.data.artists.items);
+                    nextUrl = response.data.artists.next;
+                }
+                setArtists(allArtists);
             } catch (err) {
-                console.error('Failed to fetch top artists', err);
-                setError('Could not load your top artists.');
+                console.error('Failed to fetch followed artists', err);
+                setError('Could not load your followed artists.');
             } finally {
                 setLoading(false);
             }
         };
         fetchArtists();
-    }, []);
+    }, [refreshTrigger]);
     
     const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
 

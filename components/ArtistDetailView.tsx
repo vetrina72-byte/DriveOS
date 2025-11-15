@@ -55,6 +55,7 @@ interface ArtistDetailViewProps {
     isNight: boolean;
     onPlay: (options: { uris?: string[], context_uri?: string, offset?: any }) => void;
     onSelectItem: (item: SpotifyItem) => void;
+    onFollowChange: () => void;
 }
 
 const AnimatedEqualizer = ({ className }: { className?: string; }) => (
@@ -83,7 +84,7 @@ const formatDuration = (ms: number) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, onPlay, onSelectItem }) => {
+const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, onPlay, onSelectItem, onFollowChange }) => {
     const [artist, setArtist] = useState<Artist | null>(null);
     const [tracks, setTracks] = useState<Track[]>([]);
     const [discography, setDiscography] = useState<DiscographyItem[]>([]);
@@ -157,6 +158,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
             } else {
                 await apiClient.delete(`/me/following?type=artist&ids=${artistId}`);
             }
+            onFollowChange();
         } catch (e) {
             console.error("Failed to toggle follow status", e);
             setIsFollowing(!shouldFollow); // Revert on error

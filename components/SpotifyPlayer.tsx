@@ -55,7 +55,7 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
-    const { isAuthenticated, user, error, play, isPlayerReady } = useAuth();
+    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
@@ -213,6 +213,7 @@ const SpotifyPlayer = ({
                             isNight={isNight}
                             onPlay={play}
                             onSelectItem={handleSelectItem}
+                            onFollowChange={triggerDataRefresh}
                         />
                     )}
                      {view.type === 'show' && (
