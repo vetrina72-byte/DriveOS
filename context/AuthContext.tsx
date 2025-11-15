@@ -288,6 +288,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [attemptRefreshAndUpdatePlayerToken]);
 
     useEffect(() => {
+        if (isPlayerSdkReady) {
+            const deviceId = getDeviceId();
+            if (deviceId) {
+                console.log('[PLAYER] Player is ready. Proactively transferring playback control.');
+                fetch('/api/transfer-player', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: sessionIdRef.current, device_id: deviceId })
+                }).catch(err => console.error('[PLAYER] Proactive transfer failed:', err));
+            }
+        }
+    }, [isPlayerSdkReady]);
+
+    useEffect(() => {
         if (!state.isAuthenticated || !state.accessToken) {
             getPlayerInstance()?.disconnect();
             return;

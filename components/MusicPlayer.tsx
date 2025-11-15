@@ -448,10 +448,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (!playerState || playerState.paused || !currentTrackUri) {
             return;
         }
-        const { position, duration } = playerState;
+        const { position, duration, disallows } = playerState;
         const isNearEnd = duration > 15000 && (duration - position) < 15000;
+        
+        // Only show if skipping to the next track is possible.
+        const canSkipNext = !disallows.skipping_next;
 
-        if (isNearEnd && visibleQueue !== 'spotify' && autoPopoverDismissedFor !== currentTrackUri) {
+        if (isNearEnd && canSkipNext && visibleQueue !== 'spotify' && autoPopoverDismissedFor !== currentTrackUri) {
             setVisibleQueue('spotify');
         }
     }, [playerState, currentTrackUri, visibleQueue, autoPopoverDismissedFor]);
@@ -957,14 +960,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                          <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button onClick={handlePrevTrack} className="transition" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
                             <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
                                     ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
                                     : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
                                 }
                             </button>
-                            <button onClick={handleNextTrack} className="transition" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
                             <button
                                 onClick={handleToggleLike}
                                 className="transition"

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
@@ -37,6 +35,21 @@ const processRecentPlays = async (items: any[]): Promise<MediaItem[]> => {
     const unifiedList: MediaItem[] = [];
     const addedUris = new Set<string>();
     const contextDetailsCache = new Map<string, MediaItem>();
+
+    // Fetch all of the user's liked songs to create a lookup for contextless plays.
+    const likedTracksUris = new Set<string>();
+    try {
+        let nextUrl: string | null = '/me/tracks?limit=50';
+        while (nextUrl) {
+            const response = await apiClient.get(nextUrl);
+            response.data.items.forEach((item: any) => {
+                if (item.track?.uri) likedTracksUris.add(item.track.uri);
+            });
+            nextUrl = response.data.next;
+        }
+    } catch (e) {
+        console.error("Failed to fetch user's liked tracks for context check", e);
+    }
 
     // Special item for "Liked Songs"
     const likedSongsItem: MediaItem = {
@@ -84,9 +97,10 @@ const processRecentPlays = async (items: any[]): Promise<MediaItem[]> => {
         if (!item.track) continue;
 
         let itemToAdd: MediaItem | null = null;
-
-        // CRITICAL FIX: Explicitly check for "Liked Songs" context first.
-        if (item.context?.type === 'collection') {
+        
+        // If context is 'collection', it's definitely Liked Songs.
+        // OR, if there's NO context AND the track is in the user's saved tracks, treat it as Liked Songs.
+        if (item.context?.type === 'collection' || (!item.context && likedTracksUris.has(item.track.uri))) {
             itemToAdd = likedSongsItem;
         } 
         // If the track was played in a valid context (album/playlist) that we successfully fetched, use the context.
