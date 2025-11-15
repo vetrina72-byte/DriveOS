@@ -105,7 +105,7 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
         animate="visible"
       >
         {validItems.map((item, index) => (
-          <motion.div variants={itemVariants} key={`${keyPrefix}-${item.id || index}`}>
+          <motion.div className="py-2" variants={itemVariants} key={`${keyPrefix}-${item.id || index}`}>
             <PlaylistItem item={item} isNight={isNight} onSelectItem={(selectedItem) => onSelectItem(selectedItem, items)} />
           </motion.div>
         ))}

@@ -49,6 +49,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
     onToggleYouTubeFavorite: (playlistId: string) => void;
     isAutoplayBlocked: boolean;
     unlockAutoplay: () => void;
+    lastPlayInitiated: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -72,6 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
     const [isAutoplayBlocked, setAutoplayBlocked] = useState(false);
     const [isPlayerSdkReady, setIsPlayerSdkReady] = useState(false);
+    const [lastPlayInitiated, setLastPlayInitiated] = useState(0);
     
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
@@ -266,6 +268,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem("last_progress_ms", "0");
         localStorage.setItem("last_is_playing", "true");
 
+        setLastPlayInitiated(Date.now());
         setNowPlaying(prev => ({ ...prev, source: 'spotify', radioStation: null, youtubeTrack: null, isLoading: true }));
         
         const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
@@ -355,7 +358,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const isPlayerReady = isPlayerSdkReady && !!getDeviceId();
     
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, triggerDataRefresh, _setPlayerState, setVolumeLive, setVolumeFinal, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, triggerDataRefresh, _setPlayerState, setVolumeLive, setVolumeFinal, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay, lastPlayInitiated }}>
             {children}
         </AuthContext.Provider>
     );

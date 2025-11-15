@@ -55,7 +55,7 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
-    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, refreshTrigger, nowPlaying } = useAuth();
+    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, refreshTrigger, lastPlayInitiated } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
@@ -253,31 +253,18 @@ const SpotifyPlayer = ({
         }
     }, [refreshTrigger, user, startFetching, fetchData, fetchRecentlyPlayed]);
 
-    const previousTrackUri = useRef<string | undefined>();
-    
-    // This robust effect replaces the previous faulty logic.
-    // It runs only when the track URI changes, preventing loops caused by frequent progress updates.
+    // New effect to refresh "Continue Listening" after a play action is initiated.
     useEffect(() => {
-        const currentTrackUri = nowPlaying.spotifyState?.track_window.current_track?.uri;
-    
-        // Only trigger if the track URI has actually changed from the previous render
-        // and if there is a new track URI (not null/undefined).
-        if (currentTrackUri && currentTrackUri !== previousTrackUri.current) {
-            // Only fetch if the player is open and has started fetching content.
+        if (lastPlayInitiated > 0) {
             if (user && startFetching) {
-                // A short delay gives Spotify's API time to register the new "recently played" track.
-                // This is a good compromise between "immediacy" and "correctness", preventing a race condition.
+                // A delay gives Spotify's API time to register the new "recently played" track.
                 const timer = setTimeout(() => {
                     fetchRecentlyPlayed();
-                }, 500);
-    
+                }, 1000); // 1 second delay
                 return () => clearTimeout(timer);
             }
         }
-        
-        // Update the ref for the next render.
-        previousTrackUri.current = currentTrackUri;
-    }, [nowPlaying.spotifyState, user, startFetching, fetchRecentlyPlayed]); // Depend on the whole state object
+    }, [lastPlayInitiated, user, startFetching, fetchRecentlyPlayed]);
     
     // --- End Data Fetching ---
 
