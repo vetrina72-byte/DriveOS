@@ -254,9 +254,12 @@ const SpotifyPlayer = ({
     }, [refreshTrigger, user, startFetching, fetchData, fetchRecentlyPlayed]);
 
     const previousTrackUri = useRef<string | undefined>();
-    const currentTrackUri = nowPlaying.spotifyState?.track_window.current_track?.uri;
-
+    
+    // This robust effect replaces the previous faulty logic.
+    // It runs only when the track URI changes, preventing loops caused by frequent progress updates.
     useEffect(() => {
+        const currentTrackUri = nowPlaying.spotifyState?.track_window.current_track?.uri;
+    
         // Only trigger if the track URI has actually changed from the previous render
         // and if there is a new track URI (not null/undefined).
         if (currentTrackUri && currentTrackUri !== previousTrackUri.current) {
@@ -267,14 +270,14 @@ const SpotifyPlayer = ({
                 const timer = setTimeout(() => {
                     fetchRecentlyPlayed();
                 }, 500);
-
+    
                 return () => clearTimeout(timer);
             }
         }
         
         // Update the ref for the next render.
         previousTrackUri.current = currentTrackUri;
-    }, [currentTrackUri, fetchRecentlyPlayed, user, startFetching]);
+    }, [nowPlaying.spotifyState, user, startFetching, fetchRecentlyPlayed]); // Depend on the whole state object
     
     // --- End Data Fetching ---
 

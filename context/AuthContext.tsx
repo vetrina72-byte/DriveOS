@@ -272,7 +272,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!success) {
             setNowPlaying(prev => ({ ...prev, isLoading: false }));
         }
-        setRefreshTrigger(p => p + 1);
     }, [attemptRefreshAndUpdatePlayerToken]);
     
     const getAccessTokenForPlayer = useCallback(async (): Promise<string> => {
