@@ -1,5 +1,4 @@
 // pages/api/spotify-callback.js
-import axios from 'axios';
 import { getRedis } from '../lib/redis.js';
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
@@ -52,14 +51,22 @@ export default async function handler(req, res) {
   params.append('redirect_uri', VITE_REDIRECT_URI);
 
   try {
-    const spotifyResponse = await axios.post(TOKEN_URL, params, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': authHeader,
-      },
+    const spotifyResponse = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': authHeader,
+        },
+        body: params,
     });
     
-    const tokenData = spotifyResponse.data;
+    const tokenData = await spotifyResponse.json();
+
+    if (!spotifyResponse.ok) {
+        console.error('Error exchanging token with Spotify:', tokenData);
+        return res.status(spotifyResponse.status).send(`<h1>Authentication Failed</h1><p>Could not exchange code for token. Details: ${JSON.stringify(tokenData)}</p>`);
+    }
+    
     const redis = getRedis();
     
     const payload = {
@@ -75,7 +82,7 @@ export default async function handler(req, res) {
     sendSuccessPage(res);
 
   } catch (exchangeError) {
-    console.error('Error exchanging token:', exchangeError.response ? exchangeError.response.data : exchangeError.message);
-    res.status(500).send('<h1>Authentication Failed</h1><p>Could not exchange the authorization code for an access token.</p>');
+    console.error('Network or parsing error during token exchange:', exchangeError.message);
+    res.status(500).send('<h1>Authentication Failed</h1><p>A network error occurred while contacting Spotify.</p>');
   }
 }
