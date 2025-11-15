@@ -389,6 +389,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
     const [isQueueClosing, setIsQueueClosing] = useState(false);
+    const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(true);
     
     const [isLiked, setIsLiked] = useState(false);
 
@@ -429,6 +430,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
         if (visibleQueue === source) {
+            // Closing the queue
             if (source === 'spotify' && currentTrackUri) {
                 setAutoPopoverDismissedFor(currentTrackUri);
             }
@@ -437,9 +439,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 setVisibleQueue(null);
                 setIsQueueClosing(false);
             }, 300);
+            setIsAutoQueueEnabled(false); // Disable auto-show on manual close
         } else {
+            // Opening the queue
             setIsQueueClosing(false);
             setVisibleQueue(source);
+            setIsAutoQueueEnabled(true); // Re-enable auto-show on manual open
         }
     }, [visibleQueue, currentTrackUri]);
 
@@ -451,13 +456,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const { position, duration, disallows } = playerState;
         const isNearEnd = duration > 15000 && (duration - position) < 15000;
         
-        // Only show if skipping to the next track is possible.
         const canSkipNext = !disallows.skipping_next;
 
-        if (isNearEnd && canSkipNext && visibleQueue !== 'spotify' && autoPopoverDismissedFor !== currentTrackUri) {
+        if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify' && autoPopoverDismissedFor !== currentTrackUri) {
             setVisibleQueue('spotify');
         }
-    }, [playerState, currentTrackUri, visibleQueue, autoPopoverDismissedFor]);
+    }, [playerState, currentTrackUri, visibleQueue, autoPopoverDismissedFor, isAutoQueueEnabled]);
 
     // Effect for hiding popover on track change
     const prevTrackUri = useRef<string | undefined>();
@@ -977,7 +981,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                         </div>
                          <div className="flex-1 flex justify-end items-center">
-                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: visibleQueue === 'spotify' ? buttonActiveColor : inactiveButtonColor }}>
+                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: visibleQueue === 'spotify' || isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>

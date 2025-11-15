@@ -257,11 +257,8 @@ const SpotifyPlayer = ({
     useEffect(() => {
         if (lastPlayInitiated > 0) {
             if (user && startFetching) {
-                // A delay gives Spotify's API time to register the new "recently played" track.
-                const timer = setTimeout(() => {
-                    fetchRecentlyPlayed();
-                }, 1000); // 1 second delay
-                return () => clearTimeout(timer);
+                // Fetch immediately on play action to provide a more responsive UI.
+                fetchRecentlyPlayed();
             }
         }
     }, [lastPlayInitiated, user, startFetching, fetchRecentlyPlayed]);
