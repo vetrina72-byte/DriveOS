@@ -428,38 +428,33 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentTrackUri = currentTrack?.uri;
 
     const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
-        if (visibleQueue === source) {
-            // --- CLOSING LOGIC ---
-            // User manually closes the popover. This disables the auto-show feature.
-            setIsQueueClosing(true);
-            setTimeout(() => {
-                setVisibleQueue(null);
-                setIsQueueClosing(false);
-            }, 300);
-            setIsAutoQueueEnabled(false);
-        } else {
-            // --- "OPENING" OR ENABLING LOGIC ---
-            // This action enables the auto-show feature.
-            setIsAutoQueueEnabled(true);
-
-            // For spotify, we only show it immediately if it's already near the end.
-            if (source === 'spotify') {
-                const { position, duration, disallows } = playerState || {};
-                const isNearEnd = duration && position && duration > 15000 && (duration - position) < 15000;
-                const canSkipNext = !disallows?.skipping_next;
-
-                if (isNearEnd && canSkipNext) {
-                    setIsQueueClosing(false); // Ensure it's not in closing state if toggling fast
-                    setVisibleQueue('spotify');
-                }
-                // If not near the end, we do nothing else. The main useEffect will trigger it later.
+        if (source === 'spotify') {
+            // This button now *only* toggles the auto-show feature.
+            const newIsEnabled = !isAutoQueueEnabled;
+            setIsAutoQueueEnabled(newIsEnabled);
+    
+            // If the user is manually disabling the feature, we should also hide the popover if it's currently visible.
+            if (!newIsEnabled && visibleQueue === 'spotify') {
+                setIsQueueClosing(true);
+                setTimeout(() => {
+                    setVisibleQueue(null);
+                    setIsQueueClosing(false);
+                }, 300);
+            }
+        } else if (source === 'youtube') {
+            // YouTube button is a simple toggle for visibility.
+            if (visibleQueue === 'youtube') {
+                setIsQueueClosing(true);
+                setTimeout(() => {
+                    setVisibleQueue(null);
+                    setIsQueueClosing(false);
+                }, 300);
             } else {
-                // For other sources like YouTube, show immediately as there's no "auto-show" logic for them.
-                setIsQueueClosing(false);
-                setVisibleQueue(source);
+                setIsQueueClosing(false); // Make sure it's not closing
+                setVisibleQueue('youtube');
             }
         }
-    }, [visibleQueue, playerState]);
+    }, [isAutoQueueEnabled, visibleQueue]);
 
     // Effect for showing popover near end of track
     useEffect(() => {

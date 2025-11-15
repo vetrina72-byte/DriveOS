@@ -100,7 +100,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [homeContentLoading, setHomeContentLoading] = useState(false);
     const [homeContentError, setHomeContentError] = useState<string | null>(null);
     const [hasFetchedHomeContent, setHasFetchedHomeContent] = useState(false);
-    const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>([]);
+    const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                const stored = localStorage.getItem('continueListeningItems');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed)) return parsed;
+                }
+            } catch (e) {
+                console.error("Failed to parse continueListeningItems from localStorage", e);
+            }
+        }
+        return [];
+    });
     const [newReleases, setNewReleases] = useState<MediaItem[]>([]);
     const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>([]);
     const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>([]);
@@ -119,6 +132,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const refreshTimeoutId = useRef<number | null>(null);
 
     const triggerDataRefresh = useCallback(() => setRefreshTrigger(p => p + 1), []);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('continueListeningItems', JSON.stringify(continueListeningItems));
+            } catch (e) {
+                console.error("Failed to save continueListeningItems to localStorage", e);
+            }
+        }
+    }, [continueListeningItems]);
 
     useEffect(() => {
         try {
@@ -143,6 +166,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('last_track_uri');
         localStorage.removeItem('last_progress_ms');
         localStorage.removeItem('last_is_playing');
+        localStorage.removeItem('continueListeningItems');
         
         getPlayerInstance()?.disconnect();
 
