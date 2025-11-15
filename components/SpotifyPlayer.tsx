@@ -109,8 +109,8 @@ const SpotifyPlayer = ({
         if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist' || item.type === 'show') {
             changeView({ type: item.type, id: item.id });
         } else if (item.type === 'category') {
-            // FIX: Add a more robust check for the "New Releases" category by also checking its name, as the ID can be inconsistent.
-            if (item.id === 'new-releases' || item.name === 'Nuove Uscite') {
+            // FIX: Add a more robust, case-insensitive check for the "New Releases" category.
+            if (item.id === 'new-releases' || item.name?.toLowerCase() === 'nuove uscite') {
                 changeView({ type: 'new-releases' });
             } else {
                 changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
