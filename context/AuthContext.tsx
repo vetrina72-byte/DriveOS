@@ -5,7 +5,7 @@ import { NowPlayingState, YouTubeTrackInfo, PlayOptions } from '../types';
 import { getSessionId } from '../lib/sessionId';
 import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalPlayer, getPlayerInstance, getDeviceId, safePlay } from '../lib/spotify-player';
 
-interface SpotifyUser {
+export interface SpotifyUser {
     display_name: string;
     images?: { url: string }[];
     id: string;

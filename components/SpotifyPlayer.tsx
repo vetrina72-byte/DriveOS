@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { FiLoader } from 'react-icons/fi';
+import apiClient from '../api';
 import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
 import ContentArea from './ContentArea';
@@ -55,21 +55,41 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
-    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh } = useAuth();
+    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, refreshTrigger } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
-    const [startFetching, setStartFetching] = useState(false);
     
     const [view, setView] = useState<ViewState>({ type: 'home' });
     const [viewHistory, setViewHistory] = useState<ViewState[]>([]);
+
+    // Home Content State - Lifted from ContentArea for performance
+    const [homeContentLoading, setHomeContentLoading] = useState(false);
+    const [homeContentError, setHomeContentError] = useState<string | null>(null);
+    const [hasFetchedHomeContent, setHasFetchedHomeContent] = useState(false);
+    const [startFetching, setStartFetching] = useState(false);
+    
+    const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>([]);
+    const [newReleases, setNewReleases] = useState<MediaItem[]>([]);
+    const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>([]);
+    const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>([]);
+    const [topArtists, setTopArtists] = useState<MediaItem[]>([]);
+    const [chartsPlaylists, setChartsPlaylists] = useState<MediaItem[]>([]);
+    const [genresCategories, setGenresCategories] = useState<MediaItem[]>([]);
+    const [recommendedShows, setRecommendedShows] = useState<MediaItem[]>([]);
+    const [partyPlaylists, setPartyPlaylists] = useState<MediaItem[]>([]);
+    const [topTracks, setTopTracks] = useState<MediaItem[]>([]);
+    const [artistRadioTracks, setArtistRadioTracks] = useState<MediaItem[]>([]);
+    const [trackRecommendations, setTrackRecommendations] = useState<MediaItem[]>([]);
+    const [savedAlbums, setSavedAlbums] = useState<MediaItem[]>([]);
+    const [madeForYou, setMadeForYou] = useState<MediaItem[]>([]);
+
 
     const openingBoxSpeed = 4.365;
     const closingBoxSpeed = 8.342;
 
     useEffect(() => {
         if (isOpen && !startFetching) {
-            // Delay fetching to allow the opening animation to be smooth
             const timer = setTimeout(() => {
                 setStartFetching(true);
             }, 400);
@@ -78,11 +98,147 @@ const SpotifyPlayer = ({
             const timer = setTimeout(() => {
                 setView({ type: 'home' });
                 setViewHistory([]);
-                setStartFetching(false); // Reset for next open
+                setStartFetching(false);
+                setHasFetchedHomeContent(false); // Reset so it refetches next time it opens
             }, 500); 
             return () => clearTimeout(timer);
         }
     }, [isOpen, startFetching]);
+
+    // --- Data Fetching Logic (Moved from ContentArea) ---
+    const processRecentPlays = useCallback(async (items: any[]): Promise<MediaItem[]> => {
+        const unifiedList: MediaItem[] = [];
+        const addedUris = new Set<string>();
+        const contextDetailsCache = new Map<string, any>();
+        const likedTracksUris = new Set<string>();
+
+        try {
+            let nextUrl: string | null = '/me/tracks?limit=50';
+            while (nextUrl) {
+                const response = await apiClient.get(nextUrl);
+                response.data.items.forEach((item: any) => {
+                    if (item.track?.uri) likedTracksUris.add(item.track.uri);
+                });
+                nextUrl = response.data.next;
+            }
+        } catch (e) {
+            console.error("Failed to fetch user's liked tracks for context check", e);
+        }
+
+        const likedSongsItem: MediaItem = { id: 'liked-songs', name: 'Brani che ti piacciono', type: 'playlist', uri: 'special:liked-songs', description: 'La tua collezione personale.' };
+
+        const contextUrisToFetch = [...new Set(items.filter(item => item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')).map(item => item.context.uri))] as string[];
+
+        if (contextUrisToFetch.length > 0) {
+            const albumIds = contextUrisToFetch.filter(uri => uri.includes(':album:')).map(uri => uri.split(':')[2]);
+            const playlistIds = contextUrisToFetch.filter(uri => uri.includes(':playlist:')).map(uri => uri.split(':')[2]);
+            const promises = [];
+            if (albumIds.length > 0) {
+                promises.push(apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
+                    res.data.albums.forEach((album: any) => { if (album) contextDetailsCache.set(album.uri, album); });
+                }).catch(e => console.error("Failed fetching album details", e)));
+            }
+            if (playlistIds.length > 0) {
+                const playlistPromises = playlistIds.map(id => apiClient.get(`/playlists/${id}`).then(res => {
+                    contextDetailsCache.set(res.data.uri, res.data);
+                }).catch(e => console.error(`Failed to fetch playlist ${id}`, e)));
+                promises.push(Promise.all(playlistPromises));
+            }
+            await Promise.all(promises);
+        }
+
+        for (const item of items) {
+            if (!item.track) continue;
+            let itemToAdd: MediaItem | null = null;
+            if (item.context?.type === 'collection' || (!item.context && likedTracksUris.has(item.track.uri))) {
+                itemToAdd = likedSongsItem;
+            } else if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
+                const contextDetails = contextDetailsCache.get(item.context.uri)!;
+                if (contextDetails.type === 'playlist' && contextDetails.owner.id === 'spotify') {
+                    itemToAdd = item.track;
+                } else {
+                    itemToAdd = contextDetails;
+                }
+            } else {
+                itemToAdd = item.track;
+            }
+            if (itemToAdd?.uri && !addedUris.has(itemToAdd.uri)) {
+                unifiedList.push(itemToAdd);
+                addedUris.add(itemToAdd.uri);
+            }
+        }
+        return unifiedList.slice(0, 10);
+    }, []);
+
+    const fetchData = useCallback(async () => {
+        if (!user || hasFetchedHomeContent) return;
+        setHomeContentLoading(true);
+        setHomeContentError(null);
+
+        try {
+            const promises = [
+                apiClient.get('/me/player/recently-played?limit=50'),
+                apiClient.get('/me/playlists?limit=10'),
+                apiClient.get('/me/top/artists?time_range=medium_term&limit=10'),
+                apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'),
+                apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'),
+                apiClient.get(`/browse/new-releases?country=IT&limit=10`),
+                apiClient.get('/browse/categories?country=IT&limit=20'),
+                apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'),
+                apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'),
+                apiClient.get('/me/top/tracks?limit=20&time_range=long_term'),
+                apiClient.get('/me/albums?limit=10'),
+                apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'),
+            ];
+            const results = await Promise.allSettled(promises);
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') console.log(`API call at index ${index} failed:`, result.reason.response?.data || result.reason.message);
+            });
+            const [recents, playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew] = results;
+            if (recents.status === 'fulfilled') processRecentPlays(recents.value.data.items).then(setContinueListeningItems);
+            if (playlists.status === 'fulfilled') setUserPlaylists(playlists.value.data.items);
+            if (artists.status === 'fulfilled') {
+                const topArtistsData = artists.value.data.items;
+                setTopArtists(topArtistsData);
+                if (topArtistsData.length > 0) apiClient.get(`/recommendations?seed_artists=${topArtistsData[0].id}&limit=20`).then(res => setArtistRadioTracks(res.data.tracks.filter(Boolean))).catch(e => console.error("Failed to fetch artist radio", e));
+            }
+            if (madeForYouPl.status === 'fulfilled') setMadeForYouPlaylists(madeForYouPl.value.data.playlists.items);
+            if (madeForYouNew.status === 'fulfilled') setMadeForYou(madeForYouNew.value.data.playlists.items);
+            if (charts.status === 'fulfilled') setChartsPlaylists(charts.value.data.playlists.items);
+            if (parties.status === 'fulfilled') setPartyPlaylists(parties.value.data.playlists.items);
+            if (newRels.status === 'fulfilled') setNewReleases(newRels.value.data.albums.items);
+            if (genres.status === 'fulfilled') setGenresCategories(genres.value.data.categories.items.map((c: any) => ({ ...c, type: 'category' })));
+            if (shows.status === 'fulfilled') setRecommendedShows(shows.value.data.shows.items);
+            if (topTr.status === 'fulfilled') {
+                const tracks = topTr.value.data.items;
+                setTopTracks(tracks);
+                if (tracks.length >= 2) apiClient.get(`/recommendations?seed_tracks=${tracks.slice(0, 2).map((t: MediaItem) => t.id).join(',')}&limit=20`).then(res => setTrackRecommendations(res.data.tracks.filter(Boolean))).catch(e => console.error("Failed to fetch track recommendations", e));
+            }
+            if (savedAlbs.status === 'fulfilled') setSavedAlbums(savedAlbs.value.data.items.map((i: any) => i.album).filter(Boolean));
+            setHasFetchedHomeContent(true);
+        } catch (err: any) {
+            setHomeContentError("Could not load content.");
+        } finally {
+            setHomeContentLoading(false);
+        }
+    }, [user, hasFetchedHomeContent, processRecentPlays]);
+
+    useEffect(() => {
+        if (user && startFetching && !hasFetchedHomeContent) {
+            fetchData();
+        }
+    }, [user, startFetching, hasFetchedHomeContent, fetchData]);
+    
+    useEffect(() => {
+        if (refreshTrigger > 0) {
+            setHasFetchedHomeContent(false); // Allow refetch on trigger
+            if (user && startFetching) {
+                fetchData();
+            }
+        }
+    }, [refreshTrigger, user, startFetching, fetchData]);
+    
+    // --- End Data Fetching ---
 
     const changeView = (newView: ViewState) => {
         setViewHistory(prev => [...prev, view]);
@@ -106,25 +262,15 @@ const SpotifyPlayer = ({
         if (item.type === 'playlist' || item.type === 'album' || item.type === 'artist' || item.type === 'show') {
             changeView({ type: item.type, id: item.id });
         } else if (item.type === 'category') {
-            // Handle special categories that link to full views, not just playlist searches
             if (item.id === 'new-releases') {
                 changeView({ type: 'new-releases' });
             } else {
                 changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
             }
         } else if (item.type === 'track') {
-            if (!isPlayerReady) {
-                console.warn("Player not ready. Playback blocked.");
-                return;
-            }
+            if (!isPlayerReady) return;
             if (item.context?.uri) {
-                // If the track has context (album/playlist), play the context starting from this track
-                play({
-                    context_uri: item.context.uri,
-                    offset: {
-                        uri: item.uri,
-                    },
-                });
+                play({ context_uri: item.context.uri, offset: { uri: item.uri } });
             } else {
                  play({ uris: [item.uri] });
             }
@@ -188,7 +334,29 @@ const SpotifyPlayer = ({
                         onBack={handleBack} 
                         showBackButton={isDetailView} 
                     />
-                    {view.type === 'home' && <ContentArea isNight={isNight} onSelectItem={handleSelectItem} startFetching={startFetching} />}
+                    {view.type === 'home' && (
+                        <ContentArea
+                            isNight={isNight}
+                            onSelectItem={handleSelectItem}
+                            loading={homeContentLoading}
+                            error={homeContentError}
+                            user={user}
+                            continueListeningItems={continueListeningItems}
+                            newReleases={newReleases}
+                            userPlaylists={userPlaylists}
+                            madeForYouPlaylists={madeForYouPlaylists}
+                            topArtists={topArtists}
+                            chartsPlaylists={chartsPlaylists}
+                            genresCategories={genresCategories}
+                            recommendedShows={recommendedShows}
+                            partyPlaylists={partyPlaylists}
+                            topTracks={topTracks}
+                            artistRadioTracks={artistRadioTracks}
+                            trackRecommendations={trackRecommendations}
+                            savedAlbums={savedAlbums}
+                            madeForYou={madeForYou}
+                        />
+                    )}
                     {view.type === 'playlists' && <PlaylistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'artists' && <ArtistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'albums' && <AlbumGridView isNight={isNight} onSelectItem={handleSelectItem} />}
@@ -248,7 +416,6 @@ const SpotifyPlayer = ({
               className={`w-full h-full flex flex-col relative backdrop-blur-lg`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
-                {/* The close button has been removed from the header */}
                 <h1 id="spotify-app-title" className="sr-only">Spotify App</h1>
                 <div className="flex-grow flex justify-center items-center overflow-hidden relative">
                     {renderContent()}
