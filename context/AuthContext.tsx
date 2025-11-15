@@ -348,21 +348,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const processedItemsFromApi = await processRecentPlays(recents.data.items);
             
             setContinueListeningItems(currentItems => {
-                // The most recent optimistic item is at the front of the current list.
+                // The most recent optimistically updated item is what's currently at the front.
                 const optimisticItem = currentItems.length > 0 ? currentItems[0] : null;
-                
-                // The API response is our source of truth for the order.
-                let finalItems = [...processedItemsFromApi];
-                const apiUris = new Set(finalItems.map(i => i.uri));
     
-                // If our optimistic item hasn't made it to the API yet, manually prepend it.
-                if (optimisticItem && !apiUris.has(optimisticItem.uri)) {
-                    finalItems.unshift(optimisticItem);
+                if (!optimisticItem) {
+                    // If there's no optimistic item, just use the API response.
+                    return processedItemsFromApi;
                 }
-                
-                // De-duplicate the list to ensure consistency and slice to the limit.
+    
+                // Build the new list, prioritizing the optimistic item at the front.
+                // Then, add all items from the API response, filtering out the one we just added
+                // to avoid duplicates before the final de-duplication step.
+                const combinedList = [
+                    optimisticItem,
+                    ...processedItemsFromApi.filter(item => item.uri !== optimisticItem.uri)
+                ];
+    
+                // Final de-duplication based on URI to be absolutely sure.
                 const uniqueUris = new Set<string>();
-                const uniqueItems = finalItems.filter(item => {
+                const uniqueItems = combinedList.filter(item => {
                     if (!item || !item.uri) return false; // Guard against bad data
                     if (uniqueUris.has(item.uri)) {
                         return false;
@@ -439,7 +443,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const resetHomeContent = useCallback(() => {
         setHasFetchedHomeContent(false);
-        // setContinueListeningItems([]); // DO NOT CLEAR THIS - FIX
+        // Do not clear continueListeningItems on panel close to maintain state on reload
         setNewReleases([]);
         setUserPlaylists([]);
         setMadeForYouPlaylists([]);
