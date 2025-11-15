@@ -34,7 +34,7 @@ interface PlayHistoryObject {
     };
 }
 
-const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (options: { uris?: string[] }) => void }) => {
+const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (options: { uris?: string[] }, itemForOptimisticUpdate?: SpotifyItem) => void }) => {
     const [history, setHistory] = useState<PlayHistoryObject[]>([]);
     const [contextDetails, setContextDetails] = useState<Map<string, any>>(new Map());
     const [loading, setLoading] = useState(true);
@@ -85,7 +85,7 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
     }, []);
 
     const theme = {
-        textPrimary: isNight ? 'text-white' : 'text-zinc-800',
+        textPrimary: isNight ? 'text-white' : 'text-black',
         textSecondary: isNight ? 'text-[#b3b3b3]' : 'text-zinc-500',
         hover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/5',
     };
@@ -119,7 +119,7 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
                         <motion.div
                             key={`${track.id}-${index}`}
                             variants={itemVariants}
-                            onClick={() => isPlayerReady && onPlay({ uris: [track.uri] })}
+                            onClick={() => isPlayerReady && onPlay({ uris: [track.uri] }, track)}
                             className={`flex items-center gap-4 p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                         >
                             <img 

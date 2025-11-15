@@ -57,7 +57,7 @@ interface PlaylistDetailViewProps {
     itemId: string;
     itemType: ItemType;
     isNight: boolean;
-    onPlay: (options: { context_uri?: string, uris?: string[], offset?: any }) => void;
+    onPlay: (options: { context_uri?: string, uris?: string[], offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => void;
 }
 
 const AnimatedEqualizer = ({ className }: { className?: string; }) => (
@@ -108,6 +108,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     setTracks(likedTracks);
                     
                     setDetails({
+                        id: 'liked-songs',
                         name: 'Brani che ti piacciono',
                         description: `La tua collezione personale di brani preferiti.`,
                         type: 'playlist',
@@ -200,18 +201,18 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const handlePlay = () => {
         if (!isPlayerReady) return;
         if (isLikedSongs) {
-            onPlay({ uris: tracks.map(t => t.uri) });
+            onPlay({ uris: tracks.map(t => t.uri) }, details);
         } else if (details?.uri) {
-            onPlay({ context_uri: details.uri });
+            onPlay({ context_uri: details.uri }, details);
         }
     };
     
     const handleTrackPlay = (trackUri: string, index: number) => {
         if (!isPlayerReady) return;
         if (isLikedSongs) {
-            onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } });
+            onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } }, details);
         } else if (details?.uri) {
-            onPlay({ context_uri: details.uri, offset: { uri: trackUri } });
+            onPlay({ context_uri: details.uri, offset: { uri: trackUri } }, details);
         }
     };
 

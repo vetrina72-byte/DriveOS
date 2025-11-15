@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import apiClient from '../api';
 import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
 import ContentArea from './ContentArea';
@@ -55,7 +54,13 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
-    const { isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, refreshTrigger, lastPlayInitiated } = useAuth();
+    const { 
+        isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, 
+        triggerHomeContentFetch, resetHomeContent, homeContentLoading, homeContentError,
+        continueListeningItems, newReleases, userPlaylists, madeForYouPlaylists,
+        topArtists, chartsPlaylists, genresCategories, recommendedShows,
+        partyPlaylists, topTracks, artistRadioTracks, trackRecommendations, savedAlbums, madeForYou
+    } = useAuth();
     
     const [translateX, setTranslateX] = useState(100);
     const animationFrameId = useRef<number | null>(null);
@@ -63,209 +68,25 @@ const SpotifyPlayer = ({
     const [view, setView] = useState<ViewState>({ type: 'home' });
     const [viewHistory, setViewHistory] = useState<ViewState[]>([]);
 
-    // Home Content State - Lifted from ContentArea for performance
-    const [homeContentLoading, setHomeContentLoading] = useState(false);
-    const [homeContentError, setHomeContentError] = useState<string | null>(null);
-    const [hasFetchedHomeContent, setHasFetchedHomeContent] = useState(false);
-    const [startFetching, setStartFetching] = useState(false);
-    
-    const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>([]);
-    const [newReleases, setNewReleases] = useState<MediaItem[]>([]);
-    const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>([]);
-    const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>([]);
-    const [topArtists, setTopArtists] = useState<MediaItem[]>([]);
-    const [chartsPlaylists, setChartsPlaylists] = useState<MediaItem[]>([]);
-    const [genresCategories, setGenresCategories] = useState<MediaItem[]>([]);
-    const [recommendedShows, setRecommendedShows] = useState<MediaItem[]>([]);
-    const [partyPlaylists, setPartyPlaylists] = useState<MediaItem[]>([]);
-    const [topTracks, setTopTracks] = useState<MediaItem[]>([]);
-    const [artistRadioTracks, setArtistRadioTracks] = useState<MediaItem[]>([]);
-    const [trackRecommendations, setTrackRecommendations] = useState<MediaItem[]>([]);
-    const [savedAlbums, setSavedAlbums] = useState<MediaItem[]>([]);
-    const [madeForYou, setMadeForYou] = useState<MediaItem[]>([]);
-
-
     const openingBoxSpeed = 4.365;
     const closingBoxSpeed = 8.342;
 
     useEffect(() => {
-        if (isOpen && !startFetching) {
+        if (isOpen) {
             const timer = setTimeout(() => {
-                setStartFetching(true);
+                triggerHomeContentFetch();
             }, 400);
             return () => clearTimeout(timer);
         } else if (!isOpen) {
             const timer = setTimeout(() => {
                 setView({ type: 'home' });
                 setViewHistory([]);
-                setStartFetching(false);
-                setHasFetchedHomeContent(false); // Reset so it refetches next time it opens
+                resetHomeContent();
             }, 500); 
             return () => clearTimeout(timer);
         }
-    }, [isOpen, startFetching]);
-
-    // --- Data Fetching Logic (Moved from ContentArea) ---
-    const processRecentPlays = useCallback(async (items: any[]): Promise<MediaItem[]> => {
-        const unifiedList: MediaItem[] = [];
-        const addedUris = new Set<string>();
-        const contextDetailsCache = new Map<string, any>();
-
-        const tracksWithoutContext = items.filter(item => item.track && !item.context);
-        const trackIdsToCheck = tracksWithoutContext.map(item => item.track.id).filter(Boolean);
-        const likedStatusMap = new Map<string, boolean>();
-
-        if (trackIdsToCheck.length > 0) {
-            for (let i = 0; i < trackIdsToCheck.length; i += 50) {
-                const chunk = trackIdsToCheck.slice(i, i + 50);
-                try {
-                    const response = await apiClient.get(`/me/tracks/contains?ids=${chunk.join(',')}`);
-                    response.data.forEach((isLiked: boolean, index: number) => {
-                        likedStatusMap.set(chunk[index], isLiked);
-                    });
-                } catch (e) {
-                    console.error("Failed to check liked status for tracks", e);
-                }
-            }
-        }
-
-        const likedSongsItem: MediaItem = { id: 'liked-songs', name: 'Brani che ti piacciono', type: 'playlist', uri: 'special:liked-songs', description: 'La tua collezione personale.' };
-
-        const contextUrisToFetch = [...new Set(items.filter(item => item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')).map(item => item.context.uri))] as string[];
-
-        if (contextUrisToFetch.length > 0) {
-            const albumIds = contextUrisToFetch.filter(uri => uri.includes(':album:')).map(uri => uri.split(':')[2]);
-            const playlistIds = contextUrisToFetch.filter(uri => uri.includes(':playlist:')).map(uri => uri.split(':')[2]);
-            const promises = [];
-            if (albumIds.length > 0) {
-                promises.push(apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
-                    res.data.albums.forEach((album: any) => { if (album) contextDetailsCache.set(album.uri, album); });
-                }).catch(e => console.error("Failed fetching album details", e)));
-            }
-            if (playlistIds.length > 0) {
-                const playlistPromises = playlistIds.map(id => apiClient.get(`/playlists/${id}`).then(res => {
-                    contextDetailsCache.set(res.data.uri, res.data);
-                }).catch(e => console.error(`Failed to fetch playlist ${id}`, e)));
-                promises.push(Promise.all(playlistPromises));
-            }
-            await Promise.all(promises);
-        }
-
-        for (const item of items) {
-            if (!item.track) continue;
-            let itemToAdd: MediaItem | null = null;
-            if (item.context?.type === 'collection' || likedStatusMap.get(item.track.id)) {
-                itemToAdd = likedSongsItem;
-            } else if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
-                const contextDetails = contextDetailsCache.get(item.context.uri)!;
-                if (contextDetails.type === 'playlist' && contextDetails.owner.id === 'spotify') {
-                    itemToAdd = item.track;
-                } else {
-                    itemToAdd = contextDetails;
-                }
-            } else {
-                itemToAdd = item.track;
-            }
-            if (itemToAdd?.uri && !addedUris.has(itemToAdd.uri)) {
-                unifiedList.push(itemToAdd);
-                addedUris.add(itemToAdd.uri);
-            }
-        }
-        return unifiedList.slice(0, 10);
-    }, []);
-
-    const fetchRecentlyPlayed = useCallback(async () => {
-        if (!user) return;
-        try {
-            const recents = await apiClient.get('/me/player/recently-played?limit=50');
-            const processedItems = await processRecentPlays(recents.data.items);
-            setContinueListeningItems(processedItems);
-        } catch (err) {
-            console.error("Failed to fetch recently played items", err);
-        }
-    }, [user, processRecentPlays]);
-
-    const fetchData = useCallback(async () => {
-        if (!user || hasFetchedHomeContent) return;
-        setHomeContentLoading(true);
-        setHomeContentError(null);
-
-        try {
-            const promises = [
-                apiClient.get('/me/playlists?limit=10'),
-                apiClient.get('/me/top/artists?time_range=medium_term&limit=10'),
-                apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'),
-                apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'),
-                apiClient.get(`/browse/new-releases?country=IT&limit=10`),
-                apiClient.get('/browse/categories?country=IT&limit=20'),
-                apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'),
-                apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'),
-                apiClient.get('/me/top/tracks?limit=20&time_range=long_term'),
-                apiClient.get('/me/albums?limit=10'),
-                apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'),
-            ];
-            const results = await Promise.allSettled(promises);
-            results.forEach((result, index) => {
-                if (result.status === 'rejected') console.log(`API call at index ${index} failed:`, result.reason.response?.data || result.reason.message);
-            });
-            const [playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew] = results;
-            if (playlists.status === 'fulfilled') setUserPlaylists(playlists.value.data.items);
-            if (artists.status === 'fulfilled') {
-                const topArtistsData = artists.value.data.items;
-                setTopArtists(topArtistsData);
-                if (topArtistsData.length > 0) apiClient.get(`/recommendations?seed_artists=${topArtistsData[0].id}&limit=20`).then(res => setArtistRadioTracks(res.data.tracks.filter(Boolean))).catch(e => console.error("Failed to fetch artist radio", e));
-            }
-            if (madeForYouPl.status === 'fulfilled') setMadeForYouPlaylists(madeForYouPl.value.data.playlists.items);
-            if (madeForYouNew.status === 'fulfilled') setMadeForYou(madeForYouNew.value.data.playlists.items);
-            if (charts.status === 'fulfilled') setChartsPlaylists(charts.value.data.playlists.items);
-            if (parties.status === 'fulfilled') setPartyPlaylists(parties.value.data.playlists.items);
-            if (newRels.status === 'fulfilled') setNewReleases(newRels.value.data.albums.items);
-            if (genres.status === 'fulfilled') setGenresCategories(genres.value.data.categories.items.map((c: any) => ({ ...c, type: 'category' })));
-            if (shows.status === 'fulfilled') setRecommendedShows(shows.value.data.shows.items);
-            if (topTr.status === 'fulfilled') {
-                const tracks = topTr.value.data.items;
-                setTopTracks(tracks);
-                if (tracks.length >= 2) apiClient.get(`/recommendations?seed_tracks=${tracks.slice(0, 2).map((t: MediaItem) => t.id).join(',')}&limit=20`).then(res => setTrackRecommendations(res.data.tracks.filter(Boolean))).catch(e => console.error("Failed to fetch track recommendations", e));
-            }
-            if (savedAlbs.status === 'fulfilled') setSavedAlbums(savedAlbs.value.data.items.map((i: any) => i.album).filter(Boolean));
-            setHasFetchedHomeContent(true);
-        } catch (err: any) {
-            setHomeContentError("Could not load content.");
-        } finally {
-            setHomeContentLoading(false);
-        }
-    }, [user, hasFetchedHomeContent]);
-
-    useEffect(() => {
-        if (user && startFetching && !hasFetchedHomeContent) {
-            fetchRecentlyPlayed();
-            fetchData();
-        }
-    }, [user, startFetching, hasFetchedHomeContent, fetchData, fetchRecentlyPlayed]);
+    }, [isOpen, triggerHomeContentFetch, resetHomeContent]);
     
-    useEffect(() => {
-        if (refreshTrigger > 0) {
-            setHasFetchedHomeContent(false); // Allow refetch on trigger
-            if (user && startFetching) {
-                fetchRecentlyPlayed();
-                fetchData();
-            }
-        }
-    }, [refreshTrigger, user, startFetching, fetchData, fetchRecentlyPlayed]);
-
-    // New effect to refresh "Continue Listening" after a play action is initiated.
-    useEffect(() => {
-        if (lastPlayInitiated > 0) {
-            // A play action should always trigger a refresh of recently played,
-            // regardless of the initial home content loading state.
-            if (user) {
-                fetchRecentlyPlayed();
-            }
-        }
-    }, [lastPlayInitiated, user, fetchRecentlyPlayed]);
-    
-    // --- End Data Fetching ---
-
     const changeView = (newView: ViewState) => {
         setViewHistory(prev => [...prev, view]);
         setView(newView);
@@ -295,11 +116,8 @@ const SpotifyPlayer = ({
             }
         } else if (item.type === 'track') {
             if (!isPlayerReady) return;
-            if (item.context?.uri) {
-                play({ context_uri: item.context.uri, offset: { uri: item.uri } });
-            } else {
-                 play({ uris: [item.uri] });
-            }
+            // For single tracks, the item itself is what we want to see in "Continue Listening"
+            play({ uris: [item.uri] }, item);
         }
     };
 
@@ -387,8 +205,8 @@ const SpotifyPlayer = ({
                     {view.type === 'artists' && <ArtistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'albums' && <AlbumGridView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'podcasts' && <PodcastGridView isNight={isNight} onSelectItem={handleSelectItem} />}
-                    {view.type === 'recently-played' && <RecentlyPlayedView isNight={isNight} onPlay={play} />}
-                    {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={play} />}
+                    {view.type === 'recently-played' && <RecentlyPlayedView isNight={isNight} onPlay={(opts) => play(opts)} />}
+                    {view.type === 'search' && <SearchResultsView query={view.query!} isNight={isNight} onSelectItem={handleSelectItem} onPlay={(opts, item) => play(opts, item)} />}
                     {view.type === 'genres' && <GenresView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'new-releases' && <NewReleasesView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'categoryPlaylists' && <CategoryPlaylistsView categoryId={view.id!} title={view.title!} isNight={isNight} onSelectItem={handleSelectItem} onBack={handleBack} />}
@@ -398,14 +216,14 @@ const SpotifyPlayer = ({
                             itemId={view.id!}
                             itemType={view.type}
                             isNight={isNight}
-                            onPlay={play}
+                            onPlay={(opts, item) => play(opts, item)}
                         />
                     )}
                     {view.type === 'artist' && (
                         <ArtistDetailView
                             artistId={view.id!}
                             isNight={isNight}
-                            onPlay={play}
+                            onPlay={(opts, item) => play(opts, item)}
                             onSelectItem={handleSelectItem}
                             onFollowChange={triggerDataRefresh}
                         />
@@ -414,7 +232,7 @@ const SpotifyPlayer = ({
                         <ShowDetailView
                             showId={view.id!}
                             isNight={isNight}
-                            onPlay={play}
+                            onPlay={(opts) => play(opts)}
                         />
                     )}
                 </div>

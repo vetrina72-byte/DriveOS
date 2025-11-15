@@ -39,7 +39,7 @@ interface SearchResultsViewProps {
     query: string;
     isNight: boolean;
     onSelectItem: (item: SpotifyItem) => void;
-    onPlay: (options: { uris?: string[], offset?: any }) => void;
+    onPlay: (options: { uris?: string[], offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => void;
 }
 
 const AnimatedEqualizer = ({ className }: { className?: string; }) => (
@@ -150,7 +150,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                 </p>
                             </div>
                             <button
-                                onClick={(e) => { e.stopPropagation(); onPlay({ uris: [topResult.uri] }); }}
+                                onClick={(e) => { e.stopPropagation(); onPlay({ uris: [topResult.uri] }, topResult); }}
                                 disabled={!isPlayerReady}
                                 className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform self-start disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
                             >
@@ -174,7 +174,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                     <motion.div
                                       key={track.id}
                                       variants={itemVariants}
-                                      onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index + 1 } })}
+                                      onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index + 1 } }, track)}
                                       className={`flex items-center gap-3 p-2 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                                     >
                                         <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>

@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useCallback, Rea
 import apiClient from '../api';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import { NowPlayingState, YouTubeTrackInfo, PlayOptions } from '../types';
+import { SpotifyItem as MediaItem } from '../components/PlaylistItem';
 import { getSessionId } from '../lib/sessionId';
 import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalPlayer, getPlayerInstance, getDeviceId, safePlay } from '../lib/spotify-player';
 
@@ -33,7 +34,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
     login: (tokenData?: TokenData | null, error?: string) => Promise<void>;
     logout: () => void;
     clearError: () => void;
-    play: (options: PlayOptions) => void;
+    play: (options: PlayOptions, itemForOptimisticUpdate?: MediaItem) => void;
     playYouTube: (track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => void;
     refreshTrigger: number;
     triggerDataRefresh: () => void;
@@ -50,6 +51,26 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
     isAutoplayBlocked: boolean;
     unlockAutoplay: () => void;
     lastPlayInitiated: number;
+    // Home Content State & Actions
+    homeContentLoading: boolean;
+    homeContentError: string | null;
+    hasFetchedHomeContent: boolean;
+    continueListeningItems: MediaItem[];
+    newReleases: MediaItem[];
+    userPlaylists: MediaItem[];
+    madeForYouPlaylists: MediaItem[];
+    topArtists: MediaItem[];
+    chartsPlaylists: MediaItem[];
+    genresCategories: MediaItem[];
+    recommendedShows: MediaItem[];
+    partyPlaylists: MediaItem[];
+    topTracks: MediaItem[];
+    artistRadioTracks: MediaItem[];
+    trackRecommendations: MediaItem[];
+    savedAlbums: MediaItem[];
+    madeForYou: MediaItem[];
+    triggerHomeContentFetch: () => void;
+    resetHomeContent: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -75,6 +96,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [isPlayerSdkReady, setIsPlayerSdkReady] = useState(false);
     const [lastPlayInitiated, setLastPlayInitiated] = useState(0);
     
+    // Home Content State
+    const [homeContentLoading, setHomeContentLoading] = useState(false);
+    const [homeContentError, setHomeContentError] = useState<string | null>(null);
+    const [hasFetchedHomeContent, setHasFetchedHomeContent] = useState(false);
+    const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>([]);
+    const [newReleases, setNewReleases] = useState<MediaItem[]>([]);
+    const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>([]);
+    const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>([]);
+    const [topArtists, setTopArtists] = useState<MediaItem[]>([]);
+    const [chartsPlaylists, setChartsPlaylists] = useState<MediaItem[]>([]);
+    const [genresCategories, setGenresCategories] = useState<MediaItem[]>([]);
+    const [recommendedShows, setRecommendedShows] = useState<MediaItem[]>([]);
+    const [partyPlaylists, setPartyPlaylists] = useState<MediaItem[]>([]);
+    const [topTracks, setTopTracks] = useState<MediaItem[]>([]);
+    const [artistRadioTracks, setArtistRadioTracks] = useState<MediaItem[]>([]);
+    const [trackRecommendations, setTrackRecommendations] = useState<MediaItem[]>([]);
+    const [savedAlbums, setSavedAlbums] = useState<MediaItem[]>([]);
+    const [madeForYou, setMadeForYou] = useState<MediaItem[]>([]);
+
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
 
@@ -208,6 +248,162 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, []);
 
+    // Home Content Fetching Logic
+    const processRecentPlays = useCallback(async (items: any[]): Promise<MediaItem[]> => {
+        const unifiedList: MediaItem[] = [];
+        const addedUris = new Set<string>();
+        const contextDetailsCache = new Map<string, any>();
+
+        const tracksWithoutContext = items.filter(item => item.track && !item.context);
+        const trackIdsToCheck = tracksWithoutContext.map(item => item.track.id).filter(Boolean);
+        const likedStatusMap = new Map<string, boolean>();
+
+        if (trackIdsToCheck.length > 0) {
+            for (let i = 0; i < trackIdsToCheck.length; i += 50) {
+                const chunk = trackIdsToCheck.slice(i, i + 50);
+                try {
+                    const response = await apiClient.get(`/me/tracks/contains?ids=${chunk.join(',')}`);
+                    response.data.forEach((isLiked: boolean, index: number) => {
+                        likedStatusMap.set(chunk[index], isLiked);
+                    });
+                } catch (e) {
+                    console.error("Failed to check liked status for tracks", e);
+                }
+            }
+        }
+
+        const likedSongsItem: MediaItem = { id: 'liked-songs', name: 'Brani che ti piacciono', type: 'playlist', uri: 'special:liked-songs', description: 'La tua collezione personale.' };
+
+        const contextUrisToFetch = [...new Set(items.filter(item => item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')).map(item => item.context.uri))] as string[];
+
+        if (contextUrisToFetch.length > 0) {
+            const albumIds = contextUrisToFetch.filter(uri => uri.includes(':album:')).map(uri => uri.split(':')[2]);
+            const playlistIds = contextUrisToFetch.filter(uri => uri.includes(':playlist:')).map(uri => uri.split(':')[2]);
+            const promises = [];
+            if (albumIds.length > 0) {
+                promises.push(apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
+                    res.data.albums.forEach((album: any) => { if (album) contextDetailsCache.set(album.uri, album); });
+                }).catch(e => console.error("Failed fetching album details", e)));
+            }
+            if (playlistIds.length > 0) {
+                const playlistPromises = playlistIds.map(id => apiClient.get(`/playlists/${id}`).then(res => {
+                    contextDetailsCache.set(res.data.uri, res.data);
+                }).catch(e => console.error(`Failed to fetch playlist ${id}`, e)));
+                promises.push(Promise.all(playlistPromises));
+            }
+            await Promise.all(promises);
+        }
+
+        for (const item of items) {
+            if (!item.track) continue;
+            let itemToAdd: MediaItem | null = null;
+            if (item.context?.type === 'collection' || likedStatusMap.get(item.track.id)) {
+                itemToAdd = likedSongsItem;
+            } else if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
+                const contextDetails = contextDetailsCache.get(item.context.uri)!;
+                if (contextDetails.type === 'playlist' && contextDetails.owner.id === 'spotify') {
+                    itemToAdd = item.track;
+                } else {
+                    itemToAdd = contextDetails;
+                }
+            } else {
+                itemToAdd = item.track;
+            }
+            if (itemToAdd?.uri && !addedUris.has(itemToAdd.uri)) {
+                unifiedList.push(itemToAdd);
+                addedUris.add(itemToAdd.uri);
+            }
+        }
+        return unifiedList.slice(0, 10);
+    }, []);
+
+    const fetchRecentlyPlayed = useCallback(async () => {
+        if (!state.user) return;
+        try {
+            const recents = await apiClient.get('/me/player/recently-played?limit=50');
+            const processedItems = await processRecentPlays(recents.data.items);
+            setContinueListeningItems(processedItems);
+        } catch (err) {
+            console.error("Failed to fetch recently played items", err);
+        }
+    }, [state.user, processRecentPlays]);
+    
+    const fetchData = useCallback(async () => {
+        if (!state.user || hasFetchedHomeContent) return;
+        setHomeContentLoading(true);
+        setHomeContentError(null);
+
+        try {
+            const promises = [
+                apiClient.get('/me/playlists?limit=10'),
+                apiClient.get('/me/top/artists?time_range=medium_term&limit=10'),
+                apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'),
+                apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'),
+                apiClient.get(`/browse/new-releases?country=IT&limit=10`),
+                apiClient.get('/browse/categories?country=IT&limit=20'),
+                apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'),
+                apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'),
+                apiClient.get('/me/top/tracks?limit=20&time_range=long_term'),
+                apiClient.get('/me/albums?limit=10'),
+                apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'),
+            ];
+            const results = await Promise.allSettled(promises);
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') console.log(`API call at index ${index} failed:`, result.reason.response?.data || result.reason.message);
+            });
+            const [playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew] = results;
+            if (playlists.status === 'fulfilled') setUserPlaylists(playlists.value.data.items);
+            if (artists.status === 'fulfilled') {
+                const topArtistsData = artists.value.data.items;
+                setTopArtists(topArtistsData);
+                if (topArtistsData.length > 0) apiClient.get(`/recommendations?seed_artists=${topArtistsData[0].id}&limit=20`).then(res => setArtistRadioTracks(res.data.tracks.filter(Boolean))).catch(e => console.error("Failed to fetch artist radio", e));
+            }
+            if (madeForYouPl.status === 'fulfilled') setMadeForYouPlaylists(madeForYouPl.value.data.playlists.items);
+            if (madeForYouNew.status === 'fulfilled') setMadeForYou(madeForYouNew.value.data.playlists.items);
+            if (charts.status === 'fulfilled') setChartsPlaylists(charts.value.data.playlists.items);
+            if (parties.status === 'fulfilled') setPartyPlaylists(parties.value.data.playlists.items);
+            if (newRels.status === 'fulfilled') setNewReleases(newRels.value.data.albums.items);
+            if (genres.status === 'fulfilled') setGenresCategories(genres.value.data.categories.items.map((c: any) => ({ ...c, type: 'category' })));
+            if (shows.status === 'fulfilled') setRecommendedShows(shows.value.data.shows.items);
+            if (topTr.status === 'fulfilled') {
+                const tracks = topTr.value.data.items;
+                setTopTracks(tracks);
+                if (tracks.length >= 2) apiClient.get(`/recommendations?seed_tracks=${tracks.slice(0, 2).map((t: MediaItem) => t.id).join(',')}&limit=20`).then(res => setTrackRecommendations(res.data.tracks.filter(Boolean))).catch(e => console.error("Failed to fetch track recommendations", e));
+            }
+            if (savedAlbs.status === 'fulfilled') setSavedAlbums(savedAlbs.value.data.items.map((i: any) => i.album).filter(Boolean));
+            setHasFetchedHomeContent(true);
+        } catch (err: any) {
+            setHomeContentError("Could not load content.");
+        } finally {
+            setHomeContentLoading(false);
+        }
+    }, [state.user, hasFetchedHomeContent]);
+
+    const triggerHomeContentFetch = useCallback(() => {
+        if (state.user && !hasFetchedHomeContent) {
+            fetchRecentlyPlayed();
+            fetchData();
+        }
+    }, [state.user, hasFetchedHomeContent, fetchRecentlyPlayed, fetchData]);
+
+    const resetHomeContent = useCallback(() => {
+        setHasFetchedHomeContent(false);
+        setContinueListeningItems([]);
+        setNewReleases([]);
+        setUserPlaylists([]);
+        setMadeForYouPlaylists([]);
+        setTopArtists([]);
+        setChartsPlaylists([]);
+        setGenresCategories([]);
+        setRecommendedShows([]);
+        setPartyPlaylists([]);
+        setTopTracks([]);
+        setArtistRadioTracks([]);
+        setTrackRecommendations([]);
+        setSavedAlbums([]);
+        setMadeForYou([]);
+    }, []);
+
     useEffect(() => {
         const initFromStorage = async () => {
             const token = localStorage.getItem('accessToken');
@@ -259,7 +455,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [fetchUserInfo, logout]);
     
-    const play = useCallback(async (options: PlayOptions) => {
+    const play = useCallback(async (options: PlayOptions, itemForOptimisticUpdate?: MediaItem) => {
+        if (itemForOptimisticUpdate) {
+            setContinueListeningItems(prevItems => {
+                const filtered = prevItems.filter(i => i.uri !== itemForOptimisticUpdate.uri);
+                const newItems = [itemForOptimisticUpdate, ...filtered];
+                return newItems.slice(0, 10);
+            });
+        }
+
         if (options.context_uri) localStorage.setItem("last_context_uri", options.context_uri);
         else if (options.uris?.[0]) {
             localStorage.setItem("last_track_uri", options.uris[0]);
@@ -277,6 +481,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [attemptRefreshAndUpdatePlayerToken]);
     
+    // Delayed fetch to reconcile with Spotify API after optimistic update
+    useEffect(() => {
+        if (lastPlayInitiated > 0) {
+            const timer = setTimeout(() => {
+                if(state.user) {
+                    fetchRecentlyPlayed();
+                }
+            }, 2000); // 2 second delay for API to update
+            return () => clearTimeout(timer);
+        }
+    }, [lastPlayInitiated, state.user, fetchRecentlyPlayed]);
+
     const getAccessTokenForPlayer = useCallback(async (): Promise<string> => {
         const expiresAt = Number(localStorage.getItem('expiresAt') || '0');
         if (expiresAt > Date.now() + 60 * 1000) {
@@ -358,7 +574,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const isPlayerReady = isPlayerSdkReady && !!getDeviceId();
     
     return (
-        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, triggerDataRefresh, _setPlayerState, setVolumeLive, setVolumeFinal, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay, lastPlayInitiated }}>
+        <AuthContext.Provider value={{ ...state, login, logout, clearError, play, playYouTube, refreshTrigger, triggerDataRefresh, _setPlayerState, setVolumeLive, setVolumeFinal, toggleMute, nowPlaying, setNowPlaying, isPlayerReady, pauseSpotify, youTubeFavorites, onToggleYouTubeFavorite, isAutoplayBlocked, unlockAutoplay, lastPlayInitiated, homeContentLoading, homeContentError, hasFetchedHomeContent, continueListeningItems, newReleases, userPlaylists, madeForYouPlaylists, topArtists, chartsPlaylists, genresCategories, recommendedShows, partyPlaylists, topTracks, artistRadioTracks, trackRecommendations, savedAlbums, madeForYou, triggerHomeContentFetch, resetHomeContent }}>
             {children}
         </AuthContext.Provider>
     );

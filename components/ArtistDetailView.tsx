@@ -32,6 +32,8 @@ interface Artist {
     name: string;
     images: { url: string }[];
     followers: { total: number };
+    uri: string;
+    type: 'artist';
 }
 
 interface Track {
@@ -53,7 +55,7 @@ interface DiscographyItem extends SpotifyItem {
 interface ArtistDetailViewProps {
     artistId: string;
     isNight: boolean;
-    onPlay: (options: { uris?: string[], context_uri?: string, offset?: any }) => void;
+    onPlay: (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => void;
     onSelectItem: (item: SpotifyItem) => void;
     onFollowChange: () => void;
 }
@@ -220,7 +222,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                     <p className={`text-sm ${theme.textSecondary}`}>{formatFollowers(artist.followers.total)} followers</p>
                     <div className="flex items-center gap-4 mt-4">
                         {tracks.length > 0 && (
-                            <button onClick={() => isPlayerReady && onPlay({ uris: trackUris })} disabled={!isPlayerReady} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
+                            <button onClick={() => isPlayerReady && onPlay({ uris: trackUris }, artist)} disabled={!isPlayerReady} className="bg-green-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
                                 <FiPlay className="w-7 h-7 ml-1" />
                             </button>
                         )}
@@ -251,7 +253,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                             <motion.div
                                 key={track.id}
                                 variants={itemVariants}
-                                onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index } })}
+                                onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index } }, artist)}
                                 className={`flex items-center gap-4 p-2 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                             >
                                 <span className={`w-6 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>
