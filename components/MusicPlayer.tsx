@@ -410,7 +410,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
-    const [autoPopoverDismissedFor, setAutoPopoverDismissedFor] = useState<string|null>(null);
 
     useEffect(() => {
         const show = nowPlaying.isLoading || debugSpinner;
@@ -430,23 +429,37 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
         if (visibleQueue === source) {
-            // Closing the queue
-            if (source === 'spotify' && currentTrackUri) {
-                setAutoPopoverDismissedFor(currentTrackUri);
-            }
+            // --- CLOSING LOGIC ---
+            // User manually closes the popover. This disables the auto-show feature.
             setIsQueueClosing(true);
             setTimeout(() => {
                 setVisibleQueue(null);
                 setIsQueueClosing(false);
             }, 300);
-            setIsAutoQueueEnabled(false); // Disable auto-show on manual close
+            setIsAutoQueueEnabled(false);
         } else {
-            // Opening the queue
-            setIsQueueClosing(false);
-            setVisibleQueue(source);
-            setIsAutoQueueEnabled(true); // Re-enable auto-show on manual open
+            // --- "OPENING" OR ENABLING LOGIC ---
+            // This action enables the auto-show feature.
+            setIsAutoQueueEnabled(true);
+
+            // For spotify, we only show it immediately if it's already near the end.
+            if (source === 'spotify') {
+                const { position, duration, disallows } = playerState || {};
+                const isNearEnd = duration && position && duration > 15000 && (duration - position) < 15000;
+                const canSkipNext = !disallows?.skipping_next;
+
+                if (isNearEnd && canSkipNext) {
+                    setIsQueueClosing(false); // Ensure it's not in closing state if toggling fast
+                    setVisibleQueue('spotify');
+                }
+                // If not near the end, we do nothing else. The main useEffect will trigger it later.
+            } else {
+                // For other sources like YouTube, show immediately as there's no "auto-show" logic for them.
+                setIsQueueClosing(false);
+                setVisibleQueue(source);
+            }
         }
-    }, [visibleQueue, currentTrackUri]);
+    }, [visibleQueue, playerState]);
 
     // Effect for showing popover near end of track
     useEffect(() => {
@@ -458,10 +471,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         
         const canSkipNext = !disallows.skipping_next;
 
-        if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify' && autoPopoverDismissedFor !== currentTrackUri) {
+        if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify') {
+            setIsQueueClosing(false);
             setVisibleQueue('spotify');
         }
-    }, [playerState, currentTrackUri, visibleQueue, autoPopoverDismissedFor, isAutoQueueEnabled]);
+    }, [playerState, currentTrackUri, visibleQueue, isAutoQueueEnabled]);
 
     // Effect for hiding popover on track change
     const prevTrackUri = useRef<string | undefined>();
@@ -476,7 +490,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     setIsQueueClosing(false);
                 }, 300);
             }
-            setAutoPopoverDismissedFor(null); // Reset dismissal on track change
         }
         prevTrackUri.current = currentTrackUri;
     }, [currentTrackUri, visibleQueue]);
@@ -987,7 +1000,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                         </div>
                          <div className="flex-1 flex justify-end items-center">
-                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: visibleQueue === 'spotify' || isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
+                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
                                 <BsList style={{ width: '20px', height: '20px'}} />
                             </button>
                         </div>

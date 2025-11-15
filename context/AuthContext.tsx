@@ -321,8 +321,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!state.user) return;
         try {
             const recents = await apiClient.get('/me/player/recently-played?limit=50');
-            const processedItems = await processRecentPlays(recents.data.items);
-            setContinueListeningItems(processedItems);
+            const processedItemsFromApi = await processRecentPlays(recents.data.items);
+            
+            setContinueListeningItems(currentItems => {
+                if (currentItems.length === 0) {
+                    return processedItemsFromApi;
+                }
+                
+                const optimisticItem = currentItems[0];
+                const apiHasCaughtUp = processedItemsFromApi.length > 0 && processedItemsFromApi[0].uri === optimisticItem.uri;
+                
+                if (apiHasCaughtUp) {
+                    // The API response is up-to-date and includes our item as the most recent. Trust the API.
+                    return processedItemsFromApi;
+                } else {
+                    // The API is stale. Our optimistic item is still the most recent.
+                    // Prepend it to the API response and filter out any potential duplicates of it further down the list.
+                    const filteredApiItems = processedItemsFromApi.filter(item => item.uri !== optimisticItem.uri);
+                    const mergedItems = [optimisticItem, ...filteredApiItems];
+                    return mergedItems.slice(0, 10);
+                }
+            });
+    
         } catch (err) {
             console.error("Failed to fetch recently played items", err);
         }
