@@ -112,50 +112,44 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player) return;
         
-        // Immediately stop the animation loop.
         setIsSeeking(true);
-        if (justSoughtRef.current) {
-            justSoughtRef.current = false; // Clear any lingering seek flags
-        }
         
-        // Helper function to calculate the seek position in milliseconds from a mouse coordinate.
         const getSeekPosition = (clientX: number): number => {
             if (!progressRef.current) return 0;
             const rect = progressRef.current.getBoundingClientRect();
-            // Calculate the click position as a ratio (0.0 to 1.0) along the bar's width.
             const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
             return Math.round(state.duration * ratio);
         };
         
-        // Update the visual position instantly for immediate feedback.
+        // Optimistic update on first click
         setPosition(getSeekPosition(e.clientX));
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
-            // Update the visual position as the user drags the mouse.
             setPosition(getSeekPosition(moveEvent.clientX));
         };
 
         const handleMouseUp = (upEvent: MouseEvent) => {
-            // Remove the global listeners when the user releases the mouse.
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
             
-            // Calculate the final position and send the 'seek' command to the Spotify player.
             const finalPosition = getSeekPosition(upEvent.clientX);
-            player.seek(finalPosition).then(() => {
-                // Once the seek is confirmed, sync our local state and re-enable animations.
-                setPosition(finalPosition);
+            
+            // Set the flag *before* the async call to prevent the race condition
+            justSoughtRef.current = true;
+            
+            // Now call seek
+            player.seek(finalPosition).finally(() => {
+                // This runs whether the seek succeeded or failed, ensuring the UI is unlocked.
                 setIsSeeking(false);
-                // Flag that we just sought and should ignore the next state update.
-                justSoughtRef.current = true;
-                // After a short delay, reset the flag to resume normal syncing.
-                setTimeout(() => {
-                    justSoughtRef.current = false;
-                }, 300); // 300ms should be enough for state to propagate.
             });
+            
+            // Reset the flag after a delay. This gives time for the stale state
+            // to pass and the correct new state to arrive from the SDK.
+            setTimeout(() => {
+                justSoughtRef.current = false;
+            }, 500); // 500ms is a safer buffer
         };
         
-        // Add listeners to the window to track mouse movement anywhere on the screen.
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
     }, [player, state.duration]);
