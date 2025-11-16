@@ -57,20 +57,13 @@ interface MusicPlayerProps {
  * @param {SpotifyPlayerState} state - The current player state from the SDK.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // This state is the single source of truth for what's rendered on screen.
     const [displayPosition, setDisplayPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
-
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
-
-    // Refs to store the last known "ground truth" from the Spotify SDK or a user seek action.
-    // This is the base for our animation calculations.
     const lastStatePositionRef = useRef(state.position);
     const lastStateUpdateTimestampRef = useRef(performance.now());
 
-    // Main sync effect: When Spotify's state prop changes, update our animation baseline,
-    // but only if the user isn't actively seeking.
     useEffect(() => {
         if (!isSeeking) {
             setDisplayPosition(state.position);
@@ -79,86 +72,66 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         }
     }, [state.position, isSeeking]);
 
-    // Animation loop effect: Starts/stops the animation based on play state.
     useEffect(() => {
-        // Stop animating if paused or if the user is dragging the slider.
         if (state.paused || isSeeking) {
             cancelAnimationFrame(animationFrameRef.current);
             return;
         }
-
         const animate = () => {
             const timeSinceLastUpdate = performance.now() - lastStateUpdateTimestampRef.current;
             const newAnimatedPosition = lastStatePositionRef.current + timeSinceLastUpdate;
-            
-            // Update the visual display, but don't go past the end of the track.
             setDisplayPosition(Math.min(newAnimatedPosition, state.duration));
-            
             animationFrameRef.current = requestAnimationFrame(animate);
         };
-
-        // Start the animation loop.
         animationFrameRef.current = requestAnimationFrame(animate);
-
-        // Cleanup: cancel the animation frame when the component unmounts or this effect re-runs.
         return () => cancelAnimationFrame(animationFrameRef.current);
     }, [state.paused, state.duration, isSeeking]);
-
-    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    
+    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player || !state.duration) return;
-
-        // Cancel any ongoing animation immediately.
         cancelAnimationFrame(animationFrameRef.current);
         setIsSeeking(true);
-        
+    }, [player, state.duration]);
+
+    useEffect(() => {
+        if (!isSeeking) return;
+
         const getSeekPosition = (clientX: number): number => {
-            if (!progressRef.current) return 0;
+            if (!progressRef.current || !state.duration) return 0;
             const rect = progressRef.current.getBoundingClientRect();
             const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
             return Math.round(state.duration * ratio);
         };
-        
-        // Optimistic UI update on first click.
-        const initialSeekPos = getSeekPosition(e.clientX);
-        setDisplayPosition(initialSeekPos);
 
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            const currentSeekPos = getSeekPosition(moveEvent.clientX);
-            setDisplayPosition(currentSeekPos);
+        const handleMouseMove = (e: MouseEvent) => {
+            setDisplayPosition(getSeekPosition(e.clientX));
         };
 
-        const handleMouseUp = (upEvent: MouseEvent) => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-            
-            const finalPosition = getSeekPosition(upEvent.clientX);
-            
-            // Tell Spotify to seek.
-            player.seek(finalPosition).catch(err => console.error("Seek failed", err));
-
-            // CRITICAL: Reset our animation baseline to this new, user-defined position.
-            // This prevents the bar from jumping back to the old SDK state.
-            // The animation will now proceed smoothly from this point.
+        const handleMouseUp = (e: MouseEvent) => {
+            const finalPosition = getSeekPosition(e.clientX);
+            player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
             lastStatePositionRef.current = finalPosition;
             lastStateUpdateTimestampRef.current = performance.now();
-            setDisplayPosition(finalPosition); // Ensure final position is set
-
-            // We're done seeking, allow SDK updates and animations to resume.
+            setDisplayPosition(finalPosition);
             setIsSeeking(false);
         };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
         
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    }, [player, state.duration]);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isSeeking, player, state.duration]);
     
-    // The rendered position is always our local `displayPosition` state.
     const progressPercentage = state.duration > 0 ? (displayPosition / state.duration) * 100 : 0;
     
     return (
         <div
             ref={progressRef}
             className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)]"
-            onMouseDown={handleSeek}
+            onMouseDown={handleMouseDown}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
                  <div 
@@ -402,6 +375,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
+    const prevPositionRef = useRef(0);
 
     useEffect(() => {
         const show = nowPlaying.isLoading || debugSpinner;
@@ -412,20 +386,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, [nowPlaying.isLoading, debugSpinner]);
 
-    // FIX: Get player instance from the library.
     const player = getPlayerInstance();
-
     const isPlayerActive = player && playerState && playerState.track_window.current_track;
     const currentTrack = playerState?.track_window.current_track;
     const currentTrackUri = currentTrack?.uri;
 
     const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
         if (source === 'spotify') {
-            // This button now *only* toggles the auto-show feature.
             const newIsEnabled = !isAutoQueueEnabled;
             setIsAutoQueueEnabled(newIsEnabled);
     
-            // If the user is manually disabling the feature, we should also hide the popover if it's currently visible.
             if (!newIsEnabled && visibleQueue === 'spotify') {
                 setIsQueueClosing(true);
                 setTimeout(() => {
@@ -434,7 +404,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 }, 300);
             }
         } else if (source === 'youtube') {
-            // YouTube button is a simple toggle for visibility.
             if (visibleQueue === 'youtube') {
                 setIsQueueClosing(true);
                 setTimeout(() => {
@@ -442,26 +411,32 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     setIsQueueClosing(false);
                 }, 300);
             } else {
-                setIsQueueClosing(false); // Make sure it's not closing
+                setIsQueueClosing(false); 
                 setVisibleQueue('youtube');
             }
         }
     }, [isAutoQueueEnabled, visibleQueue]);
 
-    // Effect for showing popover near end of track
     useEffect(() => {
-        if (!playerState || playerState.paused || !currentTrackUri) {
-            return;
-        }
+        if (!playerState || playerState.paused || !currentTrackUri) return;
+
         const { position, duration, disallows } = playerState;
+        const positionDelta = position - prevPositionRef.current;
+        const isBackwardsSeek = positionDelta < -2000; // User seeks back > 2s
         const isNearEnd = duration > 15000 && (duration - position) < 15000;
-        
         const canSkipNext = !disallows.skipping_next;
 
-        if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify') {
+        if (isBackwardsSeek && !isNearEnd && visibleQueue === 'spotify') {
+            // Hide popover if user seeks away from the end
+            setIsQueueClosing(true);
+            setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 300);
+        } else if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify') {
+            // Show popover if near the end and it's not already visible
             setIsQueueClosing(false);
             setVisibleQueue('spotify');
         }
+
+        prevPositionRef.current = position;
     }, [playerState, currentTrackUri, visibleQueue, isAutoQueueEnabled]);
 
     // Effect for hiding popover on track change
@@ -469,13 +444,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     useEffect(() => {
         if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
             if (visibleQueue === 'spotify') {
-                // Manually hide popover without calling handleToggleQueue
-                // to preserve isAutoQueueEnabled state.
                 setIsQueueClosing(true);
-                setTimeout(() => {
-                    setVisibleQueue(null);
-                    setIsQueueClosing(false);
-                }, 300);
+                setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 300);
             }
         }
         prevTrackUri.current = currentTrackUri;
@@ -1090,5 +1060,4 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     );
 };
 
-// FIX: Add a default export to the MusicPlayer component to resolve the module import error in App.tsx.
 export default React.memo(MusicPlayer);

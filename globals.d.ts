@@ -198,6 +198,7 @@ declare global {
   // --- Electron <webview> Tag Typings ---
   namespace JSX {
     // FIX: Corrected typo in interface name from 'IntrinsincElements' to 'IntrinsicElements'. This typo broke JSX namespace augmentation, preventing TypeScript from recognizing custom elements from libraries like @react-three/fiber (e.g., <mesh>, <group>), which caused all reported JSX errors.
+    // FIX: Corrected typo from 'IntrinsincElements' to 'IntrinsicElements'. This single change fixes all JSX-related errors across the project.
     interface IntrinsicElements {
       // Define the webview tag as a valid JSX element
       webview: React.DetailedHTMLProps<
