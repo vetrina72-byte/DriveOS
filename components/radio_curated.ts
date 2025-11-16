@@ -3,10 +3,10 @@ import type { RadioStation } from '../types';
 export const curatedStations: RadioStation[] = [
     {
         stationuuid: '9611354c-0601-11e8-a442-52543be04c81',
-        name: 'RTL 102.5',
+        name: 'RTL 102.5 local',
         url_resolved: 'https://rtl1025-live.akamaized.net/hls/live/2016311/rtl1025/master.m3u8',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/0/0e/RTL_102.5_logo.svg',
-        tags: 'hits,pop,top40,italian',
+        tags: 'local,hits,pop,top40',
         codec: 'HLS',
     },
     {

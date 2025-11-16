@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { FiRadio, FiAlertTriangle, FiSearch, FiX } from 'react-icons/fi';
+import { FiRadio, FiAlertTriangle, FiSearch, FiX, FiChevronLeft } from 'react-icons/fi';
 import type { RadioStation } from '../types';
 import RadioCard from './RadioCard';
 import HorizontalCarousel from './HorizontalCarousel';
@@ -421,8 +421,20 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
             >
                  <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
-                        <FiRadio className="w-8 h-8" style={{ color: 'var(--text-primary)' }} />
-                        <h1 id="radio-app-title" className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>Radio</h1>
+                        {searchQuery.trim().length > 0 ? (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="p-2 -ml-2 rounded-full transition-colors hover:bg-white/10"
+                                aria-label="Indietro"
+                            >
+                                <FiChevronLeft className="w-7 h-7" style={{ color: 'var(--text-primary)' }} />
+                            </button>
+                        ) : (
+                            <>
+                                <FiRadio className="w-8 h-8" style={{ color: 'var(--text-primary)' }} />
+                                <h1 id="radio-app-title" className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>Radio</h1>
+                            </>
+                        )}
                     </div>
                      <div className="flex items-center gap-6">
                         <div className="relative max-w-xs">
@@ -432,17 +444,9 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
                                 placeholder="Cerca una stazione..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className={`w-full pl-11 pr-10 py-3 rounded-full text-sm font-medium transition-colors duration-300 placeholder:text-zinc-400 border border-transparent focus:outline-none ${isNight ? 'bg-white/10 focus:border-white/20' : 'bg-black/5 focus:border-black/20'}`}
+                                className={`w-full pl-11 pr-4 py-3 rounded-full text-sm font-medium transition-colors duration-300 placeholder:text-zinc-400 border border-transparent focus:outline-none ${isNight ? 'bg-white/10 focus:border-white/20' : 'bg-black/5 focus:border-black/20'}`}
                                 style={{ color: 'var(--text-primary)' }}
                             />
-                            {searchQuery && (
-                                <button
-                                    onClick={() => setSearchQuery('')}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/20"
-                                >
-                                    <FiX className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-                                </button>
-                            )}
                         </div>
                      </div>
                  </header>
