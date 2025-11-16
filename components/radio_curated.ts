@@ -4,7 +4,7 @@ export const curatedStations: RadioStation[] = [
     {
         stationuuid: '9611354c-0601-11e8-a442-52543be04c81',
         name: 'RTL 102.5 local',
-        url_resolved: 'https://rtl1025-live.akamaized.net/hls/live/2016311/rtl1025/master.m3u8',
+        url_resolved: 'https://dd782ed59e2a4e86aabf6fc508674b59.msvdn.net/live/S97044836/tbbP8T1ZRPBL/playlist_audio.m3u8',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/0/0e/RTL_102.5_logo.svg',
         tags: 'local,hits,pop,top40',
         codec: 'HLS',
@@ -23,6 +23,14 @@ export const curatedStations: RadioStation[] = [
         url_resolved: 'https://icy.unitedradio.it/Radio105.mp3',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/5/50/Radio_105_logo.svg',
         tags: 'hits,dance,pop',
+        codec: 'MP3',
+    },
+    {
+        stationuuid: 'custom-rmc-uuid-001',
+        name: 'Radio Monte Carlo',
+        url_resolved: 'http://icecast.unitedradio.it/RMC.mp3',
+        favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/RMC_logo_2022.svg/200px-RMC_logo_2022.svg.png',
+        tags: 'lounge,chill,pop',
         codec: 'MP3',
     },
     {
