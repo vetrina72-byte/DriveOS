@@ -29,7 +29,7 @@ export const curatedStations: RadioStation[] = [
         stationuuid: 'custom-rmc-uuid-001',
         name: 'Radio Monte Carlo',
         url_resolved: 'http://icecast.unitedradio.it/RMC.mp3',
-        favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/RMC_logo_2022.svg/200px-RMC_logo_2022.svg.png',
+        favicon: 'https://upload.wikimedia.org/wikipedia/commons/8/81/Logo_RMC_2002.svg',
         tags: 'lounge,chill,pop',
         codec: 'MP3',
     },
