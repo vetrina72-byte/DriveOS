@@ -39,6 +39,7 @@ const ALL_APPS: AppDefinition[] = [
   { id: 'maps', icon: ICONS.maps, label: 'Maps' },
   { id: 'theater', icon: ICONS.theater, label: 'Theater' },
   { id: 'radio', icon: ICONS.radio, label: 'Radio', colorClasses: 'text-white' },
+  { id: 'browser', icon: ICONS.browser, label: 'Browser' },
 ];
 
 const weatherConfig: Record<string, WeatherParams> = {
@@ -758,7 +759,7 @@ function AppContent() {
   // App Customization State
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
-  const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music']);
+  const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music', 'browser']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
   
   // Radio Favorites State
@@ -1374,6 +1375,11 @@ function AppContent() {
     setIsAppLauncherOpen(false);
     setIsCustomizing(false);
     
+    if (appName === 'browser') {
+        setWebAppUrl('https://www.google.com');
+        return;
+    }
+
     const willBeActive = activeApp !== appName;
     if (willBeActive && !dockApps.includes(appName)) {
         setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
