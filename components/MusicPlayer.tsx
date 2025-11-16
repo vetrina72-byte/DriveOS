@@ -57,61 +57,58 @@ interface MusicPlayerProps {
  * @param {SpotifyPlayerState} state - The current player state from the SDK.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // 'position' holds the locally animated progress in milliseconds for a smooth display.
-    const [position, setPosition] = useState(state.position);
-    // 'isSeeking' is a flag to prevent animation while the user is dragging the progress handle.
+    // This state is the single source of truth for what's rendered on screen.
+    const [displayPosition, setDisplayPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
+
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
-    const lastStateUpdate = useRef(performance.now());
-    const justSoughtRef = useRef(false); // Ref to ignore first state update after seeking
 
-    // Effect to synchronize the local animated position with the actual state from Spotify.
+    // Refs to store the last known "ground truth" from the Spotify SDK or a user seek action.
+    // This is the base for our animation calculations.
+    const lastStatePositionRef = useRef(state.position);
+    const lastStateUpdateTimestampRef = useRef(performance.now());
+
+    // Main sync effect: When Spotify's state prop changes, update our animation baseline,
+    // but only if the user isn't actively seeking.
     useEffect(() => {
-        // If we just sought, ignore this update because it might be stale.
-        if (justSoughtRef.current) {
-            return;
-        }
         if (!isSeeking) {
-            setPosition(state.position);
-            lastStateUpdate.current = performance.now();
+            setDisplayPosition(state.position);
+            lastStatePositionRef.current = state.position;
+            lastStateUpdateTimestampRef.current = performance.now();
         }
     }, [state.position, isSeeking]);
 
-    // This effect creates the smooth animation loop using requestAnimationFrame.
+    // Animation loop effect: Starts/stops the animation based on play state.
     useEffect(() => {
-        // Stop the animation if the track is paused or the user is seeking.
+        // Stop animating if paused or if the user is dragging the slider.
         if (state.paused || isSeeking) {
             cancelAnimationFrame(animationFrameRef.current);
             return;
         }
 
         const animate = () => {
-            // Calculate how much time has passed since the last real update from Spotify.
-            const elapsed = performance.now() - lastStateUpdate.current;
-            // Predict the new position by adding the elapsed time to the last known position.
-            const newPosition = state.position + elapsed;
+            const timeSinceLastUpdate = performance.now() - lastStateUpdateTimestampRef.current;
+            const newAnimatedPosition = lastStatePositionRef.current + timeSinceLastUpdate;
             
-            // Update the visual progress, ensuring it doesn't exceed the track's duration.
-            if (newPosition < state.duration) {
-                setPosition(newPosition);
-                // Request the next frame to continue the animation.
-                animationFrameRef.current = requestAnimationFrame(animate);
-            } else {
-                setPosition(state.duration);
-            }
+            // Update the visual display, but don't go past the end of the track.
+            setDisplayPosition(Math.min(newAnimatedPosition, state.duration));
+            
+            animationFrameRef.current = requestAnimationFrame(animate);
         };
 
+        // Start the animation loop.
         animationFrameRef.current = requestAnimationFrame(animate);
 
-        // Cleanup function to cancel the animation frame when the component unmounts or dependencies change.
+        // Cleanup: cancel the animation frame when the component unmounts or this effect re-runs.
         return () => cancelAnimationFrame(animationFrameRef.current);
-    }, [state.paused, state.duration, state.position, isSeeking]);
+    }, [state.paused, state.duration, isSeeking]);
 
-    // Callback to handle user interaction (mousedown and drag) for seeking.
-    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (!progressRef.current || !player) return;
-        
+    const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (!progressRef.current || !player || !state.duration) return;
+
+        // Cancel any ongoing animation immediately.
+        cancelAnimationFrame(animationFrameRef.current);
         setIsSeeking(true);
         
         const getSeekPosition = (clientX: number): number => {
@@ -121,46 +118,47 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             return Math.round(state.duration * ratio);
         };
         
-        // Optimistic update on first click
-        setPosition(getSeekPosition(e.clientX));
+        // Optimistic UI update on first click.
+        const initialSeekPos = getSeekPosition(e.clientX);
+        setDisplayPosition(initialSeekPos);
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
-            setPosition(getSeekPosition(moveEvent.clientX));
+            const currentSeekPos = getSeekPosition(moveEvent.clientX);
+            setDisplayPosition(currentSeekPos);
         };
 
         const handleMouseUp = (upEvent: MouseEvent) => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
             
             const finalPosition = getSeekPosition(upEvent.clientX);
             
-            // Set the flag *before* the async call to prevent the race condition
-            justSoughtRef.current = true;
-            
-            // Now call seek
-            player.seek(finalPosition).finally(() => {
-                // This runs whether the seek succeeded or failed, ensuring the UI is unlocked.
-                setIsSeeking(false);
-            });
-            
-            // Reset the flag after a delay. This gives time for the stale state
-            // to pass and the correct new state to arrive from the SDK.
-            setTimeout(() => {
-                justSoughtRef.current = false;
-            }, 500); // 500ms is a safer buffer
+            // Tell Spotify to seek.
+            player.seek(finalPosition).catch(err => console.error("Seek failed", err));
+
+            // CRITICAL: Reset our animation baseline to this new, user-defined position.
+            // This prevents the bar from jumping back to the old SDK state.
+            // The animation will now proceed smoothly from this point.
+            lastStatePositionRef.current = finalPosition;
+            lastStateUpdateTimestampRef.current = performance.now();
+            setDisplayPosition(finalPosition); // Ensure final position is set
+
+            // We're done seeking, allow SDK updates and animations to resume.
+            setIsSeeking(false);
         };
         
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
     }, [player, state.duration]);
     
-    const progressPercentage = state.duration > 0 ? (position / state.duration) * 100 : 0;
+    // The rendered position is always our local `displayPosition` state.
+    const progressPercentage = state.duration > 0 ? (displayPosition / state.duration) * 100 : 0;
     
     return (
         <div
             ref={progressRef}
             className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)]"
-            onMouseDown={handleMouseDown}
+            onMouseDown={handleSeek}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
                  <div 
