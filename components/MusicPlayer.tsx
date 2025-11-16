@@ -68,7 +68,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
     // Effect to synchronize the local animated position with the actual state from Spotify.
     useEffect(() => {
-        // If we just finished a seek, ignore the next state update because it might be stale.
+        // If we just sought, ignore this update because it might be stale.
         if (justSoughtRef.current) {
             return;
         }
