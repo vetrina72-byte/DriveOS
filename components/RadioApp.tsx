@@ -209,6 +209,12 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
                         // Filter out any curated stations from these other categories to avoid duplicates
                         liveStations = liveStations.filter(s => !curatedStationUuids.has(s.stationuuid) && !curatedStationNames.has(s.name.toLowerCase()));
 
+                        // Filter out stations requested by the user for removal.
+                        liveStations = liveStations.filter(s => {
+                            const nameLower = s.name.toLowerCase();
+                            return !nameLower.includes('radio italia dance') && !nameLower.includes('studio più');
+                        });
+
                         if (categoryConfig.name === 'Notizie') {
                             liveStations = liveStations.filter(s => {
                                 const nameLower = s.name.toLowerCase();
@@ -403,7 +409,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
 
     return (
         <div 
-            className="spotify-app-panel flex shadow-2xl"
+            className="spotify-app-panel w-2/3 flex shadow-2xl"
             style={{
                 transform: `translateX(${translateX}%)`,
                 top: `${spotifyPlayerTop}px`,

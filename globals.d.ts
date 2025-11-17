@@ -206,7 +206,6 @@ declare global {
           useragent?: string;
           partition?: string;
           webpreferences?: string;
-          allowpopups?: boolean;
         },
         HTMLWebViewElement
       >;

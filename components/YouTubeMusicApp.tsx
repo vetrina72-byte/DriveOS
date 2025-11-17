@@ -251,7 +251,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
 
     return (
         <div 
-            className="spotify-app-panel flex shadow-2xl"
+            className="spotify-app-panel w-2/3 flex shadow-2xl"
             style={{
                 transform: `translateX(${translateX}%)`,
                 top: `${spotifyPlayerTop}px`,

@@ -47,12 +47,14 @@ const SpotifyPlayer = ({
     isNight,
     spotifyPlayerTop,
     spotifyPlayerBottom,
+    isMapsLayered,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
     isNight: boolean;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    isMapsLayered?: boolean;
 }) => {
     const { 
         isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, 
@@ -62,7 +64,8 @@ const SpotifyPlayer = ({
         partyPlaylists, topTracks, artistRadioTracks, trackRecommendations, savedAlbums, madeForYou
     } = useAuth();
     
-    const [translateX, setTranslateX] = useState(100);
+    const [animationType, setAnimationType] = useState<'x' | 'y'>('x');
+    const [transformValue, setTransformValue] = useState(100);
     const animationFrameId = useRef<number | null>(null);
     
     const [view, setView] = useState<ViewState>({ type: 'home' });
@@ -133,20 +136,26 @@ const SpotifyPlayer = ({
     };
 
     useEffect(() => {
+        if (isOpen) {
+            setAnimationType(isMapsLayered ? 'y' : 'x');
+        }
+    }, [isOpen, isMapsLayered]);
+
+    useEffect(() => {
         let lastTime = performance.now();
         const animate = (now: number) => {
             const delta = (now - lastTime) / 1000;
             lastTime = now;
-            setTranslateX(currentX => {
+            setTransformValue(currentVal => {
                 const target = isOpen ? 0 : 100;
                 const speed = isOpen ? openingBoxSpeed : closingBoxSpeed;
                 const damp = 1 - Math.exp(-speed * delta);
-                const newX = currentX + (target - currentX) * damp;
-                if (Math.abs(target - newX) < 0.1) {
+                const newVal = currentVal + (target - currentVal) * damp;
+                if (Math.abs(target - newVal) < 0.1) {
                     if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
                     return target;
                 }
-                return newX;
+                return newVal;
             });
             animationFrameId.current = requestAnimationFrame(animate);
         };
@@ -243,11 +252,15 @@ const SpotifyPlayer = ({
         return <SpotifyLogin />;
     };
 
+    const transform = animationType === 'y'
+        ? `translateY(${transformValue}%)`
+        : `translateX(${transformValue}%)`;
+
     return (
         <div 
-            className={`spotify-app-panel flex shadow-2xl`}
+            className={`spotify-app-panel w-2/3 flex shadow-2xl`}
             style={{
-                transform: `translateX(${translateX}%)`,
+                transform: transform,
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,
             }}

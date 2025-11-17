@@ -68,7 +68,7 @@ export const curatedStations: RadioStation[] = [
     {
         stationuuid: '96112d78-0601-11e8-a442-52543be04c81',
         name: 'Radio 80',
-        url_resolved: 'https://wma01.fluidstream.net/radio80.mp3',
+        url_resolved: 'http://streams.80s80s.de/web/mp3-192/play.m3u',
         favicon: 'https://upload.wikimedia.org/wikipedia/commons/a/ad/80s80s_Logo_2015.svg',
         tags: '80s,anni 80,pop',
         codec: 'MP3',
