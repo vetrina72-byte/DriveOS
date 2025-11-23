@@ -242,7 +242,7 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
     return (
         <div 
             ref={containerRef}
-            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border}`}
+            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${theme.border}`}
             style={{ 
                 width: `${width}px`,
                 height: `${isExpanded ? expandedHeight : baseHeight}px`,
@@ -483,7 +483,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
 
     return (
         <div 
-            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out ${theme.border}`}
+            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${theme.border}`}
             style={{ 
                 width: `${width}px`,
                 height: '113px',
@@ -775,6 +775,7 @@ function AppContent() {
   const [virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight] = useState(600);
   const [webAppUrl, setWebAppUrl] = useState<string | null>(null);
 
+  // Focus logic for showing keyboard
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
@@ -788,11 +789,41 @@ function AppContent() {
     };
 
     document.addEventListener('focusin', handleFocusIn);
-
     return () => {
       document.removeEventListener('focusin', handleFocusIn);
     };
   }, []);
+
+  // Logic to close keyboard on clicking outside
+  useEffect(() => {
+    if (!isKeyboardVisible) return;
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // If the click is on the keyboard itself, do nothing
+      if (target.closest('#virtual-keyboard')) {
+        return;
+      }
+
+      // If the click is on an input/textarea, do nothing (browser focus logic handles it, or focusIn will handle re-opening)
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Otherwise, close the keyboard
+      setIsKeyboardVisible(false);
+      setKeyboardTarget(null);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isKeyboardVisible]);
 
   const handleKeyboardClose = useCallback(() => {
     if (keyboardTarget) {

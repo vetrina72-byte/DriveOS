@@ -116,7 +116,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const trackResults = results.tracks?.items.slice(1, 5) || []; // Top 4 tracks after the main one
     const trackUris = results.tracks?.items.map(t => t.uri) || [];
 
-    const noResultsFound = Object.values(results).every(res => !res || res.items.length === 0);
+    const noResultsFound = Object.values(results).every((res: any) => !res || res.items.length === 0);
     if(noResultsFound) {
         return <div className="flex-grow flex justify-center items-center text-lg">Nessun risultato per "{query}"</div>
     }

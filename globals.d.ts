@@ -1,8 +1,3 @@
-// FIX: Import 'react' to make React's global JSX typings available.
-import * as React from 'react';
-// FIX: Import '@react-three/fiber' to extend the JSX namespace with its custom elements like <mesh>, <group>, etc. This resolves errors where TypeScript does not recognize these components.
-import '@react-three/fiber';
-
 // This file extends the global Window object to include properties from the Web Speech API,
 // and the Spotify Web Playback SDK.
 
@@ -74,7 +69,6 @@ export interface SpotifyPlayer {
     on(event: 'ready' | 'not_ready', cb: (data: { device_id: string }) => void): void;
     on(event: 'player_state_changed', cb: (state: SpotifyPlayerState | null) => void): void;
     on(event: 'initialization_error' | 'authentication_error' | 'account_error' | 'playback_error', cb: (error: { message: string }) => void): void;
-    // FIX: Add 'addListener' method to match the SDK's API and fix errors in AuthContext.tsx.
     addListener(event: 'ready' | 'not_ready', cb: (data: { device_id: string }) => void): void;
     addListener(event: 'player_state_changed', cb: (state: SpotifyPlayerState | null) => void): void;
     addListener(event: 'initialization_error' | 'authentication_error' | 'account_error' | 'playback_error', cb: (error: { message: string }) => void): void;
@@ -83,8 +77,6 @@ export interface SpotifyPlayer {
 
 
 declare global {
-  // FIX: Moved Web Speech API interfaces into `declare global` to make them available
-  // project-wide and fix "Cannot find name 'SpeechRecognition'" errors.
   // --- Web Speech API ---
 
   interface SpeechRecognitionAlternative {
@@ -115,7 +107,6 @@ declare global {
     readonly message: string;
   }
 
-  // FIX: Corrected typo from Speech-Recognition to SpeechRecognition
   interface SpeechRecognition extends EventTarget {
     lang: string;
     interimResults: boolean;
@@ -126,11 +117,7 @@ declare global {
     stop(): void;
     abort(): void;
 
-    // FIX: Added the missing `onstart` property to the SpeechRecognition interface
-    // to match the Web Speech API and fix the TypeScript error.
     onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-    // FIX: Added the missing `onend` property to the SpeechRecognition interface
-    // to match the Web Speech API and fix the TypeScript error.
     onend: ((this: SpeechRecognition, ev: Event) => any) | null;
     onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
     onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null;
@@ -153,9 +140,6 @@ declare global {
 
   // Add Electron's Webview typings to the global scope for TypeScript.
   interface HTMLWebViewElement extends HTMLElement {
-    // FIX: Added missing Electron webview methods, properties, and event listeners to the interface
-    // to resolve TypeScript errors in WebAppViewer.tsx.
-    // Methods
     loadURL(url: string): void;
     canGoBack(): boolean;
     canGoForward(): boolean;
@@ -197,18 +181,9 @@ declare global {
 
   // --- Electron <webview> Tag Typings ---
   namespace JSX {
-    // FIX: Corrected typo in interface name from 'IntrinsincElements' to 'IntrinsicElements'. This typo broke JSX namespace augmentation, preventing TypeScript from recognizing custom elements from libraries like @react-three/fiber (e.g., <mesh>, <group>), which caused all reported JSX errors.
     interface IntrinsicElements {
-      // Define the webview tag as a valid JSX element
-      webview: React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLWebViewElement> & {
-          src: string;
-          useragent?: string;
-          partition?: string;
-          webpreferences?: string;
-        },
-        HTMLWebViewElement
-      >;
+      // Define the webview tag as a valid JSX element.
+      webview: any;
     }
   }
 }

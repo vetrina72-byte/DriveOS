@@ -24,6 +24,8 @@ class ModelErrorBoundary extends React.Component<{ children: React.ReactNode }, 
     console.error("Error loading 3D Model, hiding it from the scene:", error, errorInfo);
   }
 
+  state = { hasError: false };
+
   render() {
     if (this.state.hasError) {
       // As per the request, render nothing if the model fails to load.

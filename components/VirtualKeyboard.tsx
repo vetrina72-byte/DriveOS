@@ -70,6 +70,8 @@ const Key = ({
                 e.stopPropagation();
                 onClick(key);
             }}
+            // Prevents the button from stealing focus when clicked, keeping the input active.
+            onMouseDown={(e) => e.preventDefault()}
             className={finalClassName}
             style={{ 
                 flex, 
@@ -427,15 +429,15 @@ const VirtualKeyboard = ({
             {isVisible && (
                 <motion.div
                     key="keyboard-backdrop"
-                    className="fixed inset-0 z-[9000] flex items-end"
+                    className="fixed inset-0 z-[9000] flex items-end pointer-events-none"
                     initial={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     animate={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     exit={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     transition={{ duration: 0.3 }}
-                    onClick={onClose}
                 >
                     <motion.div
-                        className={`w-full py-2 ${themeClasses}`}
+                        id="virtual-keyboard"
+                        className={`w-full py-2 ${themeClasses} pointer-events-auto`}
                         initial={{ y: '100%' }}
                         animate={{ y: '0%' }}
                         exit={{ y: '100%' }}

@@ -120,7 +120,7 @@
     @keyframes drift {
       0% { transform: translateX(-5px); }
       50% { transform: translateX(5px); }
-      100% { translateX(-5px); }
+      100% { transform: translateX(-5px); }
     }
     @keyframes pulse-glow {
       0%, 100% {
@@ -183,20 +183,28 @@
     @keyframes sun-move-set {
         0% { transform: translateY(-8px); }
         50% { transform: translateY(16px); }
-        100% { translateY(-8px); }
+        100% { transform: translateY(-8px); }
     }
     @keyframes arrow-move-rise {
         0%   { transform: translateY(8px) scale(1); }
         50%  { transform: translateY(-8px) scale(1.2); }
-        100% { translateY(8px) scale(1); }
+        100% { transform: translateY(8px) scale(1); }
     }
     @keyframes arrow-move-set {
         0%   { transform: translateY(-8px) scale(1.2); }
         50%  { transform: translateY(16px) scale(0.8); }
-        100% { translateY(-8px) scale(1.2); }
+        100% { transform: translateY(-8px) scale(1.2); }
     }
-    @keyframes cloud-drift-subtle-sr { 0% { transform: translateX(-2px); } 50% { transform: translateX(2px); } 100% { translateX(-2px); } }
-    @keyframes cloud-drift-subtle-ss { 0% { transform: translateX(-2px); } 50% { transform: translateX(2px); } 100% { translateX(-2px); } }
+    @keyframes cloud-drift-subtle-sr { 
+      0% { transform: translateX(-2px); } 
+      50% { transform: translateX(2px); } 
+      100% { transform: translateX(-2px); } 
+    }
+    @keyframes cloud-drift-subtle-ss { 
+      0% { transform: translateX(-2px); } 
+      50% { transform: translateX(2px); } 
+      100% { transform: translateX(-2px); } 
+    }
 
     /* MiniMap Styles */
     .minimap-container {
