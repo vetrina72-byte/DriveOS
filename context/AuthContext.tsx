@@ -75,7 +75,7 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const [state, setState] = useState<AuthState>({
         accessToken: localStorage.getItem('accessToken'),
         expiresAt: Number(localStorage.getItem('expiresAt') || '0'),

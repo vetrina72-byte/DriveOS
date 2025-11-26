@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
 const mapHtmlContent = `
@@ -58,7 +59,30 @@ overflow: hidden;
 cursor: grab;
 }
 #map-container.dragging { cursor: grabbing; }
-#map-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
+
+/* BASE MAP LAYER */
+#map-canvas { 
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    z-index: 10; 
+}
+
+/* LABELS LAYER (Satellite Text) */
+#labels-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 15;
+    /* Default values - overridden by injected style */
+    filter: brightness(4) saturate(0) drop-shadow(0 0 1.2px rgba(0,0,0,1));
+}
+
 #marker-overlay {
 position: absolute;
 top:0;
@@ -302,6 +326,8 @@ box-shadow: 0 0 5px rgba(0,0,0,0.5);
     </div>
     <div id="map-container">
         <canvas id="map-canvas"></canvas>
+        <!-- Separated canvas for labels to apply performant CSS filters -->
+        <canvas id="labels-canvas"></canvas> 
         <div id="marker-overlay">
             <div id="vehicle-marker">
                 <svg viewBox="0 0 1414 2000" style="shape-rendering: geometricPrecision;">
@@ -399,14 +425,28 @@ document.addEventListener('DOMContentLoaded', () => {
         constructor() {
             this.stadiaApiKey = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
             this.geoapifyApiKey = '0d2c9c7f72c0477eb3260838db72a383';
+            this.maptilerApiKey = 'T3ITqSa4x2w9qQOiIENK';
             
             this.mapContainer = document.getElementById('map-container');
+            
+            // Main canvas for map tiles
             this.canvas = document.getElementById('map-canvas');
             this.ctx = this.canvas.getContext('2d');
+            
+            // Secondary canvas for labels (with heavy filters in CSS)
+            this.labelsCanvas = document.getElementById('labels-canvas');
+            this.labelsCtx = this.labelsCanvas.getContext('2d');
+
+            // Offscreen buffers
             this.tileCanvas = document.createElement('canvas');
             this.tileCtx = this.tileCanvas.getContext('2d');
+            
+            this.labelTileCanvas = document.createElement('canvas');
+            this.labelTileCtx = this.labelTileCanvas.getContext('2d');
+
             this.weatherCanvas = document.createElement('canvas');
             this.weatherCtx = this.weatherCanvas.getContext('2d');
+            
             this.vehicleMarkerEl = document.getElementById('vehicle-marker');
             this.markerOverlay = document.getElementById('marker-overlay');
             this.searchInput = document.getElementById('search-input');
@@ -454,7 +494,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.tileProviders = {
                 dark: \`https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=\${this.stadiaApiKey}\`,
                 light: \`https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=\${this.stadiaApiKey}\`,
-                satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                satelliteLabels: 'https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
             };
             this.currentTileProvider = 'dark';
 
@@ -519,7 +560,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async setDestination(coords, name, startNavigating = false) {
             if (this.destination && this.destination.lat === coords.lat && this.destination.lng === coords.lng) {
-                console.log("Destination is the same. Not recalculating.");
                 if (this.isNavigating) {
                     this.updateUIVisibility();
                     this.recenterMap();
@@ -564,11 +604,11 @@ document.addEventListener('DOMContentLoaded', () => {
             this.setMapMode(this.userSelectedMapMode, false);
         }
         
-        getTileUrl(x, y, z) {
+        getTileUrl(x, y, z, providerKey = this.currentTileProvider) {
             const numTiles = Math.pow(2, z);
             if (y < 0 || y >= numTiles) return null;
             const wrappedX = ((x % numTiles) + numTiles) % numTiles;
-            const providerUrl = this.tileProviders[this.currentTileProvider] || this.tileProviders.dark;
+            const providerUrl = this.tileProviders[providerKey] || this.tileProviders.dark;
             const dpr = Math.min(window.devicePixelRatio || 1, 2);
             return providerUrl.replace('{z}', z).replace('{x}', wrappedX).replace('{y}', y).replace('{r}', dpr > 1.5 ? '@2x' : '');
         }
@@ -599,15 +639,27 @@ document.addEventListener('DOMContentLoaded', () => {
         resizeCanvas() {
             const dpr = Math.min(window.devicePixelRatio || 1, 2);
             const { offsetWidth: width, offsetHeight: height } = this.mapContainer;
+            
             this.canvas.width = width * dpr;
             this.canvas.height = height * dpr;
             this.canvas.style.width = \`\${width}px\`;
             this.canvas.style.height = \`\${height}px\`;
-            [this.tileCanvas, this.weatherCanvas].forEach(canvas => {
+            
+            this.labelsCanvas.width = width * dpr;
+            this.labelsCanvas.height = height * dpr;
+            this.labelsCanvas.style.width = \`\${width}px\`;
+            this.labelsCanvas.style.height = \`\${height}px\`;
+
+            [this.tileCanvas, this.labelTileCanvas, this.weatherCanvas].forEach(canvas => {
                 canvas.width = this.canvas.width;
                 canvas.height = this.canvas.height;
                 canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
             });
+            
+            // Ensure transforms are set on the visible canvases too
+            this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            this.labelsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
             this.requestRedraw();
         }
         
@@ -659,15 +711,173 @@ document.addEventListener('DOMContentLoaded', () => {
         
         zoomAtPoint(zoomChange, x, y) { const mouseGeoBefore = this.screenPxToGeo(x, y); this.zoom = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoom + zoomChange)); const mouseGeoAfter = this.screenPxToGeo(x, y); this.center = { lat: this.center.lat - (mouseGeoAfter.lat - mouseGeoBefore.lat), lng: this.center.lng - (mouseGeoAfter.lng - mouseGeoBefore.lng) }; this.clampCenter(); this.requestRedraw(); }
         
-        startRenderLoop() { const render = (timestamp) => { this.updateAnimation(timestamp); this.updateRotation(); this.drawMapToBuffer(); if (this.isWeatherLayerVisible && this.weatherNeedsRedraw) { this.drawWeatherToBuffer(); this.weatherNeedsRedraw = false; } this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); this.ctx.drawImage(this.tileCanvas, 0, 0); if (this.isWeatherLayerVisible) { this.ctx.globalAlpha = 0.8; this.ctx.drawImage(this.weatherCanvas, 0, 0); this.ctx.globalAlpha = 1.0; } this.updateUiElements(); requestAnimationFrame(render); }; requestAnimationFrame(render); }
+        startRenderLoop() { 
+            const render = (timestamp) => { 
+                this.updateAnimation(timestamp); 
+                this.updateRotation(); 
+                this.drawMapToBuffer(); 
+                
+                if (this.isWeatherLayerVisible && this.weatherNeedsRedraw) { 
+                    this.drawWeatherToBuffer(); 
+                    this.weatherNeedsRedraw = false; 
+                } 
+                
+                // Clear the main visible canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); 
+                
+                // Clear the label visible canvas (new)
+                this.labelsCtx.clearRect(0, 0, this.labelsCanvas.width, this.labelsCanvas.height);
+
+                // Draw the base map buffer to the main canvas
+                this.ctx.drawImage(this.tileCanvas, 0, 0); 
+                
+                // Draw the label buffer to the separate label canvas (the CSS filter does the magic here)
+                this.labelsCtx.drawImage(this.labelTileCanvas, 0, 0);
+
+                if (this.isWeatherLayerVisible) { 
+                    this.ctx.globalAlpha = 0.8; 
+                    this.ctx.drawImage(this.weatherCanvas, 0, 0); 
+                    this.ctx.globalAlpha = 1.0; 
+                } 
+                
+                this.updateUiElements(); 
+                requestAnimationFrame(render); 
+            }; 
+            requestAnimationFrame(render); 
+        }
         
         processTileQueue() { while (this.activeLoads < this.MAX_CONCURRENT_LOADS && this.tileQueue.length > 0) { const url = this.tileQueue.shift(); this.loadTile(url, this.imageCache); } }
         
-        drawMapToBuffer() { const ctx = this.tileCtx; const { offsetWidth: width, offsetHeight: height } = this.mapContainer; ctx.save(); ctx.clearRect(0, 0, width, height); if (Math.abs(this.currentRotation) > 0.001) { ctx.translate(width / 2, height / 2); ctx.rotate(this.currentRotation); ctx.translate(-width / 2, -height / 2); } const tileZ = Math.round(this.zoom); const scale = Math.pow(2, this.zoom - tileZ); const scaledTileSize = this.TILE_SIZE * scale; const centerTileX = this.lon2tile(this.center.lng, tileZ); const centerTileY = this.lat2tile(this.center.lat, tileZ); const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 2; const newTileQueue = []; for (let i = Math.floor(centerTileX - tilesToLoad); i < Math.ceil(centerTileX + tilesToLoad); i++) { for (let j = Math.floor(centerTileY - tilesToLoad); j < Math.ceil(centerTileY + tilesToLoad); j++) { const url = this.getTileUrl(i, j, tileZ); if (url && !this.imageCache[url] && !this.loadingTiles.has(url) && !this.failedTiles[url]) { const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2); const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2); const distance = Math.hypot(tileScreenX - width / 2, tileScreenY - height / 2); newTileQueue.push({ url, distance }); } } } newTileQueue.sort((a, b) => a.distance - b.distance); this.tileQueue = newTileQueue.map(t => t.url); this.processTileQueue(); const drawWorld = () => { for (let i = Math.floor(centerTileX - tilesToLoad); i < Math.ceil(centerTileX + tilesToLoad); i++) { for (let j = Math.floor(centerTileY - tilesToLoad); j < Math.ceil(centerTileY + tilesToLoad); j++) { const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2); const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2); this.drawTile(ctx, i, j, tileZ, tileScreenX, tileScreenY, scaledTileSize); } } }; const worldWidthInPixels = Math.pow(2, this.zoom) * this.TILE_SIZE; drawWorld(); ctx.translate(-worldWidthInPixels, 0); drawWorld(); ctx.translate(2 * worldWidthInPixels, 0); drawWorld(); ctx.restore(); ctx.save(); if (Math.abs(this.currentRotation) > 0.001) { ctx.translate(width / 2, height / 2); ctx.rotate(this.currentRotation); ctx.translate(-width / 2, -height / 2); } this.drawRoute(ctx); ctx.restore(); }
+        drawMapToBuffer() { 
+            const ctx = this.tileCtx; 
+            const lCtx = this.labelTileCtx; // New context for labels
+            const { offsetWidth: width, offsetHeight: height } = this.mapContainer; 
+            
+            // Setup transforms for Base Map
+            ctx.save(); 
+            ctx.clearRect(0, 0, width, height); 
+            if (Math.abs(this.currentRotation) > 0.001) { 
+                ctx.translate(width / 2, height / 2); 
+                ctx.rotate(this.currentRotation); 
+                ctx.translate(-width / 2, -height / 2); 
+            } 
+
+            // Setup transforms for Labels
+            lCtx.save();
+            lCtx.clearRect(0, 0, width, height);
+            if (Math.abs(this.currentRotation) > 0.001) {
+                lCtx.translate(width / 2, height / 2); 
+                lCtx.rotate(this.currentRotation); 
+                lCtx.translate(-width / 2, -height / 2);
+            }
+
+            const tileZ = Math.round(this.zoom); 
+            const scale = Math.pow(2, this.zoom - tileZ); 
+            const scaledTileSize = this.TILE_SIZE * scale; 
+            const centerTileX = this.lon2tile(this.center.lng, tileZ); 
+            const centerTileY = this.lat2tile(this.center.lat, tileZ); 
+            const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 2; 
+            const newTileQueue = []; 
+            
+            for (let i = Math.floor(centerTileX - tilesToLoad); i < Math.ceil(centerTileX + tilesToLoad); i++) { 
+                for (let j = Math.floor(centerTileY - tilesToLoad); j < Math.ceil(centerTileY + tilesToLoad); j++) { 
+                    
+                    // Queue base map tile
+                    const url = this.getTileUrl(i, j, tileZ); 
+                    if (url && !this.imageCache[url] && !this.loadingTiles.has(url) && !this.failedTiles[url]) { 
+                        const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2); 
+                        const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2); 
+                        const distance = Math.hypot(tileScreenX - width / 2, tileScreenY - height / 2); 
+                        newTileQueue.push({ url, distance }); 
+                    } 
+                    
+                    // Queue label tile (only for satellite)
+                    if (this.currentTileProvider === 'satellite') { 
+                        const labelUrl = this.getTileUrl(i, j, tileZ, 'satelliteLabels'); 
+                        if (labelUrl && !this.imageCache[labelUrl] && !this.loadingTiles.has(labelUrl) && !this.failedTiles[labelUrl]) { 
+                            const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2); 
+                            const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2); 
+                            const distance = Math.hypot(tileScreenX - width / 2, tileScreenY - height / 2); 
+                            newTileQueue.push({ url: labelUrl, distance }); 
+                        } 
+                    } 
+                } 
+            } 
+            
+            newTileQueue.sort((a, b) => a.distance - b.distance); 
+            this.tileQueue = newTileQueue.map(t => t.url); 
+            this.processTileQueue(); 
+            
+            const drawWorld = () => { 
+                for (let i = Math.floor(centerTileX - tilesToLoad); i < Math.ceil(centerTileX + tilesToLoad); i++) { 
+                    for (let j = Math.floor(centerTileY - tilesToLoad); j < Math.ceil(centerTileY + tilesToLoad); j++) { 
+                        const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2); 
+                        const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2); 
+                        
+                        // Draw base tile to base canvas
+                        this.drawTile(ctx, i, j, tileZ, tileScreenX, tileScreenY, scaledTileSize); 
+                        
+                        // Draw label tile to SEPARATE label canvas
+                        if (this.currentTileProvider === 'satellite') { 
+                            this.drawTile(lCtx, i, j, tileZ, tileScreenX, tileScreenY, scaledTileSize, 'satelliteLabels'); 
+                        } 
+                    } 
+                } 
+            }; 
+            
+            const worldWidthInPixels = Math.pow(2, this.zoom) * this.TILE_SIZE; 
+            drawWorld(); 
+            
+            // Handle world wrapping
+            ctx.translate(-worldWidthInPixels, 0); lCtx.translate(-worldWidthInPixels, 0);
+            drawWorld(); 
+            ctx.translate(2 * worldWidthInPixels, 0); lCtx.translate(2 * worldWidthInPixels, 0);
+            drawWorld(); 
+            
+            ctx.restore(); 
+            lCtx.restore();
+
+            ctx.save(); 
+            if (Math.abs(this.currentRotation) > 0.001) { 
+                ctx.translate(width / 2, height / 2); 
+                ctx.rotate(this.currentRotation); 
+                ctx.translate(-width / 2, -height / 2); 
+            } 
+            this.drawRoute(ctx); 
+            ctx.restore(); 
+        }
         
         loadTile(url, cache, onLoadCallback = null) { if (!url || this.loadingTiles.has(url) || cache[url]) return; this.loadingTiles.add(url); this.activeLoads++; const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { if (img.naturalWidth === 0) { img.onerror(); return; } img.loadTime = performance.now(); cache[url] = img; delete this.failedTiles[url]; this.loadingTiles.delete(url); this.activeLoads--; this.processTileQueue(); if (onLoadCallback) onLoadCallback(); this.requestRedraw(); }; img.onerror = () => { this.failedTiles[url] = { timestamp: performance.now() }; this.loadingTiles.delete(url); this.activeLoads--; this.processTileQueue(); }; img.src = url; }
         
-        drawTile(ctx, x, y, z, canvasX, canvasY, size) { ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--tile-placeholder-color'); ctx.fillRect(canvasX, canvasY, size + 1, size + 1); const fallbackData = this.findLoadedTile(x, y, z - 1, this.imageCache, (x,y,z) => this.getTileUrl(x,y,z)); if (fallbackData) { this.drawParentTile(ctx, fallbackData, x, y, z, canvasX, canvasY, size); } const idealUrl = this.getTileUrl(x, y, z); if (!idealUrl) return; const idealImage = this.imageCache[idealUrl]; if (idealImage?.complete && idealImage.naturalWidth > 0) { const elapsed = performance.now() - (idealImage.loadTime || 0); const opacity = Math.min(1, elapsed / this.FADE_DURATION); if (opacity < 1) ctx.globalAlpha = opacity; ctx.imageSmoothingEnabled = false; ctx.drawImage(idealImage, canvasX, canvasY, size + 1, size + 1); if (opacity < 1) ctx.globalAlpha = 1; }  }
+        drawTile(ctx, x, y, z, canvasX, canvasY, size, providerKey = this.currentTileProvider) { 
+            // DO NOT draw placeholders on the label layer, keep it transparent!
+            if (providerKey !== 'satelliteLabels') { 
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--tile-placeholder-color'); 
+                ctx.fillRect(canvasX, canvasY, size + 1, size + 1); 
+            } 
+            
+            const fallbackData = this.findLoadedTile(x, y, z - 1, this.imageCache, (px,py,pz) => this.getTileUrl(px,py,pz, providerKey)); 
+            if (fallbackData) { 
+                this.drawParentTile(ctx, fallbackData, x, y, z, canvasX, canvasY, size); 
+            } 
+            
+            const idealUrl = this.getTileUrl(x, y, z, providerKey); 
+            if (!idealUrl) return; 
+            const idealImage = this.imageCache[idealUrl]; 
+            
+            if (idealImage?.complete && idealImage.naturalWidth > 0) { 
+                const elapsed = performance.now() - (idealImage.loadTime || 0); 
+                const opacity = Math.min(1, elapsed / this.FADE_DURATION); 
+                if (opacity < 1) ctx.globalAlpha = opacity; 
+                
+                // CRITICAL FIX: Enable image smoothing for better text rendering
+                ctx.imageSmoothingEnabled = true; 
+                ctx.imageSmoothingQuality = 'high';
+                
+                ctx.drawImage(idealImage, canvasX, canvasY, size + 1, size + 1); 
+                if (opacity < 1) ctx.globalAlpha = 1; 
+            }  
+        }
         
         drawWeatherToBuffer() {
             const ctx = this.weatherCtx;
@@ -742,7 +952,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         drawParentTile(ctx, parentTile, x, y, z, canvasX, canvasY, size) { const { img, x: pX, y: pY, z: pZ } = parentTile; const tileRes = img.src.includes('@2x') || img.src.includes('/512/') ? 512 : 256; const tileSizeOnParent = tileRes / Math.pow(2, z - pZ); const clipX = (x - pX * Math.pow(2, z - pZ)) * tileSizeOnParent; const clipY = (y - pY * Math.pow(2, z - pZ)) * tileSizeOnParent; ctx.imageSmoothingEnabled = true; ctx.drawImage(img, clipX, clipY, tileSizeOnParent, tileSizeOnParent, canvasX, canvasY, size + 1, size + 1); }
         
-        findLoadedTile(x, y, z, cache, urlBuilder) { let z_ = z; while (z_ >= this.MIN_ZOOM) { const pX = x >> (z - z_); const pY = y >> (z - z_); const url = urlBuilder(this.weatherTimestamps[this.currentWeatherFrame]?.path, pX, pY, z_); if(url && cache[url]?.complete && cache[url].naturalWidth > 0) { return { img: cache[url], x: pX, y: pY, z: z_ }; } z_--; } return null; }
+        findLoadedTile(x, y, z, cache, urlBuilder) { let z_ = z; while (z_ >= this.MIN_ZOOM) { const pX = x >> (z - z_); const pY = y >> (z - z_); const url = urlBuilder(pX, pY, z_); if(url && cache[url]?.complete && cache[url].naturalWidth > 0) { return { img: cache[url], x: pX, y: pY, z: z_ }; } z_--; } return null; }
         
         async toggleWeatherLayer() { this.isWeatherLayerVisible = !this.isWeatherLayerVisible; this.weatherToggleBtn.classList.toggle('active', this.isWeatherLayerVisible); this.timelapseControls.classList.toggle('visible', this.isWeatherLayerVisible); this.requestRedraw(); if (this.isWeatherLayerVisible) { this.isWeatherOverviewActive = true; this.isFollowingUser = false; if (this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); if (this.compassMode === 'heading-up') { this.wasInHeadingUpMode = true; this.setCompassMode('north-up'); this.showInfoToast('Modalità North Up per vista radar', 'compass'); } this.flyTo({ center: this.currentPosition ?? this.center, zoom: this.WEATHER_ZOOM_OUT_LEVEL }); this.startWeatherRecenterTimer(); this.stopTimelapse(); if (this.weatherTimestamps.length === 0) { this.showInfoToast("Caricamento dati radar...", "loader"); try { const response = await fetch('https://api.rainviewer.com/public/weather-maps.json'); const data = await response.json(); this.weatherTimestamps = [...data.radar.past, ...data.radar.nowcast]; this.pastFramesCount = data.radar.past.length; this.timelapseSlider.max = this.weatherTimestamps.length - 1; this.updateTimelapseSliderStyle(); this.setTimelapseFrame(this.pastFramesCount - 1); this.showInfoToast("Radar meteo caricato", "cloud-rain"); this.playPauseTimelapse(); } catch (weatherError) { console.error('Errore caricamento dati meteo:', weatherError); this.showInfoToast("Errore caricamento dati meteo", "alert-triangle"); this.toggleWeatherLayer(); } } else { this.playPauseTimelapse(); } } else { this.showInfoToast("Radar meteo disattivato", "cloud-off"); this.stopTimelapse(); if (this.isWeatherOverviewActive) { this.isWeatherOverviewActive = false; if (this.weatherOverviewRecenterTimer) clearTimeout(this.weatherOverviewRecenterTimer); this.recenterMap(); } } }
         
@@ -1104,6 +1314,8 @@ export default function MapsContainer({
     navigationTarget,
     spotifyPlayerTop,
     spotifyPlayerBottom,
+    satelliteLabelBrightness,
+    satelliteLabelOutlineWidth,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
@@ -1113,6 +1325,8 @@ export default function MapsContainer({
     navigationTarget: { lat: number, lng: number, name: string } | null;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    satelliteLabelBrightness: number;
+    satelliteLabelOutlineWidth: number;
 }) {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const [translateX, setTranslateX] = useState(100);
@@ -1130,10 +1344,14 @@ export default function MapsContainer({
           --maps-search-panel-width: ${searchPanelWidth}px;
           --maps-search-panel-top: ${searchPanelTop}px;
         }
+        /* DYNAMIC LABEL OVERRIDE */
+        #labels-canvas {
+            filter: brightness(${satelliteLabelBrightness}) saturate(0) drop-shadow(0 0 ${satelliteLabelOutlineWidth}px rgba(0,0,0,1)) !important;
+        }
       </style>
     `;
     return mapHtmlContent.replace('</head>', `${dynamicStyles}</head>`);
-  }, [searchPanelWidth, searchPanelTop]);
+  }, [searchPanelWidth, searchPanelTop, satelliteLabelBrightness, satelliteLabelOutlineWidth]);
 
   const postMessageToIframe = useCallback((message: object) => {
     if (iframeRef.current?.contentWindow) {

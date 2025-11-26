@@ -20,19 +20,20 @@ const symbolsLayout = [
     [';', ':', '\'', '"', ',', '.', '/', '?'],
 ];
 
-
-const Key = ({
-    keyConfig,
-    onClick,
-    isNight,
-    fontSize,
-    fontWeight
-}: {
+interface KeyProps {
     keyConfig: string | { key: string; label: React.ReactNode; flex?: string; className?: string; colSpan?: string; rowSpan?: string };
     onClick: (key: string) => void;
     isNight: boolean;
     fontSize: number;
     fontWeight: number;
+}
+
+const Key: React.FC<KeyProps> = ({
+    keyConfig,
+    onClick,
+    isNight,
+    fontSize,
+    fontWeight
 }) => {
     const { key, label, flex, className, colSpan, rowSpan } = 
         typeof keyConfig === 'object' 

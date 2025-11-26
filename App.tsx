@@ -1,3 +1,5 @@
+
+// ... (imports remain same)
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -25,6 +27,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import VirtualKeyboard from './components/VirtualKeyboard';
 import { SpotifyItem as MediaItem } from './components/PlaylistItem';
 import WebAppViewer from './components/WebAppViewer';
+
+// ... (AppDefinition, ALL_APPS, weatherConfig, DockButton, IconLocationResult, formatTravelTime, NavigateTool, calculateGeoDistance, NavigationStatus, helper functions, types)
+// ... (keep all these existing components and functions exactly as they are)
 
 interface AppDefinition {
   id: string;
@@ -169,7 +174,7 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
     };
 
     useEffect(() => {
-        if (query.length < 3) {
+        if (query.length < 1) {
             setSuggestions([]);
             if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
             return;
@@ -181,7 +186,7 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
         searchTimeoutRef.current = window.setTimeout(async () => {
             try {
                 const biasParam = currentPosition ? `&bias=proximity:${currentPosition.lng},${currentPosition.lat}` : '';
-                const response = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&lang=it&limit=5&apiKey=${GEOAPIFY_API_KEY}${biasParam}`);
+                const response = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&lang=it&limit=10&apiKey=${GEOAPIFY_API_KEY}${biasParam}`);
                 const data = await response.json();
                 const features = data.features || [];
                 const suggestionsWithDistance = features.map((feature: any) => {
@@ -650,6 +655,14 @@ const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
     };
 };
 
+const DEFAULT_HOME_CONFIG: SceneConfig = {
+    cameraPos: { x: 8.30, y: 2.30, z: 8.80 },
+    cameraTarget: { x: 0.95, y: 0.00, z: 0.65 },
+    modelPos: { x: 14.25, y: -1.30, z: -1.40 },
+    modelRot: { x: 0.00, y: 0.06, z: 0.00 },
+    modelScale: 2.80,
+};
+
 function AppContent() {
   const { nowPlaying, setNowPlaying, pauseSpotify } = useAuth();
   const [isDebugOpen, setIsDebugOpen] = useState(true);
@@ -677,13 +690,33 @@ function AppContent() {
   // 3D Scene
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
+  
+  const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
+
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>({
       cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
-      cameraTarget: { x: 0.60, y: 0.22, z: 0.65 },
-      modelPos: { x: -4.65, y: -1.00, z: 1.47 },
-      modelRot: { x: 0, y: -0.09, z: 0.0 },
-      modelScale: 0.78,
+      cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
+      modelPos: { x: 1.05, y: -1.15, z: 1.40 },
+      modelRot: { x: 0.01, y: 0.01, z: 0.01 },
+      modelScale: 1.63,
   });
+
+  const [headlightConfig, setHeadlightConfig] = useState({
+      x: -4.85,
+      y: 0.81,
+      z: 1.55,
+      angle: 3.10,
+      intensity: 0.70,
+      startWidth: 0.10,
+      endWidth: 0.10,
+      length: 20.00,
+      startHeight: 0.13,
+      endHeight: 0.01,
+      fade: 7.40,
+      separation: 0.90,
+      circular: true,
+  });
+
   const [sceneColors, setSceneColors] = useState<SceneColors>(initialSceneColors);
   const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.25);
   const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.60);
@@ -753,6 +786,10 @@ function AppContent() {
   const [darkVolumeFillBg, setDarkVolumeFillBg] = useState('#ffffff');
   const [darkPlayerBg, setDarkPlayerBg] = useState('#212121');
   const [darkNavigateInputBg, setDarkNavigateInputBg] = useState('#2b2b2b');
+
+  // Satellite Map Label Customization
+  const [satelliteLabelBrightness, setSatelliteLabelBrightness] = useState(2.3);
+  const [satelliteLabelOutlineWidth, setSatelliteLabelOutlineWidth] = useState(1.2);
 
 
   // App Customization State
@@ -1473,21 +1510,21 @@ function AppContent() {
             return {
                 ...baseStyle,
                 opacity: 1,
-                pointerEvents: 'auto',
+                pointerEvents: 'auto' as const,
                 left: launcherOpenLeft,
             };
         } else if (isUIOverlayActive) { // State 2: App Open (e.g., Spotify)
             return {
                 ...baseStyle,
                 opacity: 0,
-                pointerEvents: 'none',
+                pointerEvents: 'none' as const, // Add 'as const' to fix type error
                 left: homeLeft, // Keep position during fade-out to prevent jump
             };
         } else { // State 1: Home Screen (Floating)
             return {
                 ...baseStyle,
                 opacity: 1,
-                pointerEvents: 'auto',
+                pointerEvents: 'auto' as const,
                 left: homeLeft,
             };
         }
@@ -1507,6 +1544,7 @@ function AppContent() {
           minOrbitDistance={minOrbitDistance}
           maxOrbitDistance={maxOrbitDistance}
           appOpenConfig={appOpenConfig}
+          homeConfig={homeConfig}
           sceneColors={sceneColors}
           nightAmbientIntensity={nightAmbientIntensity}
           nightFrontLightIntensity={nightFrontLightIntensity}
@@ -1517,6 +1555,7 @@ function AppContent() {
           dayFogFar={dayFogFar}
           targetWeatherParams={targetWeatherParams}
           uiScale={uiScale ?? 1.0}
+          headlightConfig={headlightConfig}
       />
       
       {/* --- NON-SCALABLE / FIXED UI --- */}
@@ -1580,6 +1619,8 @@ function AppContent() {
             navigationTarget={navigationTarget}
             spotifyPlayerTop={spotifyPlayerTop}
             spotifyPlayerBottom={spotifyPlayerBottom}
+            satelliteLabelBrightness={satelliteLabelBrightness}
+            satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}
         />
         
         <SpotifyApp 
@@ -1901,6 +1942,8 @@ function AppContent() {
         setMaxOrbitDistance={setMaxOrbitDistance}
         appOpenConfig={appOpenConfig}
         setAppOpenConfig={setAppOpenConfig}
+        homeConfig={homeConfig}
+        setHomeConfig={setHomeConfig}
         sceneColors={sceneColors}
         setSceneColors={setSceneColors}
         spotifyPlayerTop={spotifyPlayerTop}
@@ -2022,20 +2065,23 @@ function AppContent() {
         spinnerLeft={spinnerLeft}
         setSpinnerLeft={setSpinnerLeft}
         homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
+        satelliteLabelBrightness={satelliteLabelBrightness}
+        setSatelliteLabelBrightness={setSatelliteLabelBrightness}
+        satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}
+        setSatelliteLabelOutlineWidth={setSatelliteLabelOutlineWidth}
+        headlightConfig={headlightConfig}
+        setHeadlightConfig={setHeadlightConfig}
       />}
     </div>
   );
 }
 
-function App() {  
+export default function App() {
   return (
-    <AuthProvider>
-      <VehicleProvider>
+    <VehicleProvider>
+      <AuthProvider>
         <AppContent />
-        <div id="portal-root"></div>
-      </VehicleProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </VehicleProvider>
   );
 }
-
-export default App;

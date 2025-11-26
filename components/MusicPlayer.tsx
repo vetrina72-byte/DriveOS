@@ -440,7 +440,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [playerState, currentTrackUri, visibleQueue, isAutoQueueEnabled]);
 
     // Effect for hiding popover on track change
-    const prevTrackUri = useRef<string | undefined>();
+    const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
             if (visibleQueue === 'spotify') {
@@ -618,7 +618,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         animationFrameId = requestAnimationFrame(updateLoop);
         window.addEventListener('resize', calculatePosition);
-    
+        
         return () => {
             cancelAnimationFrame(animationFrameId);
             window.removeEventListener('resize', calculatePosition);
@@ -792,7 +792,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 rounded-xl">
             <p className="text-white font-semibold text-center">L'autoplay è bloccato dal browser.</p>
             <button
-                onClick={unlockAutoplay}
+                onClick={() => unlockAutoplay()}
                 className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-3 px-6 rounded-full text-base transition-all transform hover:scale-105"
             >
                 Riprendi musica

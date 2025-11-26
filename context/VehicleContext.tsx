@@ -61,7 +61,7 @@ const vehicleReducer = (state: VehicleState, action: Action): VehicleState => {
 const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
 
 // FIX: Refactored the provider to not use React.FC to avoid issues with the `children` prop typing in newer versions of @types/react.
-export const VehicleProvider = ({ children }: { children: React.ReactNode }) => {
+export const VehicleProvider = ({ children }: React.PropsWithChildren<{}>) => {
   const [state, dispatch] = useReducer(vehicleReducer, initialState);
 
   useEffect(() => {

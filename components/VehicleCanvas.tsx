@@ -1,4 +1,5 @@
-import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
+
+import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback, Component } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -8,39 +9,40 @@ import type { SceneColors } from '../App';
 import type { WeatherParams } from '../types';
 
 // Simple Error Boundary for the 3D model
-class ModelErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: React.ReactNode }) {
+interface ModelErrorBoundaryProps {
+  children?: React.ReactNode;
+}
+
+interface ModelErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ModelErrorBoundary extends Component<ModelErrorBoundaryProps, ModelErrorBoundaryState> {
+  constructor(props: ModelErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: any) {
-    // Update state so the next render will show the fallback UI.
     return { hasError: true };
   }
 
   componentDidCatch(error: any, errorInfo: any) {
-    // Log the error to the console
     console.error("Error loading 3D Model, hiding it from the scene:", error, errorInfo);
   }
 
-  state = { hasError: false };
-
   render() {
     if (this.state.hasError) {
-      // As per the request, render nothing if the model fails to load.
-      // The rest of the UI will remain functional.
       return null;
     }
-
     return this.props.children;
   }
 }
 
-// URL del modello GLTF
-const MODEL_URL = 'https://cdn.jsdelivr.net/gh/pmndrs/drei-assets@master/models/cybertruck.gltf';
+// URL del modello GLTF (Raw GitHub Link)
+const MODEL_URL = 'https://raw.githubusercontent.com/vetrina72-byte/assets/main/land_rover_defender_90_lowpoly.glb';
 
-// Interfaccia per la configurazione della scena, mantenuta per la logica di animazione interna
+// Interfaccia per la configurazione della scena
 export interface SceneConfig {
     cameraPos: { x: number; y: number; z: number; };
     cameraTarget: { x: number; y: number; z: number; };
@@ -49,13 +51,21 @@ export interface SceneConfig {
     modelScale: number;
 }
 
-const BASE_INITIAL_CONFIG: SceneConfig = {
-    cameraPos: { x: 8.30, y: 2.10, z: 8.80 },
-    cameraTarget: { x: 0.95, y: 0, z: 0.65 },
-    modelPos: { x: 0.95, y: -1.00, z: 0.65 },
-    modelRot: { x: 0.0, y: 0.05, z: 0.0 },
-    modelScale: 1.5,
-};
+export interface HeadlightConfig {
+    x: number;
+    y: number;
+    z: number;
+    angle: number;
+    intensity: number;
+    startWidth: number;
+    endWidth: number;
+    length: number;
+    startHeight: number;
+    endHeight: number;
+    fade: number;
+    separation: number;
+    circular: boolean;
+}
 
 // Memoize Environment per evitare flash sulle riflessioni
 const MemoizedEnvironment = React.memo(() => <Environment preset="city" />);
@@ -80,19 +90,27 @@ const Model = forwardRef<THREE.Group, {
         child.receiveShadow = true;
         if (mat) {
           const name = mat.name.toLowerCase();
-          if (name.includes('window') || name.includes('glass')) {
-            mat.color.set('black');
-            mat.roughness = 0.05;
-            mat.metalness = 0.1;
+          // Attempt to handle windows/glass
+          if (name.includes('window') || name.includes('glass') || name.includes('windshield')) {
             mat.transparent = true;
             mat.opacity = 0.5;
-            child.castShadow = false;
+            mat.roughness = 0.1;
+            mat.metalness = 0.9;
+            mat.color.set('#111111');
+            child.castShadow = false; // Usually looks better if glass doesn't cast hard shadows
           }
-          if (name === 'lights_emissive' || name === 'lights') {
-            mat.emissive = new THREE.Color('#ffffff');
+          // Attempt to handle lights
+          if (name.includes('light') || name.includes('lamp') || name.includes('emission')) {
+            // Basic heuristic for tail lights vs headlights based on name or position could go here
+            // For now, make them all emissive
+            if (name.includes('red') || name.includes('tail') || name.includes('rear') || name.includes('brake')) {
+                 mat.color.set('#ff0000');
+                 mat.emissive = new THREE.Color('#ff0000');
+            } else {
+                 mat.emissive = new THREE.Color('#ffffff');
+            }
             mat.toneMapped = false;
             lightMats.current[mat.uuid] = mat;
-            child.castShadow = false;
           }
         }
       }
@@ -102,10 +120,8 @@ const Model = forwardRef<THREE.Group, {
   useFrame((_, delta) => {
     const target = isNight ? 5.0 : 0.0;
     const damp = 1 - Math.exp(-2 * delta);
-    Object.values(lightMats.current).forEach(mat => {
-      // FIX: Cast material to THREE.MeshStandardMaterial to resolve 'emissiveIntensity' property error.
-      const standardMat = mat as THREE.MeshStandardMaterial;
-      standardMat.emissiveIntensity = THREE.MathUtils.lerp(standardMat.emissiveIntensity, target, damp);
+    Object.values(lightMats.current).forEach((mat: THREE.MeshStandardMaterial) => {
+      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, target, damp);
     });
   });
 
@@ -496,6 +512,7 @@ interface VehicleCanvasProps {
   minOrbitDistance: number;
   maxOrbitDistance: number;
   appOpenConfig: SceneConfig;
+  homeConfig: SceneConfig;
   sceneColors: SceneColors;
   nightAmbientIntensity: number;
   nightFrontLightIntensity: number;
@@ -506,6 +523,7 @@ interface VehicleCanvasProps {
   dayFogFar: number;
   targetWeatherParams: WeatherParams;
   uiScale: number;
+  headlightConfig: HeadlightConfig;
 }
 
 export default function VehicleCanvas({
@@ -514,6 +532,7 @@ export default function VehicleCanvas({
   minOrbitDistance,
   maxOrbitDistance,
   appOpenConfig: appOpenConfigFromProps,
+  homeConfig,
   sceneColors,
   nightAmbientIntensity,
   nightFrontLightIntensity,
@@ -524,6 +543,7 @@ export default function VehicleCanvas({
   dayFogFar,
   targetWeatherParams,
   uiScale,
+  headlightConfig,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -532,36 +552,28 @@ export default function VehicleCanvas({
   const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
   
-  const beamLength = 5.0;
-  const beamStartWidth = 1.86;
-  const beamEndWidth = 2.60;
-  const beamStartHeight = 0.03;
-  const beamEndHeight = 0.01;
-  const beamAngle = 2.92;
+  const { x, y, z, angle, intensity, startWidth, endWidth, length, startHeight, endHeight, fade, separation, circular } = headlightConfig;
+
   const beamRoll = 0;
-  const beamIntensity = 0.5;
-  const beamFade = 3.30;
-  const headlightPosition = { x: 0.85, y: 1.09, z: 2.47 };
   
-  const shadowPosition = { x: 0, y: 0.01, z: 0 };
-  const shadowOpacity = 0.5;
-  const shadowBlur = 2.5;
+  const shadowPosition = { x: 0, y: 0.02, z: 0 };
+  const shadowOpacity = 0.8;
 
   const initialConfig = useMemo(() => {
     if (uiScale === 1.0) {
-      return BASE_INITIAL_CONFIG;
+      return homeConfig;
     }
     // As scale decreases (e.g., 0.8), zoomFactor increases (1.25), moving camera further away.
     const zoomFactor = 1 / uiScale;
     return {
-      ...BASE_INITIAL_CONFIG,
+      ...homeConfig,
       cameraPos: {
-        x: BASE_INITIAL_CONFIG.cameraPos.x * zoomFactor,
-        y: BASE_INITIAL_CONFIG.cameraPos.y, // Keep Y the same to avoid weird angles
-        z: BASE_INITIAL_CONFIG.cameraPos.z * zoomFactor,
+        x: homeConfig.cameraPos.x * zoomFactor,
+        y: homeConfig.cameraPos.y, // Keep Y the same to avoid weird angles
+        z: homeConfig.cameraPos.z * zoomFactor,
       },
     };
-  }, [uiScale]);
+  }, [uiScale, homeConfig]);
 
   const [runtimeAppOpenConfig, setRuntimeAppOpenConfig] = useState<SceneConfig>(appOpenConfigFromProps);
 
@@ -602,111 +614,143 @@ export default function VehicleCanvas({
               />
 
               <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}>
-                <planeGeometry args={[10, 10]} />
+                <planeGeometry args={[20, 20]} />
                 <shadowMaterial transparent opacity={shadowOpacity} />
               </mesh>
               
-              <VolumetricHeadlight
-                position={[0, headlightPosition.y, headlightPosition.z]}
-                beamLength={beamLength}
-                beamAngle={beamAngle}
-                beamRoll={beamRoll}
-                intensity={beamIntensity}
-                fade={beamFade}
-                visible={isNight}
-                beamStartWidth={beamStartWidth}
-                beamEndWidth={beamEndWidth}
-                beamStartHeight={beamStartHeight}
-                beamEndHeight={beamEndHeight}
-              />
+              {separation > 0 ? (
+                <>
+                    <VolumetricHeadlight
+                        position={[x - separation / 2, y, z]}
+                        beamLength={length}
+                        beamAngle={angle}
+                        beamRoll={beamRoll}
+                        intensity={intensity}
+                        fade={fade}
+                        visible={isNight} 
+                        beamStartWidth={startWidth}
+                        beamEndWidth={endWidth}
+                        beamStartHeight={startHeight}
+                        beamEndHeight={endHeight}
+                        circular={circular}
+                    />
+                     <VolumetricHeadlight
+                        position={[x + separation / 2, y, z]}
+                        beamLength={length}
+                        beamAngle={angle}
+                        beamRoll={beamRoll}
+                        intensity={intensity}
+                        fade={fade}
+                        visible={isNight} 
+                        beamStartWidth={startWidth}
+                        beamEndWidth={endWidth}
+                        beamStartHeight={startHeight}
+                        beamEndHeight={endHeight}
+                        circular={circular}
+                    />
+                </>
+              ) : (
+                 <VolumetricHeadlight
+                    position={[x, y, z]}
+                    beamLength={length}
+                    beamAngle={angle}
+                    beamRoll={beamRoll}
+                    intensity={intensity}
+                    fade={fade}
+                    visible={isNight} 
+                    beamStartWidth={startWidth}
+                    beamEndWidth={endWidth}
+                    beamStartHeight={startHeight}
+                    beamEndHeight={endHeight}
+                    circular={circular}
+                />
+              )}
+
+              <primitive object={frontLightTarget} position={[0, 0, 10]} />
             </group>
           </Suspense>
         </ModelErrorBoundary>
 
-        <ambientLight ref={ambientLightRef} />
-
-        <directionalLight
-          ref={directionalLightRef}
-          castShadow
-          position={[0.5, 10, 1]}
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-near={1}
-          shadow-camera-far={30}
-          shadow-camera-left={-10}
-          shadow-camera-right={10}
-          shadow-camera-top={10}
-          shadow-camera-bottom={-10}
-          shadow-radius={shadowBlur}
+        <CameraController />
+        <OrbitControls 
+            makeDefault
+            enablePan={false} 
+            minPolarAngle={Math.PI / 2.8} // Limit vertical rotation to avoid going under the floor
+            maxPolarAngle={Math.PI / 2.1} 
+            minDistance={minOrbitDistance}
+            maxDistance={maxOrbitDistance}
+            enableZoom={true}
+            enableRotate={!isAppOpen} // Disable manual rotation when app is open (locked view)
         />
 
-        <primitive object={frontLightTarget} />
+        <ambientLight ref={ambientLightRef} intensity={0.5} />
         <spotLight
           ref={frontLightRef}
-          position={[0.95, 4, 7]}
-          angle={0.9}
-          penumbra={1}
-          castShadow={false}
-          distance={30}
-          decay={2}
+          position={[0, 5, 0]}
+          angle={0.5}
+          penumbra={0.5}
+          intensity={1}
+          castShadow
+          shadow-bias={-0.0001}
         />
-
-        <mesh ref={floorRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1, 0]}>
-          <planeGeometry args={[100, 100]} />
+        <directionalLight
+            ref={directionalLightRef}
+            position={[-5, 10, 5]}
+            intensity={1}
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-far={50}
+            shadow-camera-left={-10}
+            shadow-camera-right={10}
+            shadow-camera-top={10}
+            shadow-camera-bottom={-10}
+        />
+        
+        {/* Reflective Floor */}
+        <mesh ref={floorRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.05, 0]} receiveShadow>
+          <planeGeometry args={[300, 300]} />
           <MeshReflectorMaterial
+            blur={[400, 400]}
             resolution={1024}
-            mixBlur={0}
-            mixStrength={1.2}
-            roughness={0.8}
+            mixBlur={1}
+            mixStrength={1.5} // Reduced strength to avoid over-bright reflections
+            roughness={0.5} // Increased roughness for a matte-like floor
             depthScale={1}
             minDepthThreshold={0.4}
             maxDepthThreshold={1.4}
-            color="#ffffff"
-            metalness={0.6}
-            mirror={0.8}
+            color="#101010"
+            metalness={0.2}
+            mirror={0.7} // Controlled by EnvironmentController
           />
         </mesh>
 
-        <OrbitControls
-          makeDefault
-          enabled={!isAppOpen}
-          enableZoom
-          enablePan={false}
-          enableDamping
-          dampingFactor={0.05}
-          minDistance={minOrbitDistance}
-          maxDistance={maxOrbitDistance}
-          minPolarAngle={Math.PI / 3.5}
-          maxPolarAngle={Math.PI / 2 - 0.05}
-          autoRotate={false}
+        <EnvironmentController 
+            isNight={isNight} 
+            floorRef={floorRef}
+            ambientLightRef={ambientLightRef}
+            frontLightRef={frontLightRef}
+            directionalLightRef={directionalLightRef}
+            nightAmbientIntensity={nightAmbientIntensity}
+            nightFrontLightIntensity={nightFrontLightIntensity}
+            nightEnvironmentIntensity={nightEnvironmentIntensity}
+            weatherCondition={effectiveWeatherCondition}
+            dayFogNear={dayFogNear}
+            dayFogFar={dayFogFar}
+            sceneColors={sceneColors}
+            targetWeatherParams={targetWeatherParams}
         />
-        
-        <CameraController />
-        <SceneController
-          isAppOpen={isAppOpen}
-          activeConfig={activeConfig}
-          setAppOpenConfig={setRuntimeAppOpenConfig}
-          modelRef={modelRef}
-          frontLightTarget={frontLightTarget}
-          originalAppOpenConfig={appOpenConfigFromProps}
-          onInteractionChange={onInteractionChange}
-        />
-        <EnvironmentController
-          isNight={isNight}
-          floorRef={floorRef}
-          ambientLightRef={ambientLightRef}
-          frontLightRef={frontLightRef}
-          directionalLightRef={directionalLightRef}
-          nightAmbientIntensity={nightAmbientIntensity}
-          nightFrontLightIntensity={nightFrontLightIntensity}
-          nightEnvironmentIntensity={nightEnvironmentIntensity}
-          weatherCondition={effectiveWeatherCondition}
-          dayFogNear={dayFogNear}
-          dayFogFar={dayFogFar}
-          sceneColors={sceneColors}
-          targetWeatherParams={targetWeatherParams}
+        <SceneController 
+            isAppOpen={isAppOpen} 
+            activeConfig={activeConfig}
+            setAppOpenConfig={setRuntimeAppOpenConfig}
+            modelRef={modelRef}
+            frontLightTarget={frontLightTarget}
+            originalAppOpenConfig={initialConfig}
+            onInteractionChange={onInteractionChange}
         />
       </Canvas>
     </>
   );
 }
+useGLTF.preload(MODEL_URL);
