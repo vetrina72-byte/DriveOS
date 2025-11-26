@@ -205,9 +205,9 @@ const WEATHER_CONDITIONS = [
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
   cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
-  modelPos: { x: 1.05, y: -1.15, z: 1.40 },
+  modelPos: { x: 2.00, y: -1.05, z: 1.40 },
   modelRot: { x: 0.01, y: 0.01, z: 0.01 },
-  modelScale: 1.63,
+  modelScale: 1.46,
 };
 
 const DEFAULT_HOME_CONFIG: SceneConfig = {
@@ -481,7 +481,7 @@ export default function DebugControls({
     setSpinnerLeft(undefined);
     setSatelliteLabelBrightness(2.3);
     setSatelliteLabelOutlineWidth(1.2);
-    setHeadlightConfig({ x: -4.85, y: 0.81, z: 1.55, angle: 3.10, intensity: 0.70, startWidth: 0.10, endWidth: 0.10, length: 20.00, startHeight: 0.13, endHeight: 0.01, fade: 7.40, separation: 0.90, circular: true });
+    setHeadlightConfig({ x: -4.85, y: 0.81, z: 1.55, angle: 3.10, intensity: 0.70, startWidth: 0.10, endWidth: 0.10, length: 20.00, startHeight: 0.10, endHeight: 0.01, fade: 7.40, separation: 0.90, circular: true });
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

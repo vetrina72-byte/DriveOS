@@ -456,13 +456,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         const p = totalDistance > 0 ? 1 - (effectiveRemaining / totalDistance) : 0;
         const clampedP = Math.max(0, Math.min(1, p));
         
-        console.log(
-            '[NAV_DEBUG]',
-            `rem: ${effectiveRemaining.toFixed(2)}km`,
-            `total: ${totalDistance.toFixed(2)}km`,
-            `perc: ${clampedP.toFixed(3)}`
-        );
-
         return { percent: clampedP };
     }, [totalDistance, remainingDistance, simulatedRemainingDistance]);
 
@@ -696,9 +689,9 @@ function AppContent() {
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>({
       cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
       cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
-      modelPos: { x: 1.05, y: -1.15, z: 1.40 },
+      modelPos: { x: 2.00, y: -1.05, z: 1.40 }, // Updated as requested
       modelRot: { x: 0.01, y: 0.01, z: 0.01 },
-      modelScale: 1.63,
+      modelScale: 1.46, // Updated as requested
   });
 
   const [headlightConfig, setHeadlightConfig] = useState({
@@ -710,7 +703,7 @@ function AppContent() {
       startWidth: 0.10,
       endWidth: 0.10,
       length: 20.00,
-      startHeight: 0.13,
+      startHeight: 0.10,
       endHeight: 0.01,
       fade: 7.40,
       separation: 0.90,
@@ -1484,6 +1477,12 @@ function AppContent() {
     if (isAppLauncherOpen) {
         setIsAppLauncherOpen(false);
         setIsCustomizing(false);
+    }
+    // ADDED: Close active app on background click
+    if (activeApp) {
+        setActiveApp(null);
+        // Also handle maps layering logic if needed, but setActiveApp(null) handles the main state
+        setIsMapsLayered(false);
     }
   };
 
