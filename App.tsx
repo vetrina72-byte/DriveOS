@@ -649,8 +649,8 @@ const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
 };
 
 const DEFAULT_HOME_CONFIG: SceneConfig = {
-    cameraPos: { x: 8.30, y: 2.30, z: 8.80 },
-    cameraTarget: { x: 0.95, y: 0.00, z: 0.65 },
+    cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, // UPDATED Y
+    cameraTarget: { x: 0.95, y: 0.25, z: 0.65 }, // UPDATED Y
     modelPos: { x: 14.25, y: -1.30, z: -1.40 },
     modelRot: { x: 0.00, y: 0.06, z: 0.00 },
     modelScale: 2.80,
@@ -689,9 +689,9 @@ function AppContent() {
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>({
       cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
       cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
-      modelPos: { x: 2.00, y: -1.05, z: 1.40 }, // Updated as requested
+      modelPos: { x: 2.00, y: -1.05, z: 1.40 }, 
       modelRot: { x: 0.01, y: 0.01, z: 0.01 },
-      modelScale: 1.46, // Updated as requested
+      modelScale: 1.46, 
   });
 
   const [headlightConfig, setHeadlightConfig] = useState({
