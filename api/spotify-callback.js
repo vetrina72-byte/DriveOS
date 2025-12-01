@@ -50,7 +50,7 @@ const sendCallbackPage = (res, { success = true, message = '' }) => {
       }
       header {
         width: 100%;
-        padding: 40px 0;
+        padding: 100px 0 40px;
         display: flex;
         justify-content: center;
         align-items: center;

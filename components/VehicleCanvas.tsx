@@ -1,5 +1,4 @@
-
-import React, { Component, Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
+import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -17,11 +16,8 @@ interface ModelErrorBoundaryState {
   hasError: boolean;
 }
 
-class ModelErrorBoundary extends Component<ModelErrorBoundaryProps, ModelErrorBoundaryState> {
-  constructor(props: ModelErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false };
-  }
+class ModelErrorBoundary extends React.Component<ModelErrorBoundaryProps, ModelErrorBoundaryState> {
+  state: ModelErrorBoundaryState = { hasError: false };
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true };
