@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContentCarousel from './ContentCarousel';
@@ -86,8 +87,9 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const [selectedPlaylist, setSelectedPlaylist] = useState<{ id: string; name: string; images?: { url: string }[], description?: string } | null>(null);
     const [isQuotaModalDismissed, setIsQuotaModalDismissed] = useState(false);
 
-    const openingBoxSpeed = 4.365;
-    const closingBoxSpeed = 8.342;
+    // Accelerated speeds
+    const openingBoxSpeed = 6.5; 
+    const closingBoxSpeed = 12.0;
     
     useEffect(() => {
         // Reset dismissed state if the quota error is resolved and comes back later
@@ -256,6 +258,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 transform: `translateX(${translateX}%)`,
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,
+                willChange: 'transform', // Important for smooth animation
             }}
             aria-hidden={!isOpen}
             role="dialog"

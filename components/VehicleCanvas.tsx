@@ -1,4 +1,3 @@
-
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
@@ -165,9 +164,9 @@ function SceneController({
   const [interacting, setInteracting] = useState(false);
   const interactTimeout = useRef<number | null>(null);
 
-  // Velocità di animazione fisse
-  const openingCameraSpeed = 4.5;
-  const closingCameraSpeed = 3.1;
+  // Velocità di animazione fisse (Accelerated)
+  const openingCameraSpeed = 5.5; // Was 4.5
+  const closingCameraSpeed = 6.5; // Was 3.1 - Significantly faster return
 
   // Gestione interazione orbit controls
   useEffect(() => {

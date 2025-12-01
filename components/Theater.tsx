@@ -106,11 +106,11 @@ const ServiceButton = ({ service, isNight, onClick }: {
 
 
 // Framer Motion Variants for the choreographed entry animation
-// FIX: Explicitly type `panelVariant` as `Variants` to fix type incompatibility with the 'type' property in transitions.
+// Accelerated spring physics for snappier feel
 const panelVariant: Variants = {
     initial: { x: '100%' },
-    animate: { x: '0%', transition: { type: 'spring', stiffness: 194, damping: 26 } },
-    exit: { x: '100%', transition: { type: 'spring', stiffness: 291, damping: 31 } },
+    animate: { x: '0%', transition: { type: 'spring', stiffness: 300, damping: 30 } },
+    exit: { x: '100%', transition: { type: 'spring', stiffness: 400, damping: 35 } },
 };
 
 // FIX: Explicitly type variants with the `Variants` type.

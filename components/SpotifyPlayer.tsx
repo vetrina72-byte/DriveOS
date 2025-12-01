@@ -72,8 +72,9 @@ const SpotifyPlayer = ({
     const [view, setView] = useState<ViewState>({ type: 'home' });
     const [viewHistory, setViewHistory] = useState<ViewState[]>([]);
 
-    const openingBoxSpeed = 4.365;
-    const closingBoxSpeed = 8.342;
+    // Increased speeds for snappier UI and to reduce visual glitches
+    const openingBoxSpeed = 6.5; 
+    const closingBoxSpeed = 12.0;
 
     useEffect(() => {
         if (isOpen) {
@@ -264,6 +265,7 @@ const SpotifyPlayer = ({
                 transform: transform,
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,
+                willChange: 'transform', // CRITICAL for smooth animation without artifacts
             }}
             aria-hidden={!isOpen}
             role="dialog"

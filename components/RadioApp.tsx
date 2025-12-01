@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { FiRadio, FiAlertTriangle, FiSearch, FiX, FiChevronLeft } from 'react-icons/fi';
 import type { RadioStation } from '../types';
@@ -95,8 +96,9 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
     const [isSearching, setIsSearching] = useState(false);
     const searchDebounceRef = useRef<number | null>(null);
 
-    const openingBoxSpeed = 4.365;
-    const closingBoxSpeed = 8.342;
+    // Accelerated animation speeds
+    const openingBoxSpeed = 6.5; 
+    const closingBoxSpeed = 12.0;
 
     const radioBrowserApi = useMemo(() => {
         const servers = [
@@ -414,6 +416,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, isNight, onPlayStation, fav
                 transform: `translateX(${translateX}%)`,
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,
+                willChange: 'transform', // Important for smooth animation
             }}
             aria-hidden={!isOpen}
             role="dialog"

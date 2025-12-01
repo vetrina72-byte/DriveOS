@@ -131,6 +131,8 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
+    // Ref to hold the latest item played by the user to ensure it stays at the top during API refreshes
+    const latestOptimisticItem = useRef<MediaItem | null>(null);
 
     const triggerDataRefresh = useCallback(() => setRefreshTrigger(p => p + 1), []);
 
@@ -168,6 +170,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.removeItem('last_progress_ms');
         localStorage.removeItem('last_is_playing');
         localStorage.removeItem('continueListeningItems');
+        latestOptimisticItem.current = null;
         
         getPlayerInstance()?.disconnect();
 
@@ -349,26 +352,21 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             const processedItemsFromApi = await processRecentPlays(recents.data.items);
             
             setContinueListeningItems(currentItems => {
-                // The most recent optimistically updated item is what's currently at the front.
-                const optimisticItem = currentItems.length > 0 ? currentItems[0] : null;
+                // Use the ref as the primary source of truth for the most recent item to ensure instant updates persist
+                const optimisticItem = latestOptimisticItem.current || (currentItems.length > 0 ? currentItems[0] : null);
     
                 if (!optimisticItem) {
-                    // If there's no optimistic item, just use the API response.
                     return processedItemsFromApi;
                 }
     
-                // Build the new list, prioritizing the optimistic item at the front.
-                // Then, add all items from the API response, filtering out the one we just added
-                // to avoid duplicates before the final de-duplication step.
                 const combinedList = [
                     optimisticItem,
                     ...processedItemsFromApi.filter(item => item.uri !== optimisticItem.uri)
                 ];
     
-                // Final de-duplication based on URI to be absolutely sure.
                 const uniqueUris = new Set<string>();
                 const uniqueItems = combinedList.filter(item => {
-                    if (!item || !item.uri) return false; // Guard against bad data
+                    if (!item || !item.uri) return false; 
                     if (uniqueUris.has(item.uri)) {
                         return false;
                     }
@@ -449,7 +447,6 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
     const resetHomeContent = useCallback(() => {
         setHasFetchedHomeContent(false);
-        // Do not clear continueListeningItems on panel close to maintain state on reload
         setNewReleases([]);
         setUserPlaylists([]);
         setMadeForYouPlaylists([]);
@@ -463,6 +460,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         setTrackRecommendations([]);
         setSavedAlbums([]);
         setMadeForYou([]);
+        // We purposefully do NOT clear continueListeningItems here to prevent flash of empty content
     }, []);
 
     useEffect(() => {
@@ -518,6 +516,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     
     const play = useCallback(async (options: PlayOptions, itemForOptimisticUpdate?: MediaItem) => {
         if (itemForOptimisticUpdate) {
+            // Update the ref to ensure this item persists through API refreshes
+            latestOptimisticItem.current = itemForOptimisticUpdate;
+            
             setContinueListeningItems(prevItems => {
                 const filtered = prevItems.filter(i => i.uri !== itemForOptimisticUpdate.uri);
                 const newItems = [itemForOptimisticUpdate, ...filtered];

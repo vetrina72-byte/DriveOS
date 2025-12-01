@@ -1334,8 +1334,9 @@ export default function MapsContainer({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isIframeReady, setIsIframeReady] = useState(false);
 
-  const openingBoxSpeed = 4.5;
-  const closingBoxSpeed = 8.6;
+  // Accelerated animation speeds
+  const openingBoxSpeed = 6.5; 
+  const closingBoxSpeed = 12.0;
 
   const finalMapHtml = useMemo(() => {
     const dynamicStyles = `
@@ -1433,7 +1434,10 @@ export default function MapsContainer({
   return (
     <div 
         className={`fixed top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel`}
-        style={{ transform: `translateX(${translateX}%)` }}
+        style={{ 
+            transform: `translateX(${translateX}%)`, 
+            willChange: 'transform', // Important for smooth animation
+        }}
         aria-hidden={!isOpen}
         role="dialog"
         aria-modal="true"
