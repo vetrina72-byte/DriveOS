@@ -1,3 +1,4 @@
+
 import React, { useRef } from 'react';
 // FIX: Import `Variants` type from framer-motion to resolve type error.
 import { motion, Variants } from 'framer-motion';
@@ -195,7 +196,7 @@ const Theater = ({
             initial="initial"
             animate="animate"
             exit="exit"
-            className="spotify-app-panel shadow-2xl flex"
+            className="spotify-app-panel w-2/3 shadow-2xl flex"
             style={{
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,

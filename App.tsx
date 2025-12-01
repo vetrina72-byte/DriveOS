@@ -1478,12 +1478,7 @@ function AppContent() {
         setIsAppLauncherOpen(false);
         setIsCustomizing(false);
     }
-    // ADDED: Close active app on background click
-    if (activeApp) {
-        setActiveApp(null);
-        // Also handle maps layering logic if needed, but setActiveApp(null) handles the main state
-        setIsMapsLayered(false);
-    }
+    // Explicitly doing nothing for activeApp to prevent closing on background click
   };
 
   const isUIOverlayActive = activeApp !== null;

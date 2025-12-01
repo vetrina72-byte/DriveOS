@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import apiClient from '../api';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
@@ -384,8 +385,13 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [state.user, processRecentPlays]);
     
     const fetchData = useCallback(async () => {
-        if (!state.user || hasFetchedHomeContent) return;
-        setHomeContentLoading(true);
+        if (!state.user) return;
+        
+        // Only show full loading state if we haven't fetched before. 
+        // Subsequent fetches will update silently.
+        if (!hasFetchedHomeContent) {
+            setHomeContentLoading(true);
+        }
         setHomeContentError(null);
 
         try {
@@ -435,11 +441,11 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [state.user, hasFetchedHomeContent]);
 
     const triggerHomeContentFetch = useCallback(() => {
-        if (state.user && !hasFetchedHomeContent) {
+        if (state.user) {
             fetchRecentlyPlayed();
             fetchData();
         }
-    }, [state.user, hasFetchedHomeContent, fetchRecentlyPlayed, fetchData]);
+    }, [state.user, fetchRecentlyPlayed, fetchData]);
 
     const resetHomeContent = useCallback(() => {
         setHasFetchedHomeContent(false);

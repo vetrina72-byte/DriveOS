@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
@@ -84,7 +85,7 @@ const SpotifyPlayer = ({
             const timer = setTimeout(() => {
                 setView({ type: 'home' });
                 setViewHistory([]);
-                resetHomeContent();
+                // Data is no longer reset here to allow background updates and persistence
             }, 500); 
             return () => clearTimeout(timer);
         }

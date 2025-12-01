@@ -1,5 +1,5 @@
 
-import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback, Component } from 'react';
+import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -17,7 +17,7 @@ interface ModelErrorBoundaryState {
   hasError: boolean;
 }
 
-class ModelErrorBoundary extends Component<ModelErrorBoundaryProps, ModelErrorBoundaryState> {
+class ModelErrorBoundary extends React.Component<ModelErrorBoundaryProps, ModelErrorBoundaryState> {
   state: ModelErrorBoundaryState = { hasError: false };
 
   static getDerivedStateFromError(error: any) {
@@ -152,23 +152,18 @@ function CameraController() {
 
 
 function SceneController({
-  isAppOpen, activeConfig, setAppOpenConfig, modelRef,
-  frontLightTarget, originalAppOpenConfig, onInteractionChange
+  isAppOpen, activeConfig, modelRef,
+  frontLightTarget, onInteractionChange
 }: {
   isAppOpen: boolean;
   activeConfig: SceneConfig;
-  setAppOpenConfig: React.Dispatch<React.SetStateAction<SceneConfig>>;
   modelRef: React.RefObject<THREE.Group>;
   frontLightTarget: THREE.Object3D;
-  originalAppOpenConfig: SceneConfig;
   onInteractionChange?: (isInteracting: boolean) => void;
 }) {
-  const { camera, controls, gl } = useThree();
+  const { camera, controls } = useThree();
   const [interacting, setInteracting] = useState(false);
   const interactTimeout = useRef<number | null>(null);
-  const dragResetTimeout = useRef<number | null>(null);
-  const dragging = useRef(false);
-  const lastPos = useRef({ x: 0, y: 0 });
 
   // Velocità di animazione fisse
   const openingCameraSpeed = 4.5;
@@ -204,67 +199,6 @@ function SceneController({
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
     };
   }, [controls, isAppOpen, onInteractionChange]);
-
-  // Drag per ruotare il modello in app-open
-  useEffect(() => {
-    if (!isAppOpen) return;
-
-    const dom = gl.domElement;
-
-    const startDrag = (x: number) => {
-        dragging.current = true;
-        lastPos.current.x = x;
-        if (dragResetTimeout.current) clearTimeout(dragResetTimeout.current);
-    };
-
-    const drag = (x: number) => {
-        if (!dragging.current) return;
-        const dx = x - lastPos.current.x;
-        lastPos.current.x = x;
-        setAppOpenConfig(prev => ({
-            ...prev,
-            modelRot: { ...prev.modelRot, y: prev.modelRot.y + dx * 0.0012 },
-        }));
-    };
-
-    const endDrag = () => {
-        if (!dragging.current) return;
-        dragging.current = false;
-        if (dragResetTimeout.current) clearTimeout(dragResetTimeout.current);
-        dragResetTimeout.current = window.setTimeout(() => {
-            setAppOpenConfig(prev => ({
-                ...prev,
-                modelRot: originalAppOpenConfig.modelRot,
-            }));
-        }, 7000);
-    };
-
-    // Event handlers
-    const handleMouseDown = (e: MouseEvent) => startDrag(e.clientX);
-    const handleMouseMove = (e: MouseEvent) => drag(e.clientX);
-    const handleTouchStart = (e: TouchEvent) => startDrag(e.touches[0].clientX);
-    const handleTouchMove = (e: TouchEvent) => drag(e.touches[0].clientX);
-
-    // Register event listeners
-    dom.addEventListener('mousedown', handleMouseDown);
-    dom.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', endDrag);
-
-    dom.addEventListener('touchstart', handleTouchStart, { passive: true });
-    dom.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.addEventListener('touchend', endDrag);
-
-    // Cleanup
-    return () => {
-        dom.removeEventListener('mousedown', handleMouseDown);
-        dom.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', endDrag);
-        dom.removeEventListener('touchstart', handleTouchStart);
-        dom.removeEventListener('touchmove', handleTouchMove);
-        window.removeEventListener('touchend', endDrag);
-        if (dragResetTimeout.current) clearTimeout(dragResetTimeout.current);
-    };
-  }, [isAppOpen, gl, setAppOpenConfig, originalAppOpenConfig]);
 
   // Animazione camera e modello
   useFrame((_, delta) => {
@@ -572,6 +506,8 @@ export default function VehicleCanvas({
     };
   }, [uiScale, homeConfig]);
 
+  // We only use runtimeAppOpenConfig to store the props passed down, 
+  // as we no longer modify it locally in SceneController
   const [runtimeAppOpenConfig, setRuntimeAppOpenConfig] = useState<SceneConfig>(appOpenConfigFromProps);
 
   useEffect(() => {
@@ -740,10 +676,8 @@ export default function VehicleCanvas({
         <SceneController 
             isAppOpen={isAppOpen} 
             activeConfig={activeConfig}
-            setAppOpenConfig={setRuntimeAppOpenConfig}
             modelRef={modelRef}
             frontLightTarget={frontLightTarget}
-            originalAppOpenConfig={initialConfig}
             onInteractionChange={onInteractionChange}
         />
       </Canvas>
