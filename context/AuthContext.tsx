@@ -97,24 +97,42 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const [isPlayerSdkReady, setIsPlayerSdkReady] = useState(false);
     const [lastPlayInitiated, setLastPlayInitiated] = useState(0);
     
+    // Ref to hold the latest item played by the user to ensure it stays at the top during API refreshes
+    const latestOptimisticItem = useRef<MediaItem | null>(null);
+
     // Home Content State
     const [homeContentLoading, setHomeContentLoading] = useState(false);
     const [homeContentError, setHomeContentError] = useState<string | null>(null);
     const [hasFetchedHomeContent, setHasFetchedHomeContent] = useState(false);
+    
+    // Initialize continueListeningItems with robust merging of the optimistic item
     const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>(() => {
+        let items: MediaItem[] = [];
         if (typeof window !== 'undefined') {
             try {
+                // 1. Load the general list
                 const stored = localStorage.getItem('continueListeningItems');
                 if (stored) {
                     const parsed = JSON.parse(stored);
-                    if (Array.isArray(parsed)) return parsed;
+                    if (Array.isArray(parsed)) items = parsed;
+                }
+                
+                // 2. Load and merge the specific optimistic item immediately to prevent delay
+                const storedOptimistic = localStorage.getItem('last_optimistic_item');
+                if (storedOptimistic) {
+                    const optimisticItem = JSON.parse(storedOptimistic);
+                    latestOptimisticItem.current = optimisticItem; // Sync ref
+                    
+                    const filtered = items.filter(i => i.uri !== optimisticItem.uri);
+                    items = [optimisticItem, ...filtered];
                 }
             } catch (e) {
                 console.error("Failed to parse continueListeningItems from localStorage", e);
             }
         }
-        return [];
+        return items.slice(0, 10);
     });
+
     const [newReleases, setNewReleases] = useState<MediaItem[]>([]);
     const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>([]);
     const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>([]);
@@ -131,20 +149,6 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
-    // Ref to hold the latest item played by the user to ensure it stays at the top during API refreshes
-    const latestOptimisticItem = useRef<MediaItem | null>(null);
-
-    // Initialize the optimistic item ref from localStorage to prevent loss on reload
-    useEffect(() => {
-        try {
-            const stored = localStorage.getItem('last_optimistic_item');
-            if (stored) {
-                latestOptimisticItem.current = JSON.parse(stored);
-            }
-        } catch (e) {
-            console.error("Failed to restore last_optimistic_item", e);
-        }
-    }, []);
 
     const triggerDataRefresh = useCallback(() => setRefreshTrigger(p => p + 1), []);
 
