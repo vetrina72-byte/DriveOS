@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
@@ -135,7 +136,7 @@ function SpotifyLogin() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.3 }}
-                    className="flex items-center gap-12 bg-zinc-900/50 p-12 rounded-2xl shadow-2xl border border-white/10"
+                    className="flex items-center gap-12 bg-neutral-900 p-12 rounded-2xl shadow-2xl border border-white/10"
                 >
                     <div className="flex-shrink-0 w-64 h-64 p-4 bg-white rounded-lg shadow-lg">
                         <img src={qrCodeUrl} alt="QR Code per login Spotify" className="w-full h-full object-contain" />
