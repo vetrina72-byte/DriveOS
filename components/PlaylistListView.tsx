@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
@@ -70,7 +71,7 @@ const PlaylistListView = ({ isNight, onSelectItem }: { isNight: boolean, onSelec
     }
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6">
+        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             <h2 className={`text-3xl font-bold mb-6 ${isNight ? 'text-white' : 'text-black'}`}>Le tue Playlist</h2>
             <motion.div
               className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"

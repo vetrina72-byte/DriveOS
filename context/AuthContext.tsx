@@ -134,6 +134,18 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     // Ref to hold the latest item played by the user to ensure it stays at the top during API refreshes
     const latestOptimisticItem = useRef<MediaItem | null>(null);
 
+    // Initialize the optimistic item ref from localStorage to prevent loss on reload
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('last_optimistic_item');
+            if (stored) {
+                latestOptimisticItem.current = JSON.parse(stored);
+            }
+        } catch (e) {
+            console.error("Failed to restore last_optimistic_item", e);
+        }
+    }, []);
+
     const triggerDataRefresh = useCallback(() => setRefreshTrigger(p => p + 1), []);
 
     useEffect(() => {
@@ -170,6 +182,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.removeItem('last_progress_ms');
         localStorage.removeItem('last_is_playing');
         localStorage.removeItem('continueListeningItems');
+        localStorage.removeItem('last_optimistic_item'); // Clear persistent optimistic item
         latestOptimisticItem.current = null;
         
         getPlayerInstance()?.disconnect();
@@ -518,6 +531,13 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         if (itemForOptimisticUpdate) {
             // Update the ref to ensure this item persists through API refreshes
             latestOptimisticItem.current = itemForOptimisticUpdate;
+            
+            // Persist the optimistic item to localStorage to survive page reloads
+            try {
+                localStorage.setItem('last_optimistic_item', JSON.stringify(itemForOptimisticUpdate));
+            } catch (e) {
+                console.error("Failed to save last_optimistic_item", e);
+            }
             
             setContinueListeningItems(prevItems => {
                 const filtered = prevItems.filter(i => i.uri !== itemForOptimisticUpdate.uri);
