@@ -31,7 +31,8 @@ class ModelErrorBoundary extends React.Component<ModelErrorBoundaryProps, ModelE
     if (this.state.hasError) {
       return null;
     }
-    return this.props.children;
+    // Cast 'this' to access props safely if type inference fails in the environment
+    return (this as any).props.children;
   }
 }
 

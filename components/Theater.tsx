@@ -152,16 +152,14 @@ const Theater = ({
     isNight,
     spotifyPlayerTop,
     spotifyPlayerBottom,
+    onLaunchApp,
 }: {
     onClose: () => void;
     isNight: boolean;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    onLaunchApp: (url: string) => void;
 }) => {
-
-    const handleServiceClick = () => {
-        // Functionality removed as per user request.
-    };
 
     const services = [
         { name: 'Netflix', url: 'https://www.netflix.com', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', logoClassName: 'w-36', glowColor: '#E50914' },
@@ -241,7 +239,7 @@ const Theater = ({
                             <ServiceButton
                                 service={service}
                                 isNight={isNight}
-                                onClick={handleServiceClick}
+                                onClick={() => onLaunchApp(service.url)}
                             />
                         </motion.div>
                     ))}

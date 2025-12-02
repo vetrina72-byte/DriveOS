@@ -1633,6 +1633,10 @@ function AppContent() {
               isNight={useDarkTheme}
               spotifyPlayerTop={spotifyPlayerTop}
               spotifyPlayerBottom={spotifyPlayerBottom}
+              onLaunchApp={(url) => {
+                  setWebAppUrl(url);
+                  toggleApp('theater'); 
+              }}
             />
           )}
           {activeApp === 'radio' && (
