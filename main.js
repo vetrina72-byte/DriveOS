@@ -1,4 +1,3 @@
-
 import { app, BrowserWindow, session } from 'electron';
 import isDev from 'electron-is-dev';
 import path from 'path';
@@ -161,12 +160,11 @@ function createWindow() {
       contextIsolation: true,
       // Add partition for persistent sessions
       partition: 'persist:default',
-      plugins: true, // Allow plugins like Widevine for DRM
     },
   });
   
   // Set a standard User-Agent to avoid being blocked
-  mainWindow.webContents.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+  mainWindow.webContents.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
 
   const loadURL = isDev
     ? 'http://localhost:5173'
@@ -182,43 +180,22 @@ function createWindow() {
 app.whenReady().then(() => {
   createAuthServer(); // Start the stateful auth server
 
-  // Helper to strip security headers that block embedding
-  const stripHeaders = (sess) => {
-    // Intercept headers for all URLs
-    sess.webRequest.onHeadersReceived(
-      { urls: ['*://*/*'] },
-      (details, callback) => {
-        const { responseHeaders } = details;
-        if (!responseHeaders) return callback({ cancel: false, responseHeaders });
+  // THIS IS THE CRITICAL PART: Intercept network requests and robustly remove security headers.
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const { responseHeaders } = details;
+    const updatedHeaders = { ...responseHeaders };
 
-        const updatedHeaders = { ...responseHeaders };
-        
-        // Headers to remove to allow embedding (iframe/webview)
-        const headersToRemove = [
-          'x-frame-options', 
-          'content-security-policy',
-          'frame-options', // older legacy
-          'content-security-policy-report-only'
-        ];
+    // A more robust way to remove headers: iterate over all keys and delete any that match case-insensitively.
+    const headersToRemove = ['x-frame-options', 'content-security-policy'];
 
-        for (const headerKey of Object.keys(updatedHeaders)) {
-          if (headersToRemove.includes(headerKey.toLowerCase())) {
-            delete updatedHeaders[headerKey];
-          }
-        }
-
-        callback({ cancel: false, responseHeaders: updatedHeaders });
+    for (const headerKey of Object.keys(updatedHeaders)) {
+      if (headersToRemove.includes(headerKey.toLowerCase())) {
+        delete updatedHeaders[headerKey];
       }
-    );
-  };
+    }
 
-  // 1. Apply to default session (main window)
-  stripHeaders(session.defaultSession);
-
-  // 2. CRITICAL: Apply to the 'persist:theater' session used by the WebAppViewer <webview>
-  // This allows Netflix, YouTube, etc. to load without X-Frame-Options blocking.
-  const theaterSession = session.fromPartition('persist:theater');
-  stripHeaders(theaterSession);
+    callback({ responseHeaders: updatedHeaders });
+  });
 
   createWindow();
 
