@@ -205,9 +205,9 @@ const WEATHER_CONDITIONS = [
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
   cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
-  modelPos: { x: -5.75, y: -1.00, z: 1.90 },
+  modelPos: { x: -5.45, y: -1.00, z: 1.90 },
   modelRot: { x: 0.01, y: -1.49, z: 0.01 },
-  modelScale: 1.36,
+  modelScale: 1.25,
 };
 
 const DEFAULT_HOME_CONFIG: SceneConfig = {
