@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getSessionId } from '../lib/sessionId';
 import { FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
 
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
@@ -19,17 +18,23 @@ function SpotifyLogin() {
   const { login } = useAuth();
   const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO' | 'PREMIUM_RICHIESTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const [sessionId, setSessionId] = useState<string>(getSessionId());
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
 
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+    }
+  };
+
   const startLoginProcess = useCallback(() => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    stopPolling();
     setUiState('CARICAMENTO');
     
-    // Rigenera sessione per pulire errori precedenti e forzare un nuovo QR
-    const newSid = 'sid_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('spotify_session_id', newSid);
-    setSessionId(newSid);
+    // Generiamo un ID sessione univoco per questo tentativo
+    const sid = 'sid_' + Math.random().toString(36).substr(2, 9);
+    setActiveSessionId(sid);
     
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
     const redirectUri = process.env.VITE_REDIRECT_URI;
@@ -37,23 +42,25 @@ function SpotifyLogin() {
     
     const authUrl = new URL("https://accounts.spotify.com/authorize");
     authUrl.search = new URLSearchParams({
-        client_id: clientId, response_type: 'code', redirect_uri: redirectUri,
-        scope: scope, show_dialog: 'true', state: newSid
+        client_id: clientId, response_type: 'code', redirect_uri: redirectUri || '',
+        scope: scope, show_dialog: 'true', state: sid
     }).toString();
 
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('ATTESA_SCANSIONE');
-  }, []);
-  
-  const startPolling = useCallback((sid: string) => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    
+    // Iniziamo il polling immediatamente con il nuovo ID
+    pollForAuth(sid);
+  }, [login]);
 
+  const pollForAuth = (sid: string) => {
+    stopPolling();
     pollIntervalRef.current = window.setInterval(() => {
       fetch(`/api/check-auth-status?sessionId=${sid}`)
         .then(res => res.json())
         .then(data => {
           if (data?.authenticated && data?.access_token) {
-            clearInterval(pollIntervalRef.current!);
+            stopPolling();
             setUiState('LOGIN_COMPLETATO');
             setTimeout(() => login({
                 access_token: data.access_token,
@@ -61,29 +68,23 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             }), 1500);
           } else if (data?.error === 'premium_required') {
-            // STOP LOOP: se l'utente non è premium, smettiamo di interrogare il server
-            clearInterval(pollIntervalRef.current!);
+            // BLOCCA TUTTO: l'utente non ha premium
+            stopPolling();
             setUiState('PREMIUM_RICHIESTO');
           } else if (data?.expired) {
-            clearInterval(pollIntervalRef.current!);
+            stopPolling();
             setUiState('SCADUTO');
             setTimeout(startLoginProcess, 2000);
           }
         })
-        .catch(() => {});
+        .catch(err => console.error("Poll error:", err));
     }, 3000);
-  }, [login, startLoginProcess]);
+  };
 
   useEffect(() => {
     startLoginProcess();
-    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
-  }, [startLoginProcess]);
-
-  useEffect(() => {
-    if (uiState === 'ATTESA_SCANSIONE' && sessionId) {
-      startPolling(sessionId);
-    }
-  }, [uiState, sessionId, startPolling]);
+    return () => stopPolling();
+  }, []); // Eseguito solo al montaggio
 
   return (
     <div className="w-full h-full flex items-center justify-center p-8 bg-[var(--spotify-panel-bg)]">
@@ -102,7 +103,7 @@ function SpotifyLogin() {
                         <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
                             <p className="text-zinc-300 text-sm flex items-start gap-3">
                                 <FiAlertCircle className="mt-1 flex-shrink-0 text-blue-400" />
-                                <span>L'integrazione Drive OS richiede un account <strong>Spotify Premium</strong> attivo.</span>
+                                <span>L'integrazione Drive OS richiede un account <strong>Spotify Premium</strong> attivo per abilitare la riproduzione remota.</span>
                             </p>
                         </div>
                     </div>
@@ -112,28 +113,28 @@ function SpotifyLogin() {
             {uiState === 'PREMIUM_RICHIESTO' && (
                 <motion.div 
                     key="denied" 
-                    initial={{ opacity: 0, y: 20 }} 
+                    initial={{ opacity: 0, y: 30 }} 
                     animate={{ opacity: 1, y: 0 }} 
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className="flex flex-col items-center justify-center text-center max-w-lg bg-black/40 p-12 rounded-3xl border border-red-500/30 backdrop-blur-xl"
+                    className="flex flex-col items-center justify-center text-center max-w-xl bg-black/50 p-16 rounded-[2.5rem] border border-red-500/40 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
                 >
                     <motion.div 
-                        initial={{ scale: 0 }} 
-                        animate={{ scale: 1 }} 
-                        transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                        className="w-24 h-24 bg-red-600 rounded-full flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(220,38,38,0.4)]"
+                        initial={{ scale: 0, rotate: -45 }} 
+                        animate={{ scale: 1, rotate: 0 }} 
+                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        className="w-28 h-28 bg-red-600 rounded-full flex items-center justify-center mb-10 shadow-[0_0_50px_rgba(220,38,38,0.5)]"
                     >
-                        <FiX className="text-white w-14 h-14" strokeWidth={3} />
+                        <FiX className="text-white w-16 h-16" strokeWidth={3} />
                     </motion.div>
-                    <h2 className="text-3xl font-bold text-white mb-4">Accesso Negato</h2>
-                    <p className="text-zinc-400 text-lg mb-8 leading-relaxed">
-                        L'account utilizzato non dispone di un abbonamento <strong>Premium</strong>.<br/>Per utilizzare Spotify su Drive OS è necessario un piano a pagamento.
+                    <h2 className="text-4xl font-bold text-white mb-6">Accesso Negato</h2>
+                    <p className="text-zinc-300 text-xl mb-10 leading-relaxed max-w-md">
+                        Abbiamo rilevato un account <strong>Free</strong>.<br/>Per utilizzare Spotify su questa vettura è necessario un abbonamento <strong>Premium</strong>.
                     </p>
                     <button 
                         onClick={startLoginProcess} 
-                        className="flex items-center gap-3 bg-white text-black font-bold py-4 px-10 rounded-full hover:bg-zinc-200 transition-all active:scale-95"
+                        className="flex items-center gap-3 bg-white text-black font-bold py-5 px-12 rounded-full hover:bg-zinc-200 transition-all active:scale-95 shadow-xl"
                     >
-                        <FiRefreshCw /> Riprova con un altro account
+                        <FiRefreshCw className="w-5 h-5" /> Riprova con un altro account
                     </button>
                 </motion.div>
             )}
@@ -141,19 +142,22 @@ function SpotifyLogin() {
             {uiState === 'LOGIN_COMPLETATO' && (
                 <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
                     <CheckmarkIcon />
-                    <h2 className="text-2xl font-bold text-white mt-6">Benvenuto!</h2>
+                    <h2 className="text-2xl font-bold text-white mt-6">Accesso completato!</h2>
                     <p className="text-zinc-400 mt-2">Configurazione in corso...</p>
                 </motion.div>
             )}
 
             {uiState === 'CARICAMENTO' && (
-                <div className="w-12 h-12 border-4 border-white/10 border-t-[#1DB954] rounded-full animate-spin" />
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-white/10 border-t-[#1DB954] rounded-full animate-spin" />
+                    <p className="text-zinc-500 font-medium">Inizializzazione...</p>
+                </div>
             )}
             
             {(uiState === 'ERRORE' || uiState === 'SCADUTO') && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
-                    <p className="text-red-400 mb-4">Si è verificato un errore durante il login.</p>
-                    <button onClick={startLoginProcess} className="px-6 py-2 bg-white/10 text-white rounded-full">Riprova</button>
+                    <p className="text-red-400 text-lg mb-6">Si è verificato un errore durante il login.</p>
+                    <button onClick={startLoginProcess} className="px-8 py-3 bg-white/10 text-white rounded-full font-bold hover:bg-white/20 transition-colors">Riprova</button>
                 </motion.div>
             )}
         </AnimatePresence>
