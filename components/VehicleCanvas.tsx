@@ -1,3 +1,4 @@
+
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
@@ -18,6 +19,12 @@ interface ModelErrorBoundaryState {
 
 class ModelErrorBoundary extends React.Component<ModelErrorBoundaryProps, ModelErrorBoundaryState> {
   state: ModelErrorBoundaryState = { hasError: false };
+  props: ModelErrorBoundaryProps; // Explicitly declared props
+
+  constructor(props: ModelErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true };
@@ -35,8 +42,8 @@ class ModelErrorBoundary extends React.Component<ModelErrorBoundaryProps, ModelE
   }
 }
 
-// URL del modello GLTF (Raw GitHub Link)
-const MODEL_URL = 'https://raw.githubusercontent.com/vetrina72-byte/assets/main/land_rover_defender_90_lowpoly.glb';
+// URL del modello GLTF (Raw GitHub Link) - VOLVO EX30
+const MODEL_URL = 'https://raw.githubusercontent.com/vetrina72-byte/assets/main/volvo_ex30.glb';
 
 // Interfaccia per la configurazione della scena
 export interface SceneConfig {
@@ -52,6 +59,8 @@ export interface HeadlightConfig {
     y: number;
     z: number;
     angle: number;
+    yaw: number; // Individual lateral tilt
+    assemblyYaw: number; // Entire assembly rotation (360 deg)
     intensity: number;
     startWidth: number;
     endWidth: number;
@@ -61,6 +70,7 @@ export interface HeadlightConfig {
     fade: number;
     separation: number;
     circular: boolean;
+    linked: boolean; // Toggle rotation link with model
 }
 
 // Memoize Environment per evitare flash sulle riflessioni
@@ -165,8 +175,8 @@ function SceneController({
   const interactTimeout = useRef<number | null>(null);
 
   // Velocità di animazione fisse (Accelerated)
-  const openingCameraSpeed = 5.5; // Was 4.5
-  const closingCameraSpeed = 6.5; // Was 3.1 - Significantly faster return
+  const openingCameraSpeed = 5.5; 
+  const closingCameraSpeed = 6.5; 
 
   // Gestione interazione orbit controls
   useEffect(() => {
@@ -360,7 +370,7 @@ function EnvironmentController({
         targetDirectionalIntensity = 0;
         targetEnvIntensity = nightEnvironmentIntensity;
         targetMirror = 0;
-        targetFog = { near: 15, far: 70 }; // Blending fog for all night conditions
+        targetFog = { near: 15, far: 70 }; 
     } else {
         // Default DAY values
         targetAmbientIntensity = dayAmbientIntensity;
@@ -369,12 +379,10 @@ function EnvironmentController({
         targetEnvIntensity = dayEnvironmentIntensity;
         targetMirror = 0.8;
         
-        // Use debug controls for clear day, otherwise use weather config
         const fogNear = isOvercast ? targetWeatherParams.fogNear : dayFogNear;
         const fogFar = isOvercast ? targetWeatherParams.fogFar : dayFogFar;
         targetFog = { near: fogNear, far: fogFar };
 
-        // DAY WEATHER OVERRIDES for lighting
         if (weatherKey === 'Temporale') {
             targetAmbientIntensity *= 0.5;
             targetDirectionalIntensity = 0.1;
@@ -403,7 +411,6 @@ function EnvironmentController({
         }
     }
     
-    // --- LERP VALUES TO APPLY ---
     if (scene.background instanceof THREE.Color) scene.background.lerp(targetSky, t);
     
     const floorMat = floorRef.current!.material as any;
@@ -415,14 +422,11 @@ function EnvironmentController({
     if (directionalLightRef.current) directionalLightRef.current.intensity = THREE.MathUtils.lerp(directionalLightRef.current.intensity, targetDirectionalIntensity, t);
     scene.environmentIntensity = THREE.MathUtils.lerp(scene.environmentIntensity, targetEnvIntensity, t);
     
-    // FOG MUST BE APPLIED LAST
     if (targetFog) {
         if (!scene.fog) {
             scene.fog = new THREE.Fog(targetSky, targetFog.near, targetFog.far);
         }
         const fog = scene.fog as THREE.Fog;
-        // CRASH FIX: Use a reliable THREE.Color object for the fog color, not the scene background
-        // which could be a texture or null, causing a 'Cannot read properties of null' error.
         fog.color.copy(targetSky); 
         fog.near = THREE.MathUtils.lerp(fog.near, targetFog.near, t);
         fog.far = THREE.MathUtils.lerp(fog.far, targetFog.far, t);
@@ -482,7 +486,7 @@ export default function VehicleCanvas({
   const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
   
-  const { x, y, z, angle, intensity, startWidth, endWidth, length, startHeight, endHeight, fade, separation, circular } = headlightConfig;
+  const { x, y, z, angle, yaw, assemblyYaw, intensity, startWidth, endWidth, length, startHeight, endHeight, fade, separation, circular, linked } = headlightConfig;
 
   const beamRoll = 0;
   
@@ -493,20 +497,17 @@ export default function VehicleCanvas({
     if (uiScale === 1.0) {
       return homeConfig;
     }
-    // As scale decreases (e.g., 0.8), zoomFactor increases (1.25), moving camera further away.
     const zoomFactor = 1 / uiScale;
     return {
       ...homeConfig,
       cameraPos: {
         x: homeConfig.cameraPos.x * zoomFactor,
-        y: homeConfig.cameraPos.y, // Keep Y the same to avoid weird angles
+        y: homeConfig.cameraPos.y,
         z: homeConfig.cameraPos.z * zoomFactor,
       },
     };
   }, [uiScale, homeConfig]);
 
-  // We only use runtimeAppOpenConfig to store the props passed down, 
-  // as we no longer modify it locally in SceneController
   const [runtimeAppOpenConfig, setRuntimeAppOpenConfig] = useState<SceneConfig>(appOpenConfigFromProps);
 
   useEffect(() => {
@@ -521,6 +522,63 @@ export default function VehicleCanvas({
   }, [frontLightTarget]);
 
   const activeConfig = isAppOpen ? runtimeAppOpenConfig : initialConfig;
+
+  // Headlight rendering extracted for clean conditional rendering
+  // The assemblyYaw rotates the entire group of headlights as a single unit
+  const renderHeadlights = () => (
+    <group rotation={[0, assemblyYaw, 0]}>
+      {separation > 0 ? (
+        <>
+            <VolumetricHeadlight
+                position={[x - separation / 2, y, z]}
+                beamLength={length}
+                beamAngle={angle}
+                beamYaw={yaw}
+                beamRoll={beamRoll}
+                intensity={intensity}
+                fade={fade}
+                visible={isNight} 
+                beamStartWidth={startWidth}
+                beamEndWidth={endWidth}
+                beamStartHeight={startHeight}
+                beamEndHeight={endHeight}
+                circular={circular}
+            />
+             <VolumetricHeadlight
+                position={[x + separation / 2, y, z]}
+                beamLength={length}
+                beamAngle={angle}
+                beamYaw={yaw}
+                beamRoll={beamRoll}
+                intensity={intensity}
+                fade={fade}
+                visible={isNight} 
+                beamStartWidth={startWidth}
+                beamEndWidth={endWidth}
+                beamStartHeight={startHeight}
+                beamEndHeight={endHeight}
+                circular={circular}
+            />
+        </>
+      ) : (
+         <VolumetricHeadlight
+            position={[x, y, z]}
+            beamLength={length}
+            beamAngle={angle}
+            beamYaw={yaw}
+            beamRoll={beamRoll}
+            intensity={intensity}
+            fade={fade}
+            visible={isNight} 
+            beamStartWidth={startWidth}
+            beamEndWidth={endWidth}
+            beamStartHeight={startHeight}
+            beamEndHeight={endHeight}
+            circular={circular}
+        />
+      )}
+    </group>
+  );
 
   return (
     <>
@@ -550,56 +608,21 @@ export default function VehicleCanvas({
                 <shadowMaterial transparent opacity={shadowOpacity} />
               </mesh>
               
-              {separation > 0 ? (
-                <>
-                    <VolumetricHeadlight
-                        position={[x - separation / 2, y, z]}
-                        beamLength={length}
-                        beamAngle={angle}
-                        beamRoll={beamRoll}
-                        intensity={intensity}
-                        fade={fade}
-                        visible={isNight} 
-                        beamStartWidth={startWidth}
-                        beamEndWidth={endWidth}
-                        beamStartHeight={startHeight}
-                        beamEndHeight={endHeight}
-                        circular={circular}
-                    />
-                     <VolumetricHeadlight
-                        position={[x + separation / 2, y, z]}
-                        beamLength={length}
-                        beamAngle={angle}
-                        beamRoll={beamRoll}
-                        intensity={intensity}
-                        fade={fade}
-                        visible={isNight} 
-                        beamStartWidth={startWidth}
-                        beamEndWidth={endWidth}
-                        beamStartHeight={startHeight}
-                        beamEndHeight={endHeight}
-                        circular={circular}
-                    />
-                </>
-              ) : (
-                 <VolumetricHeadlight
-                    position={[x, y, z]}
-                    beamLength={length}
-                    beamAngle={angle}
-                    beamRoll={beamRoll}
-                    intensity={intensity}
-                    fade={fade}
-                    visible={isNight} 
-                    beamStartWidth={startWidth}
-                    beamEndWidth={endWidth}
-                    beamStartHeight={startHeight}
-                    beamEndHeight={endHeight}
-                    circular={circular}
-                />
-              )}
+              {/* Linked headlights follow the model's group rotation */}
+              {linked && renderHeadlights()}
 
               <primitive object={frontLightTarget} position={[0, 0, 10]} />
             </group>
+
+            {/* Unlinked headlights stay fixed in world rotation while car spins */}
+            {!linked && (
+              <group 
+                position={[activeConfig.modelPos.x, activeConfig.modelPos.y, activeConfig.modelPos.z]} 
+                scale={activeConfig.modelScale}
+              >
+                {renderHeadlights()}
+              </group>
+            )}
           </Suspense>
         </ModelErrorBoundary>
 
@@ -607,12 +630,12 @@ export default function VehicleCanvas({
         <OrbitControls 
             makeDefault
             enablePan={false} 
-            minPolarAngle={Math.PI / 2.8} // Limit vertical rotation to avoid going under the floor
+            minPolarAngle={Math.PI / 2.8}
             maxPolarAngle={Math.PI / 2.1} 
             minDistance={minOrbitDistance}
             maxDistance={maxOrbitDistance}
             enableZoom={true}
-            enableRotate={!isAppOpen} // Disable manual rotation when app is open (locked view)
+            enableRotate={!isAppOpen} 
         />
 
         <ambientLight ref={ambientLightRef} intensity={0.5} />
@@ -639,21 +662,20 @@ export default function VehicleCanvas({
             shadow-camera-bottom={-10}
         />
         
-        {/* Reflective Floor */}
         <mesh ref={floorRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.05, 0]} receiveShadow>
           <planeGeometry args={[300, 300]} />
           <MeshReflectorMaterial
             blur={[400, 400]}
             resolution={1024}
             mixBlur={1}
-            mixStrength={1.5} // Reduced strength to avoid over-bright reflections
-            roughness={0.5} // Increased roughness for a matte-like floor
+            mixStrength={1.5} 
+            roughness={0.5} 
             depthScale={1}
             minDepthThreshold={0.4}
             maxDepthThreshold={1.4}
             color="#101010"
             metalness={0.2}
-            mirror={0.7} // Controlled by EnvironmentController
+            mirror={0.7} 
           />
         </mesh>
 

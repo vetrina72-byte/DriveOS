@@ -60,7 +60,6 @@ const VolumetricFragmentShader = `
     uniform vec3 uColor;
     uniform float uIntensity;
     uniform float uFade;
-    // uniform bool uCircular; // Removed, geometry handles shape now
 
     varying vec3 vPos;
     varying vec2 vUv;
@@ -81,6 +80,7 @@ export const VolumetricHeadlight = ({
     position,
     beamLength,
     beamAngle, // Pitch
+    beamYaw,   // Yaw (Lateral Tilt)
     beamRoll,  // Roll
     intensity,
     fade,
@@ -94,6 +94,7 @@ export const VolumetricHeadlight = ({
     position: [number, number, number];
     beamLength: number;
     beamAngle: number;
+    beamYaw: number;
     beamRoll: number;
     intensity: number;
     fade: number;
@@ -109,7 +110,7 @@ export const VolumetricHeadlight = ({
 
     useEffect(() => {
         if (groupRef.current) {
-            const initialEuler = new THREE.Euler(beamAngle, Math.PI, beamRoll, 'YXZ');
+            const initialEuler = new THREE.Euler(beamAngle, Math.PI + beamYaw, beamRoll, 'YXZ');
             groupRef.current.quaternion.setFromEuler(initialEuler);
         }
     }, []);
@@ -133,7 +134,7 @@ export const VolumetricHeadlight = ({
         fragmentShader: VolumetricFragmentShader,
         transparent: true,
         depthWrite: false,
-        side: THREE.DoubleSide, // Visible from inside and out
+        side: THREE.DoubleSide, 
     }), []);
 
     useFrame((_, delta) => {
@@ -144,7 +145,7 @@ export const VolumetricHeadlight = ({
         const animationSpeed = 2.0;
         const dampFactor = 1 - Math.exp(-animationSpeed * delta);
         
-        targetEuler.set(beamAngle, Math.PI, beamRoll);
+        targetEuler.set(beamAngle, Math.PI + beamYaw, beamRoll);
         targetQuat.setFromEuler(targetEuler);
         group.quaternion.slerp(targetQuat, dampFactor);
 
@@ -171,7 +172,6 @@ export const VolumetricHeadlight = ({
         >
             <mesh castShadow={false} receiveShadow={false}>
                 {circular ? (
-                    // Radius 0.5 matches Box size 1 (from -0.5 to 0.5)
                     <cylinderGeometry args={[0.5, 0.5, 1, 32, 1, true]} />
                 ) : (
                     <boxGeometry args={[1, 1, 1]} />

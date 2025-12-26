@@ -1,12 +1,10 @@
 
-// ... (imports remain same)
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyApp from './components/SpotifyPlayer';
-// FIX: MusicPlayer is a default export. The import is correct.
 import MusicPlayer from './components/MusicPlayer';
 import MapsContainer from './components/MapsContainer';
 import AppLauncher from './components/AppLauncher';
@@ -28,9 +26,6 @@ import VirtualKeyboard from './components/VirtualKeyboard';
 import { SpotifyItem as MediaItem } from './components/PlaylistItem';
 import WebAppViewer from './components/WebAppViewer';
 
-// ... (AppDefinition, ALL_APPS, weatherConfig, DockButton, IconLocationResult, formatTravelTime, NavigateTool, calculateGeoDistance, NavigationStatus, helper functions, types)
-// ... (keep all these existing components and functions exactly as they are)
-
 interface AppDefinition {
   id: string;
   icon: React.ComponentType<any>;
@@ -47,37 +42,26 @@ const ALL_APPS: AppDefinition[] = [
 ];
 
 const weatherConfig: Record<string, WeatherParams> = {
-  // Clear conditions, minimal fog
   'Cielo sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
   'Prevalentemente sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 45, fogFar: 140 },
   'Parzialmente nuvoloso': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 35, fogFar: 120 },
   'Coperto': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 25, fogFar: 80 },
-
-  // Precipitation
   'Pioggerella': { rainDensity: 0.2, rainSpeed: 5, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 20, fogFar: 60 },
   'Pioggia leggera': { rainDensity: 0.4, rainSpeed: 8, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 18, fogFar: 50 },
   'Pioggia': { rainDensity: 0.7, rainSpeed: 11, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 15, fogFar: 40 },
   'Pioggia forte': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
   'Rovescio': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
   'Temporale': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 8, fogFar: 25 },
-
-  // Frozen Precipitation
   'Neve leggera': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.4, snowSpeed: 1.5, hailDensity: 0, fogNear: 15, fogFar: 40 },
   'Neve': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.7, snowSpeed: 3.0, hailDensity: 0, fogNear: 12, fogFar: 35 },
   'Neve forte': { rainDensity: 0, rainSpeed: 0, snowDensity: 1.0, snowSpeed: 6.0, hailDensity: 0, fogNear: 8, fogFar: 25 },
   'Grandine': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 1.0, fogNear: 12, fogFar: 35 },
-
-  // Obscuration
   'Nebbia': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 1, fogFar: 20 },
-  
-  // Special / Time-based
   'Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
   'Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
   'Cloudy Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
   'Cloudy Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
   'Partly Cloudy Night': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 120 },
-
-  // Default fallback
   'Default': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
 };
 
@@ -137,7 +121,7 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
     const expandedHeight = 400;
 
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-        const R = 6371; // Radius of the Earth in km
+        const R = 6371; 
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
         const a =
@@ -145,7 +129,7 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
             Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; // Distance in km
+        return R * c; 
     };
 
     const highlightMatch = (text: string | undefined, query: string) => {
@@ -212,9 +196,6 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
     }, [query, currentPosition]);
 
     useEffect(() => {
-        // The panel should be expanded if the user is focused on the input,
-        // OR if there is text in the input (even if focus is lost).
-        // This prevents the panel from closing when the user clicks away while typing.
         setIsExpanded(isFocused || query.length > 0);
     }, [isFocused, query]);
 
@@ -230,8 +211,8 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
     useEffect(() => {
         const textarea = inputRef.current;
         if (textarea) {
-            textarea.style.height = 'auto'; // Reset height
-            textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
+            textarea.style.height = 'auto'; 
+            textarea.style.height = `${textarea.scrollHeight}px`; 
         }
     }, [query]);
     
@@ -345,18 +326,6 @@ const NavigateTool = ({ isNight, onSelectDestination, currentPosition, width, wi
     );
 };
 
-const calculateGeoDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371; // Radius of the Earth in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-};
-
 const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo, simulatedRemainingDistance, width, widgetBgColor }: {
     target: { lat: number, lng: number, name: string },
     currentPosition: { lat: number, lng: number } | null,
@@ -388,7 +357,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
             const totalDistKm = tripInfo.distance / 1000;
             setTotalDistance(totalDistKm);
             setRemainingDistance(totalDistKm);
-            setRemainingTime(tripInfo.time / 60); // Set initial time
+            setRemainingTime(tripInfo.time / 60); 
             isNewTrip.current = true;
         } else {
             setTotalDistance(null);
@@ -397,7 +366,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         }
     }, [target, tripInfo]);
 
-    // Effect to update remaining distance based on real-time position.
     useEffect(() => {
         if (!currentPosition || !routeRef.current || totalDistance === null) return;
         
@@ -434,7 +402,7 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
             setRemainingTime(null);
         }
 
-        if (remDist < 0.05) { // Arrived (50 meters)
+        if (remDist < 0.05) { 
             onCancel('Sei arrivato a destinazione!');
         }
 
@@ -463,14 +431,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
         const arrow = arrowIndicatorRef.current;
         if (arrow) {
             arrow.style.opacity = '1';
-            setTimeout(() => {
-                if (arrow) {
-                    const currentOpacity = parseFloat(window.getComputedStyle(arrow).opacity);
-                    if (currentOpacity < 0.9) {
-                        console.warn(`[NAV_ARROW_OPACITY_WARN] Arrow opacity is unexpectedly low: ${currentOpacity}. Check for conflicting global CSS.`);
-                    }
-                }
-            }, 100);
         }
     }, [percent]);
 
@@ -540,7 +500,6 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
     );
 }
 
-// Helper Functions for weather data processing
 const degToCompass = (num: number) => {
     const val = Math.floor((num / 45) + 0.5);
     const arr = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
@@ -555,38 +514,36 @@ const timestampToHHMM = (ts: number) => {
 
 const wmoCodeToCondition = (code: number): string => {
     const mapping: { [key: number]: string } = {
-        0: 'Cielo sereno',
-        1: 'Prevalentemente sereno',
-        2: 'Parzialmente nuvoloso',
-        3: 'Coperto',
-        45: 'Nebbia',
-        48: 'Nebbia',
-        51: 'Pioggerella',
-        53: 'Pioggerella',
-        55: 'Pioggerella',
-        56: 'Pioggerella',
-        57: 'Pioggerella',
-        61: 'Pioggia leggera',
-        63: 'Pioggia',
-        65: 'Pioggia forte',
-        66: 'Pioggia',
-        67: 'Pioggia',
-        71: 'Neve leggera',
-        73: 'Neve',
-        75: 'Neve forte',
-        77: 'Grandine',
-        80: 'Rovescio',
-        81: 'Rovescio',
-        82: 'Rovescio',
-        85: 'Neve',
-        86: 'Neve',
-        95: 'Temporale',
-        96: 'Temporale',
-        99: 'Temporale',
+        0: 'Cielo sereno', 1: 'Prevalentemente sereno', 2: 'Parzialmente nuvoloso', 3: 'Coperto',
+        45: 'Nebbia', 48: 'Nebbia', 51: 'Pioggerella', 53: 'Pioggerella', 55: 'Pioggerella',
+        56: 'Pioggerella', 57: 'Pioggerella', 61: 'Pioggia leggera', 63: 'Pioggia', 65: 'Pioggia forte',
+        66: 'Pioggia', 67: 'Pioggia', 71: 'Neve leggera', 73: 'Neve', 75: 'Neve forte', 77: 'Grandine',
+        80: 'Rovescio', 81: 'Rovescio', 82: 'Rovescio', 85: 'Neve', 86: 'Neve', 95: 'Temporale',
+        96: 'Temporale', 99: 'Temporale',
     };
     return mapping[code] ?? 'Parzialmente nuvoloso';
 };
 
+const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
+    if (!item || !item.snippet) return null;
+
+    const id = typeof item.id === 'string' ? item.id : item.id?.videoId || item.id?.playlistId;
+    if (!id) return null;
+
+    const type = item.kind === 'youtube#video' || item.id?.kind === 'youtube#video' ? 'track' :
+                 item.kind === 'youtube#playlist' || item.id?.kind === 'youtube#playlist' ? 'playlist' : 'track';
+
+    return {
+        id,
+        name: item.snippet.title,
+        uri: `youtube:${type}:${id}`,
+        images: [item.snippet.thumbnails.high || item.snippet.thumbnails.default],
+        description: item.snippet.channelTitle,
+        type: type,
+    };
+};
+
+const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
 
 type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
 
@@ -601,7 +558,6 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   } : null;
 }
 
-// FIX: Changed SceneColors to use explicit 'day' and 'night' keys for better type safety.
 export type SceneColors = {
   day: {
     [condition: string]: { sky: string; floor: string };
@@ -630,43 +586,34 @@ export const initialSceneColors: SceneColors = {
   }
 };
 
-const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
-
-const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
-    if (!item || !item.snippet) return null;
-    const id = typeof item.id === 'string' ? item.id : item.id?.videoId || item.id?.playlistId;
-    if (!id) return null;
-    const type = item.kind === 'youtube#video' || item.id?.kind === 'youtube#video' ? 'track' :
-                 item.kind === 'youtube#playlist' || item.id?.kind === 'youtube#playlist' ? 'playlist' : 'track';
-    return {
-        id,
-        name: item.snippet.title,
-        uri: `youtube:${type}:${id}`,
-        images: [item.snippet.thumbnails.high || item.snippet.thumbnails.default],
-        description: item.snippet.channelTitle,
-        type: type,
-    };
-};
+function calculateGeoDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; 
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
 
 const DEFAULT_HOME_CONFIG: SceneConfig = {
-    cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, // UPDATED Y
-    cameraTarget: { x: 0.95, y: 0.25, z: 0.65 }, // UPDATED Y
-    modelPos: { x: 14.25, y: -1.30, z: -1.40 },
-    modelRot: { x: 0.00, y: 0.06, z: 0.00 },
-    modelScale: 2.80,
+    cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
+    cameraTarget: { x: -1.30, y: -0.40, z: 0.05 }, 
+    modelPos: { x: -1.40, y: -1.05, z: 0.15 },
+    modelRot: { x: 0.01, y: -1.49, z: 0.00 },
+    modelScale: 2.68,
 };
 
 function AppContent() {
   const { nowPlaying, setNowPlaying, pauseSpotify } = useAuth();
   const [isDebugOpen, setIsDebugOpen] = useState(true);
 
-  // Time and Weather
   const [timeOverride, setTimeOverride] = useState<Date | null>(null);
   const [weatherConditionOverride, setWeatherConditionOverride] = useState<string | null>(null);
   const [sunsetArrowYPosition, setSunsetArrowYPosition] = useState(1);
   const [sunriseArrowYPosition, setSunriseArrowYPosition] = useState(5);
 
-  // UI Layout
   const [topBarScale, setTopBarScale] = useState(1.0);
   const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
   const [mapsSearchPanelWidth, setMapsSearchPanelWidth] = useState(401);
@@ -680,7 +627,6 @@ function AppContent() {
   const [uiScale, setUiScale] = useState<number | null>(1.0);
   const [appBarWidth, setAppBarWidth] = useState(500);
 
-  // 3D Scene
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
   
@@ -689,25 +635,28 @@ function AppContent() {
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>({
       cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
       cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
-      modelPos: { x: 2.00, y: -1.05, z: 1.40 }, 
-      modelRot: { x: 0.01, y: 0.01, z: 0.01 },
-      modelScale: 1.46, 
+      modelPos: { x: -5.75, y: -1.00, z: 1.90 }, 
+      modelRot: { x: 0.01, y: -1.49, z: 0.01 },
+      modelScale: 1.36, 
   });
 
   const [headlightConfig, setHeadlightConfig] = useState({
-      x: -4.85,
-      y: 0.81,
-      z: 1.55,
-      angle: 3.10,
-      intensity: 0.70,
-      startWidth: 0.10,
+      x: -0.05,
+      y: 0.77,
+      z: -1.55,
+      angle: 0.06,
+      yaw: 0.01, 
+      assemblyYaw: -1.588, // -91 deg in rad
+      intensity: 0.75,
+      startWidth: 0.30,
       endWidth: 0.10,
-      length: 20.00,
-      startHeight: 0.10,
+      length: 7.00,
+      startHeight: 0.03,
       endHeight: 0.01,
       fade: 7.40,
-      separation: 0.90,
+      separation: 1.25,
       circular: true,
+      linked: true, 
   });
 
   const [sceneColors, setSceneColors] = useState<SceneColors>(initialSceneColors);
@@ -718,7 +667,6 @@ function AppContent() {
   const [dayFogNear, setDayFogNear] = useState(13);
   const [dayFogFar, setDayFogFar] = useState(52);
 
-  // Spotify Player & Home Widgets
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(80);
   const [playerDockedWidth, setPlayerDockedWidth] = useState(519);
@@ -748,23 +696,22 @@ function AppContent() {
   const [volumeSliderPopupWidth, setVolumeSliderPopupWidth] = useState(247);
   const [volumeSliderPopupHeight, setVolumeSliderPopupHeight] = useState(40);
   const [volumeControlZIndex, setVolumeControlZIndex] = useState(5000);
-  const [appLauncherWidth, setAppLauncherWidth] = useState(30); // percentage
-  const [appLauncherHeight, setAppLauncherHeight] = useState(286); // pixels
+
+  // FIX: Added missing state variables for App Launcher and Queue Popover.
+  const [appLauncherWidth, setAppLauncherWidth] = useState(30);
+  const [appLauncherHeight, setAppLauncherHeight] = useState(286);
   const [queuePopoverHeight, setQueuePopoverHeight] = useState(89);
   const [queuePopoverBottomOffset, setQueuePopoverBottomOffset] = useState(16);
   const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
   const [queuePopoverWidth, setQueuePopoverWidth] = useState(288);
   const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(-29);
 
-
-  // YouTube Music State
   const [youtubeHomeData, setYoutubeHomeData] = useState<{[key: string]: MediaItem[]}>({});
   const [youtubeHomeIsLoading, setYoutubeHomeIsLoading] = useState(true);
   const [youtubeHomeError, setYoutubeHomeError] = useState<string | null>(null);
   const [youtubeHomeQuotaExceeded, setYoutubeHomeQuotaExceeded] = useState(false);
   const retryIntervalRef = useRef<number | null>(null);
 
-  // Debug UI Colors
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
   const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#ffffff');
   const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
@@ -773,28 +720,22 @@ function AppContent() {
     return rgb ? `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})` : 'rgb(255, 255, 255)';
   }, [widgetBgHex]);
   
-  // Custom Dark Mode Volume Colors
   const [darkVolumeTrackBg, setDarkVolumeTrackBg] = useState('#4D4D4D');
   const [darkVolumeThumbBg, setDarkVolumeThumbBg] = useState('#ffffff');
   const [darkVolumeFillBg, setDarkVolumeFillBg] = useState('#ffffff');
   const [darkPlayerBg, setDarkPlayerBg] = useState('#212121');
   const [darkNavigateInputBg, setDarkNavigateInputBg] = useState('#2b2b2b');
 
-  // Satellite Map Label Customization
   const [satelliteLabelBrightness, setSatelliteLabelBrightness] = useState(2.3);
   const [satelliteLabelOutlineWidth, setSatelliteLabelOutlineWidth] = useState(1.2);
 
-
-  // App Customization State
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
   const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
   
-  // Radio Favorites State
   const [favoriteStationUUIDs, setFavoriteStationUUIDs] = useState<string[]>([]);
 
-  // Virtual Keyboard State
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardTarget, setKeyboardTarget] = useState<HTMLElement | null>(null);
   const [virtualKeyboardKeySize, setVirtualKeyboardKeySize] = useState(41);
@@ -805,7 +746,6 @@ function AppContent() {
   const [virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight] = useState(600);
   const [webAppUrl, setWebAppUrl] = useState<string | null>(null);
 
-  // Focus logic for showing keyboard
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
@@ -817,38 +757,21 @@ function AppContent() {
         setIsKeyboardVisible(true);
       }
     };
-
     document.addEventListener('focusin', handleFocusIn);
-    return () => {
-      document.removeEventListener('focusin', handleFocusIn);
-    };
+    return () => document.removeEventListener('focusin', handleFocusIn);
   }, []);
 
-  // Logic to close keyboard on clicking outside
   useEffect(() => {
     if (!isKeyboardVisible) return;
-
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
-      
-      // If the click is on the keyboard itself, do nothing
-      if (target.closest('#virtual-keyboard')) {
-        return;
-      }
-
-      // If the click is on an input/textarea, do nothing (browser focus logic handles it, or focusIn will handle re-opening)
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        return;
-      }
-
-      // Otherwise, close the keyboard
+      if (target.closest('#virtual-keyboard')) return;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       setIsKeyboardVisible(false);
       setKeyboardTarget(null);
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('touchstart', handleClickOutside);
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
@@ -856,41 +779,26 @@ function AppContent() {
   }, [isKeyboardVisible]);
 
   const handleKeyboardClose = useCallback(() => {
-    if (keyboardTarget) {
-      keyboardTarget.blur();
-    }
+    if (keyboardTarget) keyboardTarget.blur();
     setIsKeyboardVisible(false);
     setKeyboardTarget(null);
   }, [keyboardTarget]);
 
-
   useEffect(() => {
     try {
         const storedFavorites = localStorage.getItem('radio_favorite_uuids');
-        if (storedFavorites) {
-            setFavoriteStationUUIDs(JSON.parse(storedFavorites));
-        }
-    } catch (e) {
-        console.error("Failed to load favorite stations from localStorage", e);
-    }
+        if (storedFavorites) setFavoriteStationUUIDs(JSON.parse(storedFavorites));
+    } catch (e) { console.error(e); }
   }, []);
 
   useEffect(() => {
     try {
         localStorage.setItem('radio_favorite_uuids', JSON.stringify(favoriteStationUUIDs));
-    } catch (e) {
-        console.error("Failed to save favorite stations to localStorage", e);
-    }
-  }, [favoriteStationUUIDs]);
+    } catch (e) { console.error(e); }
+  }, []);
 
   const handleToggleFavorite = useCallback((station: RadioStation) => {
-    setFavoriteStationUUIDs(prev => {
-        if (prev.includes(station.stationuuid)) {
-            return prev.filter(uuid => uuid !== station.stationuuid);
-        } else {
-            return [...prev, station.stationuuid];
-        }
-    });
+    setFavoriteStationUUIDs(prev => prev.includes(station.stationuuid) ? prev.filter(uuid => uuid !== station.stationuuid) : [...prev, station.stationuuid]);
   }, []);
 
   const moveAppToLauncher = (appId: string) => {
@@ -934,7 +842,6 @@ function AppContent() {
   const [workLocation, setWorkLocation] = useState<{ lat: number, lng: number, name: string } | null>(null);
   const [favoriteLocations, setFavoriteLocations] = useState<{ lat: number, lng: number, name: string }[]>([]);
 
-  // States for trip simulation
   const [simulatedRemainingDistance, setSimulatedRemainingDistance] = useState<number | null>(null);
   const simulationIntervalRef = useRef<number | null>(null);
   
@@ -943,45 +850,24 @@ function AppContent() {
   
   const handlePlayStation = (station: RadioStation, context: RadioStation[]) => {
       pauseSpotify();
-      setNowPlaying(prev => ({
-        ...prev,
-        source: 'radio',
-        radioStation: station,
-        radioContext: context,
-        youtubeTrack: null,
-        isLoading: true,
-      }));
+      setNowPlaying(prev => ({ ...prev, source: 'radio', radioStation: station, radioContext: context, youtubeTrack: null, isLoading: true }));
   };
   
   const handleStationChange = (direction: 'next' | 'prev') => {
-      if (nowPlaying?.source !== 'radio' || !nowPlaying.radioContext || nowPlaying.radioContext.length === 0) return;
-      
+      if (nowPlaying?.source !== 'radio' || !nowPlaying.radioContext?.length) return;
       const { radioStation, radioContext } = nowPlaying;
-      if (!radioStation || !radioContext) return;
-      
-      const currentIndex = radioContext.findIndex(s => s.stationuuid === radioStation.stationuuid);
+      const currentIndex = radioContext.findIndex(s => s.stationuuid === radioStation!.stationuuid);
       if (currentIndex === -1) return;
-      
-      let nextIndex;
-      if (direction === 'next') {
-          nextIndex = (currentIndex + 1) % radioContext.length;
-      } else {
-          nextIndex = (currentIndex - 1 + radioContext.length) % radioContext.length;
-      }
+      let nextIndex = direction === 'next' ? (currentIndex + 1) % radioContext.length : (currentIndex - 1 + radioContext.length) % radioContext.length;
       setNowPlaying(prev => ({ ...prev, radioStation: radioContext[nextIndex] }));
   };
 
   const startTripSimulation = useCallback(() => {
     if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
-    if (!tripInfo) {
-        console.warn("Cannot start simulation: no trip is active.");
-        return;
-    }
-
+    if (!tripInfo) return;
     const totalDistKm = tripInfo.distance / 1000;
     let currentDist = totalDistKm;
     setSimulatedRemainingDistance(currentDist);
-
     simulationIntervalRef.current = window.setInterval(() => {
         currentDist -= totalDistKm / 100; 
         if (currentDist <= 0) {
@@ -993,1079 +879,225 @@ function AppContent() {
   }, [tripInfo]);
 
   const stopTripSimulation = useCallback(() => {
-    if (simulationIntervalRef.current) {
-        clearInterval(simulationIntervalRef.current);
-        simulationIntervalRef.current = null;
-    }
+    if (simulationIntervalRef.current) { clearInterval(simulationIntervalRef.current); simulationIntervalRef.current = null; }
     setSimulatedRemainingDistance(null);
   }, []);
 
-  const handleSelectDestination = (target: { lat: number, lng: number, name: string }) => {
-    setNavigationTarget(target);
-    setActiveApp('maps');
-  };
+  const handleSelectDestination = (target: { lat: number, lng: number, name: string }) => { setNavigationTarget(target); setActiveApp('maps'); };
   
   const handleCancelNavigation = useCallback((message?: string) => {
-    setNavigationTarget(null);
-    setTripInfo(null);
-    routeStore.setRoute(null);
-
+    setNavigationTarget(null); setTripInfo(null); routeStore.setRoute(null);
     const mapsIframe = document.querySelector('iframe[title="Tesla Navigation"]');
-    if (mapsIframe && (mapsIframe as HTMLIFrameElement).contentWindow) {
-        (mapsIframe as HTMLIFrameElement).contentWindow.postMessage({ type: 'CLEAR_ROUTE_FROM_PARENT' }, '*');
-    }
-
-    if (message) {
-      setArrivalMessage(message);
-      if (arrivalTimeoutRef.current) clearTimeout(arrivalTimeoutRef.current);
-      arrivalTimeoutRef.current = window.setTimeout(() => setArrivalMessage(null), 5000);
-    }
+    if (mapsIframe && (mapsIframe as HTMLIFrameElement).contentWindow) { (mapsIframe as HTMLIFrameElement).contentWindow.postMessage({ type: 'CLEAR_ROUTE_FROM_PARENT' }, '*'); }
+    if (message) { setArrivalMessage(message); if (arrivalTimeoutRef.current) clearTimeout(arrivalTimeoutRef.current); arrivalTimeoutRef.current = window.setTimeout(() => setArrivalMessage(null), 5000); }
   }, []);
 
   useEffect(() => {
     try {
-        const storedHome = localStorage.getItem('home_location');
-        if (storedHome) setHomeLocation(JSON.parse(storedHome));
-        const storedWork = localStorage.getItem('work_location');
-        if (storedWork) setWorkLocation(JSON.parse(storedWork));
-        const storedFavorites = localStorage.getItem('favorite_locations');
-        if (storedFavorites) setFavoriteLocations(JSON.parse(storedFavorites));
-    } catch (e) { console.error("Failed to load locations from localStorage", e); }
+        const storedHome = localStorage.getItem('home_location'); if (storedHome) setHomeLocation(JSON.parse(storedHome));
+        const storedWork = localStorage.getItem('work_location'); if (storedWork) setWorkLocation(JSON.parse(storedWork));
+        const storedFavorites = localStorage.getItem('favorite_locations'); if (storedFavorites) setFavoriteLocations(JSON.parse(storedFavorites));
+    } catch (e) { console.error(e); }
   }, []);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'ROUTE_CLEARED') {
-          handleCancelNavigation();
-      }
-      
+      if (event.data?.type === 'ROUTE_CLEARED') handleCancelNavigation();
       if (event.data?.type === 'ROUTE_UPDATED' && event.data.payload) {
         const { geometry, info, target } = event.data.payload;
         const routeData: [number, number][] = geometry.map((coords: [number, number]) => [coords[1], coords[0]]);
-        routeStore.setRoute(routeData);
-        setTripInfo(info);
-        if (target) {
-          setNavigationTarget(target);
-        }
+        routeStore.setRoute(routeData); setTripInfo(info); if (target) setNavigationTarget(target);
       }
-      
-      if (event.data?.type === 'MAP_STYLE_CHANGED') {
-        setMapStyle(event.data.payload.style);
-      }
-
+      if (event.data?.type === 'MAP_STYLE_CHANGED') setMapStyle(event.data.payload.style);
       if (event.data?.type === 'SAVE_LOCATION' && event.data.payload) {
         const { type, coords, name } = event.data.payload;
         const locationData = { lat: coords.lat, lng: coords.lng, name };
-        if (type === 'home') {
-            setHomeLocation(locationData);
-            localStorage.setItem('home_location', JSON.stringify(locationData));
-        } else if (type === 'work') {
-            setWorkLocation(locationData);
-            localStorage.setItem('work_location', JSON.stringify(locationData));
-        }
+        if (type === 'home') { setHomeLocation(locationData); localStorage.setItem('home_location', JSON.stringify(locationData)); }
+        else if (type === 'work') { setWorkLocation(locationData); localStorage.setItem('work_location', JSON.stringify(locationData)); }
       }
        if (event.data?.type === 'SAVE_FAVORITE' && event.data.payload) {
             const newFavorite = event.data.payload;
             setFavoriteLocations(prev => {
                 if (prev.some(f => f.name === newFavorite.name)) return prev;
-                const updatedFavorites = [newFavorite, ...prev];
-                localStorage.setItem('favorite_locations', JSON.stringify(updatedFavorites));
+                const updatedFavorites = [newFavorite, ...prev]; localStorage.setItem('favorite_locations', JSON.stringify(updatedFavorites));
                 return updatedFavorites;
             });
         }
     };
-
     window.addEventListener('message', handleMessage);
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
+    return () => window.removeEventListener('message', handleMessage);
   }, [handleCancelNavigation]);
 
-  const handleCloseMaps = () => {
-    toggleApp('maps');
-  };
+  const handleCloseMaps = () => toggleApp('maps');
+  useEffect(() => { const intervalId = setInterval(() => setCurrentTime(new Date()), 60000); return () => clearInterval(intervalId); }, []);
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
-        setCurrentTime(new Date());
-    }, 60000);
-    return () => clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    const calculateBearing = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
-      const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
-      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-    };
-
     if (navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
         (position) => {
           const { latitude, longitude, heading } = position.coords;
           const newPos = { lat: latitude, lng: longitude };
-          
           setCurrentPosition(newPos);
-
           if (heading !== null && heading !== undefined) {
-              setBearing(prevBearing => {
-                  let diff = heading - prevBearing;
-                  if (diff > 180) diff -= 360;
-                  if (diff < -180) diff += 360;
-                  return (prevBearing + diff * 0.3 + 360) % 360;
-              });
-          } else if (lastPositionRef.current && (Math.abs(lastPositionRef.current.lat - newPos.lat) > 0.00001 || Math.abs(lastPositionRef.current.lng - newPos.lng) > 0.00001)) {
-              const newBearing = calculateBearing(lastPositionRef.current.lat, lastPositionRef.current.lng, newPos.lat, newPos.lng);
-              setBearing(prevBearing => {
-                  let diff = newBearing - prevBearing;
-                  if (diff > 180) diff -= 360;
-                  if (diff < -180) diff += 360;
-                  return (prevBearing + diff * 0.3 + 360) % 360;
-              });
+              setBearing(prevBearing => { let diff = heading - prevBearing; if (diff > 180) diff -= 360; if (diff < -180) diff += 360; return (prevBearing + diff * 0.3 + 360) % 360; });
           }
           lastPositionRef.current = newPos;
         },
-        (error) => {
-          console.warn("Geolocation watch error:", error.message);
-        },
+        (error) => console.warn(error.message),
         { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
       );
-      
       return () => navigator.geolocation.clearWatch(watchId);
     }
   }, []);
   
-  useEffect(() => {
-      const handler = setTimeout(() => {
-          if (currentPosition) {
-              setThrottledPosition(currentPosition);
-          }
-      }, 250);
-      return () => clearTimeout(handler);
-  }, [currentPosition]);
-
+  useEffect(() => { const handler = setTimeout(() => { if (currentPosition) setThrottledPosition(currentPosition); }, 250); return () => clearTimeout(handler); }, [currentPosition]);
 
   const effectiveTime = timeOverride || currentTime;
 
   const { isNight, effectiveWeatherCondition, isHot, isCold } = useMemo(() => {
-    const now = effectiveTime;
-    let night: boolean;
-    let condition: string;
-
+    const now = effectiveTime; let night: boolean; let condition: string;
     if (weatherData?.details?.sunrise && weatherData?.details?.sunset) {
-        const sunriseDate = new Date(now.getTime());
-        const sunsetDate = new Date(now.getTime());
+        const sunriseDate = new Date(now.getTime()); const sunsetDate = new Date(now.getTime());
         const [sr_h, sr_m] = weatherData.details.sunrise.split(':').map(Number);
         const [ss_h, ss_m] = weatherData.details.sunset.split(':').map(Number);
-        sunriseDate.setHours(sr_h, sr_m, 0, 0);
-        sunsetDate.setHours(ss_h, ss_m, 0, 0);
-
+        sunriseDate.setHours(sr_h, sr_m, 0, 0); sunsetDate.setHours(ss_h, ss_m, 0, 0);
         night = now.getTime() < sunriseDate.getTime() || now.getTime() >= sunsetDate.getTime();
-
         const isCloudy = /nuvol|nebbia|coperto/i.test(weatherData.current.condition);
-        
-        if (now.getHours() === sunriseDate.getHours()) {
-            condition = isCloudy ? 'Cloudy Sunrise' : 'Sunrise';
-        } else if (now.getHours() === sunsetDate.getHours()) {
-            condition = isCloudy ? 'Cloudy Sunset' : 'Sunset';
-        } else {
-            condition = weatherData.current.condition;
-        }
-
+        if (now.getHours() === sunriseDate.getHours()) condition = isCloudy ? 'Cloudy Sunrise' : 'Sunrise';
+        else if (now.getHours() === sunsetDate.getHours()) condition = isCloudy ? 'Cloudy Sunset' : 'Sunset';
+        else condition = weatherData.current.condition;
     } else {
-        const hour = now.getHours();
-        const month = now.getMonth();
-        const isSummer = month >= 3 && month <= 8;
-        const sunriseHour = isSummer ? 6 : 7;
-        const sunsetHour = isSummer ? 20 : 17;
-
-        night = hour < sunriseHour || hour >= sunsetHour;
+        const hour = now.getHours(); const month = now.getMonth();
+        night = hour < (month >= 3 && month <= 8 ? 6 : 7) || hour >= (month >= 3 && month <= 8 ? 20 : 17);
         condition = 'Nuvoloso';
     }
-    
     const finalCondition = weatherConditionOverride || condition;
-
-    const nowHourlyData = weatherData?.hourly.find(h => new Date(h.dt * 1000).getHours() === now.getHours());
-    const currentTemp = nowHourlyData?.temperature ?? weatherData?.current.temperature ?? 20;
-
-    const hot = currentTemp >= HOT_TEMP && !/nuvol|coperto|piogg|rovescio|nev|nebbia|temporale|grandin/i.test(finalCondition);
-    const cold = currentTemp <= COLD_TEMP;
-
-    return { 
-        isNight: night, 
-        effectiveWeatherCondition: finalCondition,
-        isHot: hot,
-        isCold: cold
-    };
+    const currentTemp = weatherData?.hourly.find(h => new Date(h.dt * 1000).getHours() === now.getHours())?.temperature ?? weatherData?.current.temperature ?? 20;
+    return { isNight: night, effectiveWeatherCondition: finalCondition, isHot: currentTemp >= HOT_TEMP && !/nuvol|coperto|piogg|rovescio|nev|nebbia|temporale|grandin/i.test(finalCondition), isCold: currentTemp <= COLD_TEMP };
   }, [effectiveTime, weatherData, weatherConditionOverride]);
 
-  const isGloomyDay = useMemo(() => {
-    if (isNight) return false;
-    const condition = effectiveWeatherCondition.toLowerCase();
-    return condition.includes('temporale') || condition.includes('pioggia') || condition.includes('rovescio') || condition.includes('grandine');
-  }, [isNight, effectiveWeatherCondition]);
-
-  const useDarkTheme = isNight || isGloomyDay;
+  const useDarkTheme = isNight || /temporale|pioggia|rovescio|grandine/i.test(effectiveWeatherCondition.toLowerCase());
   
   useEffect(() => {
     const root = document.documentElement;
     if (useDarkTheme) {
-        root.style.setProperty('--volume-slider-track-bg', darkVolumeTrackBg);
-        root.style.setProperty('--volume-slider-thumb-bg', darkVolumeThumbBg);
-        root.style.setProperty('--volume-slider-fill-bg', darkVolumeFillBg);
-        root.style.setProperty('--player-bg', darkPlayerBg);
+        root.style.setProperty('--volume-slider-track-bg', darkVolumeTrackBg); root.style.setProperty('--volume-slider-thumb-bg', darkVolumeThumbBg);
+        root.style.setProperty('--volume-slider-fill-bg', darkVolumeFillBg); root.style.setProperty('--player-bg', darkPlayerBg);
     } else {
-        // When not in dark theme, remove the overrides so the CSS file's :root variables take effect.
-        root.style.removeProperty('--volume-slider-track-bg');
-        root.style.removeProperty('--volume-slider-thumb-bg');
-        root.style.removeProperty('--volume-slider-fill-bg');
-        root.style.removeProperty('--player-bg');
+        root.style.removeProperty('--volume-slider-track-bg'); root.style.removeProperty('--volume-slider-thumb-bg');
+        root.style.removeProperty('--volume-slider-fill-bg'); root.style.removeProperty('--player-bg');
     }
   }, [useDarkTheme, darkVolumeTrackBg, darkVolumeThumbBg, darkVolumeFillBg, darkPlayerBg]);
 
-
-  const targetWeatherParams = useMemo(() => {
-    return weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'];
-  }, [effectiveWeatherCondition]);
+  const targetWeatherParams = useMemo(() => weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'], [effectiveWeatherCondition]);
 
   const fetchWeatherData = useCallback(async (latitude: number, longitude: number) => {
-      setWeatherStatus('fetching');
-      setWeatherError(null);
+      setWeatherStatus('fetching'); setWeatherError(null);
       try {
-          const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`;
-          const locationApiUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`;
-
           const [weatherResponse, locationResponse] = await Promise.all([
-              fetch(weatherApiUrl),
-              fetch(locationApiUrl)
+              fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`),
+              fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`)
           ]);
-
-          if (!weatherResponse.ok) throw new Error('Failed to fetch weather data from Open-Meto');
-          if (!locationResponse.ok) throw new Error('Failed to fetch location data from Nominatim');
-
-          const weatherApiData = await weatherResponse.json();
-          const locationData = await locationResponse.json();
-          
-          if (weatherApiData.error) {
-              throw new Error(`Open-Meteo Error: ${weatherApiData.reason}`);
-          }
-
+          const weatherApiData = await weatherResponse.json(); const locationData = await locationResponse.json();
+          if (weatherApiData.error) throw new Error(`Open-Meteo Error: ${weatherApiData.reason}`);
           const locationName = locationData.address?.city || locationData.address?.town || locationData.address?.village || locationData.address?.county || 'Current Location';
-
           const mappedData: Omit<WeatherData, 'lastUpdated'> = {
-              locationName,
-              current: {
-                  temperature: Math.round(weatherApiData.current.temperature_2m),
-                  condition: wmoCodeToCondition(weatherApiData.current.weather_code),
-                  high: Math.round(weatherApiData.daily.temperature_2m_max[0]),
-                  low: Math.round(weatherApiData.daily.temperature_2m_min[0]),
-              },
-              hourly: weatherApiData.hourly.time.map((isoTime: string, index: number) => ({
-                  time: new Date(isoTime).getHours().toString().padStart(2, '0') + ':00',
-                  dt: new Date(isoTime).getTime() / 1000,
-                  temperature: Math.round(weatherApiData.hourly.temperature_2m[index]),
-                  condition: wmoCodeToCondition(weatherApiData.hourly.weather_code[index]),
-              })),
-              details: {
-                  chanceOfRain: Math.round(weatherApiData.current.precipitation_probability ?? 0),
-                  humidity: Math.round(weatherApiData.current.relative_humidity_2m),
-                  wind: `${Math.round(weatherApiData.current.wind_speed_10m)} km/h ${degToCompass(weatherApiData.current.wind_direction_10m)}`,
-                  sunrise: timestampToHHMM(new Date(weatherApiData.daily.sunrise[0]).getTime() / 1000),
-                  sunset: timestampToHHMM(new Date(weatherApiData.daily.sunset[0]).getTime() / 1000),
-              }
+              locationName, current: { temperature: Math.round(weatherApiData.current.temperature_2m), condition: wmoCodeToCondition(weatherApiData.current.weather_code), high: Math.round(weatherApiData.daily.temperature_2m_max[0]), low: Math.round(weatherApiData.daily.temperature_2m_min[0]) },
+              hourly: weatherApiData.hourly.time.map((isoTime: string, index: number) => ({ time: new Date(isoTime).getHours().toString().padStart(2, '0') + ':00', dt: new Date(isoTime).getTime() / 1000, temperature: Math.round(weatherApiData.hourly.temperature_2m[index]), condition: wmoCodeToCondition(weatherApiData.hourly.weather_code[index]) })),
+              details: { chanceOfRain: Math.round(weatherApiData.current.precipitation_probability ?? 0), humidity: Math.round(weatherApiData.current.relative_humidity_2m), wind: `${Math.round(weatherApiData.current.wind_speed_10m)} km/h ${degToCompass(weatherApiData.current.wind_direction_10m)}`, sunrise: timestampToHHMM(new Date(weatherApiData.daily.sunrise[0]).getTime() / 1000), sunset: timestampToHHMM(new Date(weatherApiData.daily.sunset[0]).getTime() / 1000) }
           };
-          
-          setWeatherData({ ...mappedData, lastUpdated: new Date() });
-          setWeatherStatus('success');
-
-      } catch (error: any) {
-          console.error("Error fetching weather data:", error);
-          setWeatherError(error.message || "Impossibile recuperare i dati. Riprova più tardi.");
-          setWeatherData(null);
-          setWeatherStatus('error');
-      }
+          setWeatherData({ ...mappedData, lastUpdated: new Date() }); setWeatherStatus('success');
+      } catch (error: any) { setWeatherError(error.message || "Impossibile recuperare i dati."); setWeatherData(null); setWeatherStatus('error'); }
   }, []);
 
   const requestWeather = useCallback(() => {
-    setWeatherData(null);
-    setWeatherError(null);
-    setWeatherStatus('locating');
-    
+    setWeatherData(null); setWeatherError(null); setWeatherStatus('locating');
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-            (position) => {
-                if (position.coords.accuracy > 1500) {
-                    console.warn(`Geolocation accuracy is poor: ${position.coords.accuracy}m. Required < 1500m.`);
-                    setWeatherError("La posizione rilevata è troppo imprecisa. Prova a migliorare il segnale GPS o la connessione di rete.");
-                    setWeatherStatus('error');
-                    return;
-                }
-                fetchWeatherData(position.coords.latitude, position.coords.longitude);
-            },
-            (error) => {
-                console.error("Geolocation error details:", `Code ${error.code}: ${error.message}`);
-                
-                let userMessage = "Impossibile ottenere la posizione.";
-                switch (error.code) {
-                    case 1:
-                        userMessage = "Permesso di geolocalizzazione negato. Abilitalo nelle impostazioni del browser e ricarica.";
-                        break;
-                    case 2:
-                        userMessage = "Informazioni sulla posizione non disponibili. Controlla il segnale GPS o la connessione di rete.";
-                        break;
-                    case 3:
-                        userMessage = "Timeout nel recupero della posizione. Riprova più tardi.";
-                        break;
-                }
-                
-                setWeatherError(userMessage);
-                setWeatherStatus('error');
-            },
+            (position) => { if (position.coords.accuracy > 1500) { setWeatherError("Posizione troppo imprecisa."); setWeatherStatus('error'); return; } fetchWeatherData(position.coords.latitude, position.coords.longitude); },
+            (error) => { setWeatherError("Impossibile ottenere la posizione."); setWeatherStatus('error'); },
             { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
         );
-    } else {
-        setWeatherError("La geolocalizzazione non è supportata da questo browser.");
-        setWeatherStatus('error');
-    }
+    } else { setWeatherError("Geolocalizzazione non supportata."); setWeatherStatus('error'); }
   }, [fetchWeatherData]);
 
-  useEffect(() => {
-    requestWeather();
-    const intervalId = setInterval(requestWeather, 15 * 60 * 1000);
-    return () => clearInterval(intervalId);
-  }, [requestWeather]);
-
-  const handleWeatherClick = () => {
-    setWeatherModalOpen(true);
-    if (weatherStatus !== 'locating' && weatherStatus !== 'fetching') {
-       if (!weatherData || (new Date().getTime() - weatherData.lastUpdated.getTime()) > 300000) {
-          requestWeather();
-       }
-    }
-  };
+  useEffect(() => { requestWeather(); const intervalId = setInterval(requestWeather, 15 * 60 * 1000); return () => clearInterval(intervalId); }, [requestWeather]);
+  const handleWeatherClick = () => { setWeatherModalOpen(true); if (weatherStatus !== 'locating' && weatherStatus !== 'fetching') { if (!weatherData || (new Date().getTime() - weatherData.lastUpdated.getTime()) > 300000) requestWeather(); } };
   
   const fetchYouTubeHomeData = useCallback(async () => {
     if (Object.keys(youtubeHomeData).length > 0 && !youtubeHomeQuotaExceeded) return;
-
-    setYoutubeHomeIsLoading(true);
-    setYoutubeHomeError(null);
+    setYoutubeHomeIsLoading(true); setYoutubeHomeError(null);
     try {
-        const [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes] = await Promise.all([
-            fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
-            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=official pop hits playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
-            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10&key=${YOUTUBE_API_KEY}`),
-            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=musica italiana playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
-            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=workout music playlist&type=playlist&maxResults=10&key=${YOUTUBE_API_KEY}`),
-            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=acoustic sessions live&type=video&maxResults=10&key=${YOUTUBE_API_KEY}`)
-        ]);
-
-        const responses = [chartsRes, popRes, liveRes, italianRes, workoutRes, acousticRes];
-        for (const res of responses) {
-            if (!res.ok) {
-                const errorData = await res.json();
-                if (errorData.error?.errors?.[0]?.reason === 'quotaExceeded' || errorData.error?.message.toLowerCase().includes('quota')) {
-                    throw new Error("quotaExceeded");
-                }
-                throw new Error(errorData.error?.message || 'Failed to fetch data from YouTube API');
-            }
-        }
-
-        const [chartsData, popData, liveData, italianData, workoutData, acousticData] = await Promise.all(responses.map(res => res.json()));
-
-        setYoutubeHomeData({
-            musicCharts: chartsData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
-            popPlaylists: popData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
-            livePerformances: liveData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
-            italianPlaylists: italianData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
-            workoutPlaylists: workoutData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
-            acousticSessions: acousticData.items.map(mapYouTubeItemToMediaItem).filter(Boolean),
-        });
+        const endpoints = [ `videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10`, `search?part=snippet&q=official pop hits playlist&type=playlist&maxResults=10`, `search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10`, `search?part=snippet&q=musica italiana playlist&type=playlist&maxResults=10`, `search?part=snippet&q=workout music playlist&type=playlist&maxResults=10`, `search?part=snippet&q=acoustic sessions live&type=video&maxResults=10` ];
+        const responses = await Promise.all(endpoints.map(ep => fetch(`https://www.googleapis.com/youtube/v3/${ep}&key=${YOUTUBE_API_KEY}`)));
+        for (const res of responses) { if (!res.ok) { const errorData = await res.json(); if (errorData.error?.message.toLowerCase().includes('quota')) throw new Error("quotaExceeded"); throw new Error(errorData.error?.message); } }
+        const data = await Promise.all(responses.map(res => res.json()));
+        setYoutubeHomeData({ musicCharts: data[0].items.map(mapYouTubeItemToMediaItem).filter(Boolean), popPlaylists: data[1].items.map(mapYouTubeItemToMediaItem).filter(Boolean), livePerformances: data[2].items.map(mapYouTubeItemToMediaItem).filter(Boolean), italianPlaylists: data[3].items.map(mapYouTubeItemToMediaItem).filter(Boolean), workoutPlaylists: data[4].items.map(mapYouTubeItemToMediaItem).filter(Boolean), acousticSessions: data[5].items.map(mapYouTubeItemToMediaItem).filter(Boolean) });
         setYoutubeHomeQuotaExceeded(false);
-
-    } catch (err: any) {
-        if (err.message === 'quotaExceeded') {
-            setYoutubeHomeError(null);
-            setYoutubeHomeQuotaExceeded(true);
-        } else {
-            setYoutubeHomeError(err.message || "Could not load content from YouTube.");
-        }
-    } finally {
-        setYoutubeHomeIsLoading(false);
-    }
+    } catch (err: any) { if (err.message === 'quotaExceeded') setYoutubeHomeQuotaExceeded(true); else setYoutubeHomeError(err.message); } finally { setYoutubeHomeIsLoading(false); }
   }, [youtubeHomeData, youtubeHomeQuotaExceeded]);
   
-  useEffect(() => {
-    if (activeApp === 'youtube-music' && !nowPlaying.youtubeTrack) {
-        fetchYouTubeHomeData();
-    }
-  }, [activeApp, fetchYouTubeHomeData, nowPlaying.youtubeTrack]);
-
-  // This effect will automatically retry fetching the home data if the quota was exceeded.
-  useEffect(() => {
-      const retryFetch = () => {
-          console.log("Retrying to fetch YouTube home data after quota error...");
-          fetchYouTubeHomeData();
-      };
-
-      if (youtubeHomeQuotaExceeded) {
-          if (retryIntervalRef.current) clearInterval(retryIntervalRef.current);
-          retryIntervalRef.current = window.setInterval(retryFetch, 15 * 60 * 1000); // 15 minutes
-          console.log("YouTube quota exceeded. Auto-retry scheduled.");
-      } else {
-          if (retryIntervalRef.current) {
-              clearInterval(retryIntervalRef.current);
-              retryIntervalRef.current = null;
-              console.log("YouTube quota seems restored. Auto-retry timer cleared.");
-          }
-      }
-
-      return () => {
-          if (retryIntervalRef.current) {
-              clearInterval(retryIntervalRef.current);
-          }
-      };
-  }, [youtubeHomeQuotaExceeded, fetchYouTubeHomeData]);
-
-  const handleGenericQuotaError = useCallback(() => {
-      setYoutubeHomeQuotaExceeded(true);
-  }, []);
+  useEffect(() => { if (activeApp === 'youtube-music' && !nowPlaying.youtubeTrack) fetchYouTubeHomeData(); }, [activeApp, fetchYouTubeHomeData, nowPlaying.youtubeTrack]);
+  useEffect(() => { if (youtubeHomeQuotaExceeded) { if (retryIntervalRef.current) clearInterval(retryIntervalRef.current); retryIntervalRef.current = window.setInterval(() => fetchYouTubeHomeData(), 15 * 60 * 1000); } else if (retryIntervalRef.current) { clearInterval(retryIntervalRef.current); retryIntervalRef.current = null; } return () => { if (retryIntervalRef.current) clearInterval(retryIntervalRef.current); }; }, [youtubeHomeQuotaExceeded, fetchYouTubeHomeData]);
+  const handleGenericQuotaError = useCallback(() => setYoutubeHomeQuotaExceeded(true), []);
 
   const toggleApp = (appName: string) => {
-    setIsAppLauncherOpen(false);
-    setIsCustomizing(false);
-    
-    const willBeActive = activeApp !== appName;
-    if (willBeActive && !dockApps.includes(appName)) {
-        setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
-    }
-
-    if (appName === 'spotify' && activeApp === 'maps') {
-        setActiveApp('spotify');
-        setIsMapsLayered(true);
-    } else if (appName === 'spotify' && activeApp === 'spotify' && isMapsLayered) {
-        setActiveApp('maps');
-        setIsMapsLayered(false);
-    } else {
-        const isSwitchingToMediaApp = ['spotify', 'radio', 'youtube-music'].includes(appName);
-        const isSwitchingFromMediaApp = ['spotify', 'radio', 'youtube-music'].includes(activeApp ?? '');
-        
-        // If switching away from a media app to a non-media app, don't clear nowPlaying
-        if(isSwitchingFromMediaApp && !isSwitchingToMediaApp && willBeActive) {
-            // Don't do anything to nowPlaying state
-        } else if (isSwitchingFromMediaApp && isSwitchingToMediaApp && willBeActive) {
-            // This is handled by play functions in AuthContext
-        } else {
-            // setNowPlaying({ source: null, spotifyState: null, radioStation: null, radioContext: [], youtubeTrack: null });
-        }
-        
-        setIsMapsLayered(false);
-        setActiveApp(prevApp => (prevApp === appName ? null : appName));
-    }
+    setIsAppLauncherOpen(false); setIsCustomizing(false);
+    const willBeActive = activeApp !== appName; if (willBeActive && !dockApps.includes(appName)) setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
+    if (appName === 'spotify' && activeApp === 'maps') { setActiveApp('spotify'); setIsMapsLayered(true); }
+    else if (appName === 'spotify' && activeApp === 'spotify' && isMapsLayered) { setActiveApp('maps'); setIsMapsLayered(false); }
+    else { setIsMapsLayered(false); setActiveApp(prevApp => (prevApp === appName ? null : appName)); }
   };
 
-  const toggleLauncher = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newLauncherState = !isAppLauncherOpen;
-    setIsAppLauncherOpen(newLauncherState);
-    if (!newLauncherState) {
-        setIsCustomizing(false);
-    }
-  };
-  
-  const handleWrapperClick = () => {
-    if (isAppLauncherOpen) {
-        setIsAppLauncherOpen(false);
-        setIsCustomizing(false);
-    }
-    // Explicitly doing nothing for activeApp to prevent closing on background click
-  };
-
-  const isUIOverlayActive = activeApp !== null;
-  const isHomeScreenDocked = isUIOverlayActive || isAppLauncherOpen;
+  const toggleLauncher = (e: React.MouseEvent) => { e.stopPropagation(); const newLauncherState = !isAppLauncherOpen; setIsAppLauncherOpen(newLauncherState); if (!newLauncherState) setIsCustomizing(false); };
+  const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
   
     const navigateToolStyle = useMemo(() => {
-        const baseStyle: React.CSSProperties = {
-            transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-            position: 'fixed',
-            zIndex: 1000,
-            bottom: `${playerFloatingBottom}px`,
-            transform: 'none', // Unified transform property
-        };
-    
+        const baseStyle: React.CSSProperties = { transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)', position: 'fixed', zIndex: 1000, bottom: `${playerFloatingBottom}px`, transform: 'none' };
         const homeLeft = `calc(50% + (${playerFloatingWidth}px / 2) + 8px - (${navigateToolWidth}px / 2))`;
-        
-        // Symmetrical position adjustment for when the launcher is open.
-        // This moves the nav tool further from the right edge to balance the wider music player on the left.
-        const launcherOpenRightOffset = playerDockedLeft + 90; 
-        const launcherOpenLeft = `calc(100% - ${launcherOpenRightOffset}px - ${navigateToolWidth}px)`;
-
-        if (isAppLauncherOpen) { // State 3: Launcher Open
-            return {
-                ...baseStyle,
-                opacity: 1,
-                pointerEvents: 'auto' as const,
-                left: launcherOpenLeft,
-            };
-        } else if (isUIOverlayActive) { // State 2: App Open (e.g., Spotify)
-            return {
-                ...baseStyle,
-                opacity: 0,
-                pointerEvents: 'none' as const, // Add 'as const' to fix type error
-                left: homeLeft, // Keep position during fade-out to prevent jump
-            };
-        } else { // State 1: Home Screen (Floating)
-            return {
-                ...baseStyle,
-                opacity: 1,
-                pointerEvents: 'auto' as const,
-                left: homeLeft,
-            };
-        }
-    }, [isAppLauncherOpen, isUIOverlayActive, playerFloatingBottom, playerDockedLeft, playerFloatingWidth, navigateToolWidth, playerDockedWidth]);
+        const launcherOpenLeft = `calc(100% - ${playerDockedLeft + 90}px - ${navigateToolWidth}px)`;
+        if (isAppLauncherOpen) return { ...baseStyle, opacity: 1, pointerEvents: 'auto' as const, left: launcherOpenLeft };
+        else if (activeApp !== null) return { ...baseStyle, opacity: 0, pointerEvents: 'none' as const, left: homeLeft };
+        else return { ...baseStyle, opacity: 1, pointerEvents: 'auto' as const, left: homeLeft };
+    }, [isAppLauncherOpen, activeApp, playerFloatingBottom, playerDockedLeft, playerFloatingWidth, navigateToolWidth]);
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
   return (
-    <div 
-      className="relative w-screen h-screen bg-black select-none overflow-hidden"
-      onClick={handleWrapperClick}
-      data-theme={useDarkTheme ? 'dark' : 'light'}
-    >
-      <VehicleCanvas 
-          isAppOpen={isUIOverlayActive} 
-          isNight={isNight}
-          minOrbitDistance={minOrbitDistance}
-          maxOrbitDistance={maxOrbitDistance}
-          appOpenConfig={appOpenConfig}
-          homeConfig={homeConfig}
-          sceneColors={sceneColors}
-          nightAmbientIntensity={nightAmbientIntensity}
-          nightFrontLightIntensity={nightFrontLightIntensity}
-          nightEnvironmentIntensity={nightEnvironmentIntensity}
-          onInteractionChange={setIsCanvasInteracting}
-          effectiveWeatherCondition={effectiveWeatherCondition}
-          dayFogNear={dayFogNear}
-          dayFogFar={dayFogFar}
-          targetWeatherParams={targetWeatherParams}
-          uiScale={uiScale ?? 1.0}
-          headlightConfig={headlightConfig}
-      />
-      
-      {/* --- NON-SCALABLE / FIXED UI --- */}
-      <TopStatusBar 
-          isNight={useDarkTheme} 
-          onWeatherClick={handleWeatherClick}
-          weatherData={weatherData}
-          weatherCondition={effectiveWeatherCondition}
-          sunsetArrowYPosition={sunsetArrowYPosition}
-          sunriseArrowYPosition={sunriseArrowYPosition}
-          isHot={isHot}
-          isCold={isCold}
-          tempUnit={tempUnit}
-          setTempUnit={setTempUnit}
-          scale={uiScale ?? 1.0}
-          offsetY={topBarOffsetY}
-          mapStyle={mapStyle}
-          isMapVisible={activeApp === 'maps' || isMapsLayered}
-      />
-      
-      <WeatherModal 
-          isOpen={isWeatherModalOpen}
-          onClose={() => setWeatherModalOpen(false)}
-          isNight={useDarkTheme}
-          status={weatherStatus}
-          data={weatherData}
-          error={weatherError}
-          effectiveTime={effectiveTime}
-          sunsetArrowYPosition={sunsetArrowYPosition}
-          sunriseArrowYPosition={sunriseArrowYPosition}
-          tempUnit={tempUnit}
-      />
-        
-      <MiniMap 
-          isVisible={!isUIOverlayActive && !isCanvasInteracting} 
-          position={currentPosition} 
-          bearing={bearing}
-          isNight={isNight}
-          useDarkTheme={useDarkTheme}
-          top={miniMapTop}
-          right={miniMapRight}
-          size={miniMapSize}
-          zoom={miniMapZoom}
-          fadeStart={miniMapFadeStart}
-          fadeEnd={miniMapFadeEnd}
-          onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }}
-          uiScale={uiScale ?? 1.0}
-      />
-
-      {/* --- SCALABLE UI CONTAINER --- */}
+    <div className="relative w-screen h-screen bg-black select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
+      <VehicleCanvas isAppOpen={activeApp !== null} isNight={isNight} minOrbitDistance={minOrbitDistance} maxOrbitDistance={maxOrbitDistance} appOpenConfig={appOpenConfig} homeConfig={homeConfig} sceneColors={sceneColors} nightAmbientIntensity={nightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} onInteractionChange={setIsCanvasInteracting} effectiveWeatherCondition={effectiveWeatherCondition} dayFogNear={dayFogNear} dayFogFar={dayFogFar} targetWeatherParams={targetWeatherParams} uiScale={uiScale ?? 1.0} headlightConfig={headlightConfig}/>
+      <TopStatusBar isNight={useDarkTheme} onWeatherClick={handleWeatherClick} weatherData={weatherData} weatherCondition={effectiveWeatherCondition} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} isHot={isHot} isCold={isCold} tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} mapStyle={mapStyle} isMapVisible={activeApp === 'maps' || isMapsLayered}/>
+      <WeatherModal isOpen={isWeatherModalOpen} onClose={() => setWeatherModalOpen(false)} isNight={useDarkTheme} status={weatherStatus} data={weatherData} error={weatherError} effectiveTime={effectiveTime} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} tempUnit={tempUnit}/>
+      <MiniMap isVisible={activeApp === null && !isCanvasInteracting} position={currentPosition} bearing={bearing} isNight={isNight} useDarkTheme={useDarkTheme} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
-        
-        {/* All scalable fixed-position UI elements go here */}
-        <MapsContainer 
-            isOpen={activeApp === 'maps' || isMapsLayered}
-            onClose={handleCloseMaps}
-            isNight={useDarkTheme}
-            searchPanelWidth={mapsSearchPanelWidth}
-            searchPanelTop={mapsSearchPanelTop}
-            navigationTarget={navigationTarget}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-            satelliteLabelBrightness={satelliteLabelBrightness}
-            satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}
-        />
-        
-        <SpotifyApp 
-            isOpen={activeApp === 'spotify'} 
-            onClose={() => toggleApp('spotify')} 
-            isNight={useDarkTheme}
-            spotifyPlayerTop={spotifyPlayerTop}
-            spotifyPlayerBottom={spotifyPlayerBottom}
-            isMapsLayered={isMapsLayered}
-        />
-        
+        <MapsContainer isOpen={activeApp === 'maps' || isMapsLayered} onClose={() => toggleApp('maps')} isNight={useDarkTheme} searchPanelWidth={mapsSearchPanelWidth} searchPanelTop={mapsSearchPanelTop} navigationTarget={navigationTarget} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} satelliteLabelBrightness={satelliteLabelBrightness} satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}/>
+        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={() => toggleApp('spotify')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered}/>
         <AnimatePresence>
-          {activeApp === 'theater' && (
-            <TheaterApp
-              onClose={() => toggleApp('theater')}
-              isNight={useDarkTheme}
-              spotifyPlayerTop={spotifyPlayerTop}
-              spotifyPlayerBottom={spotifyPlayerBottom}
-            />
-          )}
-          {activeApp === 'radio' && (
-            <RadioApp
-              isOpen={activeApp === 'radio'}
-              onClose={() => toggleApp('radio')}
-              isNight={useDarkTheme}
-              onPlayStation={handlePlayStation}
-              spotifyPlayerTop={spotifyPlayerTop}
-              spotifyPlayerBottom={spotifyPlayerBottom}
-              favoriteStationUUIDs={favoriteStationUUIDs}
-            />
-          )}
-           {activeApp === 'youtube-music' && (
-            <YouTubeMusicApp
-              isOpen={activeApp === 'youtube-music'}
-              onClose={() => toggleApp('youtube-music')}
-              isNight={useDarkTheme}
-              spotifyPlayerTop={spotifyPlayerTop}
-              spotifyPlayerBottom={spotifyPlayerBottom}
-              homeData={youtubeHomeData}
-              isHomeDataLoading={youtubeHomeIsLoading}
-              youtubeHomeError={youtubeHomeError}
-              homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
-              onRetry={fetchYouTubeHomeData}
-              onQuotaError={handleGenericQuotaError}
-            />
-          )}
+          {activeApp === 'theater' && <TheaterApp onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom}/>}
+          {activeApp === 'radio' && <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs}/>}
+          {activeApp === 'youtube-music' && <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError}/>}
         </AnimatePresence>
-
-        <AnimatePresence>
-            {arrivalMessage && (
-                <motion.div
-                    initial={{ opacity: 0, y: 50, scale: 0.9 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 50, scale: 0.9 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-                    className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10"
-                >
-                    {arrivalMessage}
-                </motion.div>
-            )}
-        </AnimatePresence>
-
-        <div
-          className="flex items-end"
-          style={navigateToolStyle}
-        >
-            {navigationTarget ? (
-              <NavigationStatus
-                target={navigationTarget}
-                currentPosition={throttledPosition}
-                isNight={useDarkTheme}
-                onCancel={handleCancelNavigation}
-                tripInfo={tripInfo}
-                simulatedRemainingDistance={simulatedRemainingDistance}
-                width={navigateToolWidth}
-                widgetBgColor={widgetBgColor}
-              />
-            ) : (
-              <NavigateTool 
-                isNight={useDarkTheme}
-                onSelectDestination={handleSelectDestination}
-                currentPosition={currentPosition}
-                width={navigateToolWidth}
-                widgetBgColor={widgetBgColor}
-                dayPlayerButtonColor={dayPlayerButtonColor}
-                nightPlayerButtonColor={nightPlayerButtonColor}
-                homeLocation={homeLocation}
-                workLocation={workLocation}
-                darkNavigateInputBg={darkNavigateInputBg}
-              />
-            )}
-        </div>
-
-        <MusicPlayer
-          activeApp={activeApp}
-          onStationChange={handleStationChange}
-          isAnyAppOpen={isHomeScreenDocked}
-          isNight={useDarkTheme}
-          dockedConfig={{
-            width: playerDockedWidth,
-            bottom: playerFloatingBottom,
-            left: playerDockedLeft,
-            height: playerDockedHeight,
-          }}
-          floatingConfig={{
-            width: playerFloatingWidth,
-            bottom: playerFloatingBottom,
-            height: playerFloatingHeight,
-            otherWidgetWidth: navigateToolWidth,
-          }}
-          playerControlsSize={playerControlsSize}
-          playerControlsGap={playerControlsGap}
-          playerControlsVerticalPosition={playerControlsVerticalPosition}
-          spinnerSize={spinnerSize}
-          spinnerShuffleGap={spinnerShuffleGap}
-          debugSpinner={debugSpinner}
-          widgetBgColor={widgetBgColor}
-          dayPlayerButtonColor={dayPlayerButtonColor}
-          nightPlayerButtonColor={nightPlayerButtonColor}
-          favoriteStationUUIDs={favoriteStationUUIDs}
-          onToggleFavorite={handleToggleFavorite}
-          queuePopoverHeight={queuePopoverHeight}
-          queuePopoverBottomOffset={queuePopoverBottomOffset}
-          queuePopoverScale={queuePopoverScale}
-          queuePopoverWidth={queuePopoverWidth}
-          queuePopoverOffsetX={queuePopoverOffsetX}
-          spinnerTop={spinnerTop}
-          spinnerRight={spinnerRight}
-          spinnerBottom={spinnerBottom}
-          spinnerLeft={spinnerLeft}
-        />
-        
-        <AppLauncher
-            isOpen={isAppLauncherOpen}
-            width={appLauncherWidth}
-            height={appLauncherHeight}
-            apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)}
-            isCustomizing={isCustomizing}
-            onCustomizeClick={moveAppToDock}
-            onAppLaunch={toggleApp}
-            isNight={useDarkTheme}
-        />
-
-        {isAppLauncherOpen && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsCustomizing(prev => !prev);
-            }}
-            className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg
-              ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'}
-              ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
-            style={{
-              bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)`,
-            }}
-          >
-            {isCustomizing ? 'Fine' : 'Personalizza'}
-          </button>
-        )}
-        
-        <AnimatePresence>
-          {isKeyboardVisible && (
-              <VirtualKeyboard 
-                  isVisible={isKeyboardVisible}
-                  targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null}
-                  onClose={handleKeyboardClose}
-                  isNight={useDarkTheme}
-                  virtualKeyboardKeySize={virtualKeyboardKeySize}
-                  virtualKeyboardHeight={virtualKeyboardHeight}
-                  virtualKeyboardPaddingX={virtualKeyboardPaddingX}
-                  virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
-                  virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
-                  virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
-              />
-          )}
-        </AnimatePresence>
-
-        <footer 
-            className="fixed bottom-0 left-0 right-0 h-20 z-[4500]"
-            aria-label="Application Dock"
-        >
-            <div 
-              className="absolute top-0 left-1/2 -translate-x-1/2 h-full bg-black"
-              style={{ width: `${appBarWidth}%` }}
-            />
-
+        <AnimatePresence>{arrivalMessage && <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.9 }} className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10">{arrivalMessage}</motion.div>}</AnimatePresence>
+        <div className="flex items-end" style={navigateToolStyle}>{navigationTarget ? <NavigationStatus target={navigationTarget} currentPosition={throttledPosition} isNight={useDarkTheme} onCancel={handleCancelNavigation} tripInfo={tripInfo} simulatedRemainingDistance={simulatedRemainingDistance} width={navigateToolWidth} widgetBgColor={widgetBgColor}/> : <NavigateTool isNight={useDarkTheme} onSelectDestination={handleSelectDestination} currentPosition={currentPosition} width={navigateToolWidth} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} homeLocation={homeLocation} workLocation={workLocation} darkNavigateInputBg={darkNavigateInputBg}/>}</div>
+        <MusicPlayer activeApp={activeApp} onStationChange={handleStationChange} isAnyAppOpen={isHomeScreenDocked} isNight={useDarkTheme} dockedConfig={{ width: playerDockedWidth, bottom: playerFloatingBottom, left: playerDockedLeft, height: playerDockedHeight }} floatingConfig={{ width: playerFloatingWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: navigateToolWidth }} playerControlsSize={playerControlsSize} playerControlsGap={playerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} spinnerSize={spinnerSize} spinnerShuffleGap={spinnerShuffleGap} debugSpinner={debugSpinner} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} favoriteStationUUIDs={favoriteStationUUIDs} onToggleFavorite={handleToggleFavorite} queuePopoverHeight={queuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} queuePopoverWidth={queuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} spinnerTop={spinnerTop} spinnerRight={spinnerRight} spinnerBottom={spinnerBottom} spinnerLeft={spinnerLeft}/>
+        <AppLauncher isOpen={isAppLauncherOpen} width={appLauncherWidth} height={appLauncherHeight} apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)} isCustomizing={isCustomizing} onCustomizeClick={moveAppToDock} onAppLaunch={toggleApp} isNight={useDarkTheme}/>
+        {isAppLauncherOpen && <button onClick={(e) => { e.stopPropagation(); setIsCustomizing(prev => !prev); }} className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'} ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} style={{ bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)` }}>{isCustomizing ? 'Fine' : 'Personalizza'}</button>}
+        <AnimatePresence>{isKeyboardVisible && <VirtualKeyboard isVisible={isKeyboardVisible} targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null} onClose={handleKeyboardClose} isNight={useDarkTheme} virtualKeyboardKeySize={virtualKeyboardKeySize} virtualKeyboardHeight={virtualKeyboardHeight} virtualKeyboardPaddingX={virtualKeyboardPaddingX} virtualKeyboardKeyGapX={virtualKeyboardKeyGapX} virtualKeyboardKeyGapY={virtualKeyboardKeyGapY} virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}/>}</AnimatePresence>
+        <footer className="fixed bottom-0 left-0 right-0 h-20 z-[4500]" aria-label="Application Dock">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 h-full bg-black" style={{ width: `${appBarWidth}%` }}/>
             <div className="relative z-10 h-full flex justify-center items-center">
                 <div className="flex justify-center items-center gap-4">
-                    {dockApps.map(appId => {
-                    const app = ALL_APPS.find(a => a.id === appId);
-                    if (!app) return null;
-
-                    const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
-                    
-                    return (
-                        <div key={app.id} className="relative flex flex-col items-center">
-                        <button
-                            onClick={(e) => {
-                            e.stopPropagation();
-                            if (isCustomizing) return;
-                            toggleApp(app.id);
-                            }}
-                            className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out ${isCustomizing ? 'customizing-jiggle cursor-default' : 'hover:scale-110'} ${effectiveColorClasses}`}
-                            aria-label={app.label}
-                        >
-                            <app.icon className="w-10 h-10" />
-                        </button>
-                        {activeApp === app.id && !isCustomizing && (
-                            <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
-                        )}
-                        {isCustomizing && (
-                            <button
-                            onClick={(e) => { e.stopPropagation(); moveAppToLauncher(app.id); }}
-                            className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer"
-                            aria-label={`Sposta ${app.label} nel launcher`}
-                            >
-                            <FiMinus className="w-4 h-4 text-white" strokeWidth={3}/>
-                            </button>
-                        )}
-                        </div>
-                    );
-                    })}
-                    
-                    <div className="relative flex flex-col items-center">
-                        <DockButton 
-                        icon={ICONS.apps} 
-                        onClick={toggleLauncher}
-                        label="Open App Launcher"
-                        />
-                        {isAppLauncherOpen && !isCustomizing && (
-                            <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
-                        )}
-                    </div>
-
-                    {recentAppsToShow.length > 0 && (
-                    <>
-                        <div className="w-px h-8 bg-gray-600" />
-                        {recentAppsToShow.map(appId => {
-                            const app = ALL_APPS.find(a => a.id === appId);
-                            if (!app) return null;
-                            const effectiveColorClasses = app.colorClasses ?? 'text-gray-400 hover:text-white';
-                            return (
-                            <div key={`recent-${app.id}`} className="relative flex flex-col items-center">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); toggleApp(app.id); }}
-                                        className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${effectiveColorClasses}`}
-                                        aria-label={app.label}
-                                    >
-                                        <app.icon className="w-8 h-8" />
-                                    </button>
-                                    {activeApp === app.id && (
-                                        <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />
-                                    )}
-                            </div>
-                            );
-                        })}
-                    </>
-                    )}
+                    {dockApps.map(appId => { const app = ALL_APPS.find(a => a.id === appId); if (!app) return null; return ( <div key={app.id} className="relative flex flex-col items-center"> <button onClick={(e) => { e.stopPropagation(); if (isCustomizing) return; toggleApp(app.id); }} className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out ${isCustomizing ? 'customizing-jiggle cursor-default' : 'hover:scale-110'} ${app.colorClasses ?? 'text-gray-400 hover:text-white'}`} aria-label={app.label}> <app.icon className="w-10 h-10" /> </button> {activeApp === app.id && !isCustomizing && <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />} {isCustomizing && <button onClick={(e) => { e.stopPropagation(); moveAppToLauncher(app.id); }} className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer" aria-label={`Sposta ${app.label} nel launcher`}> <FiMinus className="w-4 h-4 text-white" strokeWidth={3}/> </button>} </div> ); })}
+                    <div className="relative flex flex-col items-center"><DockButton icon={ICONS.apps} onClick={toggleLauncher} label="Open App Launcher"/>{isAppLauncherOpen && !isCustomizing && <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />}</div>
+                    {recentAppsToShow.length > 0 && <> <div className="w-px h-8 bg-gray-600" /> {recentAppsToShow.map(appId => { const app = ALL_APPS.find(a => a.id === appId); if (!app) return null; return ( <div key={`recent-${app.id}`} className="relative flex flex-col items-center"> <button onClick={(e) => { e.stopPropagation(); toggleApp(app.id); }} className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${app.colorClasses ?? 'text-gray-400 hover:text-white'}`} aria-label={app.label}> <app.icon className="w-8 h-8" /> </button> {activeApp === app.id && <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />} </div> ); })} </>}
                 </div>
-                
-                <div className="absolute top-0 right-0 h-full flex items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}>
-                    {/* FIX: Corrected variable names passed as props from slider... to volumeSlider... */}
-                    <VolumeControl 
-                        iconSize={volumeIconSize}
-                        volumeSliderOffsetY={volumeSliderOffsetY}
-                        volumeSliderOffsetX={volumeSliderOffsetX}
-                        volumeSliderWidth={volumeSliderWidth}
-                        volumeSliderThickness={volumeSliderThickness}
-                        volumeSliderPopupWidth={volumeSliderPopupWidth}
-                        volumeSliderPopupHeight={volumeSliderPopupHeight}
-                        zIndex={volumeControlZIndex}
-                        volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}
-                    />
-                </div>
+                <div className="absolute top-0 right-0 h-full flex items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}><VolumeControl iconSize={volumeIconSize} volumeSliderOffsetY={volumeSliderOffsetY} volumeSliderOffsetX={volumeSliderOffsetX} volumeSliderWidth={volumeSliderWidth} volumeSliderThickness={volumeSliderThickness} volumeSliderPopupWidth={volumeSliderPopupWidth} volumeSliderPopupHeight={volumeSliderPopupHeight} zIndex={volumeControlZIndex} volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}/></div>
             </div>
         </footer>
       </div>
-
        {webAppUrl && <WebAppViewer url={webAppUrl} onClose={() => setWebAppUrl(null)} />}
-
-      {isDebugOpen && <DebugControls
-        isOpen={isDebugOpen}
-        onClose={() => setIsDebugOpen(false)}
-        timeOverride={timeOverride}
-        setTimeOverride={setTimeOverride}
-        sunsetArrowYPosition={sunsetArrowYPosition}
-        setSunsetArrowYPosition={setSunsetArrowYPosition}
-        sunriseArrowYPosition={sunriseArrowYPosition}
-        setSunriseArrowYPosition={setSunriseArrowYPosition}
-        weatherConditionOverride={weatherConditionOverride}
-        setWeatherConditionOverride={setWeatherConditionOverride}
-        effectiveWeatherCondition={effectiveWeatherCondition}
-        isNight={isNight}
-        isHot={isHot}
-        isCold={isCold}
-        topBarScale={topBarScale}
-        setTopBarScale={setTopBarScale}
-        topBarOffsetY={topBarOffsetY}
-        setTopBarOffsetY={setTopBarOffsetY}
-        mapsSearchPanelWidth={mapsSearchPanelWidth}
-        setMapsSearchPanelWidth={setMapsSearchPanelWidth}
-        mapsSearchPanelTop={mapsSearchPanelTop}
-        setMapsSearchPanelTop={setMapsSearchPanelTop}
-        miniMapTop={miniMapTop}
-        setMiniMapTop={setMiniMapTop}
-        miniMapRight={miniMapRight}
-        setMiniMapRight={setMiniMapRight}
-        miniMapSize={miniMapSize}
-        setMiniMapSize={setMiniMapSize}
-        miniMapZoom={miniMapZoom}
-        setMiniMapZoom={setMiniMapZoom}
-        miniMapFadeStart={miniMapFadeStart}
-        setMiniMapFadeStart={setMiniMapFadeStart}
-        miniMapFadeEnd={miniMapFadeEnd}
-        setMiniMapFadeEnd={setMiniMapFadeEnd}
-        minOrbitDistance={minOrbitDistance}
-        setMinOrbitDistance={setMinOrbitDistance}
-        maxOrbitDistance={maxOrbitDistance}
-        setMaxOrbitDistance={setMaxOrbitDistance}
-        appOpenConfig={appOpenConfig}
-        setAppOpenConfig={setAppOpenConfig}
-        homeConfig={homeConfig}
-        setHomeConfig={setHomeConfig}
-        sceneColors={sceneColors}
-        setSceneColors={setSceneColors}
-        spotifyPlayerTop={spotifyPlayerTop}
-        setSpotifyPlayerTop={setSpotifyPlayerTop}
-        spotifyPlayerBottom={spotifyPlayerBottom}
-        setSpotifyPlayerBottom={setSpotifyPlayerBottom}
-        playerDockedWidth={playerDockedWidth}
-        setPlayerDockedWidth={setPlayerDockedWidth}
-        playerDockedLeft={playerDockedLeft}
-        setPlayerDockedLeft={setPlayerDockedLeft}
-        playerDockedHeight={playerDockedHeight}
-        setPlayerDockedHeight={setPlayerDockedHeight}
-        playerFloatingWidth={playerFloatingWidth}
-        setPlayerFloatingWidth={setPlayerFloatingWidth}
-        playerFloatingBottom={playerFloatingBottom}
-        setPlayerFloatingBottom={setPlayerFloatingBottom}
-        playerFloatingHeight={playerFloatingHeight}
-        setPlayerFloatingHeight={setPlayerFloatingHeight}
-        nightAmbientIntensity={nightAmbientIntensity}
-        setNightAmbientIntensity={setNightAmbientIntensity}
-        nightFrontLightIntensity={nightFrontLightIntensity}
-        setNightFrontLightIntensity={setNightFrontLightIntensity}
-        nightEnvironmentIntensity={nightEnvironmentIntensity}
-        setNightEnvironmentIntensity={setNightEnvironmentIntensity}
-        tripInfo={tripInfo}
-        startTripSimulation={startTripSimulation}
-        stopTripSimulation={stopTripSimulation}
-        isSimulating={!!simulationIntervalRef.current}
-        navigateToolWidth={navigateToolWidth}
-        setNavigateToolWidth={setNavigateToolWidth}
-        playerControlsSize={playerControlsSize}
-        setPlayerControlsSize={setPlayerControlsSize}
-        playerControlsGap={playerControlsGap}
-        setPlayerControlsGap={setPlayerControlsGap}
-        playerControlsVerticalPosition={playerControlsVerticalPosition}
-        setPlayerControlsVerticalPosition={setPlayerControlsVerticalPosition}
-        dayPlayerButtonColor={dayPlayerButtonColor}
-        setDayPlayerButtonColor={setDayPlayerButtonColor}
-        nightPlayerButtonColor={nightPlayerButtonColor}
-        setNightPlayerButtonColor={setNightPlayerButtonColor}
-        widgetBgHex={widgetBgHex}
-        setWidgetBgHex={setWidgetBgHex}
-        volumeIconSize={volumeIconSize}
-        setVolumeIconSize={setVolumeIconSize}
-        volumeSliderOffsetY={volumeSliderOffsetY}
-        setVolumeSliderOffsetY={setVolumeSliderOffsetY}
-        volumeSliderOffsetX={volumeSliderOffsetX}
-        setVolumeSliderOffsetX={setVolumeSliderOffsetX}
-        volumeControlMarginRight={volumeControlMarginRight}
-        setVolumeControlMarginRight={setVolumeControlMarginRight}
-        volumeSliderWidth={volumeSliderWidth}
-        setVolumeSliderWidth={setVolumeSliderWidth}
-        volumeSliderThickness={volumeSliderThickness}
-        setVolumeSliderThickness={setVolumeSliderThickness}
-        volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}
-        setVolumeSliderThumbOffsetY={setVolumeSliderThumbOffsetY}
-        volumeSliderPopupWidth={volumeSliderPopupWidth}
-        setVolumeSliderPopupWidth={setVolumeSliderPopupWidth}
-        volumeSliderPopupHeight={volumeSliderPopupHeight}
-        setVolumeSliderPopupHeight={setVolumeSliderPopupHeight}
-        volumeControlZIndex={volumeControlZIndex}
-        setVolumeControlZIndex={setVolumeControlZIndex}
-        appLauncherWidth={appLauncherWidth}
-        setAppLauncherWidth={setAppLauncherWidth}
-        appLauncherHeight={appLauncherHeight}
-        setAppLauncherHeight={setAppLauncherHeight}
-        dayFogNear={dayFogNear}
-        setDayFogNear={setDayFogNear}
-        dayFogFar={dayFogFar}
-        setDayFogFar={setDayFogFar}
-        virtualKeyboardKeySize={virtualKeyboardKeySize}
-        setVirtualKeyboardKeySize={setVirtualKeyboardKeySize}
-        virtualKeyboardHeight={virtualKeyboardHeight}
-        setVirtualKeyboardHeight={setVirtualKeyboardHeight}
-        virtualKeyboardPaddingX={virtualKeyboardPaddingX}
-        setVirtualKeyboardPaddingX={setVirtualKeyboardPaddingX}
-        virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
-        setVirtualKeyboardKeyGapX={setVirtualKeyboardKeyGapX}
-        virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
-        setVirtualKeyboardKeyGapY={setVirtualKeyboardKeyGapY}
-        virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
-        setVirtualKeyboardKeyFontWeight={setVirtualKeyboardKeyFontWeight}
-        uiScale={uiScale}
-        setUiScale={setUiScale}
-        appBarWidth={appBarWidth}
-        setAppBarWidth={setAppBarWidth}
-        darkVolumeTrackBg={darkVolumeTrackBg}
-        setDarkVolumeTrackBg={setDarkVolumeTrackBg}
-        darkVolumeThumbBg={darkVolumeThumbBg}
-        setDarkVolumeThumbBg={setDarkVolumeThumbBg}
-        darkVolumeFillBg={darkVolumeFillBg}
-        setDarkVolumeFillBg={setDarkVolumeFillBg}
-        darkPlayerBg={darkPlayerBg}
-        setDarkPlayerBg={setDarkPlayerBg}
-        darkNavigateInputBg={darkNavigateInputBg}
-        setDarkNavigateInputBg={setDarkNavigateInputBg}
-        queuePopoverHeight={queuePopoverHeight}
-        setQueuePopoverHeight={setQueuePopoverHeight}
-        queuePopoverBottomOffset={queuePopoverBottomOffset}
-        setQueuePopoverBottomOffset={setQueuePopoverBottomOffset}
-        queuePopoverScale={queuePopoverScale}
-        setQueuePopoverScale={setQueuePopoverScale}
-        queuePopoverWidth={queuePopoverWidth}
-        setQueuePopoverWidth={setQueuePopoverWidth}
-        queuePopoverOffsetX={queuePopoverOffsetX}
-        setQueuePopoverOffsetX={setQueuePopoverOffsetX}
-        spinnerSize={spinnerSize}
-        setSpinnerSize={setSpinnerSize}
-        spinnerShuffleGap={spinnerShuffleGap}
-        setSpinnerShuffleGap={setSpinnerShuffleGap}
-        debugSpinner={debugSpinner}
-        setDebugSpinner={setDebugSpinner}
-        spinnerTop={spinnerTop}
-        setSpinnerTop={setSpinnerTop}
-        spinnerRight={spinnerRight}
-        setSpinnerRight={setSpinnerRight}
-        spinnerBottom={spinnerBottom}
-        setSpinnerBottom={setSpinnerBottom}
-        spinnerLeft={spinnerLeft}
-        setSpinnerLeft={setSpinnerLeft}
-        homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
-        satelliteLabelBrightness={satelliteLabelBrightness}
-        setSatelliteLabelBrightness={setSatelliteLabelBrightness}
-        satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}
-        setSatelliteLabelOutlineWidth={setSatelliteLabelOutlineWidth}
-        headlightConfig={headlightConfig}
-        setHeadlightConfig={setHeadlightConfig}
-      />}
+      {isDebugOpen && <DebugControls isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} timeOverride={timeOverride} setTimeOverride={setTimeOverride} sunsetArrowYPosition={sunsetArrowYPosition} setSunsetArrowYPosition={setSunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} setSunriseArrowYPosition={setSunriseArrowYPosition} weatherConditionOverride={weatherConditionOverride} setWeatherConditionOverride={setWeatherConditionOverride} effectiveWeatherCondition={effectiveWeatherCondition} isNight={isNight} isHot={isHot} isCold={isCold} topBarScale={topBarScale} setTopBarScale={setTopBarScale} topBarOffsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} mapsSearchPanelWidth={mapsSearchPanelWidth} setMapsSearchPanelWidth={setMapsSearchPanelWidth} mapsSearchPanelTop={mapsSearchPanelTop} setMapsSearchPanelTop={setMapsSearchPanelTop} miniMapTop={miniMapTop} setMiniMapTop={setMiniMapTop} miniMapRight={miniMapRight} setMiniMapRight={setMiniMapRight} miniMapSize={miniMapSize} setMiniMapSize={setMiniMapSize} miniMapZoom={miniMapZoom} setMiniMapZoom={setMiniMapZoom} miniMapFadeStart={miniMapFadeStart} setMiniMapFadeStart={setMiniMapFadeStart} miniMapFadeEnd={miniMapFadeEnd} setMiniMapFadeEnd={setMiniMapFadeEnd} minOrbitDistance={minOrbitDistance} setMinOrbitDistance={setMinOrbitDistance} maxOrbitDistance={maxOrbitDistance} setMaxOrbitDistance={setMaxOrbitDistance} appOpenConfig={appOpenConfig} setAppOpenConfig={setAppOpenConfig} homeConfig={homeConfig} setHomeConfig={setHomeConfig} sceneColors={sceneColors} setSceneColors={setSceneColors} spotifyPlayerTop={spotifyPlayerTop} setSpotifyPlayerTop={setSpotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} setSpotifyPlayerBottom={setSpotifyPlayerBottom} playerDockedWidth={playerDockedWidth} setPlayerDockedWidth={setPlayerDockedWidth} playerDockedLeft={playerDockedLeft} setPlayerDockedLeft={setPlayerDockedLeft} playerDockedHeight={playerDockedHeight} setPlayerDockedHeight={setPlayerDockedHeight} playerFloatingWidth={playerFloatingWidth} setPlayerFloatingWidth={setPlayerFloatingWidth} playerFloatingBottom={playerFloatingBottom} setPlayerFloatingBottom={setPlayerFloatingBottom} playerFloatingHeight={playerFloatingHeight} setPlayerFloatingHeight={setPlayerFloatingHeight} nightAmbientIntensity={nightAmbientIntensity} setNightAmbientIntensity={setNightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} setNightFrontLightIntensity={setNightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} setNightEnvironmentIntensity={setNightEnvironmentIntensity} tripInfo={tripInfo} startTripSimulation={startTripSimulation} stopTripSimulation={stopTripSimulation} isSimulating={!!simulationIntervalRef.current} navigateToolWidth={navigateToolWidth} setNavigateToolWidth={setNavigateToolWidth} playerControlsSize={playerControlsSize} setPlayerControlsSize={setPlayerControlsSize} playerControlsGap={playerControlsGap} setPlayerControlsGap={setPlayerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} setPlayerControlsVerticalPosition={setPlayerControlsVerticalPosition} dayPlayerButtonColor={dayPlayerButtonColor} setDayPlayerButtonColor={setDayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} setNightPlayerButtonColor={setNightPlayerButtonColor} widgetBgHex={widgetBgHex} setWidgetBgHex={setWidgetBgHex} volumeIconSize={volumeIconSize} setVolumeIconSize={setVolumeIconSize} volumeSliderOffsetY={volumeSliderOffsetY} setVolumeSliderOffsetY={setVolumeSliderOffsetY} volumeSliderOffsetX={volumeSliderOffsetX} setVolumeSliderOffsetX={setVolumeSliderOffsetX} volumeControlMarginRight={volumeControlMarginRight} setVolumeControlMarginRight={setVolumeControlMarginRight} volumeSliderWidth={volumeSliderWidth} setVolumeSliderWidth={setVolumeSliderWidth} volumeSliderThickness={volumeSliderThickness} setVolumeSliderThickness={setVolumeSliderThickness} volumeSliderThumbOffsetY={volumeSliderThumbOffsetY} setVolumeSliderThumbOffsetY={setVolumeSliderThumbOffsetY} volumeSliderPopupWidth={volumeSliderPopupWidth} setVolumeSliderPopupWidth={setVolumeSliderPopupWidth} volumeSliderPopupHeight={volumeSliderPopupHeight} setVolumeSliderPopupHeight={setVolumeSliderPopupHeight} volumeControlZIndex={volumeControlZIndex} setVolumeControlZIndex={setVolumeControlZIndex} appLauncherWidth={appLauncherWidth} setAppLauncherWidth={setAppLauncherWidth} appLauncherHeight={appLauncherHeight} setAppLauncherHeight={setAppLauncherHeight} dayFogNear={dayFogNear} setDayFogNear={setDayFogNear} dayFogFar={dayFogFar} setDayFogFar={setDayFogFar} virtualKeyboardKeySize={virtualKeyboardKeySize} setVirtualKeyboardKeySize={setVirtualKeyboardKeySize} virtualKeyboardHeight={virtualKeyboardHeight} setVirtualKeyboardHeight={setVirtualKeyboardHeight} virtualKeyboardPaddingX={virtualKeyboardPaddingX} setVirtualKeyboardPaddingX={setVirtualKeyboardPaddingX} virtualKeyboardKeyGapX={virtualKeyboardKeyGapX} setVirtualKeyboardKeyGapX={setVirtualKeyboardKeyGapX} virtualKeyboardKeyGapY={virtualKeyboardKeyGapY} setVirtualKeyboardKeyGapY={setVirtualKeyboardKeyGapY} virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight} setVirtualKeyboardKeyFontWeight={setVirtualKeyboardKeyFontWeight} uiScale={uiScale} setUiScale={setUiScale} appBarWidth={appBarWidth} setAppBarWidth={setAppBarWidth} darkVolumeTrackBg={darkVolumeTrackBg} setDarkVolumeTrackBg={setDarkVolumeTrackBg} darkVolumeThumbBg={darkVolumeThumbBg} setDarkVolumeThumbBg={setDarkVolumeThumbBg} darkVolumeFillBg={darkVolumeFillBg} setDarkVolumeFillBg={setDarkVolumeFillBg} darkPlayerBg={darkPlayerBg} setDarkPlayerBg={setDarkPlayerBg} darkNavigateInputBg={darkNavigateInputBg} setDarkNavigateInputBg={setDarkNavigateInputBg} queuePopoverHeight={queuePopoverHeight} setQueuePopoverHeight={setQueuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} setQueuePopoverBottomOffset={setQueuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} setQueuePopoverScale={setQueuePopoverScale} queuePopoverWidth={queuePopoverWidth} setQueuePopoverWidth={setQueuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} setQueuePopoverOffsetX={setQueuePopoverOffsetX} spinnerSize={spinnerSize} setSpinnerSize={setSpinnerSize} spinnerShuffleGap={spinnerShuffleGap} setSpinnerShuffleGap={spinnerShuffleGap} debugSpinner={debugSpinner} setDebugSpinner={setDebugSpinner} spinnerTop={spinnerTop} setSpinnerTop={setSpinnerTop} spinnerRight={spinnerRight} setSpinnerRight={setSpinnerRight} spinnerBottom={spinnerBottom} setSpinnerBottom={setSpinnerBottom} spinnerLeft={spinnerLeft} setSpinnerLeft={setSpinnerLeft} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} satelliteLabelBrightness={satelliteLabelBrightness} setSatelliteLabelBrightness={setSatelliteLabelBrightness} satelliteLabelOutlineWidth={satelliteLabelOutlineWidth} setSatelliteLabelOutlineWidth={setSatelliteLabelOutlineWidth} headlightConfig={headlightConfig} setHeadlightConfig={setHeadlightConfig} />}
     </div>
   );
 }

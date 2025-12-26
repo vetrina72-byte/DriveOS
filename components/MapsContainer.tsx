@@ -73,10 +73,10 @@ cursor: grab;
 /* LABELS LAYER (Satellite Text) */
 #labels-canvas {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
     pointer-events: none;
     z-index: 15;
     /* Default values - overridden by injected style */
@@ -477,9 +477,14 @@ document.addEventListener('DOMContentLoaded', () => {
             this.redrawRequested = false;
 
             this.tileQueue = [];
+            this.weatherTileQueue = []; // Separate queue for weather
             this.loadingTiles = new Set();
-            this.activeLoads = 0;
-            this.MAX_CONCURRENT_LOADS = 8;
+            
+            this.activeMapLoads = 0;
+            this.MAX_CONCURRENT_LOADS = 12; // Increased concurrency for base map
+            
+            this.activeWeatherLoads = 0;
+            this.MAX_WEATHER_CONCURRENT_LOADS = 16; // High concurrency for weather
             
             this.TILE_RETRY_DELAY = 15000;
             this.weatherNeedsRedraw = false;
@@ -746,7 +751,14 @@ document.addEventListener('DOMContentLoaded', () => {
             requestAnimationFrame(render); 
         }
         
-        processTileQueue() { while (this.activeLoads < this.MAX_CONCURRENT_LOADS && this.tileQueue.length > 0) { const url = this.tileQueue.shift(); this.loadTile(url, this.imageCache); } }
+        processTileQueue() { while (this.activeMapLoads < this.MAX_CONCURRENT_LOADS && this.tileQueue.length > 0) { const url = this.tileQueue.shift(); this.loadTile(url, this.imageCache); } }
+
+        processWeatherTileQueue() {
+             while (this.activeWeatherLoads < this.MAX_WEATHER_CONCURRENT_LOADS && this.weatherTileQueue.length > 0) {
+                const url = this.weatherTileQueue.shift();
+                this.loadWeatherTile(url, this.weatherImageCache);
+             }
+        }
         
         drawMapToBuffer() { 
             const ctx = this.tileCtx; 
@@ -765,7 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Setup transforms for Labels
             lCtx.save();
             lCtx.clearRect(0, 0, width, height);
-            if (Math.abs(this.currentRotation) > 0.001) {
+            if (Math.abs(this.currentRotation) > 0.001) { 
                 lCtx.translate(width / 2, height / 2); 
                 lCtx.rotate(this.currentRotation); 
                 lCtx.translate(-width / 2, -height / 2);
@@ -776,7 +788,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const scaledTileSize = this.TILE_SIZE * scale; 
             const centerTileX = this.lon2tile(this.center.lng, tileZ); 
             const centerTileY = this.lat2tile(this.center.lat, tileZ); 
-            const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 2; 
+            // Increased buffer to +3
+            const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 3; 
             const newTileQueue = []; 
             
             for (let i = Math.floor(centerTileX - tilesToLoad); i < Math.ceil(centerTileX + tilesToLoad); i++) { 
@@ -847,8 +860,34 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.restore(); 
         }
         
-        loadTile(url, cache, onLoadCallback = null) { if (!url || this.loadingTiles.has(url) || cache[url]) return; this.loadingTiles.add(url); this.activeLoads++; const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { if (img.naturalWidth === 0) { img.onerror(); return; } img.loadTime = performance.now(); cache[url] = img; delete this.failedTiles[url]; this.loadingTiles.delete(url); this.activeLoads--; this.processTileQueue(); if (onLoadCallback) onLoadCallback(); this.requestRedraw(); }; img.onerror = () => { this.failedTiles[url] = { timestamp: performance.now() }; this.loadingTiles.delete(url); this.activeLoads--; this.processTileQueue(); }; img.src = url; }
+        loadTile(url, cache, onLoadCallback = null) { if (!url || this.loadingTiles.has(url) || cache[url]) return; this.loadingTiles.add(url); this.activeMapLoads++; const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { if (img.naturalWidth === 0) { img.onerror(); return; } img.loadTime = performance.now(); cache[url] = img; delete this.failedTiles[url]; this.loadingTiles.delete(url); this.activeMapLoads--; this.processTileQueue(); if (onLoadCallback) onLoadCallback(); this.requestRedraw(); }; img.onerror = () => { this.failedTiles[url] = { timestamp: performance.now() }; this.loadingTiles.delete(url); this.activeMapLoads--; this.processTileQueue(); }; img.src = url; }
         
+        loadWeatherTile(url, cache, onLoadCallback = null) {
+            if (!url || this.loadingTiles.has(url) || cache[url]) return;
+            this.loadingTiles.add(url);
+            this.activeWeatherLoads++; // Increment specifically for weather
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => {
+                if (img.naturalWidth === 0) { img.onerror(); return; }
+                img.loadTime = performance.now();
+                cache[url] = img;
+                delete this.failedTiles[url];
+                this.loadingTiles.delete(url);
+                this.activeWeatherLoads--; 
+                this.processWeatherTileQueue(); // Process next in weather queue
+                if (onLoadCallback) onLoadCallback();
+                this.requestRedraw();
+            };
+            img.onerror = () => {
+                this.failedTiles[url] = { timestamp: performance.now() };
+                this.loadingTiles.delete(url);
+                this.activeWeatherLoads--;
+                this.processWeatherTileQueue();
+            };
+            img.src = url;
+        }
+
         drawTile(ctx, x, y, z, canvasX, canvasY, size, providerKey = this.currentTileProvider) { 
             // DO NOT draw placeholders on the label layer, keep it transparent!
             if (providerKey !== 'satelliteLabels') { 
@@ -887,13 +926,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!this.isWeatherLayerVisible || !this.weatherTimestamps.length) return;
 
             ctx.save();
-            if (Math.abs(this.currentRotation) > 0.001) {
-                ctx.translate(width / 2, height / 2);
-                ctx.rotate(this.currentRotation);
-                ctx.translate(-width / 2, -height / 2);
-            }
+            if (Math.abs(this.currentRotation) > 0.001) { 
+                ctx.translate(width / 2, height / 2); 
+                ctx.rotate(this.currentRotation); 
+                ctx.translate(-width / 2, -height / 2); 
+            } 
 
-            const weatherZoom = Math.max(4, Math.min(this.MAX_WEATHER_TILE_ZOOM, Math.floor(this.zoom) - 1));
+            // Allow lower zoom levels (down to 0) for better coverage when zoomed out
+            const weatherZoom = Math.max(0, Math.min(this.MAX_WEATHER_TILE_ZOOM, Math.floor(this.zoom) - 1));
 
             const getWeatherTileUrl = (framePath, x, y, z) => {
                 const maxTileIndex = Math.pow(2, z) - 1;
@@ -905,7 +945,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const scaledTileSize = this.TILE_SIZE * Math.pow(2, this.zoom - weatherZoom);
             const centerTileX = this.lon2tile(this.center.lng, weatherZoom);
             const centerTileY = this.lat2tile(this.center.lat, weatherZoom);
-            const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 1;
+            // Increased buffer to +3 to ensure clouds are loaded just outside viewport
+            const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 3;
+
+            const newWeatherQueue = [];
 
             for (let i = Math.floor(centerTileX - tilesToLoad); i <= Math.ceil(centerTileX + tilesToLoad); i++) {
                 for (let j = Math.floor(centerTileY - tilesToLoad); j <= Math.ceil(centerTileY + tilesToLoad); j++) {
@@ -917,42 +960,51 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!idealUrl) continue;
                     
                     const image = this.weatherImageCache[idealUrl];
-                    let drawn = false;
+                    const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2);
+                    const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2);
 
                     if (image?.complete && image.naturalWidth > 0) {
-                        const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2);
-                        const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2);
                         ctx.imageSmoothingEnabled = true;
                         ctx.imageSmoothingQuality = 'high';
                         ctx.drawImage(image, tileScreenX, tileScreenY, scaledTileSize + 1, scaledTileSize + 1);
-                        drawn = true;
                     } else {
-                        this.loadTile(idealUrl, this.weatherImageCache, () => this.requestRedraw());
-                        
-                        // ANTI-FLICKER: Fallback to the previous frame's tile if available
-                        const prevFrameIndex = (this.currentWeatherFrame - 1 + this.weatherTimestamps.length) % this.weatherTimestamps.length;
-                        const prevFrame = this.weatherTimestamps[prevFrameIndex];
-                        if (prevFrame) {
-                            const prevUrl = getWeatherTileUrl(prevFrame.path, i, j, weatherZoom);
-                            const prevImage = this.weatherImageCache[prevUrl];
-                            if (prevImage?.complete && prevImage.naturalWidth > 0) {
-                                const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2);
-                                const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2);
-                                ctx.imageSmoothingEnabled = true;
-                                ctx.imageSmoothingQuality = 'high';
-                                ctx.drawImage(prevImage, tileScreenX, tileScreenY, scaledTileSize + 1, scaledTileSize + 1);
-                                drawn = true;
-                            }
+                        // Queue for loading
+                        const distance = Math.hypot(tileScreenX - width / 2, tileScreenY - height / 2);
+                        newWeatherQueue.push({ url: idealUrl, distance });
+
+                        // PARENT TILE FALLBACK: Search up to z=0 to find ANY coverage to stretch
+                        const fallback = this.findLoadedTile(i, j, weatherZoom - 1, this.weatherImageCache, (px, py, pz) => getWeatherTileUrl(idealFrame.path, px, py, pz));
+                        if (fallback) {
+                             this.drawParentTile(ctx, fallback, i, j, weatherZoom, tileScreenX, tileScreenY, scaledTileSize);
                         }
                     }
                 }
             }
+            
+            // Sort by distance from center and process queue
+            newWeatherQueue.sort((a, b) => a.distance - b.distance);
+            this.weatherTileQueue = newWeatherQueue.map(item => item.url);
+            this.processWeatherTileQueue();
+
             ctx.restore();
         }
 
         drawParentTile(ctx, parentTile, x, y, z, canvasX, canvasY, size) { const { img, x: pX, y: pY, z: pZ } = parentTile; const tileRes = img.src.includes('@2x') || img.src.includes('/512/') ? 512 : 256; const tileSizeOnParent = tileRes / Math.pow(2, z - pZ); const clipX = (x - pX * Math.pow(2, z - pZ)) * tileSizeOnParent; const clipY = (y - pY * Math.pow(2, z - pZ)) * tileSizeOnParent; ctx.imageSmoothingEnabled = true; ctx.drawImage(img, clipX, clipY, tileSizeOnParent, tileSizeOnParent, canvasX, canvasY, size + 1, size + 1); }
         
-        findLoadedTile(x, y, z, cache, urlBuilder) { let z_ = z; while (z_ >= this.MIN_ZOOM) { const pX = x >> (z - z_); const pY = y >> (z - z_); const url = urlBuilder(pX, pY, z_); if(url && cache[url]?.complete && cache[url].naturalWidth > 0) { return { img: cache[url], x: pX, y: pY, z: z_ }; } z_--; } return null; }
+        findLoadedTile(x, y, z, cache, urlBuilder) { 
+            let z_ = z; 
+            // Allow searching all the way up to z=0 for max fallback coverage
+            while (z_ >= 0) { 
+                const pX = x >> (z - z_); 
+                const pY = y >> (z - z_); 
+                const url = urlBuilder(pX, pY, z_); 
+                if(url && cache[url]?.complete && cache[url].naturalWidth > 0) { 
+                    return { img: cache[url], x: pX, y: pY, z: z_ }; 
+                } 
+                z_--; 
+            } 
+            return null; 
+        }
         
         async toggleWeatherLayer() { this.isWeatherLayerVisible = !this.isWeatherLayerVisible; this.weatherToggleBtn.classList.toggle('active', this.isWeatherLayerVisible); this.timelapseControls.classList.toggle('visible', this.isWeatherLayerVisible); this.requestRedraw(); if (this.isWeatherLayerVisible) { this.isWeatherOverviewActive = true; this.isFollowingUser = false; if (this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); if (this.compassMode === 'heading-up') { this.wasInHeadingUpMode = true; this.setCompassMode('north-up'); this.showInfoToast('Modalità North Up per vista radar', 'compass'); } this.flyTo({ center: this.currentPosition ?? this.center, zoom: this.WEATHER_ZOOM_OUT_LEVEL }); this.startWeatherRecenterTimer(); this.stopTimelapse(); if (this.weatherTimestamps.length === 0) { this.showInfoToast("Caricamento dati radar...", "loader"); try { const response = await fetch('https://api.rainviewer.com/public/weather-maps.json'); const data = await response.json(); this.weatherTimestamps = [...data.radar.past, ...data.radar.nowcast]; this.pastFramesCount = data.radar.past.length; this.timelapseSlider.max = this.weatherTimestamps.length - 1; this.updateTimelapseSliderStyle(); this.setTimelapseFrame(this.pastFramesCount - 1); this.showInfoToast("Radar meteo caricato", "cloud-rain"); this.playPauseTimelapse(); } catch (weatherError) { console.error('Errore caricamento dati meteo:', weatherError); this.showInfoToast("Errore caricamento dati meteo", "alert-triangle"); this.toggleWeatherLayer(); } } else { this.playPauseTimelapse(); } } else { this.showInfoToast("Radar meteo disattivato", "cloud-off"); this.stopTimelapse(); if (this.isWeatherOverviewActive) { this.isWeatherOverviewActive = false; if (this.weatherOverviewRecenterTimer) clearTimeout(this.weatherOverviewRecenterTimer); this.recenterMap(); } } }
         
@@ -1061,7 +1113,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!this.isWeatherLayerVisible || this.weatherTimestamps.length === 0) return;
             
             const { offsetWidth: width, offsetHeight: height } = this.mapContainer;
-            const weatherZoom = Math.max(4, Math.min(this.MAX_WEATHER_TILE_ZOOM, Math.floor(this.zoom) - 1));
+            // Relaxed zoom for preload too
+            const weatherZoom = Math.max(0, Math.min(this.MAX_WEATHER_TILE_ZOOM, Math.floor(this.zoom) - 1));
             
             const getWeatherTileUrl = (framePath, x, y, z) => {
                 const maxTileIndex = Math.pow(2, z) - 1;
@@ -1084,7 +1137,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let j = Math.floor(centerTileY - tilesToLoad); j <= Math.ceil(centerTileY + tilesToLoad); j++) {
                         const url = getWeatherTileUrl(frame.path, i, j, weatherZoom);
                         if (url) {
-                            this.loadTile(url, this.weatherImageCache);
+                            // Use loadWeatherTile to prevent map queue blocking
+                            this.loadWeatherTile(url, this.weatherImageCache);
                         }
                     }
                 }
@@ -1303,7 +1357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </body>
 </html>
-`;
+`
 
 export default function MapsContainer({ 
     isOpen, 

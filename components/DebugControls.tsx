@@ -204,18 +204,18 @@ const WEATHER_CONDITIONS = [
 
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
-  cameraTarget: { x: 0.60, y: 0.22, z: 0.65 },
-  modelPos: { x: -4.65, y: -1.00, z: 1.47 },
-  modelRot: { x: 0, y: -0.09, z: 0.0 },
-  modelScale: 0.78,
+  cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
+  modelPos: { x: -5.75, y: -1.00, z: 1.90 },
+  modelRot: { x: 0.01, y: -1.49, z: 0.01 },
+  modelScale: 1.36,
 };
 
 const DEFAULT_HOME_CONFIG: SceneConfig = {
-    cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, // UPDATED Y
-    cameraTarget: { x: 0.95, y: 0.25, z: 0.65 }, // UPDATED Y
-    modelPos: { x: 14.25, y: -1.30, z: -1.40 },
-    modelRot: { x: 0.00, y: 0.06, z: 0.00 },
-    modelScale: 2.80,
+    cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
+    cameraTarget: { x: -1.30, y: -0.40, z: 0.05 }, 
+    modelPos: { x: -1.40, y: -1.05, z: 0.15 },
+    modelRot: { x: 0.01, y: -1.49, z: 0.00 },
+    modelScale: 2.68,
 };
 
 export default function DebugControls({ 
@@ -481,7 +481,7 @@ export default function DebugControls({
     setSpinnerLeft(undefined);
     setSatelliteLabelBrightness(2.3);
     setSatelliteLabelOutlineWidth(1.2);
-    setHeadlightConfig({ x: -4.85, y: 0.81, z: 1.55, angle: 3.10, intensity: 0.70, startWidth: 0.10, endWidth: 0.10, length: 20.00, startHeight: 0.10, endHeight: 0.01, fade: 7.40, separation: 0.90, circular: true });
+    setHeadlightConfig({ x: -0.05, y: 0.77, z: -1.55, angle: 0.06, yaw: 0.01, assemblyYaw: -1.588, intensity: 0.75, startWidth: 0.30, endWidth: 0.10, length: 7.00, startHeight: 0.03, endHeight: 0.01, fade: 7.40, separation: 1.25, circular: true, linked: true });
   };
   
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -656,6 +656,12 @@ export default function DebugControls({
             <h4 className="text-sm font-semibold text-zinc-400 mt-2">Headlight Configuration</h4>
              <div>
               <label className="flex items-center gap-2 font-medium text-zinc-300">
+                <input type="checkbox" checked={headlightConfig.linked} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, linked: e.target.checked }))} />
+                Linked to Model Rotation
+              </label>
+            </div>
+             <div>
+              <label className="flex items-center gap-2 font-medium text-zinc-300">
                 <input type="checkbox" checked={headlightConfig.circular} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, circular: e.target.checked }))} />
                 Circular Beams
               </label>
@@ -663,7 +669,9 @@ export default function DebugControls({
             <div><label className="block font-medium text-zinc-300">X (Horizontal): {headlightConfig.x.toFixed(2)}</label><input type="range" min="-20" max="20" step="0.05" value={headlightConfig.x} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, x: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Y (Height): {headlightConfig.y.toFixed(2)}</label><input type="range" min="0" max="10" step="0.01" value={headlightConfig.y} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, y: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Z (Depth): {headlightConfig.z.toFixed(2)}</label><input type="range" min="-50" max="50" step="0.05" value={headlightConfig.z} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, z: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
-            <div><label className="block font-medium text-zinc-300">Angle: {headlightConfig.angle.toFixed(2)}</label><input type="range" min="0" max={Math.PI * 2} step="0.05" value={headlightConfig.angle} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, angle: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
+            <div><label className="block font-medium text-zinc-300">Angle (Pitch): {headlightConfig.angle.toFixed(2)}</label><input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={headlightConfig.angle} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, angle: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
+            <div><label className="block font-medium text-zinc-300">Yaw (Lateral Tilt): {headlightConfig.yaw.toFixed(2)}</label><input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={headlightConfig.yaw} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, yaw: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
+            <div><label className="block font-medium text-zinc-300">Assembly Yaw (360°): {((headlightConfig.assemblyYaw * 180) / Math.PI).toFixed(0)}°</label><input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={headlightConfig.assemblyYaw} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, assemblyYaw: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Separation: {headlightConfig.separation.toFixed(2)}</label><input type="range" min="0" max="3" step="0.05" value={headlightConfig.separation} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, separation: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Start Width: {headlightConfig.startWidth.toFixed(2)}</label><input type="range" min="0.1" max="3" step="0.05" value={headlightConfig.startWidth} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, startWidth: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">End Width: {headlightConfig.endWidth.toFixed(2)}</label><input type="range" min="0.1" max="5" step="0.05" value={headlightConfig.endWidth} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, endWidth: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
