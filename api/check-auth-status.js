@@ -5,13 +5,10 @@ import { getRedis } from '../lib/redis.js';
 
 export default async function handler(req, res) {
   const sessionId = req.query?.sessionId;
-  console.log(`📡 [CHECK-AUTH] Verifica per session=${sessionId}`);
-
   if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });
 
-  // Try standard token management first
+  // Prima proviamo il manager standard
   const updated = await ensureSpotifyToken(sessionId);
-
   if (updated && updated.access_token) {
     return res.status(200).json({ 
       authenticated: true, 
@@ -20,7 +17,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // Double check redis for specific error states
+  // Controllo stati di errore specifici salvati in Redis
   const redis = getRedis();
   const raw = await redis.get(`spotify:${sessionId}`);
   if (raw) {
@@ -35,6 +32,5 @@ export default async function handler(req, res) {
     } catch(e){}
   }
 
-  // No session found yet, client should keep polling.
   return res.status(200).json({ authenticated: false });
 }

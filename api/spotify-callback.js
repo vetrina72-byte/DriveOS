@@ -5,11 +5,19 @@ import { getRedis } from '../lib/redis.js';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_ME_URL = 'https://api.spotify.com/v1/me';
 
-const sendCallbackPage = (res, { success = true, message = '' }) => {
+const sendCallbackPage = (res, { success = true, errorType = '', message = '' }) => {
   const title = success ? 'Accesso Completato' : 'Accesso Negato';
-  const displayMessage = message || (success 
-      ? 'Hai collegato con successo il tuo account Spotify. Puoi chiudere questa finestra.' 
-      : 'Qualcosa è andato storto. Riprova a scansionare il codice QR.');
+  let displayMessage = message;
+  
+  if (!displayMessage) {
+    if (success) {
+      displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi chiudere questa finestra.';
+    } else {
+      displayMessage = errorType === 'premium_required' 
+        ? 'Account Premium richiesto. L\'integrazione richiede un abbonamento Spotify Premium attivo per funzionare.'
+        : 'Si è verificato un errore durante la connessione. Riprova.';
+    }
+  }
   
   const iconHtml = success 
       ? `<div class="icon-circle success">
@@ -21,7 +29,7 @@ const sendCallbackPage = (res, { success = true, message = '' }) => {
       : `<div class="icon-circle error">
            <svg class="cross" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
              <circle class="cross__circle" cx="26" cy="26" r="25" fill="none"/>
-             <path class="cross__path" fill="none" d="M16 16 36 36 M36 16 16 36" stroke="#ef4444" stroke-width="4" stroke-linecap="round"/>
+             <path class="cross__path" fill="none" d="M16 16 L36 36 M36 16 L16 36" stroke="white" stroke-width="4" stroke-linecap="round"/>
            </svg>
          </div>`;
 
@@ -51,16 +59,15 @@ const sendCallbackPage = (res, { success = true, message = '' }) => {
       }
       header {
         width: 100%;
-        padding: 100px 0 40px;
+        padding: 80px 0 40px;
         display: flex;
         justify-content: center;
         align-items: center;
         flex-shrink: 0;
       }
       .spotify-logo {
-        width: 160px;
+        width: 140px;
         height: auto;
-        display: block;
       }
       .container {
         flex-grow: 1;
@@ -69,13 +76,13 @@ const sendCallbackPage = (res, { success = true, message = '' }) => {
         align-items: center;
         justify-content: center;
         padding: 2rem;
-        padding-bottom: 20vh;
+        padding-bottom: 15vh;
         text-align: center;
-        animation: fadeIn 0.8s ease-out;
+        animation: fadeIn 0.6s ease-out;
       }
       h1 {
         font-weight: 700;
-        font-size: 1.75rem;
+        font-size: 1.8rem;
         margin: 1.5rem 0 1rem;
         letter-spacing: -0.02em;
       }
@@ -84,26 +91,23 @@ const sendCallbackPage = (res, { success = true, message = '' }) => {
         font-size: 1.1rem;
         line-height: 1.5;
         color: #a1a1aa;
-        max-width: 400px;
+        max-width: 320px;
         margin: 0;
       }
       
       @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
+        from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
 
-      .checkmark { width: 80px; height: 80px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px var(--spotify-green); animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
-      .checkmark__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--spotify-green); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
-      .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
-      
-      .cross { width: 80px; height: 80px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px transparent; animation: scale .3s ease-in-out .9s both; }
-      .cross__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--error-red); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
-      .cross__path { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
+      .icon-circle { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+      .icon-circle.success { background-color: var(--spotify-green); }
+      .icon-circle.error { background-color: var(--error-red); }
 
+      .checkmark__check { stroke: white; stroke-width: 4; fill: none; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards; }
+      .cross__path { stroke: white; stroke-width: 4; fill: none; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards; }
+      
       @keyframes stroke { 100% { stroke-dashoffset: 0; } }
-      @keyframes scale { 0%, 100% { transform: none; } 50% { transform: scale3d(1.1, 1.1, 1); } }
-      @keyframes fill { 100% { box-shadow: inset 0px 0px 0px 50px var(--spotify-green); } }
     </style>
     </head>
     <body>
@@ -115,7 +119,7 @@ const sendCallbackPage = (res, { success = true, message = '' }) => {
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => { if (window.close) { window.close(); } }, 5000);</script>
+      <script>setTimeout(() => { if (window.close) { window.close(); } }, 6000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -126,17 +130,15 @@ export default async function handler(req, res) {
   const { code, state: sessionId, error } = req.query;
 
   if (error) {
-    console.error('Spotify callback error:', error);
-    sendCallbackPage(res, { success: false, message: `Spotify ha restituito un errore: ${error}` });
-    return;
+    return sendCallbackPage(res, { success: false, message: `Errore Spotify: ${error}` });
   }
   if (!code || !sessionId) {
-    sendCallbackPage(res, { success: false, message: 'Parametri mancanti (code o session ID).' });
-    return;
+    return sendCallbackPage(res, { success: false, message: 'Parametri di sessione mancanti.' });
   }
 
   const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
   const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
+  
   const params = new URLSearchParams();
   params.append('grant_type', 'authorization_code');
   params.append('code', code);
@@ -153,29 +155,19 @@ export default async function handler(req, res) {
     });
     
     const tokenData = await spotifyResponse.json();
+    if (!spotifyResponse.ok) throw new Error('Token exchange failed');
 
-    if (!spotifyResponse.ok) {
-        console.error('Error exchanging token with Spotify:', tokenData);
-        sendCallbackPage(res, { success: false, message: 'Errore durante lo scambio del token.' });
-        return;
-    }
-    
-    // Check for Premium account status
+    // Verifica profilo per controllo Premium
     const meResponse = await fetch(USER_ME_URL, {
         headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
     });
     const userData = await meResponse.json();
-
     const redis = getRedis();
 
     if (userData.product !== 'premium') {
-        console.warn(`[SPOTIFY-CALLBACK] Non-premium user ${userData.id} attempted login.`);
-        await redis.set(`spotify:${sessionId}`, JSON.stringify({ error: 'premium_required' }), 'EX', 600); // 10 min expiry
-        sendCallbackPage(res, { 
-            success: false, 
-            message: 'Account Premium richiesto. L\'integrazione richiede un abbonamento Spotify Premium attivo per funzionare.' 
-        });
-        return;
+        console.warn(`[SPOTIFY] Login negato per utente non-premium: ${userData.id}`);
+        await redis.set(`spotify:${sessionId}`, JSON.stringify({ error: 'premium_required' }), 'EX', 600);
+        return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
     const payload = {
@@ -185,13 +177,11 @@ export default async function handler(req, res) {
       refresh_failures: 0
     };
 
-    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 60*60*24*30); // 30 days
-    console.log(`💾 [SPOTIFY-CALLBACK] Saved session ${sessionId}, expires at ${new Date(payload.expires_at).toLocaleTimeString()}`);
-    
-    sendCallbackPage(res, { success: true });
+    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 60*60*24*30);
+    return sendCallbackPage(res, { success: true });
 
-  } catch (exchangeError) {
-    console.error('Network or parsing error during token exchange:', exchangeError.message);
-    sendCallbackPage(res, { success: false, message: 'Errore di rete. Controlla la connessione e riprova.' });
+  } catch (err) {
+    console.error('Callback error:', err.message);
+    return sendCallbackPage(res, { success: false });
   }
 }

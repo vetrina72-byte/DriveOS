@@ -4,230 +4,136 @@ import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSessionId } from '../lib/sessionId';
-// Add FiX to the imports from react-icons/fi
 import { FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
 
-// Funzione helper per generare l'URL del QR code
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
 
 const CheckmarkIcon = () => (
-    <motion.svg
-        className="w-24 h-24"
-        viewBox="0 0 50 50"
-        initial="hidden"
-        animate="visible"
-    >
-        <motion.circle
-            cx="25"
-            cy="25"
-            r="24"
-            stroke="#1DB954"
-            strokeWidth="2"
-            fill="none"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1, transition: { duration: 0.5, ease: "easeOut" } }}
-        />
-        <motion.path
-            d="M14 27 L 22 35 L 37 20"
-            fill="transparent"
-            strokeWidth="3"
-            stroke="#1DB954"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: 1, transition: { duration: 0.4, ease: "easeInOut", delay: 0.3 } }}
-        />
+    <motion.svg className="w-24 h-24" viewBox="0 0 50 50" initial="hidden" animate="visible">
+        <motion.circle cx="25" cy="25" r="24" stroke="#1DB954" strokeWidth="2" fill="none" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1, transition: { duration: 0.5, ease: "easeOut" } }} />
+        <motion.path d="M14 27 L 22 35 L 37 20" fill="transparent" strokeWidth="3" stroke="#1DB954" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1, transition: { duration: 0.4, ease: "easeInOut", delay: 0.3 } }} />
     </motion.svg>
 );
-
 
 function SpotifyLogin() {
   const { login } = useAuth();
   const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO' | 'PREMIUM_RICHIESTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const [sessionId] = useState<string>(getSessionId());
+  const [sessionId, setSessionId] = useState<string>(getSessionId());
   const pollIntervalRef = useRef<number | null>(null);
 
   const startLoginProcess = useCallback(() => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setUiState('CARICAMENTO');
     
-    const newSessionId = getSessionId(); 
+    // Rigenera sessione per pulire errori precedenti
+    const newSid = 'sid_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('spotify_session_id', newSid);
+    setSessionId(newSid);
+    
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
     const redirectUri = process.env.VITE_REDIRECT_URI;
-    const scope = [
-        'streaming', 'user-read-email', 'user-read-private', 'user-library-read',
-        'user-library-modify', 'user-read-playback-state', 'user-modify-playback-state',
-        'user-read-recently-played', 'playlist-read-private', 'playlist-read-collaborative',
-        'playlist-modify-public', 'playlist-modify-private', 'user-top-read',
-        'user-follow-read', 'user-follow-modify'
-    ].join(' ');
+    const scope = ['streaming', 'user-read-email', 'user-read-private', 'user-library-read', 'user-read-playback-state', 'user-modify-playback-state'].join(' ');
     
     const authUrl = new URL("https://accounts.spotify.com/authorize");
     authUrl.search = new URLSearchParams({
         client_id: clientId, response_type: 'code', redirect_uri: redirectUri,
-        scope: scope, show_dialog: 'true', state: newSessionId
+        scope: scope, show_dialog: 'true', state: newSid
     }).toString();
 
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('ATTESA_SCANSIONE');
   }, []);
   
-  const startPolling = useCallback((delay: number) => {
-    if (!sessionId) return;
+  const startPolling = useCallback((sid: string) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
     pollIntervalRef.current = window.setInterval(() => {
-      fetch(`/api/check-auth-status?sessionId=${sessionId}`)
-        .then(res => {
-          if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
-          return res.json();
-        })
+      fetch(`/api/check-auth-status?sessionId=${sid}`)
+        .then(res => res.json())
         .then(data => {
-          if (data && data.authenticated && data.access_token) {
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          if (data?.authenticated && data?.access_token) {
+            clearInterval(pollIntervalRef.current!);
             setUiState('LOGIN_COMPLETATO');
-            const tokenData = {
+            setTimeout(() => login({
                 access_token: data.access_token,
-                expires_in: data.expires_at ? (data.expires_at - Date.now()) / 1000 : 3600,
+                expires_in: (data.expires_at - Date.now()) / 1000,
                 expires_at: data.expires_at,
-            };
-            setTimeout(() => login(tokenData), 1500);
-          } else if (data && data.error === 'premium_required') {
-            console.warn('[POLLING] User does not have a Premium account.');
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            }), 1500);
+          } else if (data?.error === 'premium_required') {
+            clearInterval(pollIntervalRef.current!);
             setUiState('PREMIUM_RICHIESTO');
-          } else if (data && data.expired === true) {
-            console.warn('[POLLING] Session expired (invalid_grant). Regenerating QR code.');
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          } else if (data?.expired) {
+            clearInterval(pollIntervalRef.current!);
             setUiState('SCADUTO');
-            setTimeout(() => {
-              startLoginProcess();
-            }, 2500);
-          } else if (data && data.error === 'redis_unreachable') {
-              console.warn('[POLLING] Redis not reachable, retrying in 5s.');
-              startPolling(5000);
+            setTimeout(startLoginProcess, 2000);
           }
         })
-        .catch(error => {
-          console.error("[POLLING] Error checking auth status:", error);
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          setUiState('ERRORE');
-        });
-    }, delay);
-  }, [sessionId, login, startLoginProcess]);
+        .catch(() => {});
+    }, 3000);
+  }, [login, startLoginProcess]);
 
   useEffect(() => {
     startLoginProcess();
+    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
   }, [startLoginProcess]);
 
   useEffect(() => {
     if (uiState === 'ATTESA_SCANSIONE' && sessionId) {
-      startPolling(3000);
+      startPolling(sessionId);
     }
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    };
   }, [uiState, sessionId, startPolling]);
 
   return (
     <div className="w-full h-full flex items-center justify-center p-8 bg-[var(--spotify-panel-bg)]">
         <AnimatePresence mode="wait">
             {uiState === 'ATTESA_SCANSIONE' && (
-                <motion.div
-                    key="qr-view"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex items-center gap-12 bg-neutral-900 p-12 rounded-2xl shadow-2xl border border-white/10"
-                >
-                    <div className="flex-shrink-0 flex flex-col items-center gap-4">
+                <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex items-center gap-12 bg-neutral-900 p-12 rounded-2xl border border-white/10 shadow-2xl">
+                    <div className="flex flex-col items-center gap-4">
                         <div className="w-64 h-64 p-4 bg-white rounded-lg shadow-lg">
-                            <img src={qrCodeUrl} alt="QR Code per login Spotify" className="w-full h-full object-contain" />
+                            <img src={qrCodeUrl} alt="QR Code" className="w-full h-full object-contain" />
                         </div>
-                         <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest text-center">Premium Mandatory</p>
+                        <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Premium Mandatory</p>
                     </div>
                     <div className="text-left max-w-md">
                         <FaSpotify className="w-12 h-12 text-[#1DB954] mb-6" />
                         <h1 className="text-3xl font-bold text-white mb-2">Connetti Spotify</h1>
-                        <p className="text-zinc-400 text-lg mb-4">Scansiona il codice QR con il tuo telefono per iniziare.</p>
-                        <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                            <p className="text-blue-400 text-sm flex items-center gap-2">
-                                <FiAlertCircle className="flex-shrink-0" />
-                                <span>L'integrazione richiede un account <strong>Spotify Premium</strong> attivo.</span>
+                        <p className="text-zinc-400 text-lg mb-6">Scansiona il codice QR con il tuo smartphone.</p>
+                        <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                            <p className="text-zinc-300 text-sm flex items-start gap-3">
+                                <FiAlertCircle className="mt-1 flex-shrink-0 text-blue-400" />
+                                <span>L'integrazione richiede un account <strong>Spotify Premium</strong>. Gli account Free non sono supportati per la riproduzione remota.</span>
                             </p>
                         </div>
                     </div>
                 </motion.div>
             )}
 
-            {uiState === 'LOGIN_COMPLETATO' && (
-                <motion.div
-                    key="success-view"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex flex-col items-center justify-center text-center"
-                >
-                    <CheckmarkIcon />
-                    <h2 className="text-2xl font-bold text-white mt-6">Accesso completato!</h2>
-                    <p className="text-zinc-400 mt-1">Stiamo caricando la tua musica...</p>
-                </motion.div>
-            )}
-
             {uiState === 'PREMIUM_RICHIESTO' && (
-                <motion.div
-                    key="premium-error-view"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex flex-col items-center justify-center text-center max-w-lg bg-neutral-900 p-12 rounded-2xl border border-red-500/30 shadow-2xl"
-                >
-                    <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6 border border-red-500/40">
-                        <FiX className="text-red-500 w-12 h-12" strokeWidth={3} />
-                    </div>
-                    <h2 className="text-3xl font-bold text-white mb-4">Spotify Premium richiesto</h2>
-                    <p className="text-zinc-400 text-lg mb-8">
-                        Non abbiamo rilevato un abbonamento Premium attivo. Questa integrazione utilizza le funzionalità di riproduzione remota di Spotify, disponibili solo per gli utenti Premium.
+                <motion.div key="denied" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="flex flex-col items-center justify-center text-center max-w-lg bg-black/40 p-12 rounded-3xl border border-red-500/30 backdrop-blur-xl">
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 15 }} className="w-24 h-24 bg-red-600 rounded-full flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(220,38,38,0.4)]">
+                        <FiX className="text-white w-14 h-14" strokeWidth={3} />
+                    </motion.div>
+                    <h2 className="text-3xl font-bold text-white mb-4">Accesso Negato</h2>
+                    <p className="text-zinc-400 text-lg mb-8 leading-relaxed">
+                        L'account utilizzato non dispone di un abbonamento <strong>Premium</strong>.<br/>Per utilizzare Spotify su Drive OS è necessario un piano a pagamento.
                     </p>
-                    <button 
-                        onClick={startLoginProcess}
-                        className="flex items-center gap-2 bg-white text-black font-bold py-4 px-8 rounded-full hover:bg-zinc-200 transition-colors"
-                    >
-                        <FiRefreshCw />
-                        Riprova con un altro account
+                    <button onClick={startLoginProcess} className="flex items-center gap-3 bg-white text-black font-bold py-4 px-10 rounded-full hover:bg-zinc-200 transition-all active:scale-95">
+                        <FiRefreshCw /> Riprova con un altro account
                     </button>
                 </motion.div>
             )}
 
-            {(uiState === 'CARICAMENTO' || uiState === 'ERRORE' || uiState === 'SCADUTO') && (
-                <motion.div
-                    key="loader-error-view"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex flex-col items-center justify-center text-center"
-                >
-                    {uiState === 'CARICAMENTO' && (
-                        <div className="w-12 h-12 spotify-spinner" />
-                    )}
-                     {uiState === 'SCADUTO' && (
-                        <>
-                            <p className="text-yellow-400 text-lg">QR Code scaduto.</p>
-                            <p className="text-zinc-400 mt-1">Sto generando un nuovo codice...</p>
-                        </>
-                    )}
-                    {uiState === 'ERRORE' && (
-                        <>
-                            <p className="text-red-400 text-lg">Si è verificato un errore.</p>
-                            <p className="text-zinc-400 mt-1 mb-6">Controlla la connessione e riprova.</p>
-                            <button onClick={startLoginProcess} className="px-6 py-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors font-bold">Riprova</button>
-                        </>
-                    )}
+            {uiState === 'LOGIN_COMPLETATO' && (
+                <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
+                    <CheckmarkIcon />
+                    <h2 className="text-2xl font-bold text-white mt-6">Benvenuto!</h2>
+                    <p className="text-zinc-400 mt-2">Configurazione in corso...</p>
                 </motion.div>
+            )}
+
+            {uiState === 'CARICAMENTO' && (
+                <div className="w-12 h-12 border-4 border-white/10 border-t-[#1DB954] rounded-full animate-spin" />
             )}
         </AnimatePresence>
     </div>
