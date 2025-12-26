@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSessionId } from '../lib/sessionId';
+// Add FiX to the imports from react-icons/fi
+import { FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
 
 // Funzione helper per generare l'URL del QR code
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
@@ -41,7 +43,7 @@ const CheckmarkIcon = () => (
 
 function SpotifyLogin() {
   const { login } = useAuth();
-  const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO'>('CARICAMENTO');
+  const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO' | 'PREMIUM_RICHIESTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [sessionId] = useState<string>(getSessionId());
   const pollIntervalRef = useRef<number | null>(null);
@@ -50,7 +52,7 @@ function SpotifyLogin() {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setUiState('CARICAMENTO');
     
-    const newSessionId = getSessionId(); // Use persistent session ID
+    const newSessionId = getSessionId(); 
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
     const redirectUri = process.env.VITE_REDIRECT_URI;
     const scope = [
@@ -91,6 +93,10 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             };
             setTimeout(() => login(tokenData), 1500);
+          } else if (data && data.error === 'premium_required') {
+            console.warn('[POLLING] User does not have a Premium account.');
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setUiState('PREMIUM_RICHIESTO');
           } else if (data && data.expired === true) {
             console.warn('[POLLING] Session expired (invalid_grant). Regenerating QR code.');
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -113,9 +119,7 @@ function SpotifyLogin() {
 
   useEffect(() => {
     startLoginProcess();
-    // This effect should only run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [startLoginProcess]);
 
   useEffect(() => {
     if (uiState === 'ATTESA_SCANSIONE' && sessionId) {
@@ -138,13 +142,22 @@ function SpotifyLogin() {
                     transition={{ duration: 0.3 }}
                     className="flex items-center gap-12 bg-neutral-900 p-12 rounded-2xl shadow-2xl border border-white/10"
                 >
-                    <div className="flex-shrink-0 w-64 h-64 p-4 bg-white rounded-lg shadow-lg">
-                        <img src={qrCodeUrl} alt="QR Code per login Spotify" className="w-full h-full object-contain" />
+                    <div className="flex-shrink-0 flex flex-col items-center gap-4">
+                        <div className="w-64 h-64 p-4 bg-white rounded-lg shadow-lg">
+                            <img src={qrCodeUrl} alt="QR Code per login Spotify" className="w-full h-full object-contain" />
+                        </div>
+                         <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest text-center">Premium Mandatory</p>
                     </div>
-                    <div className="text-left">
-                        <FaSpotify className="w-12 h-12 text-white mb-6" />
-                        <h1 className="text-3xl font-bold text-white mb-2">Accedi al tuo account Spotify</h1>
-                        <p className="text-zinc-400 text-lg">Scansiona il codice QR con il tuo telefono per iniziare.</p>
+                    <div className="text-left max-w-md">
+                        <FaSpotify className="w-12 h-12 text-[#1DB954] mb-6" />
+                        <h1 className="text-3xl font-bold text-white mb-2">Connetti Spotify</h1>
+                        <p className="text-zinc-400 text-lg mb-4">Scansiona il codice QR con il tuo telefono per iniziare.</p>
+                        <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                            <p className="text-blue-400 text-sm flex items-center gap-2">
+                                <FiAlertCircle className="flex-shrink-0" />
+                                <span>L'integrazione richiede un account <strong>Spotify Premium</strong> attivo.</span>
+                            </p>
+                        </div>
                     </div>
                 </motion.div>
             )}
@@ -161,6 +174,32 @@ function SpotifyLogin() {
                     <CheckmarkIcon />
                     <h2 className="text-2xl font-bold text-white mt-6">Accesso completato!</h2>
                     <p className="text-zinc-400 mt-1">Stiamo caricando la tua musica...</p>
+                </motion.div>
+            )}
+
+            {uiState === 'PREMIUM_RICHIESTO' && (
+                <motion.div
+                    key="premium-error-view"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex flex-col items-center justify-center text-center max-w-lg bg-neutral-900 p-12 rounded-2xl border border-red-500/30 shadow-2xl"
+                >
+                    <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6 border border-red-500/40">
+                        <FiX className="text-red-500 w-12 h-12" strokeWidth={3} />
+                    </div>
+                    <h2 className="text-3xl font-bold text-white mb-4">Spotify Premium richiesto</h2>
+                    <p className="text-zinc-400 text-lg mb-8">
+                        Non abbiamo rilevato un abbonamento Premium attivo. Questa integrazione utilizza le funzionalità di riproduzione remota di Spotify, disponibili solo per gli utenti Premium.
+                    </p>
+                    <button 
+                        onClick={startLoginProcess}
+                        className="flex items-center gap-2 bg-white text-black font-bold py-4 px-8 rounded-full hover:bg-zinc-200 transition-colors"
+                    >
+                        <FiRefreshCw />
+                        Riprova con un altro account
+                    </button>
                 </motion.div>
             )}
 
@@ -184,7 +223,8 @@ function SpotifyLogin() {
                     {uiState === 'ERRORE' && (
                         <>
                             <p className="text-red-400 text-lg">Si è verificato un errore.</p>
-                            <p className="text-zinc-400 mt-1">Controlla la connessione e riprova.</p>
+                            <p className="text-zinc-400 mt-1 mb-6">Controlla la connessione e riprova.</p>
+                            <button onClick={startLoginProcess} className="px-6 py-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors font-bold">Riprova</button>
                         </>
                     )}
                 </motion.div>

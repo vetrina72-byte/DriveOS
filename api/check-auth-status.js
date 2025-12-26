@@ -1,3 +1,4 @@
+
 // File: /api/check-auth-status.js
 import { ensureSpotifyToken } from '../lib/spotifySessionManager.js';
 import { getRedis } from '../lib/redis.js';
@@ -8,6 +9,7 @@ export default async function handler(req, res) {
 
   if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });
 
+  // Try standard token management first
   const updated = await ensureSpotifyToken(sessionId);
 
   if (updated && updated.access_token) {
@@ -18,13 +20,18 @@ export default async function handler(req, res) {
     });
   }
 
-  // if null/expired from token manager, double check redis
+  // Double check redis for specific error states
   const redis = getRedis();
   const raw = await redis.get(`spotify:${sessionId}`);
   if (raw) {
     try {
       const p = JSON.parse(raw);
-      if (p.expired) return res.status(200).json({ authenticated: false, expired: true });
+      if (p.error === 'premium_required') {
+          return res.status(200).json({ authenticated: false, error: 'premium_required' });
+      }
+      if (p.expired) {
+          return res.status(200).json({ authenticated: false, expired: true });
+      }
     } catch(e){}
   }
 
