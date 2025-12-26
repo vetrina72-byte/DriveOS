@@ -150,8 +150,7 @@ export default async function handler(req, res) {
 
     if (userData.product !== 'premium') {
         console.warn(`[SPOTIFY] Accesso negato per account Free: ${userData.id}`);
-        // Notifichiamo l'infotainment tramite Redis in modo persistente
-        await redis.set(`spotify:${sessionId}`, JSON.stringify({ error: 'premium_required', id: userData.id }), 'EX', 600);
+        await redis.set(`spotify:${sessionId}`, JSON.stringify({ error: 'premium_required' }), 'EX', 600);
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     

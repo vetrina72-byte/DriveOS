@@ -33,7 +33,6 @@ function SpotifyLogin() {
     stopPolling();
     setUiState('CARICAMENTO');
     
-    // Generiamo un ID sessione univoco e nuovo ogni volta per evitare cache degli errori precedenti
     const sid = 'sid_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
     setActiveSessionId(sid);
     
@@ -50,7 +49,6 @@ function SpotifyLogin() {
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('ATTESA_SCANSIONE');
     
-    // Iniziamo il polling immediatamente con il nuovo ID
     pollForAuth(sid);
   }, [login]);
 
@@ -69,7 +67,6 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             }), 1500);
           } else if (data?.error === 'premium_required') {
-            // Se l'utente non ha premium, fermiamo il polling e mostriamo lo stato dedicato
             stopPolling();
             setUiState('PREMIUM_RICHIESTO');
           } else if (data?.expired) {
