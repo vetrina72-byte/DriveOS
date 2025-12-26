@@ -14,8 +14,8 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
       displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi chiudere questa finestra.';
     } else {
       displayMessage = errorType === 'premium_required' 
-        ? 'Account Premium richiesto. L\'integrazione richiede un abbonamento Spotify Premium attivo per funzionare.'
-        : 'Si è verificato un errore durante la connessione. Riprova.';
+        ? 'Il tuo account non dispone di un abbonamento Spotify Premium. L\'integrazione richiede Premium per funzionare.'
+        : 'Si è verificato un errore durante la connessione. Riprova più tardi.';
     }
   }
   
@@ -166,6 +166,7 @@ export default async function handler(req, res) {
 
     if (userData.product !== 'premium') {
         console.warn(`[SPOTIFY] Login negato per utente non-premium: ${userData.id}`);
+        // Salviamo lo stato di errore specifico in Redis per informare l'infotainment
         await redis.set(`spotify:${sessionId}`, JSON.stringify({ error: 'premium_required' }), 'EX', 600);
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }

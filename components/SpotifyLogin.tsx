@@ -26,7 +26,7 @@ function SpotifyLogin() {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setUiState('CARICAMENTO');
     
-    // Rigenera sessione per pulire errori precedenti
+    // Rigenera sessione per pulire errori precedenti e forzare un nuovo QR
     const newSid = 'sid_' + Math.random().toString(36).substr(2, 9);
     localStorage.setItem('spotify_session_id', newSid);
     setSessionId(newSid);
@@ -61,6 +61,7 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             }), 1500);
           } else if (data?.error === 'premium_required') {
+            // STOP LOOP: se l'utente non è premium, smettiamo di interrogare il server
             clearInterval(pollIntervalRef.current!);
             setUiState('PREMIUM_RICHIESTO');
           } else if (data?.expired) {
@@ -93,16 +94,15 @@ function SpotifyLogin() {
                         <div className="w-64 h-64 p-4 bg-white rounded-lg shadow-lg">
                             <img src={qrCodeUrl} alt="QR Code" className="w-full h-full object-contain" />
                         </div>
-                        <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Premium Mandatory</p>
                     </div>
                     <div className="text-left max-w-md">
                         <FaSpotify className="w-12 h-12 text-[#1DB954] mb-6" />
                         <h1 className="text-3xl font-bold text-white mb-2">Connetti Spotify</h1>
-                        <p className="text-zinc-400 text-lg mb-6">Scansiona il codice QR con il tuo smartphone.</p>
+                        <p className="text-zinc-400 text-lg mb-6">Scansiona il codice QR con il tuo smartphone per accedere.</p>
                         <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
                             <p className="text-zinc-300 text-sm flex items-start gap-3">
                                 <FiAlertCircle className="mt-1 flex-shrink-0 text-blue-400" />
-                                <span>L'integrazione richiede un account <strong>Spotify Premium</strong>. Gli account Free non sono supportati per la riproduzione remota.</span>
+                                <span>L'integrazione Drive OS richiede un account <strong>Spotify Premium</strong> attivo.</span>
                             </p>
                         </div>
                     </div>
@@ -110,15 +110,29 @@ function SpotifyLogin() {
             )}
 
             {uiState === 'PREMIUM_RICHIESTO' && (
-                <motion.div key="denied" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="flex flex-col items-center justify-center text-center max-w-lg bg-black/40 p-12 rounded-3xl border border-red-500/30 backdrop-blur-xl">
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 15 }} className="w-24 h-24 bg-red-600 rounded-full flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(220,38,38,0.4)]">
+                <motion.div 
+                    key="denied" 
+                    initial={{ opacity: 0, y: 20 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="flex flex-col items-center justify-center text-center max-w-lg bg-black/40 p-12 rounded-3xl border border-red-500/30 backdrop-blur-xl"
+                >
+                    <motion.div 
+                        initial={{ scale: 0 }} 
+                        animate={{ scale: 1 }} 
+                        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                        className="w-24 h-24 bg-red-600 rounded-full flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(220,38,38,0.4)]"
+                    >
                         <FiX className="text-white w-14 h-14" strokeWidth={3} />
                     </motion.div>
                     <h2 className="text-3xl font-bold text-white mb-4">Accesso Negato</h2>
                     <p className="text-zinc-400 text-lg mb-8 leading-relaxed">
                         L'account utilizzato non dispone di un abbonamento <strong>Premium</strong>.<br/>Per utilizzare Spotify su Drive OS è necessario un piano a pagamento.
                     </p>
-                    <button onClick={startLoginProcess} className="flex items-center gap-3 bg-white text-black font-bold py-4 px-10 rounded-full hover:bg-zinc-200 transition-all active:scale-95">
+                    <button 
+                        onClick={startLoginProcess} 
+                        className="flex items-center gap-3 bg-white text-black font-bold py-4 px-10 rounded-full hover:bg-zinc-200 transition-all active:scale-95"
+                    >
                         <FiRefreshCw /> Riprova con un altro account
                     </button>
                 </motion.div>
@@ -134,6 +148,13 @@ function SpotifyLogin() {
 
             {uiState === 'CARICAMENTO' && (
                 <div className="w-12 h-12 border-4 border-white/10 border-t-[#1DB954] rounded-full animate-spin" />
+            )}
+            
+            {(uiState === 'ERRORE' || uiState === 'SCADUTO') && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                    <p className="text-red-400 mb-4">Si è verificato un errore durante il login.</p>
+                    <button onClick={startLoginProcess} className="px-6 py-2 bg-white/10 text-white rounded-full">Riprova</button>
+                </motion.div>
             )}
         </AnimatePresence>
     </div>
