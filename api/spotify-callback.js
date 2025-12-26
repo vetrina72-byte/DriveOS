@@ -27,9 +27,8 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
            </svg>
          </div>`
       : `<div class="icon-circle error">
-           <svg class="cross" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-             <circle class="cross__circle" cx="26" cy="26" r="25" fill="none"/>
-             <path class="cross__path" fill="none" d="M16 16 L36 36 M36 16 L16 36" stroke="white" stroke-width="5" stroke-linecap="round"/>
+           <svg class="cross" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" fill="none" stroke="white" stroke-width="6" stroke-linecap="round">
+             <path d="M16 16 L36 36 M36 16 L16 36" />
            </svg>
          </div>`;
 
@@ -38,7 +37,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
     <html lang="it">
     <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <title>${title}</title>
     <style>
       :root {
@@ -59,13 +58,13 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
       }
       header {
         width: 100%;
-        padding: 80px 0 40px;
+        padding: 60px 0 30px;
         display: flex;
         justify-content: center;
         align-items: center;
         flex-shrink: 0;
       }
-      .spotify-logo { width: 140px; height: auto; }
+      .spotify-logo { width: 130px; height: auto; }
       .container {
         flex-grow: 1;
         display: flex;
@@ -73,22 +72,27 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         align-items: center;
         justify-content: center;
         padding: 2rem;
-        padding-bottom: 15vh;
+        padding-bottom: 10vh;
         text-align: center;
-        animation: fadeIn 0.6s ease-out;
+        animation: fadeIn 0.5s ease-out;
       }
-      h1 { font-weight: 700; font-size: 1.8rem; margin: 1.5rem 0 1rem; letter-spacing: -0.02em; }
-      p { font-weight: 400; font-size: 1.1rem; line-height: 1.5; color: #a1a1aa; max-width: 320px; margin: 0; }
+      h1 { font-weight: 800; font-size: 2rem; margin: 1.5rem 0 1rem; letter-spacing: -0.03em; }
+      p { font-weight: 400; font-size: 1.1rem; line-height: 1.6; color: #a1a1aa; max-width: 320px; margin: 0; }
       
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-      .icon-circle { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+      .icon-circle { 
+        width: 90px; height: 90px; border-radius: 50%; display: flex; 
+        align-items: center; justify-content: center; 
+        box-shadow: 0 15px 30px rgba(0,0,0,0.6);
+        animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
       .icon-circle.success { background-color: var(--spotify-green); }
       .icon-circle.error { background-color: var(--error-red); }
 
-      .checkmark__check { stroke: white; stroke-width: 4; fill: none; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards; }
-      .cross__path { stroke: white; stroke-width: 5; fill: none; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards; }
+      .checkmark__check { stroke: white; stroke-width: 5; fill: none; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards; }
       @keyframes stroke { 100% { stroke-dashoffset: 0; } }
+      @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
     </style>
     </head>
     <body>
@@ -100,7 +104,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => { if (window.close) { window.close(); } }, 8000);</script>
+      <script>setTimeout(() => { if (window.close) { window.close(); } }, 10000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -145,9 +149,9 @@ export default async function handler(req, res) {
     const redis = getRedis();
 
     if (userData.product !== 'premium') {
-        console.warn(`[SPOTIFY] Login negato (No Premium): ${userData.id}`);
-        // Notifichiamo l'infotainment tramite Redis
-        await redis.set(`spotify:${sessionId}`, JSON.stringify({ error: 'premium_required' }), 'EX', 600);
+        console.warn(`[SPOTIFY] Accesso negato per account Free: ${userData.id}`);
+        // Notifichiamo l'infotainment tramite Redis in modo persistente
+        await redis.set(`spotify:${sessionId}`, JSON.stringify({ error: 'premium_required', id: userData.id }), 'EX', 600);
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     

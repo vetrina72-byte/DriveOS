@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getSessionId } from '../lib/sessionId';
 import { FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
 
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
@@ -32,8 +33,8 @@ function SpotifyLogin() {
     stopPolling();
     setUiState('CARICAMENTO');
     
-    // Generiamo un ID sessione univoco per questo tentativo
-    const sid = 'sid_' + Math.random().toString(36).substr(2, 9);
+    // Generiamo un ID sessione univoco e nuovo ogni volta per evitare cache degli errori precedenti
+    const sid = 'sid_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
     setActiveSessionId(sid);
     
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
@@ -68,7 +69,7 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             }), 1500);
           } else if (data?.error === 'premium_required') {
-            // BLOCCA TUTTO: l'utente non ha premium
+            // Se l'utente non ha premium, fermiamo il polling e mostriamo lo stato dedicato
             stopPolling();
             setUiState('PREMIUM_RICHIESTO');
           } else if (data?.expired) {
@@ -84,26 +85,32 @@ function SpotifyLogin() {
   useEffect(() => {
     startLoginProcess();
     return () => stopPolling();
-  }, []); // Eseguito solo al montaggio
+  }, []);
 
   return (
     <div className="w-full h-full flex items-center justify-center p-8 bg-[var(--spotify-panel-bg)]">
         <AnimatePresence mode="wait">
             {uiState === 'ATTESA_SCANSIONE' && (
-                <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex items-center gap-12 bg-neutral-900 p-12 rounded-2xl border border-white/10 shadow-2xl">
+                <motion.div 
+                    key="qr" 
+                    initial={{ opacity: 0, scale: 0.98 }} 
+                    animate={{ opacity: 1, scale: 1 }} 
+                    exit={{ opacity: 0, scale: 0.95 }} 
+                    className="flex flex-col md:flex-row items-center gap-8 md:gap-12 bg-zinc-50 dark:bg-zinc-900 p-8 md:p-12 rounded-3xl border border-zinc-200 dark:border-white/10 shadow-2xl max-w-3xl"
+                >
                     <div className="flex flex-col items-center gap-4">
-                        <div className="w-64 h-64 p-4 bg-white rounded-lg shadow-lg">
+                        <div className="w-56 h-56 p-4 bg-white rounded-2xl shadow-inner border border-zinc-100 flex items-center justify-center">
                             <img src={qrCodeUrl} alt="QR Code" className="w-full h-full object-contain" />
                         </div>
                     </div>
-                    <div className="text-left max-w-md">
-                        <FaSpotify className="w-12 h-12 text-[#1DB954] mb-6" />
-                        <h1 className="text-3xl font-bold text-white mb-2">Connetti Spotify</h1>
-                        <p className="text-zinc-400 text-lg mb-6">Scansiona il codice QR con il tuo smartphone per accedere.</p>
-                        <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
-                            <p className="text-zinc-300 text-sm flex items-start gap-3">
-                                <FiAlertCircle className="mt-1 flex-shrink-0 text-blue-400" />
-                                <span>L'integrazione Drive OS richiede un account <strong>Spotify Premium</strong> attivo per abilitare la riproduzione remota.</span>
+                    <div className="text-center md:text-left max-w-sm">
+                        <FaSpotify className="w-12 h-12 text-[#1DB954] mb-6 mx-auto md:mx-0" />
+                        <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-3">Connetti Spotify</h1>
+                        <p className="text-zinc-600 dark:text-zinc-400 text-lg mb-6 leading-relaxed">Scansiona il codice QR con il tuo smartphone per accedere alla tua musica.</p>
+                        <div className="p-4 bg-blue-50 dark:bg-white/5 border border-blue-100 dark:border-white/10 rounded-xl">
+                            <p className="text-blue-700 dark:text-blue-400 text-sm flex items-start gap-3">
+                                <FiAlertCircle className="mt-0.5 flex-shrink-0" size={18} />
+                                <span>L'integrazione richiede un account <strong>Spotify Premium</strong> attivo. Gli account Free non sono supportati.</span>
                             </p>
                         </div>
                     </div>
@@ -113,51 +120,55 @@ function SpotifyLogin() {
             {uiState === 'PREMIUM_RICHIESTO' && (
                 <motion.div 
                     key="denied" 
-                    initial={{ opacity: 0, y: 30 }} 
+                    initial={{ opacity: 0, y: 20 }} 
                     animate={{ opacity: 1, y: 0 }} 
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className="flex flex-col items-center justify-center text-center max-w-xl bg-black/50 p-16 rounded-[2.5rem] border border-red-500/40 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                    className="flex flex-col items-center justify-center text-center max-w-md bg-white dark:bg-black/50 p-10 md:p-14 rounded-[2.5rem] border border-red-500/20 dark:border-red-500/40 backdrop-blur-2xl shadow-2xl"
                 >
                     <motion.div 
                         initial={{ scale: 0, rotate: -45 }} 
                         animate={{ scale: 1, rotate: 0 }} 
                         transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                        className="w-28 h-28 bg-red-600 rounded-full flex items-center justify-center mb-10 shadow-[0_0_50px_rgba(220,38,38,0.5)]"
+                        className="w-24 h-24 bg-red-500 dark:bg-red-600 rounded-full flex items-center justify-center mb-8 shadow-xl"
                     >
-                        <FiX className="text-white w-16 h-16" strokeWidth={3} />
+                        <FiX className="text-white w-14 h-14" strokeWidth={3} />
                     </motion.div>
-                    <h2 className="text-4xl font-bold text-white mb-6">Accesso Negato</h2>
-                    <p className="text-zinc-300 text-xl mb-10 leading-relaxed max-w-md">
-                        Abbiamo rilevato un account <strong>Free</strong>.<br/>Per utilizzare Spotify su questa vettura è necessario un abbonamento <strong>Premium</strong>.
+                    <h2 className="text-3xl font-extrabold text-zinc-900 dark:text-white mb-4">Accesso Negato</h2>
+                    <p className="text-zinc-600 dark:text-zinc-300 text-lg mb-10 leading-relaxed">
+                        L'account utilizzato è un account <strong>Free</strong>.<br/>Per abilitare Spotify su Drive OS è necessario un piano <strong>Premium</strong>.
                     </p>
                     <button 
                         onClick={startLoginProcess} 
-                        className="flex items-center gap-3 bg-white text-black font-bold py-5 px-12 rounded-full hover:bg-zinc-200 transition-all active:scale-95 shadow-xl"
+                        className="flex items-center gap-3 bg-zinc-900 dark:bg-white text-white dark:text-black font-bold py-4 px-10 rounded-full hover:opacity-90 transition-all active:scale-95 shadow-lg"
                     >
-                        <FiRefreshCw className="w-5 h-5" /> Riprova con un altro account
+                        <FiRefreshCw size={18} /> Riprova con altro account
                     </button>
                 </motion.div>
             )}
 
             {uiState === 'LOGIN_COMPLETATO' && (
-                <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
+                <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center p-12">
                     <CheckmarkIcon />
-                    <h2 className="text-2xl font-bold text-white mt-6">Accesso completato!</h2>
-                    <p className="text-zinc-400 mt-2">Configurazione in corso...</p>
+                    <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mt-8">Benvenuto!</h2>
+                    <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-lg">Configurazione della libreria musicale...</p>
                 </motion.div>
             )}
 
             {uiState === 'CARICAMENTO' && (
                 <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-white/10 border-t-[#1DB954] rounded-full animate-spin" />
-                    <p className="text-zinc-500 font-medium">Inizializzazione...</p>
+                    <div className="w-12 h-12 border-4 border-zinc-200 dark:border-white/10 border-t-[#1DB954] rounded-full animate-spin" />
+                    <p className="text-zinc-500 font-medium">Inizializzazione sessione...</p>
                 </div>
             )}
             
             {(uiState === 'ERRORE' || uiState === 'SCADUTO') && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
-                    <p className="text-red-400 text-lg mb-6">Si è verificato un errore durante il login.</p>
-                    <button onClick={startLoginProcess} className="px-8 py-3 bg-white/10 text-white rounded-full font-bold hover:bg-white/20 transition-colors">Riprova</button>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center p-10 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-white/10 shadow-xl">
+                    <div className="w-16 h-16 bg-zinc-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <FiAlertCircle className="text-zinc-400" size={32} />
+                    </div>
+                    <p className="text-zinc-900 dark:text-white text-xl font-bold mb-2">Sessione scaduta o errore</p>
+                    <p className="text-zinc-500 dark:text-zinc-400 mb-8">Il codice QR non è più valido.</p>
+                    <button onClick={startLoginProcess} className="px-10 py-4 bg-[#1DB954] text-black font-bold rounded-full hover:scale-105 transition-transform">Genera nuovo codice</button>
                 </motion.div>
             )}
         </AnimatePresence>
