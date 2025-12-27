@@ -19,13 +19,13 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
   }
   
   const iconHtml = success 
-      ? `<div class="icon-circle success">
+      ? `<div class="icon-box">
            <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
              <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
              <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
            </svg>
          </div>`
-      : `<div class="icon-circle error">
+      : `<div class="icon-box">
            <svg class="cross" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
              <circle class="cross__circle" cx="26" cy="26" r="25" fill="none"/>
              <path class="cross__path" fill="none" d="M16 16 36 36 M36 16 16 36"/>
@@ -54,60 +54,55 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         height: 100vh;
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
       }
       header {
+        position: absolute;
+        top: 60px;
         width: 100%;
-        padding: 100px 0 40px;
         display: flex;
         justify-content: center;
-        align-items: center;
-        flex-shrink: 0;
       }
       .spotify-logo {
-        width: 160px;
+        width: 140px;
         height: auto;
-        display: block;
       }
       .container {
-        flex-grow: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
         padding: 2rem;
-        padding-bottom: 20vh;
-        text-align: center;
-        animation: fadeIn 0.8s ease-out;
+        animation: fadeIn 0.6s ease-out;
+      }
+      .icon-box {
+        margin-bottom: 2rem;
       }
       h1 {
         font-weight: 700;
-        font-size: 1.75rem;
-        margin: 1.5rem 0 1rem;
-        letter-spacing: -0.02em;
+        font-size: 1.85rem;
+        margin: 0 0 1rem;
+        letter-spacing: -0.01em;
       }
       p {
         font-weight: 400;
-        font-size: 1.1rem;
+        font-size: 1.15rem;
         line-height: 1.5;
         color: #a1a1aa;
-        max-width: 400px;
-        margin: 0;
+        max-width: 320px;
+        margin: 0 auto;
       }
       
-      /* Animation Keyframes */
       @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
+        from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
 
-      /* Checkmark Animation */
-      .checkmark { width: 80px; height: 80px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px var(--spotify-green); animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
+      /* Success Checkmark */
+      .checkmark { width: 90px; height: 90px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px var(--spotify-green); animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
       .checkmark__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--spotify-green); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
       .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
       
-      /* Error Animation */
-      .cross { width: 80px; height: 80px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px var(--error-red); animation: fill-error .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
+      /* Error Cross */
+      .cross { width: 90px; height: 90px; border-radius: 50%; display: block; stroke-width: 4; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px var(--error-red); animation: fill-error .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
       .cross__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--error-red); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
       .cross__path { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
 
@@ -126,91 +121,66 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-
-      <script>setTimeout(() => { if (window.close) { window.close(); } }, 5000);</script>
+      <script>setTimeout(() => { if (window.close) { window.close(); } }, 6000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
   res.status(success ? 200 : 400).send(html);
 };
 
-
 export default async function handler(req, res) {
   const { code, state: sessionId, error } = req.query;
 
   if (error) {
-    console.error('Spotify callback error:', error);
     sendCallbackPage(res, { success: false, message: `Spotify ha restituito un errore: ${error}` });
     return;
   }
   if (!code || !sessionId) {
-    sendCallbackPage(res, { success: false, message: 'Parametri mancanti (code o session ID).' });
+    sendCallbackPage(res, { success: false, message: 'Parametri mancanti.' });
     return;
   }
 
   const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
   const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
-  const params = new URLSearchParams();
-  params.append('grant_type', 'authorization_code');
-  params.append('code', code);
-  params.append('redirect_uri', VITE_REDIRECT_URI);
+  const params = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code: code,
+    redirect_uri: VITE_REDIRECT_URI,
+  });
 
   try {
-    const spotifyResponse = await fetch(TOKEN_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': authHeader,
-        },
-        body: params,
+    const tokenRes = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': authHeader },
+      body: params,
     });
     
-    const tokenData = await spotifyResponse.json();
-
-    if (!spotifyResponse.ok) {
-        console.error('Error exchanging token with Spotify:', tokenData);
-        if (tokenData?.error === 'invalid_grant') {
-            sendCallbackPage(res, { success: true, message: 'Autenticazione già completata. Puoi chiudere questa finestra.' });
-        } else {
-            sendCallbackPage(res, { success: false });
-        }
-        return;
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      sendCallbackPage(res, { success: false });
+      return;
     }
 
     // CHECK FOR PREMIUM STATUS
-    const userProfileResponse = await fetch(USER_URL, {
-        headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
-    });
-    const userData = await userProfileResponse.json();
-    
+    const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+    const userData = await userRes.json();
     const redis = getRedis();
 
     if (userData.product !== 'premium') {
-        console.warn(`[SPOTIFY-CALLBACK] User ${userData.id} is not premium. Denying access.`);
-        const payload = {
-            authenticated: false,
-            error: 'premium_required',
-            timestamp: Date.now()
-        };
-        await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 60 * 10); // 10 minutes expiry
-        sendCallbackPage(res, { success: false, errorType: 'premium_required' });
-        return;
+      const payload = { authenticated: false, error: 'premium_required', timestamp: Date.now() };
+      await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 600); 
+      sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+      return;
     }
     
     const payload = {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       expires_at: Date.now() + tokenData.expires_in * 1000,
-      refresh_failures: 0
     };
-
-    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 60*60*24*30); // 30 days
-    console.log(`💾 [SPOTIFY-CALLBACK] Saved session ${sessionId}, expires at ${new Date(payload.expires_at).toLocaleTimeString()}`);
-    
+    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 2592000); // 30 days
     sendCallbackPage(res, { success: true });
-
-  } catch (exchangeError) {
-    console.error('Network or parsing error during token exchange:', exchangeError.message);
-    sendCallbackPage(res, { success: false, message: 'Errore di rete. Controlla la connessione e riprova.' });
+  } catch (e) {
+    sendCallbackPage(res, { success: false, message: 'Errore di connessione.' });
   }
 }

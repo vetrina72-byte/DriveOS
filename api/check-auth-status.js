@@ -4,21 +4,9 @@ import { getRedis } from '../lib/redis.js';
 
 export default async function handler(req, res) {
   const sessionId = req.query?.sessionId;
-  console.log(`📡 [CHECK-AUTH] Verifica per session=${sessionId}`);
-
   if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });
 
-  const updated = await ensureSpotifyToken(sessionId);
-
-  if (updated && updated.access_token) {
-    return res.status(200).json({ 
-      authenticated: true, 
-      access_token: updated.access_token,
-      expires_at: updated.expires_at 
-    });
-  }
-
-  // if null/expired from token manager, double check redis for specific error states
+  // 1. First, check Redis directly for any explicit error states to avoid race conditions with token manager
   const redis = getRedis();
   const raw = await redis.get(`spotify:${sessionId}`);
   if (raw) {
@@ -31,6 +19,16 @@ export default async function handler(req, res) {
     } catch(e){}
   }
 
-  // No session found yet, client should keep polling.
+  // 2. If no explicit error, try to get/refresh token
+  const updated = await ensureSpotifyToken(sessionId);
+
+  if (updated && updated.access_token) {
+    return res.status(200).json({ 
+      authenticated: true, 
+      access_token: updated.access_token,
+      expires_at: updated.expires_at 
+    });
+  }
+
   return res.status(200).json({ authenticated: false });
 }
