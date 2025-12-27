@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateUUID } from '../lib/sessionId';
-import { FiAlertCircle, FiX } from 'react-icons/fi';
+import { FiX, FiRefreshCw } from 'react-icons/fi';
 
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
 
@@ -32,6 +32,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
+    // Inizia il polling per controllare lo stato dell'autenticazione sul server
     pollTimer.current = window.setInterval(async () => {
       try {
         const res = await fetch(`/api/check-auth-status?sessionId=${sidRef.current}`);
@@ -46,10 +47,13 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             expires_at: data.expires_at
           });
         } else if (data.error === 'premium_required') {
+          // GESTIONE ERRORE ACCOUNT NON PREMIUM
           clearInterval(pollTimer.current!);
           setUiState('PREMIUM_ERROR');
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("Polling error", e);
+      }
     }, 2000);
   }, [login, clearError]);
 
@@ -58,8 +62,13 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     return () => { if (pollTimer.current) clearInterval(pollTimer.current); };
   }, [startLogin]);
 
+  const handleRetry = () => {
+    sidRef.current = generateUUID();
+    startLogin();
+  };
+
   const theme = {
-    card: isNight ? 'bg-zinc-900/90 border-white/10' : 'bg-white/95 border-black/10',
+    card: isNight ? 'bg-zinc-900/95 border-white/10' : 'bg-white/95 border-black/10',
     text: isNight ? 'text-white' : 'text-zinc-900',
     sub: isNight ? 'text-zinc-400' : 'text-zinc-500'
   };
@@ -88,7 +97,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           <motion.div 
             key="error"
             initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-            className={`flex flex-col items-center text-center p-16 rounded-[40px] border backdrop-blur-3xl shadow-2xl max-w-lg ${theme.card}`}
+            className={`flex flex-col items-center text-center p-16 rounded-[40px] border backdrop-blur-3xl shadow-2xl max-w-xl ${theme.card}`}
           >
             <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-8 border border-red-500/20">
               <FiX className="w-12 h-12 text-red-500" strokeWidth={3} />
@@ -96,9 +105,10 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             <h2 className={`text-4xl font-extrabold mb-4 ${theme.text}`}>Accesso Negato</h2>
             <p className={`text-xl mb-10 ${theme.sub}`}>È necessario un account <b>Premium</b> per accedere.</p>
             <button 
-              onClick={() => { sidRef.current = generateUUID(); startLogin(); }}
-              className="px-10 py-4 bg-zinc-800 text-white rounded-full font-bold text-lg hover:scale-105 active:scale-95 transition-all shadow-lg border border-white/10"
+              onClick={handleRetry}
+              className="flex items-center gap-3 px-10 py-5 bg-zinc-800 text-white rounded-full font-bold text-xl hover:bg-zinc-700 active:scale-95 transition-all shadow-lg border border-white/10"
             >
+              <FiRefreshCw />
               Riprova con un altro account
             </button>
           </motion.div>
@@ -106,8 +116,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
 
         {uiState === 'LOADING' && (
           <motion.div key="load" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
-            <div className="w-12 h-12 border-4 border-green-500/20 border-t-green-500 rounded-full animate-spin mb-4" />
-            <p className={theme.text}>Sincronizzazione...</p>
+            <div className="w-16 h-16 border-4 border-green-500/20 border-t-green-500 rounded-full animate-spin mb-6" />
+            <p className={`text-2xl font-medium ${theme.text}`}>Sincronizzazione in corso...</p>
           </motion.div>
         )}
       </AnimatePresence>

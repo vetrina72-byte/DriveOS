@@ -5,18 +5,16 @@ import { getRedis } from '../lib/redis.js';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_URL = 'https://api.spotify.com/v1/me';
 
-const sendCallbackPage = (res, { success = true, errorType = '', message = '' }) => {
+const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   const title = success ? 'Accesso Completato' : 'Accesso Negato';
-  let displayMessage = message;
+  let displayMessage = '';
   
-  if (!displayMessage) {
-    if (success) {
-      displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi tornare all\'auto.';
-    } else if (errorType === 'premium_required') {
-      displayMessage = 'Accesso negato. Per accedere è richiesto un account premium.';
-    } else {
-      displayMessage = 'Errore durante la configurazione. Riprova la scansione.';
-    }
+  if (success) {
+    displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi tornare all\'auto.';
+  } else if (errorType === 'premium_required') {
+    displayMessage = 'Accesso negato. Per accedere è richiesto un account premium.';
+  } else {
+    displayMessage = 'Errore durante la configurazione. Riprova la scansione.';
   }
   
   const iconHtml = success 
@@ -31,14 +29,14 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>${title}</title>
     <style>
-      body { background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-      .card { background: #111; padding: 40px; border-radius: 30px; width: 80%; max-width: 350px; border: 1px solid #222; }
-      .icon { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; }
+      body { background: #000; color: #fff; font-family: -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+      .card { background: #111; padding: 40px; border-radius: 30px; width: 85%; max-width: 400px; border: 1px solid #222; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+      .icon { width: 100px; height: 100px; border-radius: 50%; margin: 0 auto 30px; display: flex; align-items: center; justify-content: center; }
       .success { background: rgba(29, 185, 84, 0.1); color: #1DB954; }
       .error { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-      svg { width: 40px; height: 40px; }
-      h1 { font-size: 22px; margin-bottom: 10px; }
-      p { color: #888; line-height: 1.4; }
+      svg { width: 50px; height: 50px; }
+      h1 { font-size: 28px; margin-bottom: 15px; font-weight: 800; }
+      p { color: #a1a1aa; font-size: 18px; line-height: 1.5; margin: 0; }
     </style>
     </head>
     <body>
@@ -47,7 +45,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => window.close(), 5000);</script>
+      <script>setTimeout(() => { if(window.close) window.close(); }, 6000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -77,15 +75,18 @@ export default async function handler(req, res) {
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) return sendCallbackPage(res, { success: false });
 
+    // CONTROLLO PREMIUM
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const userData = await userRes.json();
 
     if (userData.product !== 'premium') {
+      // Notifica all'auto che l'account non è premium
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 300); 
       sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       return;
     }
     
+    // Se premium, salva i dati normalmente
     await redis.set(`spotify:${sessionId}`, JSON.stringify({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
