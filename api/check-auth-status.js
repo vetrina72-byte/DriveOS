@@ -6,8 +6,9 @@ export default async function handler(req, res) {
   const sessionId = req.query?.sessionId;
   if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });
 
-  // 1. Controlla prima Redis per stati di errore espliciti salvati dal callback
   const redis = getRedis();
+  
+  // 1. Controlla stati di errore espliciti salvati dal callback
   try {
     const raw = await redis.get(`spotify:${sessionId}`);
     if (raw) {
@@ -15,13 +16,13 @@ export default async function handler(req, res) {
       if (p.error === 'premium_required') {
           return res.status(200).json({ authenticated: false, error: 'premium_required' });
       }
-      if (p.expired) return res.status(200).json({ authenticated: false, expired: true });
+      if (p.error) {
+          return res.status(200).json({ authenticated: false, error: p.error });
+      }
     }
-  } catch(e) {
-    console.error('[CHECK-AUTH] Redis parse error:', e);
-  }
+  } catch(e) {}
 
-  // 2. Se non c'è errore, prova a gestire il token normale (refresh o recupero)
+  // 2. Se non c'è errore, prova a gestire il token normale
   const updated = await ensureSpotifyToken(sessionId);
 
   if (updated && updated.access_token) {

@@ -1,5 +1,6 @@
+/// <reference types="@react-three/fiber" />
 import React, { useMemo, useRef, useEffect, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, ThreeElements } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Points, PointMaterial } from '@react-three/drei';
 import type { WeatherParams } from '../types';
@@ -71,6 +72,7 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
     }
   });
 
+  // Added type reference to help TypeScript resolve R3F intrinsic elements like 'pointLight'
   return <pointLight ref={lightRef} color={0xccccff} intensity={0} decay={2} distance={400} />;
 };
 
@@ -151,6 +153,7 @@ const RainStreaks = ({ targetDensity, targetSpeed }: { targetDensity: number, ta
     });
 
     return (
+        // Added type reference to help TypeScript resolve R3F intrinsic elements like 'instancedMesh', 'boxGeometry' and 'meshBasicMaterial'
         <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_COUNT]}>
             <boxGeometry ref={geometryRef} args={[0.02, 0.05, 0.02]} />
             <meshBasicMaterial color="#a0b0f0" transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false}/>

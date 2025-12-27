@@ -1,7 +1,7 @@
-
+/// <reference types="@react-three/fiber" />
 import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, ThreeElements } from '@react-three/fiber';
 
 // Deforms a unit geometry into a frustum along the Z-axis.
 // Works for both BoxGeometry and CylinderGeometry (via coordinate swizzle).
@@ -166,6 +166,7 @@ export const VolumetricHeadlight = ({
     });
 
     return (
+        // Added type reference to help TypeScript resolve R3F intrinsic elements like 'group' and 'mesh'
         <group
             ref={groupRef}
             position={position}

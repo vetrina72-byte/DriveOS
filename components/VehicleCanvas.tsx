@@ -1,6 +1,6 @@
-
+/// <reference types="@react-three/fiber" />
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import { VolumetricHeadlight } from './VolumetricHeadlight';
@@ -132,6 +132,7 @@ const Model = forwardRef<THREE.Group, {
   });
 
   return (
+    // Added type reference to help TypeScript resolve R3F intrinsic elements like 'primitive'
     <primitive
       ref={ref}
       object={scene}
@@ -526,6 +527,7 @@ export default function VehicleCanvas({
   // Headlight rendering extracted for clean conditional rendering
   // The assemblyYaw rotates the entire group of headlights as a single unit
   const renderHeadlights = () => (
+    // Added type reference to fix Property 'group' does not exist on type 'JSX.IntrinsicElements'
     <group rotation={[0, assemblyYaw, 0]}>
       {separation > 0 ? (
         <>
@@ -590,6 +592,7 @@ export default function VehicleCanvas({
 
         <ModelErrorBoundary>
           <Suspense fallback={null}>
+            {/* Added type reference to help TypeScript resolve R3F intrinsic elements like 'group' */}
             <group
               ref={modelRef}
               position={[initialConfig.modelPos.x, initialConfig.modelPos.y, initialConfig.modelPos.z]}
@@ -603,6 +606,7 @@ export default function VehicleCanvas({
                 isNight={isNight}
               />
 
+              {/* Added type reference to help TypeScript resolve R3F intrinsic elements like 'mesh', 'planeGeometry' and 'shadowMaterial' */}
               <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}>
                 <planeGeometry args={[20, 20]} />
                 <shadowMaterial transparent opacity={shadowOpacity} />
@@ -611,11 +615,13 @@ export default function VehicleCanvas({
               {/* Linked headlights follow the model's group rotation */}
               {linked && renderHeadlights()}
 
+              {/* Added type reference to fix Property 'primitive' does not exist on type 'JSX.IntrinsicElements' */}
               <primitive object={frontLightTarget} position={[0, 0, 10]} />
             </group>
 
             {/* Unlinked headlights stay fixed in world rotation while car spins */}
             {!linked && (
+              // Added type reference to fix Property 'group' does not exist on type 'JSX.IntrinsicElements'
               <group 
                 position={[activeConfig.modelPos.x, activeConfig.modelPos.y, activeConfig.modelPos.z]} 
                 scale={activeConfig.modelScale}
@@ -638,6 +644,7 @@ export default function VehicleCanvas({
             enableRotate={!isAppOpen} 
         />
 
+        {/* Added type reference to help TypeScript resolve R3F intrinsic elements like 'ambientLight', 'spotLight' and 'directionalLight' */}
         <ambientLight ref={ambientLightRef} intensity={0.5} />
         <spotLight
           ref={frontLightRef}
@@ -662,6 +669,7 @@ export default function VehicleCanvas({
             shadow-camera-bottom={-10}
         />
         
+        {/* Added type reference to fix Property 'mesh' does not exist on type 'JSX.IntrinsicElements' */}
         <mesh ref={floorRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.05, 0]} receiveShadow>
           <planeGeometry args={[300, 300]} />
           <MeshReflectorMaterial
