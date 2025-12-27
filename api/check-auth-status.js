@@ -18,12 +18,15 @@ export default async function handler(req, res) {
     });
   }
 
-  // if null/expired from token manager, double check redis
+  // if null/expired from token manager, double check redis for specific error states
   const redis = getRedis();
   const raw = await redis.get(`spotify:${sessionId}`);
   if (raw) {
     try {
       const p = JSON.parse(raw);
+      if (p.error === 'premium_required') {
+          return res.status(200).json({ authenticated: false, error: 'premium_required' });
+      }
       if (p.expired) return res.status(200).json({ authenticated: false, expired: true });
     } catch(e){}
   }

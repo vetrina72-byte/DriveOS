@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSessionId } from '../lib/sessionId';
+import { FiXCircle } from 'react-icons/fi';
 
 // Funzione helper per generare l'URL del QR code
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
@@ -41,7 +41,7 @@ const CheckmarkIcon = () => (
 
 function SpotifyLogin() {
   const { login } = useAuth();
-  const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO'>('CARICAMENTO');
+  const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO' | 'PREMIUM_RICHIESTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [sessionId] = useState<string>(getSessionId());
   const pollIntervalRef = useRef<number | null>(null);
@@ -50,7 +50,6 @@ function SpotifyLogin() {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setUiState('CARICAMENTO');
     
-    const newSessionId = getSessionId(); // Use persistent session ID
     const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
     const redirectUri = process.env.VITE_REDIRECT_URI;
     const scope = [
@@ -63,13 +62,13 @@ function SpotifyLogin() {
     
     const authUrl = new URL("https://accounts.spotify.com/authorize");
     authUrl.search = new URLSearchParams({
-        client_id: clientId, response_type: 'code', redirect_uri: redirectUri,
-        scope: scope, show_dialog: 'true', state: newSessionId
+        client_id: clientId, response_type: 'code', redirect_uri: redirectUri!,
+        scope: scope, show_dialog: 'true', state: sessionId
     }).toString();
 
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('ATTESA_SCANSIONE');
-  }, []);
+  }, [sessionId]);
   
   const startPolling = useCallback((delay: number) => {
     if (!sessionId) return;
@@ -91,6 +90,10 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             };
             setTimeout(() => login(tokenData), 1500);
+          } else if (data && data.error === 'premium_required') {
+            console.warn('[POLLING] Premium required error received.');
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setUiState('PREMIUM_RICHIESTO');
           } else if (data && data.expired === true) {
             console.warn('[POLLING] Session expired (invalid_grant). Regenerating QR code.');
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -149,6 +152,31 @@ function SpotifyLogin() {
                 </motion.div>
             )}
 
+            {uiState === 'PREMIUM_RICHIESTO' && (
+                <motion.div
+                    key="premium-error-view"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex flex-col items-center justify-center text-center max-w-lg bg-neutral-900 p-12 rounded-2xl shadow-2xl border border-red-500/30"
+                >
+                    <div className="mb-6">
+                        <FiXCircle className="w-24 h-24 text-red-500" />
+                    </div>
+                    <h2 className="text-3xl font-bold text-white">Accesso negato</h2>
+                    <p className="text-zinc-400 text-lg mt-4">
+                        Impossibile accedere perché non disponi di un account Spotify Premium.
+                    </p>
+                    <button
+                        onClick={startLoginProcess}
+                        className="mt-8 px-8 py-3 bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold rounded-full text-lg transition-all transform hover:scale-105"
+                    >
+                        Riprova
+                    </button>
+                </motion.div>
+            )}
+
             {uiState === 'LOGIN_COMPLETATO' && (
                 <motion.div
                     key="success-view"
@@ -185,6 +213,12 @@ function SpotifyLogin() {
                         <>
                             <p className="text-red-400 text-lg">Si è verificato un errore.</p>
                             <p className="text-zinc-400 mt-1">Controlla la connessione e riprova.</p>
+                            <button
+                                onClick={startLoginProcess}
+                                className="mt-8 px-8 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-bold rounded-full transition-all"
+                            >
+                                Riprova
+                            </button>
                         </>
                     )}
                 </motion.div>

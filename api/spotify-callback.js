@@ -1,14 +1,22 @@
-
 // pages/api/spotify-callback.js
 import { getRedis } from '../lib/redis.js';
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
+const USER_URL = 'https://api.spotify.com/v1/me';
 
-const sendCallbackPage = (res, { success = true, message = '' }) => {
-  const title = success ? 'Accesso Completato' : 'Errore';
-  const displayMessage = message || (success 
-      ? 'Hai collegato con successo il tuo account Spotify. Puoi chiudere questa finestra.' 
-      : 'Qualcosa è andato storto. Riprova a scansionare il codice QR.');
+const sendCallbackPage = (res, { success = true, errorType = '', message = '' }) => {
+  const title = success ? 'Accesso Completato' : 'Accesso Negato';
+  let displayMessage = message;
+  
+  if (!displayMessage) {
+    if (success) {
+      displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi chiudere questa finestra.';
+    } else if (errorType === 'premium_required') {
+      displayMessage = 'Impossibile accedere perché non disponi di un account Spotify Premium.';
+    } else {
+      displayMessage = 'Qualcosa è andato storto. Riprova a scansionare il codice QR.';
+    }
+  }
   
   const iconHtml = success 
       ? `<div class="icon-circle success">
@@ -119,7 +127,7 @@ const sendCallbackPage = (res, { success = true, message = '' }) => {
         <p>${displayMessage}</p>
       </div>
 
-      <script>setTimeout(() => { if (window.close) { window.close(); } }, 3500);</script>
+      <script>setTimeout(() => { if (window.close) { window.close(); } }, 5000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -168,8 +176,26 @@ export default async function handler(req, res) {
         }
         return;
     }
+
+    // CHECK FOR PREMIUM STATUS
+    const userProfileResponse = await fetch(USER_URL, {
+        headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+    });
+    const userData = await userProfileResponse.json();
     
     const redis = getRedis();
+
+    if (userData.product !== 'premium') {
+        console.warn(`[SPOTIFY-CALLBACK] User ${userData.id} is not premium. Denying access.`);
+        const payload = {
+            authenticated: false,
+            error: 'premium_required',
+            timestamp: Date.now()
+        };
+        await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 60 * 10); // 10 minutes expiry
+        sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+        return;
+    }
     
     const payload = {
       access_token: tokenData.access_token,
