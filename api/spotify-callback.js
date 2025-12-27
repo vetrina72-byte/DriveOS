@@ -14,7 +14,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
     } else if (errorType === 'premium_required') {
       displayMessage = 'Impossibile accedere perché non disponi di un account Spotify Premium.';
     } else {
-      displayMessage = 'Qualcosa è andato storto. Riprova a scansionare il codice QR.';
+      displayMessage = 'Qualcosa è andato storto durante l\'autenticazione. Riprova.';
     }
   }
   
@@ -92,12 +92,10 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         to { opacity: 1; transform: translateY(0); }
       }
 
-      /* Checkmark Animation */
       .checkmark { width: 80px; height: 80px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px var(--spotify-green); animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
       .checkmark__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--spotify-green); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
       .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
       
-      /* Error Animation */
       .cross { width: 80px; height: 80px; border-radius: 50%; display: block; stroke-width: 4; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px var(--error-red); animation: fill-error .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
       .cross__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--error-red); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
       .cross__path { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
@@ -126,13 +124,16 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
 
 export default async function handler(req, res) {
   const { code, state: sessionId, error } = req.query;
+  const redis = getRedis();
 
   if (error) {
+    if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error', detail: error }), 'EX', 600);
     sendCallbackPage(res, { success: false, message: `Spotify ha restituito un errore: ${error}` });
     return;
   }
+  
   if (!code || !sessionId) {
-    sendCallbackPage(res, { success: false, message: 'Parametri mancanti.' });
+    sendCallbackPage(res, { success: false, message: 'Parametri di sessione mancanti.' });
     return;
   }
 
@@ -153,6 +154,7 @@ export default async function handler(req, res) {
     
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) {
+      await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'token_exchange_failed' }), 'EX', 600);
       sendCallbackPage(res, { success: false });
       return;
     }
@@ -160,7 +162,6 @@ export default async function handler(req, res) {
     // CONTROLLO PREMIUM
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const userData = await userRes.json();
-    const redis = getRedis();
 
     if (userData.product !== 'premium') {
       console.warn(`[CALLBACK] Utente non premium. Segnalazione errore per sessione ${sessionId}`);
@@ -175,10 +176,11 @@ export default async function handler(req, res) {
       refresh_token: tokenData.refresh_token,
       expires_at: Date.now() + tokenData.expires_in * 1000,
     };
-    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 2592000); // 30 giorni
+    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 2592000); 
     sendCallbackPage(res, { success: true });
   } catch (e) {
     console.error('[CALLBACK] Errore critico:', e);
+    if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'connection_error' }), 'EX', 600);
     sendCallbackPage(res, { success: false, message: 'Errore di connessione al server.' });
   }
 }
