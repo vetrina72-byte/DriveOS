@@ -17,6 +17,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Errore durante la configurazione. Riprova la scansione.';
   }
   
+  // Icona X rossa per errore, Spunta verde per successo
   const iconHtml = success 
       ? `<div class="icon success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>`
       : `<div class="icon error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>`;
@@ -45,7 +46,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => { if(window.close) window.close(); }, 7000);</script>
+      <script>setTimeout(() => { if(window.close) window.close(); }, 8000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -75,18 +76,19 @@ export default async function handler(req, res) {
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) return sendCallbackPage(res, { success: false });
 
-    // RECUPERO PROFILO UTENTE PER CONTROLLO PREMIUM
+    // Controllo Premium
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const userData = await userRes.json();
 
     if (userData.product !== 'premium') {
-      // SALVO L'ERRORE IN REDIS: l'auto ora saprà perché l'accesso è fallito
+      console.log(`[SPOTIFY CALLBACK] Account NON premium rilevato per sessione: ${sessionId}`);
+      // Notifica l'errore a Redis in modo che l'Infotainment lo riceva
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 300); 
       sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       return;
     }
     
-    // SALVATAGGIO TOKEN SUCCESSFUL
+    console.log(`[SPOTIFY CALLBACK] Successo per sessione: ${sessionId}`);
     await redis.set(`spotify:${sessionId}`, JSON.stringify({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
@@ -94,6 +96,7 @@ export default async function handler(req, res) {
     }), 'EX', 3600); 
     sendCallbackPage(res, { success: true });
   } catch (e) {
+    console.error(`[SPOTIFY CALLBACK] Eccezione: ${e.message}`);
     sendCallbackPage(res, { success: false });
   }
 }
