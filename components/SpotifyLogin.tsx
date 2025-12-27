@@ -19,7 +19,7 @@ const CheckmarkIcon = () => (
 );
 
 function SpotifyLogin() {
-  const { login } = useAuth();
+  const { login, error: authError, clearError } = useAuth();
   const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'SCADUTO' | 'PREMIUM_RICHIESTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [sessionId, setSessionId] = useState<string>(getSessionId());
@@ -28,6 +28,9 @@ function SpotifyLogin() {
   const startLoginProcess = useCallback((forceNewSession = false) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     
+    // Pulisce errori globali all'inizio
+    clearError();
+
     let currentSid = sessionId;
     if (forceNewSession) {
         currentSid = generateUUID();
@@ -54,7 +57,7 @@ function SpotifyLogin() {
 
     setQrCodeUrl(generateQrUrl(authUrl.toString()));
     setUiState('ATTESA_SCANSIONE');
-  }, [sessionId]);
+  }, [sessionId, clearError]);
   
   const startPolling = useCallback((delay: number) => {
     if (!sessionId) return;
@@ -73,6 +76,7 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             }), 1500);
           } else if (data && data.error === 'premium_required') {
+            console.warn('[POLLING] Premium Required error found.');
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setUiState('PREMIUM_RICHIESTO');
           } else if (data && data.expired) {
@@ -89,9 +93,20 @@ function SpotifyLogin() {
   }, [sessionId, login, startLoginProcess]);
 
   useEffect(() => {
-    startLoginProcess();
+      if (authError === 'Premium required') {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          setUiState('PREMIUM_RICHIESTO');
+      }
+  }, [authError]);
+
+  useEffect(() => {
+    if (authError === 'Premium required') {
+        setUiState('PREMIUM_RICHIESTO');
+    } else {
+        startLoginProcess();
+    }
     return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
-  }, []);
+  }, [startLoginProcess, authError]);
 
   useEffect(() => {
     if (uiState === 'ATTESA_SCANSIONE' && sessionId) {

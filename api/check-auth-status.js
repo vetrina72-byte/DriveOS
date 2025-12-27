@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   const sessionId = req.query?.sessionId;
   if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });
 
-  // 1. First, check Redis directly for any explicit error states to avoid race conditions with token manager
+  // 1. Controlla prima Redis per stati di errore espliciti
   const redis = getRedis();
   const raw = await redis.get(`spotify:${sessionId}`);
   if (raw) {
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     } catch(e){}
   }
 
-  // 2. If no explicit error, try to get/refresh token
+  // 2. Se non c'è errore, prova a gestire il token normale
   const updated = await ensureSpotifyToken(sessionId);
 
   if (updated && updated.access_token) {
