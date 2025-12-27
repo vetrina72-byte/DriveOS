@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateUUID } from '../lib/sessionId';
-import { FiXCircle, FiAlertCircle } from 'react-icons/fi';
+import { FiXCircle, FiAlertCircle, FiInfo } from 'react-icons/fi';
 
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
 
@@ -26,15 +26,16 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, error: authError, clearError } = useAuth();
   const [uiState, setUiState] = useState<'CARICAMENTO' | 'ATTESA_SCANSIONE' | 'LOGIN_COMPLETATO' | 'ERRORE' | 'PREMIUM_RICHIESTO'>('CARICAMENTO');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const [currentSessionId, setCurrentSessionId] = useState<string>('');
+  const [sessionId, setSessionId] = useState<string>('');
   const pollIntervalRef = useRef<number | null>(null);
 
   const startLoginProcess = useCallback((forceNew = true) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     
     clearError();
+    // Generiamo l'ID UNA SOLA VOLTA e lo manteniamo per tutta la vita di questo tentativo
     const newSid = generateUUID();
-    setCurrentSessionId(newSid);
+    setSessionId(newSid);
     localStorage.setItem('spotify_session_id', newSid);
 
     setUiState('CARICAMENTO');
@@ -69,8 +70,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           if (data && data.authenticated && data.access_token) {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setUiState('LOGIN_COMPLETATO');
-            
-            // Trigger del login effettivo in AuthContext
             setTimeout(() => {
                 login({
                     access_token: data.access_token,
@@ -78,20 +77,21 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
                     expires_at: data.expires_at,
                 });
             }, 1000);
-          } else if (data && data.error) {
+          } else if (data && data.error === 'premium_required') {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-            if (data.error === 'premium_required') {
-                setUiState('PREMIUM_RICHIESTO');
-            } else {
-                setUiState('ERRORE');
-            }
+            setUiState('PREMIUM_RICHIESTO');
+          } else if (data && data.error) {
+             // Altri errori generici
+             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+             setUiState('ERRORE');
           }
         })
-        .catch(() => console.warn('[SPOTIFY POLLING] Network slow or reconnecting...'));
-    }, 2500); // Polling ogni 2.5 secondi per massima reattività
+        .catch(() => {
+            // Silenzioso per non disturbare l'esperienza utente in caso di fluttuazioni rete
+        });
+    }, 2500); 
   }, [login]);
 
-  // Sincronizzazione con errori globali (es. se l'SDK rileva mancato Premium dopo il login)
   useEffect(() => {
     if (authError === 'Premium required') {
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -99,25 +99,23 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     }
   }, [authError]);
 
-  // Inizio del processo al montaggio
   useEffect(() => {
     startLoginProcess();
     return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
   }, [startLoginProcess]);
 
-  // Avvio del polling non appena abbiamo una sessione valida
   useEffect(() => {
-    if (uiState === 'ATTESA_SCANSIONE' && currentSessionId) {
-      startPolling(currentSessionId);
+    if (uiState === 'ATTESA_SCANSIONE' && sessionId) {
+      startPolling(sessionId);
     }
-  }, [uiState, currentSessionId, startPolling]);
+  }, [uiState, sessionId, startPolling]);
 
   const theme = {
-    panel: isNight ? 'bg-black/80 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]' : 'bg-white/90 border-black/5 shadow-[0_10px_30px_rgba(0,0,0,0.1)]',
+    panel: isNight ? 'bg-zinc-900/90 border-white/10 shadow-[0_32px_64px_rgba(0,0,0,0.6)]' : 'bg-white/95 border-black/5 shadow-[0_20px_40px_rgba(0,0,0,0.1)]',
     textMain: isNight ? 'text-white' : 'text-zinc-900',
     textSub: isNight ? 'text-zinc-400' : 'text-zinc-600',
-    qrContainer: 'bg-white p-6 rounded-[32px] shadow-inner',
-    button: 'bg-[#1DB954] hover:bg-[#1AA34A] text-white active:scale-95'
+    qrWrapper: 'bg-white p-6 rounded-[32px] shadow-lg',
+    button: 'bg-[#1DB954] hover:bg-[#1AA34A] text-white'
   };
 
   return (
@@ -126,23 +124,18 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             {uiState === 'ATTESA_SCANSIONE' && (
                 <motion.div 
                     key="qr-view" 
-                    initial={{ opacity: 0, scale: 0.9 }} 
+                    initial={{ opacity: 0, scale: 0.95 }} 
                     animate={{ opacity: 1, scale: 1 }} 
-                    exit={{ opacity: 0, scale: 1.1 }}
+                    exit={{ opacity: 0, scale: 1.05 }}
                     className={`flex items-center gap-16 p-14 rounded-[48px] border backdrop-blur-3xl ${theme.panel}`}
                 >
-                    <div className={theme.qrContainer}>
+                    <div className={theme.qrWrapper}>
                         <img src={qrCodeUrl} alt="Spotify QR" className="w-64 h-64 object-contain" />
                     </div>
                     <div className="text-left max-w-sm">
-                        <motion.div 
-                            animate={{ rotate: [0, 10, -10, 0] }} 
-                            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                        >
-                            <FaSpotify className="w-16 h-16 text-[#1DB954] mb-8" />
-                        </motion.div>
+                        <FaSpotify className="w-16 h-16 text-[#1DB954] mb-8" />
                         <h1 className={`text-4xl font-extrabold mb-4 tracking-tight ${theme.textMain}`}>Collega Spotify</h1>
-                        <p className={`text-xl leading-relaxed opacity-80 ${theme.textSub}`}>Inquadra il codice con il tuo smartphone per accedere istantaneamente al tuo profilo <b>Premium</b>.</p>
+                        <p className={`text-xl leading-relaxed font-medium ${theme.textSub}`}>Scansiona il codice per accedere istantaneamente al tuo profilo <b>Premium</b>.</p>
                     </div>
                 </motion.div>
             )}
@@ -150,27 +143,29 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             {uiState === 'PREMIUM_RICHIESTO' && (
                 <motion.div 
                     key="premium-error" 
-                    initial={{ opacity: 0, y: 20 }} 
+                    initial={{ opacity: 0, y: 30 }} 
                     animate={{ opacity: 1, y: 0 }} 
                     exit={{ opacity: 0, scale: 0.9 }}
                     className={`flex flex-col items-center justify-center text-center max-w-xl p-16 rounded-[48px] border backdrop-blur-3xl ${theme.panel}`}
                 >
-                    <div className="relative mb-10">
-                        <motion.div 
-                            initial={{ scale: 0.8, opacity: 0 }} 
-                            animate={{ scale: 1.5, opacity: [0, 0.3, 0] }} 
-                            transition={{ duration: 2, repeat: Infinity }}
-                            className="absolute inset-0 bg-red-500 rounded-full blur-3xl"
-                        />
-                        <FiXCircle className="w-32 h-32 text-red-500 relative z-10" />
+                    <div className="mb-10 p-6 bg-red-500/10 rounded-full border border-red-500/20">
+                        <FiAlertCircle className="w-20 h-20 text-red-500" />
                     </div>
-                    <h2 className={`text-4xl font-black tracking-tight ${theme.textMain}`}>Accesso negato</h2>
-                    <p className={`text-xl mt-6 font-medium ${theme.textSub}`}>Spiacenti, questa applicazione richiede un abbonamento <b>Spotify Premium</b> attivo.</p>
+                    <h2 className={`text-4xl font-black tracking-tight ${theme.textMain}`}>Account non idoneo</h2>
+                    <p className={`text-xl mt-6 font-medium leading-relaxed ${theme.textSub}`}>
+                        Spiacenti, questa applicazione richiede un abbonamento <span className="text-white">Spotify Premium</span> attivo per poter trasmettere musica in auto.
+                    </p>
                     <button 
                         onClick={() => startLoginProcess(true)} 
-                        className={`mt-12 px-14 py-4 font-bold rounded-full text-xl transition-all shadow-xl ${theme.button}`}
+                        className={`mt-12 px-14 py-5 font-bold rounded-full text-xl transition-all shadow-xl active:scale-95 ${theme.button}`}
                     >
-                        Riprova
+                        Prova un altro account
+                    </button>
+                    <button 
+                        onClick={() => setUiState('ATTESA_SCANSIONE')}
+                        className={`mt-4 text-sm font-semibold opacity-50 hover:opacity-100 transition-opacity ${theme.textMain}`}
+                    >
+                        Indietro
                     </button>
                 </motion.div>
             )}
@@ -183,8 +178,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
                     className="flex flex-col items-center text-center"
                 >
                     <CheckmarkIcon />
-                    <h2 className={`text-3xl font-bold mt-8 tracking-tight ${theme.textMain}`}>Bentornato!</h2>
-                    <p className={`text-lg mt-2 opacity-60 ${theme.textSub}`}>Sincronizzazione in corso...</p>
+                    <h2 className={`text-3xl font-bold mt-8 tracking-tight ${theme.textMain}`}>Configurazione in corso...</h2>
+                    <p className={`text-lg mt-2 opacity-60 ${theme.textSub}`}>Benvenuto a bordo</p>
                 </motion.div>
             )}
 
@@ -194,8 +189,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
                         <div className="w-16 h-16 border-4 border-[#1DB954]/20 border-t-[#1DB954] rounded-full animate-spin" />
                     ) : (
                         <div className={`flex flex-col items-center p-12 rounded-[48px] border backdrop-blur-3xl ${theme.panel}`}>
-                            <FiAlertCircle className="w-20 h-20 text-yellow-500 mb-6" />
-                            <p className={`text-2xl font-bold mb-8 ${theme.textMain}`}>Problema di connessione</p>
+                            <FiXCircle className="w-20 h-20 text-red-500 mb-6" />
+                            <p className={`text-2xl font-bold mb-8 ${theme.textMain}`}>Errore di comunicazione</p>
                             <button onClick={() => startLoginProcess(true)} className={`px-12 py-3 font-bold rounded-full text-lg ${theme.button}`}>Riprova</button>
                         </div>
                     )}

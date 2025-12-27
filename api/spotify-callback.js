@@ -10,26 +10,20 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
   
   if (!displayMessage) {
     if (success) {
-      displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi chiudere questa finestra.';
+      displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi chiudere questa finestra e tornare all\'infotainment.';
     } else if (errorType === 'premium_required') {
-      displayMessage = 'Impossibile accedere perché non disponi di un account Spotify Premium.';
+      displayMessage = 'Impossibile completare l\'accesso: non disponi di un account Spotify Premium attivo.';
     } else {
-      displayMessage = 'Qualcosa è andato storto. Riprova a scansionare il codice QR.';
+      displayMessage = 'Si è verificato un errore durante la configurazione. Riprova scansionando nuovamente il codice.';
     }
   }
   
   const iconHtml = success 
-      ? `<div class="icon-wrapper success">
-           <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-             <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
-             <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
-           </svg>
+      ? `<div class="icon-circle success">
+           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
          </div>`
-      : `<div class="icon-wrapper error">
-           <svg class="cross" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-             <circle class="cross__circle" cx="26" cy="26" r="25" fill="none"/>
-             <path class="cross__path" fill="none" d="M16 16 36 36 M36 16 16 36"/>
-           </svg>
+      : `<div class="icon-circle error">
+           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
          </div>`;
 
   const html = `
@@ -37,12 +31,14 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
     <html lang="it">
     <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
     <title>${title}</title>
     <style>
       :root {
-        --bg-color: #000000;
+        --bg-color: #0c0c0e;
+        --card-bg: #1a1a1c;
         --text-color: #ffffff;
+        --text-sub: #a1a1aa;
         --spotify-green: #1DB954;
         --error-red: #ef4444;
       }
@@ -57,61 +53,74 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         align-items: center;
         justify-content: center;
         text-align: center;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      .card {
+        background: var(--card-bg);
+        padding: 40px 30px;
+        border-radius: 40px;
+        width: 100%;
+        max-width: 400px;
+        box-shadow: 0 30px 60px rgba(0,0,0,0.5);
       }
       .spotify-logo {
         width: 140px;
-        margin-bottom: 40px;
+        margin-bottom: 50px;
         opacity: 0.9;
       }
-      .container {
-        padding: 2rem;
-        animation: fadeIn 0.8s ease-out;
+      .icon-circle {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        margin: 0 auto 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
+      .icon-circle svg { width: 50px; height: 50px; }
+      .success { background: rgba(29, 185, 84, 0.15); color: var(--spotify-green); }
+      .error { background: rgba(239, 68, 68, 0.15); color: var(--error-red); }
+      
       h1 {
         font-weight: 800;
-        font-size: 1.8rem;
-        margin: 1.5rem 0 0.5rem;
-        letter-spacing: -0.02em;
+        font-size: 24px;
+        margin-bottom: 12px;
+        letter-spacing: -0.5px;
       }
       p {
         font-weight: 400;
-        font-size: 1.1rem;
-        line-height: 1.6;
-        color: #a1a1aa;
-        max-width: 300px;
-        margin: 0 auto;
+        font-size: 17px;
+        line-height: 1.5;
+        color: var(--text-sub);
+        margin: 0;
       }
-      
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+      .btn {
+        margin-top: 35px;
+        display: block;
+        padding: 16px;
+        background: #333;
+        color: white;
+        text-decoration: none;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 16px;
       }
-
-      .icon-wrapper { margin-bottom: 20px; }
-      .checkmark, .cross { width: 90px; height: 90px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; }
-      
-      .checkmark { box-shadow: inset 0px 0px 0px var(--spotify-green); animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
-      .checkmark__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--spotify-green); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
-      .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
-      
-      .cross { box-shadow: inset 0px 0px 0px var(--error-red); animation: fill-error .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
-      .cross__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--error-red); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
-      .cross__path { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; stroke: #fff; stroke-width: 4; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
-
-      @keyframes stroke { 100% { stroke-dashoffset: 0; } }
-      @keyframes scale { 0%, 100% { transform: none; } 50% { transform: scale3d(1.1, 1.1, 1); } }
-      @keyframes fill { 100% { box-shadow: inset 0px 0px 0px 50px var(--spotify-green); } }
-      @keyframes fill-error { 100% { box-shadow: inset 0px 0px 0px 50px var(--error-red); } }
     </style>
     </head>
     <body>
       <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_White.png" alt="Spotify" class="spotify-logo" />
-      <div class="container">
+      <div class="card">
         ${iconHtml}
         <h1>${title}</h1>
         <p>${displayMessage}</p>
+        ${!success ? '<a href="javascript:window.close()" class="btn">Chiudi finestra</a>' : ''}
       </div>
-      <script>setTimeout(() => { if (window.close) { window.close(); } }, 5000);</script>
+      <script>
+        if (${success}) {
+          setTimeout(() => { if (window.close) { window.close(); } }, 4000);
+        }
+      </script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -129,7 +138,7 @@ export default async function handler(req, res) {
   }
   
   if (!code || !sessionId) {
-    sendCallbackPage(res, { success: false, message: 'Parametri mancanti.' });
+    sendCallbackPage(res, { success: false, message: 'Parametri di sessione mancanti.' });
     return;
   }
 
