@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
@@ -15,7 +16,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, error: authError, clearError } = useAuth();
   const [uiState, setUiState] = useState<'IDLE' | 'ATTESA' | 'PREMIUM_ERROR' | 'LOADING'>('IDLE');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const sidRef = useRef<string>(generateUUID()); // ID FISSO PER QUESTA SESSIONE
+  const sidRef = useRef<string>(generateUUID());
   const pollTimer = useRef<number | null>(null);
 
   const startLogin = useCallback(() => {
@@ -31,7 +32,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
-    // Inizia il polling serio
     pollTimer.current = window.setInterval(async () => {
       try {
         const res = await fetch(`/api/check-auth-status?sessionId=${sidRef.current}`);
@@ -91,13 +91,13 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             className={`flex flex-col items-center text-center p-16 rounded-[40px] border backdrop-blur-3xl shadow-2xl max-w-lg ${theme.card}`}
           >
             <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-8 border border-red-500/20">
-              <FiAlertCircle className="w-12 h-12 text-red-500" />
+              <FiX className="w-12 h-12 text-red-500" strokeWidth={3} />
             </div>
             <h2 className={`text-4xl font-extrabold mb-4 ${theme.text}`}>Accesso Negato</h2>
-            <p className={`text-xl mb-10 ${theme.sub}`}>Questa funzione richiede un abbonamento <b>Spotify Premium</b> attivo.</p>
+            <p className={`text-xl mb-10 ${theme.sub}`}>È necessario un account <b>Premium</b> per accedere.</p>
             <button 
               onClick={() => { sidRef.current = generateUUID(); startLogin(); }}
-              className="px-10 py-4 bg-[#1DB954] text-white rounded-full font-bold text-lg hover:scale-105 active:scale-95 transition-all shadow-lg"
+              className="px-10 py-4 bg-zinc-800 text-white rounded-full font-bold text-lg hover:scale-105 active:scale-95 transition-all shadow-lg border border-white/10"
             >
               Riprova con un altro account
             </button>

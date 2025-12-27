@@ -1,3 +1,4 @@
+
 // pages/api/spotify-callback.js
 import { getRedis } from '../lib/redis.js';
 
@@ -12,7 +13,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
     if (success) {
       displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi tornare all\'auto.';
     } else if (errorType === 'premium_required') {
-      displayMessage = 'Attenzione: Spotify Premium è richiesto per questa applicazione.';
+      displayMessage = 'Accesso negato. Per accedere è richiesto un account premium.';
     } else {
       displayMessage = 'Errore durante la configurazione. Riprova la scansione.';
     }
@@ -46,11 +47,11 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => window.close(), 4000);</script>
+      <script>setTimeout(() => window.close(), 5000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
-  res.status(success ? 200 : 200).send(html); // Return 200 to show the page
+  res.status(200).send(html);
 };
 
 export default async function handler(req, res) {
@@ -80,7 +81,6 @@ export default async function handler(req, res) {
     const userData = await userRes.json();
 
     if (userData.product !== 'premium') {
-      // SCRITTURA CRITICA: Segnaliamo all'auto che l'utente non è premium
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 300); 
       sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       return;
