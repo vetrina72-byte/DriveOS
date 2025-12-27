@@ -45,7 +45,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => { if(window.close) window.close(); }, 6000);</script>
+      <script>setTimeout(() => { if(window.close) window.close(); }, 7000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -75,18 +75,18 @@ export default async function handler(req, res) {
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) return sendCallbackPage(res, { success: false });
 
-    // CONTROLLO PREMIUM
+    // RECUPERO PROFILO UTENTE PER CONTROLLO PREMIUM
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const userData = await userRes.json();
 
     if (userData.product !== 'premium') {
-      // Notifica all'auto che l'account non è premium
+      // SALVO L'ERRORE IN REDIS: l'auto ora saprà perché l'accesso è fallito
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 300); 
       sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       return;
     }
     
-    // Se premium, salva i dati normalmente
+    // SALVATAGGIO TOKEN SUCCESSFUL
     await redis.set(`spotify:${sessionId}`, JSON.stringify({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
