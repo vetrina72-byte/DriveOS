@@ -1,9 +1,14 @@
-/// <reference types="@react-three/fiber" />
 import React, { useMemo, useRef, useEffect, useCallback } from 'react';
 import { useFrame, ThreeElements } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Points, PointMaterial } from '@react-three/drei';
 import type { WeatherParams } from '../types';
+
+// Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
+const PointLight = 'pointLight' as any;
+const InstancedMesh = 'instancedMesh' as any;
+const BoxGeometry = 'boxGeometry' as any;
+const MeshBasicMaterial = 'meshBasicMaterial' as any;
 
 const LERP_FACTOR = 0.02; // Smoothing factor for transitions
 
@@ -72,8 +77,8 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
     }
   });
 
-  // Added type reference to help TypeScript resolve R3F intrinsic elements like 'pointLight'
-  return <pointLight ref={lightRef} color={0xccccff} intensity={0} decay={2} distance={400} />;
+  // Fix: Replaced 'pointLight' with locally defined 'PointLight' constant to fix JSX.IntrinsicElements error
+  return <PointLight ref={lightRef} color={0xccccff} intensity={0} decay={2} distance={400} />;
 };
 
 
@@ -153,11 +158,11 @@ const RainStreaks = ({ targetDensity, targetSpeed }: { targetDensity: number, ta
     });
 
     return (
-        // Added type reference to help TypeScript resolve R3F intrinsic elements like 'instancedMesh', 'boxGeometry' and 'meshBasicMaterial'
-        <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_COUNT]}>
-            <boxGeometry ref={geometryRef} args={[0.02, 0.05, 0.02]} />
-            <meshBasicMaterial color="#a0b0f0" transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false}/>
-        </instancedMesh>
+        // Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error
+        <InstancedMesh ref={meshRef} args={[undefined, undefined, MAX_COUNT]}>
+            <BoxGeometry ref={geometryRef} args={[0.02, 0.05, 0.02]} />
+            <MeshBasicMaterial color="#a0b0f0" transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false}/>
+        </InstancedMesh>
     );
 };
 

@@ -19,13 +19,13 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
   }
   
   const iconHtml = success 
-      ? `<div class="icon-circle success">
+      ? `<div class="icon-wrapper success">
            <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
              <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
              <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
            </svg>
          </div>`
-      : `<div class="icon-circle error">
+      : `<div class="icon-wrapper error">
            <svg class="cross" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
              <circle class="cross__circle" cx="26" cy="26" r="25" fill="none"/>
              <path class="cross__path" fill="none" d="M16 16 36 36 M36 16 16 36"/>
@@ -58,48 +58,43 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
         justify-content: center;
         text-align: center;
       }
-      header {
-        position: absolute;
-        top: 60px;
-        width: 100%;
-        display: flex;
-        justify-content: center;
-      }
       .spotify-logo {
         width: 140px;
-        height: auto;
+        margin-bottom: 40px;
+        opacity: 0.9;
       }
       .container {
         padding: 2rem;
         animation: fadeIn 0.8s ease-out;
       }
       h1 {
-        font-weight: 700;
-        font-size: 1.75rem;
+        font-weight: 800;
+        font-size: 1.8rem;
         margin: 1.5rem 0 0.5rem;
+        letter-spacing: -0.02em;
       }
       p {
         font-weight: 400;
         font-size: 1.1rem;
-        line-height: 1.5;
+        line-height: 1.6;
         color: #a1a1aa;
-        max-width: 320px;
+        max-width: 300px;
         margin: 0 auto;
       }
       
       @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
+        from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
 
-      /* Animazioni icone */
-      .checkmark, .cross { width: 80px; height: 80px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; animation: scale .3s ease-in-out .9s both; }
-      .checkmark { box-shadow: inset 0px 0px 0px var(--spotify-green); animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
-      .cross { box-shadow: inset 0px 0px 0px var(--error-red); animation: fill-error .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
+      .icon-wrapper { margin-bottom: 20px; }
+      .checkmark, .cross { width: 90px; height: 90px; border-radius: 50%; display: block; stroke-width: 3; stroke: #fff; stroke-miterlimit: 10; margin: 0 auto; }
       
+      .checkmark { box-shadow: inset 0px 0px 0px var(--spotify-green); animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
       .checkmark__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--spotify-green); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
       .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
       
+      .cross { box-shadow: inset 0px 0px 0px var(--error-red); animation: fill-error .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
       .cross__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: var(--error-red); fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
       .cross__path { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; stroke: #fff; stroke-width: 4; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
 
@@ -110,14 +105,13 @@ const sendCallbackPage = (res, { success = true, errorType = '', message = '' })
     </style>
     </head>
     <body>
-      <header>
-        <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_White.png" alt="Spotify" class="spotify-logo" />
-      </header>
+      <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_White.png" alt="Spotify" class="spotify-logo" />
       <div class="container">
         ${iconHtml}
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
+      <script>setTimeout(() => { if (window.close) { window.close(); } }, 5000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -160,15 +154,12 @@ export default async function handler(req, res) {
       return;
     }
 
-    // CONTROLLO PREMIUM
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const userData = await userRes.json();
 
     if (userData.product !== 'premium') {
-      // CRITICO: Scriviamo l'errore su Redis PRIMA di rispondere al telefono
       const payload = { authenticated: false, error: 'premium_required', timestamp: Date.now() };
       await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 300); 
-      
       sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       return;
     }

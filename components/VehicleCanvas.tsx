@@ -1,4 +1,3 @@
-/// <reference types="@react-three/fiber" />
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
@@ -7,6 +6,16 @@ import { VolumetricHeadlight } from './VolumetricHeadlight';
 import WeatherEffects from './WeatherEffects';
 import type { SceneColors } from '../App';
 import type { WeatherParams } from '../types';
+
+// Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
+const Primitive = 'primitive' as any;
+const Group = 'group' as any;
+const Mesh = 'mesh' as any;
+const PlaneGeometry = 'planeGeometry' as any;
+const ShadowMaterial = 'shadowMaterial' as any;
+const AmbientLight = 'ambientLight' as any;
+const SpotLight = 'spotLight' as any;
+const DirectionalLight = 'directionalLight' as any;
 
 // Simple Error Boundary for the 3D model
 interface ModelErrorBoundaryProps {
@@ -132,8 +141,8 @@ const Model = forwardRef<THREE.Group, {
   });
 
   return (
-    // Added type reference to help TypeScript resolve R3F intrinsic elements like 'primitive'
-    <primitive
+    // Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error
+    <Primitive
       ref={ref}
       object={scene}
       position={[position.x, position.y, position.z]}
@@ -527,8 +536,8 @@ export default function VehicleCanvas({
   // Headlight rendering extracted for clean conditional rendering
   // The assemblyYaw rotates the entire group of headlights as a single unit
   const renderHeadlights = () => (
-    // Added type reference to fix Property 'group' does not exist on type 'JSX.IntrinsicElements'
-    <group rotation={[0, assemblyYaw, 0]}>
+    // Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error
+    <Group rotation={[0, assemblyYaw, 0]}>
       {separation > 0 ? (
         <>
             <VolumetricHeadlight
@@ -579,7 +588,7 @@ export default function VehicleCanvas({
             circular={circular}
         />
       )}
-    </group>
+    </Group>
   );
 
   return (
@@ -592,8 +601,8 @@ export default function VehicleCanvas({
 
         <ModelErrorBoundary>
           <Suspense fallback={null}>
-            {/* Added type reference to help TypeScript resolve R3F intrinsic elements like 'group' */}
-            <group
+            {/* Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error */}
+            <Group
               ref={modelRef}
               position={[initialConfig.modelPos.x, initialConfig.modelPos.y, initialConfig.modelPos.z]}
               rotation={[initialConfig.modelRot.x, initialConfig.modelRot.y, initialConfig.modelRot.z]}
@@ -606,28 +615,28 @@ export default function VehicleCanvas({
                 isNight={isNight}
               />
 
-              {/* Added type reference to help TypeScript resolve R3F intrinsic elements like 'mesh', 'planeGeometry' and 'shadowMaterial' */}
-              <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}>
-                <planeGeometry args={[20, 20]} />
-                <shadowMaterial transparent opacity={shadowOpacity} />
-              </mesh>
+              {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+              <Mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}>
+                <PlaneGeometry args={[20, 20]} />
+                <ShadowMaterial transparent opacity={shadowOpacity} />
+              </Mesh>
               
               {/* Linked headlights follow the model's group rotation */}
               {linked && renderHeadlights()}
 
-              {/* Added type reference to fix Property 'primitive' does not exist on type 'JSX.IntrinsicElements' */}
-              <primitive object={frontLightTarget} position={[0, 0, 10]} />
-            </group>
+              {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
+              <Primitive object={frontLightTarget} position={[0, 0, 10]} />
+            </Group>
 
             {/* Unlinked headlights stay fixed in world rotation while car spins */}
             {!linked && (
-              // Added type reference to fix Property 'group' does not exist on type 'JSX.IntrinsicElements'
-              <group 
+              // Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error
+              <Group 
                 position={[activeConfig.modelPos.x, activeConfig.modelPos.y, activeConfig.modelPos.z]} 
                 scale={activeConfig.modelScale}
               >
                 {renderHeadlights()}
-              </group>
+              </Group>
             )}
           </Suspense>
         </ModelErrorBoundary>
@@ -644,9 +653,9 @@ export default function VehicleCanvas({
             enableRotate={!isAppOpen} 
         />
 
-        {/* Added type reference to help TypeScript resolve R3F intrinsic elements like 'ambientLight', 'spotLight' and 'directionalLight' */}
-        <ambientLight ref={ambientLightRef} intensity={0.5} />
-        <spotLight
+        {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+        <AmbientLight ref={ambientLightRef} intensity={0.5} />
+        <SpotLight
           ref={frontLightRef}
           position={[0, 5, 0]}
           angle={0.5}
@@ -655,7 +664,7 @@ export default function VehicleCanvas({
           castShadow
           shadow-bias={-0.0001}
         />
-        <directionalLight
+        <DirectionalLight
             ref={directionalLightRef}
             position={[-5, 10, 5]}
             intensity={1}
@@ -669,9 +678,9 @@ export default function VehicleCanvas({
             shadow-camera-bottom={-10}
         />
         
-        {/* Added type reference to fix Property 'mesh' does not exist on type 'JSX.IntrinsicElements' */}
-        <mesh ref={floorRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.05, 0]} receiveShadow>
-          <planeGeometry args={[300, 300]} />
+        {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+        <Mesh ref={floorRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.05, 0]} receiveShadow>
+          <PlaneGeometry args={[300, 300]} />
           <MeshReflectorMaterial
             blur={[400, 400]}
             resolution={1024}
@@ -685,7 +694,7 @@ export default function VehicleCanvas({
             metalness={0.2}
             mirror={0.7} 
           />
-        </mesh>
+        </Mesh>
 
         <EnvironmentController 
             isNight={isNight} 

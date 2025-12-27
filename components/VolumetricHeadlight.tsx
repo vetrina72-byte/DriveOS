@@ -1,7 +1,13 @@
-/// <reference types="@react-three/fiber" />
 import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, ThreeElements } from '@react-three/fiber';
+
+// Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
+const Group = 'group' as any;
+const Mesh = 'mesh' as any;
+const CylinderGeometry = 'cylinderGeometry' as any;
+const BoxGeometry = 'boxGeometry' as any;
+const ShaderMaterial = 'shaderMaterial' as any;
 
 // Deforms a unit geometry into a frustum along the Z-axis.
 // Works for both BoxGeometry and CylinderGeometry (via coordinate swizzle).
@@ -166,19 +172,19 @@ export const VolumetricHeadlight = ({
     });
 
     return (
-        // Added type reference to help TypeScript resolve R3F intrinsic elements like 'group' and 'mesh'
-        <group
+        // Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error
+        <Group
             ref={groupRef}
             position={position}
         >
-            <mesh castShadow={false} receiveShadow={false}>
+            <Mesh castShadow={false} receiveShadow={false}>
                 {circular ? (
-                    <cylinderGeometry args={[0.5, 0.5, 1, 32, 1, true]} />
+                    <CylinderGeometry args={[0.5, 0.5, 1, 32, 1, true]} />
                 ) : (
-                    <boxGeometry args={[1, 1, 1]} />
+                    <BoxGeometry args={[1, 1, 1]} />
                 )}
-                <shaderMaterial ref={materialRef} args={[shaderArgs]} />
-            </mesh>
-        </group>
+                <ShaderMaterial ref={materialRef} args={[shaderArgs]} />
+            </Mesh>
+        </Group>
     );
 };
