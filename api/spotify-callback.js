@@ -157,13 +157,13 @@ export default async function handler(req, res) {
       return;
     }
 
-    // CHECK FOR PREMIUM STATUS IMMEDIATELY
+    // CONTROLLO PREMIUM
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const userData = await userRes.json();
     const redis = getRedis();
 
     if (userData.product !== 'premium') {
-      console.warn(`[CALLBACK] User not premium. Flagging session ${sessionId}`);
+      console.warn(`[CALLBACK] Utente non premium. Segnalazione errore per sessione ${sessionId}`);
       const payload = { authenticated: false, error: 'premium_required', timestamp: Date.now() };
       await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 600); 
       sendCallbackPage(res, { success: false, errorType: 'premium_required' });
@@ -175,9 +175,10 @@ export default async function handler(req, res) {
       refresh_token: tokenData.refresh_token,
       expires_at: Date.now() + tokenData.expires_in * 1000,
     };
-    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 2592000); // 30 days
+    await redis.set(`spotify:${sessionId}`, JSON.stringify(payload), 'EX', 2592000); // 30 giorni
     sendCallbackPage(res, { success: true });
   } catch (e) {
-    sendCallbackPage(res, { success: false, message: 'Errore di connessione.' });
+    console.error('[CALLBACK] Errore critico:', e);
+    sendCallbackPage(res, { success: false, message: 'Errore di connessione al server.' });
   }
 }

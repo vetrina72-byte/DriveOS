@@ -28,7 +28,7 @@ function SpotifyLogin() {
   const startLoginProcess = useCallback((forceNewSession = false) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     
-    // Pulisce errori globali all'inizio
+    // Pulizia errori precedenti
     clearError();
 
     let currentSid = sessionId;
@@ -76,7 +76,7 @@ function SpotifyLogin() {
                 expires_at: data.expires_at,
             }), 1500);
           } else if (data && data.error === 'premium_required') {
-            console.warn('[POLLING] Premium Required error found.');
+            console.warn('[POLLING] Rilevato errore Premium Required.');
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setUiState('PREMIUM_RICHIESTO');
           } else if (data && data.expired) {
@@ -85,13 +85,13 @@ function SpotifyLogin() {
             setTimeout(() => startLoginProcess(true), 2500);
           }
         })
-        .catch(() => {
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          setUiState('ERRORE');
+        .catch((err) => {
+          console.error('[POLLING] Errore durante il controllo stato:', err);
         });
     }, delay);
   }, [sessionId, login, startLoginProcess]);
 
+  // Sincronizza lo stato interno con eventuali errori globali di AuthContext
   useEffect(() => {
       if (authError === 'Premium required') {
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
