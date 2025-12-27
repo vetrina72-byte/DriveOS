@@ -8,21 +8,35 @@ export default async function handler(req, res) {
 
   const redis = getRedis();
   
-  // 1. Controlla stati di errore espliciti salvati dal callback
+  // 1. Controlla stati immediati salvati dal callback in Redis
   try {
     const raw = await redis.get(`spotify:${sessionId}`);
     if (raw) {
       const p = JSON.parse(raw);
-      if (p.error === 'premium_required') {
-          return res.status(200).json({ authenticated: false, error: 'premium_required' });
-      }
+      
+      // Se c'è un errore specifico (es. premium_required), rispondi immediatamente
       if (p.error) {
-          return res.status(200).json({ authenticated: false, error: p.error });
+          return res.status(200).json({ 
+            authenticated: false, 
+            error: p.error,
+            detail: p.detail || ''
+          });
+      }
+
+      // Se l'autenticazione è avvenuta con successo, restituisci i dati per il login
+      if (p.access_token) {
+        return res.status(200).json({ 
+          authenticated: true, 
+          access_token: p.access_token,
+          expires_at: p.expires_at 
+        });
       }
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error("[POLLING API] Error reading from Redis:", e);
+  }
 
-  // 2. Se non c'è errore, prova a gestire il token normale
+  // 2. Fallback: prova a gestire il token tramite il manager (refresh automatico)
   const updated = await ensureSpotifyToken(sessionId);
 
   if (updated && updated.access_token) {
@@ -33,5 +47,6 @@ export default async function handler(req, res) {
     });
   }
 
+  // Se non c'è nulla, la sessione è ancora in attesa
   return res.status(200).json({ authenticated: false });
 }
