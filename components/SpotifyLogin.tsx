@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateUUID } from '../lib/sessionId';
-import { FiRefreshCw } from 'react-icons/fi';
+import { FiRefreshCw, FiAlertCircle } from 'react-icons/fi';
 
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
 
@@ -12,23 +12,22 @@ interface SpotifyLoginProps {
     isNight?: boolean;
 }
 
-// NUOVO COMPONENTE DI PRESENTAZIONE
-// Unifica lo stile per Successo ed Errore: stesso cerchio, stessa dimensione SVG, stesso stroke.
-// Questo garantisce che la schermata di errore non sembri "diversa" o "rotta", ma solo un altro stato del sistema.
+// Minimalist Icon Component - Thin strokes, no heavy backgrounds
 const FeedbackIcon = ({ type }: { type: 'success' | 'error' }) => {
     const isSuccess = type === 'success';
     return (
-        <div className={`w-[110px] h-[110px] rounded-full flex items-center justify-center ${isSuccess ? 'bg-green-500/10 text-[#1DB954]' : 'bg-red-500/10 text-red-500'}`}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-[55px] h-[55px]">
-                {isSuccess ? (
+        <div className={`flex items-center justify-center mb-6`}>
+            {isSuccess ? (
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#30D158" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
-                ) : (
-                    <>
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </>
-                )}
-            </svg>
+                </svg>
+            ) : (
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+            )}
         </div>
     );
 };
@@ -67,7 +66,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             expires_at: data.expires_at
           });
         } else if (data.error) {
-          // Errore rilevato: Interrompiamo il polling e mostriamo la nuova UI unificata
           console.log(`[SPOTIFY LOGIN] Ricevuto stato errore: ${data.error}. Stop polling.`);
           clearInterval(pollTimer.current!);
           setUiState('PREMIUM_ERROR');
@@ -89,28 +87,41 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     setTimeout(startLogin, 100);
   };
 
+  // Refined theme for better contrast and minimal look
   const theme = {
-    card: isNight ? 'bg-zinc-900/95 border-white/10' : 'bg-white/95 border-black/10',
-    text: isNight ? 'text-white' : 'text-zinc-900',
-    sub: isNight ? 'text-zinc-400' : 'text-zinc-500'
+    // Removed border, using subtle shadow and backdrop blur
+    card: isNight ? 'bg-black/40 backdrop-blur-xl' : 'bg-white/60 backdrop-blur-xl', 
+    title: isNight ? 'text-white' : 'text-zinc-900',
+    text: isNight ? 'text-zinc-400' : 'text-zinc-600',
+    button: isNight 
+        ? 'bg-white/10 hover:bg-white/20 text-white' 
+        : 'bg-black/5 hover:bg-black/10 text-black',
   };
 
   return (
     <div className="w-full h-full flex items-center justify-center p-6">
       <AnimatePresence mode="wait">
+        
         {uiState === 'ATTESA' && (
           <motion.div 
             key="qr"
-            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-            className={`flex items-center gap-12 p-12 rounded-[40px] border backdrop-blur-3xl shadow-2xl ${theme.card}`}
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className={`flex items-center gap-16 p-12 rounded-3xl ${theme.card}`}
           >
-            <div className="bg-white p-4 rounded-3xl shadow-inner">
-              <img src={qrCodeUrl} alt="QR" className="w-64 h-64" />
+            <div className="bg-white p-3 rounded-2xl shadow-sm">
+              <img src={qrCodeUrl} alt="QR" className="w-56 h-56" />
             </div>
-            <div className="max-w-xs">
-              <FaSpotify className="w-12 h-12 text-[#1DB954] mb-6" />
-              <h2 className={`text-4xl font-bold mb-4 tracking-tight ${theme.text}`}>Accedi</h2>
-              <p className={`text-lg leading-relaxed ${theme.sub}`}>Scansiona il codice per collegare il tuo account <b>Spotify Premium</b>.</p>
+            <div className="max-w-xs flex flex-col justify-center">
+              <div className="flex items-center gap-3 mb-4">
+                <FaSpotify className="w-8 h-8 text-[#1DB954]" />
+                <h2 className={`text-2xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
+              </div>
+              <p className={`text-lg leading-relaxed font-normal ${theme.text}`}>
+                Scansiona il codice per collegare il tuo account <strong>Spotify Premium</strong>.
+              </p>
             </div>
           </motion.div>
         )}
@@ -118,37 +129,38 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         {uiState === 'PREMIUM_ERROR' && (
           <motion.div 
             key="error"
-            initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-            className={`flex flex-col items-center text-center p-16 rounded-[40px] border backdrop-blur-3xl shadow-2xl max-w-xl ${theme.card}`}
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }}
+            className={`flex flex-col items-center text-center p-12 rounded-3xl max-w-lg ${theme.card}`}
           >
-            {/* Nuova Icona Unificata */}
-            <div className="mb-8">
-              <FeedbackIcon type="error" />
-            </div>
-            
-            {/* Tipografia allineata al Successo */}
-            <h2 className={`text-4xl font-extrabold mb-4 ${theme.text}`}>Accesso Negato</h2>
-            <p className={`text-xl mb-10 leading-relaxed ${theme.sub}`}>
-              Drive OS richiede un account <b>Spotify Premium</b> per lo streaming audio.<br/>
-              L'account attuale non è abilitato al servizio.
+            <FeedbackIcon type="error" />
+            <h2 className={`text-2xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
+            <p className={`text-base mb-8 leading-relaxed ${theme.text}`}>
+              L'integrazione con Drive OS richiede un abbonamento Spotify Premium attivo.
             </p>
-            
             <button 
               onClick={handleRetry}
-              className="flex items-center gap-3 px-10 py-5 bg-zinc-800 text-white rounded-full font-bold text-xl hover:bg-zinc-700 active:scale-95 transition-all shadow-lg border border-white/10"
+              className={`flex items-center gap-2 px-8 py-3 rounded-full font-medium text-base transition-all active:scale-95 ${theme.button}`}
             >
-              <FiRefreshCw />
-              Riprova scansione
+              <FiRefreshCw className="w-4 h-4" />
+              Riprova
             </button>
           </motion.div>
         )}
 
         {uiState === 'LOADING' && (
-          <motion.div key="load" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
-            <div className="w-16 h-16 border-4 border-green-500/20 border-t-green-500 rounded-full animate-spin mb-6" />
-            <p className={`text-2xl font-medium ${theme.text}`}>Configurazione in corso...</p>
+          <motion.div 
+            key="load" 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            className="flex flex-col items-center gap-4"
+          >
+            {/* Minimalist Spinner */}
+            <div className={`w-8 h-8 border-2 border-t-transparent rounded-full animate-spin ${isNight ? 'border-white' : 'border-zinc-800'}`} />
+            <p className={`text-sm font-medium ${theme.text}`}>Connessione in corso...</p>
           </motion.div>
         )}
+
       </AnimatePresence>
     </div>
   );

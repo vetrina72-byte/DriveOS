@@ -6,71 +6,111 @@ const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_URL = 'https://api.spotify.com/v1/me';
 
 const sendCallbackPage = (res, { success = true, errorType = '' }) => {
-  let title = success ? 'Accesso Consentito' : 'Accesso Negato';
+  let title = success ? 'Collegato' : 'Non riuscito';
   let displayMessage = '';
   
   if (success) {
-    displayMessage = 'Hai collegato con successo il tuo account Spotify Premium. Puoi tornare all\'auto.';
+    displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
-    displayMessage = 'È necessario un account Premium per continuare l\'esperienza Drive OS.';
+    title = 'Richiesto Premium';
+    displayMessage = 'L’integrazione richiede un account Spotify Premium attivo.';
   } else if (errorType === 'access_denied') {
-    title = 'Accesso Annullato';
-    displayMessage = 'L\'autorizzazione è stata annullata. Scansiona nuovamente il codice sull\'auto per riprovare.';
+    title = 'Annullato';
+    displayMessage = 'La configurazione è stata interrotta.';
   } else {
-    displayMessage = 'Si è verificato un inconveniente tecnico. Riprova la scansione dall\'auto.';
+    displayMessage = 'Si è verificato un problema tecnico. Riprova.';
   }
   
-  // COERENZA GRAFICA:
-  // Utilizzo lo stesso markup SVG (viewBox, stroke-width) per entrambe le icone.
-  // Cambia solo il path (polyline vs line) e la classe colore.
-  const iconHtml = success 
-      ? `<div class="icon-container success">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-         </div>`
-      : `<div class="icon-container error">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-         </div>`;
+  // Stile "Apple-like": Tratto sottile (1.5px), dimensioni contenute, nessun cerchio di sfondo pesante
+  const colorClass = success ? 'success-color' : 'error-color';
+  const iconSvg = success 
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
 
   const html = `
     <!doctype html>
     <html lang="it">
     <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
     <title>${title}</title>
     <style>
-      /* Reset e font di sistema per coerenza con l'OS */
-      body { background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+      :root {
+        --bg-color: #000000;
+        --text-primary: #FFFFFF;
+        --text-secondary: #8E8E93; /* Apple Gray */
+        --accent-success: #30D158; /* Apple Green */
+        --accent-error: #FF453A; /* Apple Red */
+        --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
       
-      /* Card unificata: stesso padding, border-radius e ombreggiatura per tutti gli stati */
-      .card { background: #111; padding: 50px 40px; border-radius: 40px; width: 85%; max-width: 420px; border: 1px solid #222; box-shadow: 0 30px 60px rgba(0,0,0,0.6); animation: appear 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
-      @keyframes appear { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+      body { 
+        background: var(--bg-color); 
+        color: var(--text-primary); 
+        font-family: var(--font-family); 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center; 
+        height: 100vh; 
+        margin: 0; 
+        padding: 20px;
+        text-align: center; 
+        box-sizing: border-box;
+      }
+
+      .container {
+        max-width: 320px;
+        animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .icon-wrapper {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
       
-      /* Contenitore Icona: Dimensioni fisse e centratura perfetta */
-      .icon-container { width: 110px; height: 110px; border-radius: 50%; margin: 0 auto 35px; display: flex; align-items: center; justify-content: center; }
-      .icon-container svg { width: 55px; height: 55px; }
-      
-      /* Varianti di colore (Green vs Red) con opacità dello sfondo identica */
-      .success { background: rgba(29, 185, 84, 0.1); color: #1DB954; }
-      .error { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-      
-      /* Tipografia coerente */
-      h1 { font-size: 32px; margin-bottom: 15px; font-weight: 800; letter-spacing: -0.5px; }
-      p { color: #a1a1aa; font-size: 19px; line-height: 1.5; margin: 0; font-weight: 400; }
+      .icon-wrapper svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .success-color { color: var(--accent-success); }
+      .error-color { color: var(--accent-error); }
+
+      h1 { 
+        font-size: 28px; 
+        font-weight: 700; 
+        margin: 0 0 12px; 
+        letter-spacing: 0.3px;
+      }
+
+      p { 
+        color: var(--text-secondary); 
+        font-size: 17px; 
+        line-height: 1.4; 
+        font-weight: 400; 
+        margin: 0; 
+      }
+
+      @keyframes fadeIn { 
+        from { opacity: 0; transform: scale(0.98); } 
+        to { opacity: 1; transform: scale(1); } 
+      }
     </style>
     </head>
     <body>
-      <div class="card">
-        ${iconHtml}
+      <div class="container">
+        <div class="icon-wrapper ${colorClass}">
+          ${iconSvg}
+        </div>
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => { if(window.close) window.close(); }, 7000);</script>
+      <script>setTimeout(() => { if(window.close) window.close(); }, 5000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
