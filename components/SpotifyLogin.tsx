@@ -12,7 +12,7 @@ interface SpotifyLoginProps {
     isNight?: boolean;
 }
 
-// Icona strutturalmente identica alla versione mobile e a quella di successo
+// FeedbackIcon: Struttura SVG speculare a quella del telefono e del successo
 const FeedbackIcon = ({ type }: { type: 'success' | 'error' }) => {
     const isSuccess = type === 'success';
     return (
@@ -46,7 +46,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     const redirectUri = process.env.VITE_REDIRECT_URI;
     const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
     
-    // show_dialog=true assicura che Spotify non riutilizzi sessioni silenziose che potrebbero fallire
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${encodeURIComponent(scope)}&state=${sidRef.current}&show_dialog=true`;
 
     setQrCodeUrl(generateQrUrl(authUrl));
@@ -58,6 +57,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         const data = await res.json();
         
         if (data.authenticated && data.access_token) {
+          // Successo: interrompe il polling e autentica
           clearInterval(pollTimer.current!);
           setUiState('LOADING');
           login({
@@ -65,7 +65,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             expires_in: 3600,
             expires_at: data.expires_at
           });
-        } else if (data.error === 'premium_required' || data.error === 'access_denied') {
+        } else if (data.error) {
+          // Errore rilevato: Qualsiasi errore (Premium o tecnico) interrompe il loop e mostra il feedback
+          console.log(`[SPOTIFY LOGIN] Ricevuto stato errore: ${data.error}. Stop polling.`);
           clearInterval(pollTimer.current!);
           setUiState('PREMIUM_ERROR');
         }
@@ -81,7 +83,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   }, [startLogin]);
 
   const handleRetry = () => {
-    // Genero un nuovo SID per garantire l'idempotenza del nuovo tentativo
     sidRef.current = generateUUID();
     setUiState('IDLE');
     setTimeout(startLogin, 100);

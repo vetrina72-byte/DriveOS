@@ -20,7 +20,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Si è verificato un inconveniente tecnico. Riprova la scansione dall\'auto.';
   }
   
-  // Icone IDENTICHE per struttura, peso e stile
+  // Icone IDENTICHE per struttura, peso e stile (V e X sono speculari)
   const iconHtml = success 
       ? `<div class="icon-container success">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -73,12 +73,13 @@ export default async function handler(req, res) {
   const { code, state: sessionId, error } = req.query;
   const redis = getRedis();
 
-  // Gestione esplicita dell'errore di annullamento da parte di Spotify
+  // 1. Gestione Annullamento (User cancel) - Scrive in Redis per sbloccare l'auto
   if (error === 'access_denied') {
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'access_denied' }), 'EX', 120);
     return sendCallbackPage(res, { success: false, errorType: 'access_denied' });
   }
 
+  // 2. Gestione Errori Generici - Scrive in Redis per sbloccare l'auto
   if (error || !code || !sessionId) {
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
     return sendCallbackPage(res, { success: false });
@@ -96,29 +97,37 @@ export default async function handler(req, res) {
     
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) {
-        console.error("[SPOTIFY CALLBACK] Token exchange failed:", tokenData);
+        if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'token_exchange_failed' }), 'EX', 120);
         return sendCallbackPage(res, { success: false });
     }
 
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-    if (!userRes.ok) return sendCallbackPage(res, { success: false });
+    if (!userRes.ok) {
+        if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'user_fetch_failed' }), 'EX', 120);
+        return sendCallbackPage(res, { success: false });
+    }
     
     const userData = await userRes.json();
 
+    // 3. Controllo Account Premium - Scrive in Redis lo stato specifico richiesto
     if (userData.product !== 'premium') {
       console.log(`[SPOTIFY CALLBACK] Account NON premium per sessione: ${sessionId}`);
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 600); 
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
+    // 4. Successo - Scrive i token in Redis
     await redis.set(`spotify:${sessionId}`, JSON.stringify({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       expires_at: Date.now() + tokenData.expires_in * 1000,
     }), 'EX', 3600); 
     sendCallbackPage(res, { success: true });
+
   } catch (e) {
     console.error(`[SPOTIFY CALLBACK] Eccezione: ${e.message}`);
+    // In caso di crash, sblocca comunque l'infotainment scrivendo l'errore
+    if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
     sendCallbackPage(res, { success: false });
   }
 }
