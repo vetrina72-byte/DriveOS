@@ -12,24 +12,44 @@ interface SpotifyLoginProps {
     isNight?: boolean;
 }
 
-// Icon component: Clean, thin strokes, distinct colors
+// Icon component: Clean, thin strokes, animated drawing effect
 const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: boolean }) => {
     const isSuccess = type === 'success';
-    // Use system-like colors: Green for success, Red for error
     const color = isSuccess ? '#22c55e' : '#ef4444';
     
     return (
         <div className={`flex items-center justify-center mb-6`}>
-            {isSuccess ? (
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-            ) : (
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            )}
+            <motion.svg 
+                width="64" height="64" viewBox="0 0 24 24" fill="none" 
+                stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.4, ease: "backOut" }}
+            >
+                {isSuccess ? (
+                    <motion.polyline 
+                        points="20 6 9 17 4 12"
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 0.4, delay: 0.1, ease: "easeInOut" }}
+                    />
+                ) : (
+                    <>
+                        <motion.line 
+                            x1="18" y1="6" x2="6" y2="18"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ duration: 0.3, delay: 0.1, ease: "easeOut" }}
+                        />
+                        <motion.line 
+                            x1="6" y1="6" x2="18" y2="18"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
+                        />
+                    </>
+                )}
+            </motion.svg>
         </div>
     );
 };
@@ -100,11 +120,11 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     title: isNight ? 'text-white' : 'text-gray-900',
     subtitle: isNight ? 'text-gray-400' : 'text-gray-500',
     
-    // QR Code Container Background
-    // Fix: Use bg-white for Day mode as well to avoid color mismatch with the card.
-    qrBg: isNight ? 'bg-white' : 'bg-white', 
-    // Fix: Very subtle border or no border for Day mode to blend in
-    qrBorder: isNight ? 'border-transparent' : 'border-gray-100',
+    // QR Code Container Configuration
+    // In Day mode, we remove border and shadow to blend seamlessly with the white card
+    qrBg: 'bg-white', 
+    qrBorder: isNight ? 'border border-transparent' : 'border-none', 
+    qrShadow: isNight ? 'shadow-sm' : 'shadow-none',
 
     button: isNight 
         ? 'bg-white text-black hover:bg-gray-200' 
@@ -127,8 +147,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             className={`flex items-center gap-10 p-10 rounded-[32px] ${theme.card}`}
           >
             {/* QR Container */}
-            <div className={`p-3 rounded-2xl ${theme.qrBg} border ${theme.qrBorder} flex-shrink-0 shadow-sm`}>
-              <img src={qrCodeUrl} alt="QR" className="w-48 h-48 rounded-lg mix-blend-multiply" />
+            <div className={`p-3 rounded-3xl ${theme.qrBg} ${theme.qrBorder} ${theme.qrShadow} flex-shrink-0`}>
+              <img src={qrCodeUrl} alt="QR" className="w-48 h-48 rounded-2xl mix-blend-multiply" />
             </div>
             
             {/* Text Content */}
@@ -151,18 +171,18 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
-            className={`flex flex-col items-center text-center p-12 rounded-[32px] max-w-md ${theme.card}`}
+            className={`flex flex-col items-center text-center p-8 rounded-[32px] max-w-[340px] w-full ${theme.card}`}
           >
             <FeedbackIcon type="error" isNight={isNight} />
-            <h2 className={`text-2xl font-bold mb-3 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
-            <p className={`text-base mb-8 leading-relaxed font-medium ${theme.subtitle}`}>
+            <h2 className={`text-xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
+            <p className={`text-sm mb-6 leading-relaxed font-medium ${theme.subtitle}`}>
               L'integrazione richiede un abbonamento Spotify Premium attivo per funzionare.
             </p>
             <button 
               onClick={handleRetry}
-              className={`flex items-center justify-center gap-2 px-8 py-3.5 rounded-full font-bold text-base transition-all active:scale-95 shadow-md ${theme.button}`}
+              className={`flex items-center justify-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all active:scale-95 shadow-md w-full ${theme.button}`}
             >
-              <FiRefreshCw className="w-5 h-5" />
+              <FiRefreshCw className="w-4 h-4" />
               Riprova
             </button>
           </motion.div>

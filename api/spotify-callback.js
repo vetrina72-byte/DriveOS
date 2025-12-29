@@ -21,10 +21,11 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Si è verificato un problema tecnico. Riprova.';
   }
   
-  // SVG Icons with thin strokes (Apple style)
+  // SVG Icons with thin strokes and animated classes
+  // The 'icon-svg' class triggers the keyframe animation defined in the style block.
   const iconSvg = success 
-      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+      ? `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+      : `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 
   const html = `
     <!doctype html>
@@ -69,22 +70,34 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
 
       .container {
         max-width: 340px;
-        animation: easeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        animation: easeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        opacity: 0;
+        transform: translateY(10px);
       }
 
       .icon-wrapper {
-        width: 60px;
-        height: 60px;
+        width: 64px;
+        height: 64px;
         margin: 0 auto 24px;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 50%;
       }
       
-      .icon-wrapper svg {
+      .icon-svg {
         width: 100%;
         height: 100%;
+      }
+      
+      /* Animation for drawing the stroke */
+      .icon-svg polyline, .icon-svg line {
+        stroke-dasharray: 100;
+        stroke-dashoffset: 100;
+        animation: draw 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.3s;
+      }
+
+      @keyframes draw {
+        to { stroke-dashoffset: 0; }
       }
 
       .success-color { color: var(--accent-success); }
@@ -106,7 +119,6 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       }
 
       @keyframes easeUp { 
-        from { opacity: 0; transform: translateY(10px); } 
         to { opacity: 1; transform: translateY(0); } 
       }
     </style>
