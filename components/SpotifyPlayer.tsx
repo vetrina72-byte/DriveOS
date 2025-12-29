@@ -173,7 +173,7 @@ const SpotifyPlayer = ({
             return (
                 <div className={`text-center flex flex-col items-center gap-4 ${isNight ? 'text-red-400' : 'text-red-600'}`}>
                     <p>Error: {error}</p>
-                    <SpotifyLogin />
+                    <SpotifyLogin isNight={isNight} />
                 </div>
             );
         }
@@ -251,7 +251,7 @@ const SpotifyPlayer = ({
             );
         }
         
-        return <SpotifyLogin />;
+        return <SpotifyLogin isNight={isNight} />;
     };
 
     const transform = animationType === 'y'

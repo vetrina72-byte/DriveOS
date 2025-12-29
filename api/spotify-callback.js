@@ -21,11 +21,10 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Si è verificato un problema tecnico. Riprova.';
   }
   
-  // Stile "Apple-like": Tratto sottile (1.5px), dimensioni contenute, nessun cerchio di sfondo pesante
-  const colorClass = success ? 'success-color' : 'error-color';
+  // SVG Icons with thin strokes (Apple style)
   const iconSvg = success 
-      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 
   const html = `
     <!doctype html>
@@ -36,41 +35,51 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     <title>${title}</title>
     <style>
       :root {
-        --bg-color: #000000;
-        --text-primary: #FFFFFF;
-        --text-secondary: #8E8E93; /* Apple Gray */
-        --accent-success: #30D158; /* Apple Green */
-        --accent-error: #FF453A; /* Apple Red */
-        --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        --bg-color: #ffffff;
+        --text-primary: #000000;
+        --text-secondary: #86868b;
+        --accent-success: #34C759;
+        --accent-error: #FF3B30;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-color: #000000;
+          --text-primary: #ffffff;
+          --text-secondary: #86868b;
+          --accent-success: #30D158;
+          --accent-error: #FF453A;
+        }
       }
       
       body { 
         background: var(--bg-color); 
         color: var(--text-primary); 
-        font-family: var(--font-family); 
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
         display: flex; 
         flex-direction: column; 
         align-items: center; 
         justify-content: center; 
         height: 100vh; 
         margin: 0; 
-        padding: 20px;
+        padding: 40px;
         text-align: center; 
         box-sizing: border-box;
       }
 
       .container {
-        max-width: 320px;
-        animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        max-width: 340px;
+        animation: easeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
       }
 
       .icon-wrapper {
-        width: 64px;
-        height: 64px;
+        width: 60px;
+        height: 60px;
         margin: 0 auto 24px;
         display: flex;
         align-items: center;
         justify-content: center;
+        border-radius: 50%;
       }
       
       .icon-wrapper svg {
@@ -82,10 +91,10 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       .error-color { color: var(--accent-error); }
 
       h1 { 
-        font-size: 28px; 
+        font-size: 24px; 
         font-weight: 700; 
         margin: 0 0 12px; 
-        letter-spacing: 0.3px;
+        letter-spacing: -0.01em;
       }
 
       p { 
@@ -96,21 +105,21 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         margin: 0; 
       }
 
-      @keyframes fadeIn { 
-        from { opacity: 0; transform: scale(0.98); } 
-        to { opacity: 1; transform: scale(1); } 
+      @keyframes easeUp { 
+        from { opacity: 0; transform: translateY(10px); } 
+        to { opacity: 1; transform: translateY(0); } 
       }
     </style>
     </head>
     <body>
       <div class="container">
-        <div class="icon-wrapper ${colorClass}">
+        <div class="icon-wrapper ${success ? 'success-color' : 'error-color'}">
           ${iconSvg}
         </div>
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => { if(window.close) window.close(); }, 5000);</script>
+      <script>setTimeout(() => { if(window.close) window.close(); }, 4000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -121,13 +130,11 @@ export default async function handler(req, res) {
   const { code, state: sessionId, error } = req.query;
   const redis = getRedis();
 
-  // 1. Gestione Annullamento (User cancel)
   if (error === 'access_denied') {
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'access_denied' }), 'EX', 120);
     return sendCallbackPage(res, { success: false, errorType: 'access_denied' });
   }
 
-  // 2. Gestione Errori Generici
   if (error || !code || !sessionId) {
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
     return sendCallbackPage(res, { success: false });
@@ -157,14 +164,12 @@ export default async function handler(req, res) {
     
     const userData = await userRes.json();
 
-    // 3. Controllo Account Premium
     if (userData.product !== 'premium') {
       console.log(`[SPOTIFY CALLBACK] Account NON premium per sessione: ${sessionId}`);
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 600); 
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
-    // 4. Successo
     await redis.set(`spotify:${sessionId}`, JSON.stringify({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
