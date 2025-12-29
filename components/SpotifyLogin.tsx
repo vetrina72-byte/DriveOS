@@ -12,15 +12,24 @@ interface SpotifyLoginProps {
     isNight?: boolean;
 }
 
-// Icona X allineata per stile e peso alla versione mobile/successo
-const DeniedIcon = () => (
-    <div className="w-[110px] h-[110px] rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-[55px] h-[55px]">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-    </div>
-);
+// Icona strutturalmente identica alla versione mobile e a quella di successo
+const FeedbackIcon = ({ type }: { type: 'success' | 'error' }) => {
+    const isSuccess = type === 'success';
+    return (
+        <div className={`w-[110px] h-[110px] rounded-full flex items-center justify-center ${isSuccess ? 'bg-green-500/10 text-[#1DB954]' : 'bg-red-500/10 text-red-500'}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-[55px] h-[55px]">
+                {isSuccess ? (
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                ) : (
+                    <>
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </>
+                )}
+            </svg>
+        </div>
+    );
+};
 
 function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, clearError } = useAuth();
@@ -37,6 +46,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     const redirectUri = process.env.VITE_REDIRECT_URI;
     const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
     
+    // show_dialog=true assicura che Spotify non riutilizzi sessioni silenziose che potrebbero fallire
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${encodeURIComponent(scope)}&state=${sidRef.current}&show_dialog=true`;
 
     setQrCodeUrl(generateQrUrl(authUrl));
@@ -55,7 +65,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             expires_in: 3600,
             expires_at: data.expires_at
           });
-        } else if (data.error === 'premium_required') {
+        } else if (data.error === 'premium_required' || data.error === 'access_denied') {
           clearInterval(pollTimer.current!);
           setUiState('PREMIUM_ERROR');
         }
@@ -71,6 +81,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   }, [startLogin]);
 
   const handleRetry = () => {
+    // Genero un nuovo SID per garantire l'idempotenza del nuovo tentativo
     sidRef.current = generateUUID();
     setUiState('IDLE');
     setTimeout(startLogin, 100);
@@ -109,7 +120,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             className={`flex flex-col items-center text-center p-16 rounded-[40px] border backdrop-blur-3xl shadow-2xl max-w-xl ${theme.card}`}
           >
             <div className="mb-8">
-              <DeniedIcon />
+              <FeedbackIcon type="error" />
             </div>
             <h2 className={`text-4xl font-extrabold mb-4 ${theme.text}`}>Accesso Negato</h2>
             <p className={`text-xl mb-10 leading-relaxed ${theme.sub}`}>
@@ -121,7 +132,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
               className="flex items-center gap-3 px-10 py-5 bg-zinc-800 text-white rounded-full font-bold text-xl hover:bg-zinc-700 active:scale-95 transition-all shadow-lg border border-white/10"
             >
               <FiRefreshCw />
-              Prova con un altro account
+              Riprova scansione
             </button>
           </motion.div>
         )}

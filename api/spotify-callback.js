@@ -6,18 +6,21 @@ const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_URL = 'https://api.spotify.com/v1/me';
 
 const sendCallbackPage = (res, { success = true, errorType = '' }) => {
-  const title = success ? 'Accesso Consentito' : 'Accesso Negato';
+  let title = success ? 'Accesso Consentito' : 'Accesso Negato';
   let displayMessage = '';
   
   if (success) {
     displayMessage = 'Hai collegato con successo il tuo account Spotify Premium. Puoi tornare all\'auto.';
   } else if (errorType === 'premium_required') {
     displayMessage = 'È necessario un account Premium per continuare l\'esperienza Drive OS.';
+  } else if (errorType === 'access_denied') {
+    title = 'Accesso Annullato';
+    displayMessage = 'L\'autorizzazione è stata annullata. Scansiona nuovamente il codice sull\'auto per riprovare.';
   } else {
-    displayMessage = 'Si è verificato un errore tecnico. Riprova la scansione dall\'auto.';
+    displayMessage = 'Si è verificato un inconveniente tecnico. Riprova la scansione dall\'auto.';
   }
   
-  // Icone costruite con lo stesso identico markup strutturale
+  // Icone IDENTICHE per struttura, peso e stile
   const iconHtml = success 
       ? `<div class="icon-container success">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -59,7 +62,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         <h1>${title}</h1>
         <p>${displayMessage}</p>
       </div>
-      <script>setTimeout(() => { if(window.close) window.close(); }, 6000);</script>
+      <script>setTimeout(() => { if(window.close) window.close(); }, 7000);</script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -70,10 +73,15 @@ export default async function handler(req, res) {
   const { code, state: sessionId, error } = req.query;
   const redis = getRedis();
 
+  // Gestione esplicita dell'errore di annullamento da parte di Spotify
+  if (error === 'access_denied') {
+    if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'access_denied' }), 'EX', 120);
+    return sendCallbackPage(res, { success: false, errorType: 'access_denied' });
+  }
+
   if (error || !code || !sessionId) {
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
-    sendCallbackPage(res, { success: false });
-    return;
+    return sendCallbackPage(res, { success: false });
   }
 
   const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
@@ -87,7 +95,10 @@ export default async function handler(req, res) {
     });
     
     const tokenData = await tokenRes.json();
-    if (!tokenRes.ok) return sendCallbackPage(res, { success: false });
+    if (!tokenRes.ok) {
+        console.error("[SPOTIFY CALLBACK] Token exchange failed:", tokenData);
+        return sendCallbackPage(res, { success: false });
+    }
 
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     if (!userRes.ok) return sendCallbackPage(res, { success: false });
@@ -95,9 +106,9 @@ export default async function handler(req, res) {
     const userData = await userRes.json();
 
     if (userData.product !== 'premium') {
-      await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 300); 
-      sendCallbackPage(res, { success: false, errorType: 'premium_required' });
-      return;
+      console.log(`[SPOTIFY CALLBACK] Account NON premium per sessione: ${sessionId}`);
+      await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 600); 
+      return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
     await redis.set(`spotify:${sessionId}`, JSON.stringify({
@@ -107,6 +118,7 @@ export default async function handler(req, res) {
     }), 'EX', 3600); 
     sendCallbackPage(res, { success: true });
   } catch (e) {
+    console.error(`[SPOTIFY CALLBACK] Eccezione: ${e.message}`);
     sendCallbackPage(res, { success: false });
   }
 }
