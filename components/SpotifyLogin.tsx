@@ -24,40 +24,51 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
         <div className={`flex items-center justify-center mb-5 relative`}>
             <motion.svg 
                 width="52" height="52" viewBox="0 0 52 52" fill="none" 
-                stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }} // Apple-like spring/ease
             >
-                {/* Optional subtle circle background for better definition */}
+                {/* Solid filled circle background */}
                 <motion.circle 
-                    cx="26" cy="26" r="23" 
-                    strokeOpacity={0.2}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.3 }}
+                    cx="26" cy="26" r="26" 
+                    fill={color}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
                 />
 
                 {isSuccess ? (
                     <motion.polyline 
                         points="14 27 22 35 38 17"
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: 1 }}
-                        transition={{ duration: 0.5, delay: 0.1, ease: "easeInOut" }}
+                        stroke="#FFFFFF"
+                        strokeWidth="4" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                        initial={{ pathLength: 0, opacity: 0 }}
+                        animate={{ pathLength: 1, opacity: 1 }}
+                        transition={{ duration: 0.3, delay: 0.2, ease: "easeInOut" }}
                     />
                 ) : (
                     <>
                         <motion.path 
-                            d="M16 16L36 36"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={{ duration: 0.3, delay: 0.1, ease: "easeInOut" }}
+                            d="M17 17L35 35"
+                            stroke="#FFFFFF"
+                            strokeWidth="4"
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                            initial={{ pathLength: 0, opacity: 0 }}
+                            animate={{ pathLength: 1, opacity: 1 }}
+                            transition={{ duration: 0.2, delay: 0.2, ease: "easeInOut" }}
                         />
                         <motion.path 
-                            d="M36 16L16 36"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={{ duration: 0.3, delay: 0.25, ease: "easeInOut" }}
+                            d="M35 17L17 35"
+                            stroke="#FFFFFF"
+                            strokeWidth="4"
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                            initial={{ pathLength: 0, opacity: 0 }}
+                            animate={{ pathLength: 1, opacity: 1 }}
+                            transition={{ duration: 0.2, delay: 0.3, ease: "easeInOut" }}
                         />
                     </>
                 )}
