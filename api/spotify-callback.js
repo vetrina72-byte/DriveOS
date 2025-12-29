@@ -186,9 +186,32 @@ export default async function handler(req, res) {
 
   if (error || !code || !sessionId) {
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
-    // Generic technical error
     return sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
+
+  // --- CHECK PREVIOUS STATE START ---
+  // If the user refreshes the page, the 'code' will be invalid (already used).
+  // We check Redis to see if we already processed this session successfully or with a specific error.
+  try {
+    const cachedStateRaw = await redis.get(`spotify:${sessionId}`);
+    if (cachedStateRaw) {
+      const cachedState = JSON.parse(cachedStateRaw);
+      
+      // If we previously determined this user is Non-Premium, return that error again immediately.
+      if (cachedState.error === 'premium_required') {
+        return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+      }
+      
+      // If we previously authenticated successfully, show success again.
+      if (cachedState.access_token) {
+        return sendCallbackPage(res, { success: true });
+      }
+    }
+  } catch (cacheErr) {
+    console.error(`[SPOTIFY CALLBACK] Error reading cache for retry check: ${cacheErr}`);
+    // Proceed to try exchange if cache read fails
+  }
+  // --- CHECK PREVIOUS STATE END ---
 
   const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
   const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
@@ -202,6 +225,9 @@ export default async function handler(req, res) {
     
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) {
+        // Only mark as technical error if we haven't already marked it as something else in Redis
+        // But since we checked Redis above, this is a genuine new failure (e.g. timeout or bad code).
+        console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
         if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'token_exchange_failed' }), 'EX', 120);
         return sendCallbackPage(res, { success: false, errorType: 'technical' });
     }
@@ -216,7 +242,7 @@ export default async function handler(req, res) {
 
     // Robust check for premium product
     if (!userData.product || userData.product !== 'premium') {
-      console.log(`[SPOTIFY CALLBACK] Account NON premium per sessione: ${sessionId} (Product: ${userData.product})`);
+      console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 600); 
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
