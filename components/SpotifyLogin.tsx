@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { generateUUID } from '../lib/sessionId';
 import { FiRefreshCw } from 'react-icons/fi';
 
-const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=1`;
+const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=4`;
 
 interface SpotifyLoginProps {
     isNight?: boolean;
@@ -156,9 +156,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             className={`flex items-center gap-10 p-10 rounded-[32px] ${theme.card}`}
           >
-            {/* QR Container - Clean and simple */}
-            <div className="p-1 bg-white rounded-2xl shadow-sm overflow-hidden flex-shrink-0">
-              <img src={qrCodeUrl} alt="QR" className="w-48 h-48 mix-blend-normal block" />
+            {/* QR Container - Visible border added, padding reduced to bring border closer */}
+            <div className="p-2 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
+              <img src={qrCodeUrl} alt="QR" className="w-48 h-48 mix-blend-multiply block" />
             </div>
             
             {/* Text Content */}
