@@ -14,8 +14,8 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
     // Specific messaging for non-premium accounts - NO BUTTONS requested
-    title = 'Errore';
-    displayMessage = 'Errore: non puoi accedere perché non disponi di un account Premium.';
+    title = 'Accesso Negato';
+    displayMessage = 'Errore: L\'accesso non può essere eseguito perché non disponi di un account Premium.';
     showRetry = false; 
   } else if (errorType === 'access_denied') {
     title = 'Annullato';
@@ -52,26 +52,17 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     <title>${title}</title>
     <style>
       :root {
-        --bg-color: #ffffff;
-        --text-primary: #000000;
-        --text-secondary: #86868b;
-        --accent-success: #34C759;
-        --accent-error: #FF3B30;
-        --btn-bg: #000000;
-        --btn-text: #ffffff;
+        --bg-color: #000000;
+        --text-primary: #ffffff;
+        --text-secondary: #a1a1aa;
+        --accent-success: #32D74B;
+        --accent-error: #FF453A;
+        --btn-bg: #ffffff;
+        --btn-text: #000000;
       }
 
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg-color: #000000;
-          --text-primary: #ffffff;
-          --text-secondary: #8E8E93;
-          --accent-success: #32D74B;
-          --accent-error: #FF453A;
-          --btn-bg: #ffffff;
-          --btn-text: #000000;
-        }
-      }
+      /* Force Dark Mode look for consistency with app, or respect device preference if desired. 
+         Here keeping it dark/sleek as per "Tesla" aesthetic usually implied. */
       
       body { 
         background: var(--bg-color); 
@@ -89,17 +80,20 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       }
 
       .container {
-        max-width: 400px; /* Wider container */
+        max-width: 360px;
         width: 100%;
         opacity: 0;
         transform: scale(0.95);
         animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
 
       .icon-wrapper {
-        width: 96px; /* Enlarged Icon */
-        height: 96px;
-        margin: 0 auto 36px;
+        width: 80px;
+        height: 80px;
+        margin-bottom: 32px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -133,18 +127,18 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       .icon-svg.error { color: var(--accent-error); }
 
       h1 { 
-        font-size: 32px; /* Enlarged Title */
+        font-size: 24px;
         font-weight: 700; 
-        margin: 0 0 20px; 
+        margin: 0 0 16px; 
         letter-spacing: -0.01em;
       }
 
       p { 
         color: var(--text-secondary); 
-        font-size: 20px; /* Enlarged Text */
+        font-size: 17px;
         line-height: 1.5; 
         font-weight: 400; 
-        margin: 0 0 48px; 
+        margin: 0 0 40px; 
       }
 
       .retry-btn {
@@ -152,9 +146,9 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         background: var(--btn-bg);
         color: var(--btn-text);
         text-decoration: none;
-        font-size: 19px; /* Enlarged Button Text */
+        font-size: 17px;
         font-weight: 600;
-        padding: 16px 36px;
+        padding: 14px 32px;
         border-radius: 99px;
         transition: opacity 0.2s;
       }
@@ -220,11 +214,10 @@ export default async function handler(req, res) {
     
     const userData = await userRes.json();
 
-    if (userData.product !== 'premium') {
-      console.log(`[SPOTIFY CALLBACK] Account NON premium per sessione: ${sessionId}`);
-      // Notify the frontend via Redis so it shows the error on the main screen too
+    // Robust check for premium product
+    if (!userData.product || userData.product !== 'premium') {
+      console.log(`[SPOTIFY CALLBACK] Account NON premium per sessione: ${sessionId} (Product: ${userData.product})`);
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 600); 
-      // Show specific error page on phone
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
