@@ -8,20 +8,25 @@ const USER_URL = 'https://api.spotify.com/v1/me';
 const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   let title = success ? 'Collegato' : 'Non riuscito';
   let displayMessage = '';
+  let showRetry = false;
   
   if (success) {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
     title = 'Richiesto Premium';
-    displayMessage = 'L’integrazione richiede un account Spotify Premium attivo.';
+    displayMessage = 'L’accesso non è possibile perché l\'account non dispone di un abbonamento Spotify Premium attivo.';
   } else if (errorType === 'access_denied') {
-    title = 'Annullato';
-    displayMessage = 'La configurazione è stata interrotta.';
+    title = 'Accesso Negato';
+    displayMessage = 'Hai annullato la richiesta di accesso.';
+    showRetry = true;
   } else {
-    displayMessage = 'Si è verificato un problema tecnico. Riprova.';
+    // Technical error
+    title = 'Errore Tecnico';
+    displayMessage = 'Si è verificato un problema durante la connessione. Verifica la tua rete e riprova.';
+    showRetry = true;
   }
   
-  // Filled Icon Style
+  // Icon styling: Filled circle
   // Success Color: Light Mode #34C759, Dark Mode #32D74B
   // Error Color: Light Mode #FF3B30, Dark Mode #FF453A
   
@@ -50,6 +55,8 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         --text-secondary: #86868b;
         --accent-success: #34C759;
         --accent-error: #FF3B30;
+        --btn-bg: #000000;
+        --btn-text: #ffffff;
       }
 
       @media (prefers-color-scheme: dark) {
@@ -59,6 +66,8 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
           --text-secondary: #8E8E93;
           --accent-success: #32D74B;
           --accent-error: #FF453A;
+          --btn-bg: #ffffff;
+          --btn-text: #000000;
         }
       }
       
@@ -70,24 +79,25 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         flex-direction: column; 
         align-items: center; 
         justify-content: center; 
-        height: 100vh; 
+        min-height: 100vh; 
         margin: 0; 
-        padding: 40px;
+        padding: 40px; 
         text-align: center; 
         box-sizing: border-box;
       }
 
       .container {
-        max-width: 320px;
+        max-width: 360px; /* Slightly wider */
+        width: 100%;
         opacity: 0;
         transform: scale(0.95);
         animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
       .icon-wrapper {
-        width: 60px;
-        height: 60px;
-        margin: 0 auto 24px;
+        width: 80px; /* Larger icon */
+        height: 80px;
+        margin: 0 auto 32px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -100,14 +110,12 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         overflow: visible;
       }
 
-      /* Circle Background */
       .icon-bg {
         fill: currentColor;
         transform-origin: center;
         animation: scaleInElastic 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
-      /* Marks (Check/Cross) */
       .icon-mark {
         fill: none;
         stroke: #FFFFFF;
@@ -119,35 +127,40 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         animation: draw 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards 0.2s;
       }
 
-      /* Theme Colors */
       .icon-svg.success { color: var(--accent-success); }
       .icon-svg.error { color: var(--accent-error); }
 
       h1 { 
-        font-size: 24px; 
+        font-size: 28px; /* Larger Title */
         font-weight: 700; 
-        margin: 0 0 12px; 
+        margin: 0 0 16px; 
         letter-spacing: -0.01em;
       }
 
       p { 
         color: var(--text-secondary); 
-        font-size: 17px; 
-        line-height: 1.4; 
+        font-size: 18px; /* Larger Text */
+        line-height: 1.5; 
         font-weight: 400; 
-        margin: 0; 
+        margin: 0 0 40px; 
       }
 
-      @keyframes scaleIn { 
-        to { opacity: 1; transform: scale(1); } 
+      .retry-btn {
+        display: inline-block;
+        background: var(--btn-bg);
+        color: var(--btn-text);
+        text-decoration: none;
+        font-size: 17px;
+        font-weight: 600;
+        padding: 14px 32px;
+        border-radius: 99px;
+        transition: opacity 0.2s;
       }
-      @keyframes scaleInElastic {
-        0% { transform: scale(0); }
-        100% { transform: scale(1); }
-      }
-      @keyframes draw {
-        to { stroke-dashoffset: 0; }
-      }
+      .retry-btn:active { opacity: 0.7; }
+
+      @keyframes scaleIn { to { opacity: 1; transform: scale(1); } }
+      @keyframes scaleInElastic { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+      @keyframes draw { to { stroke-dashoffset: 0; } }
     </style>
     </head>
     <body>
@@ -157,8 +170,9 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         </div>
         <h1>${title}</h1>
         <p>${displayMessage}</p>
+        ${showRetry ? '<a href="#" onclick="window.close()" class="retry-btn">Chiudi e Riprova</a>' : ''}
       </div>
-      <script>setTimeout(() => { if(window.close) window.close(); }, 4000);</script>
+      ${success ? '<script>setTimeout(() => { if(window.close) window.close(); }, 4000);</script>' : ''}
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html');
@@ -176,7 +190,8 @@ export default async function handler(req, res) {
 
   if (error || !code || !sessionId) {
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
-    return sendCallbackPage(res, { success: false });
+    // Generic technical error
+    return sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
 
   const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
@@ -192,13 +207,13 @@ export default async function handler(req, res) {
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) {
         if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'token_exchange_failed' }), 'EX', 120);
-        return sendCallbackPage(res, { success: false });
+        return sendCallbackPage(res, { success: false, errorType: 'technical' });
     }
 
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     if (!userRes.ok) {
         if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'user_fetch_failed' }), 'EX', 120);
-        return sendCallbackPage(res, { success: false });
+        return sendCallbackPage(res, { success: false, errorType: 'technical' });
     }
     
     const userData = await userRes.json();
@@ -219,6 +234,6 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error(`[SPOTIFY CALLBACK] Eccezione: ${e.message}`);
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
-    sendCallbackPage(res, { success: false });
+    sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
 }

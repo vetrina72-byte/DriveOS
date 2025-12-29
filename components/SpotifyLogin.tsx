@@ -21,9 +21,9 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
     const color = isSuccess ? successColor : errorColor;
     
     return (
-        <div className={`flex items-center justify-center mb-5 relative`}>
+        <div className={`flex items-center justify-center mb-6 relative`}>
             <motion.svg 
-                width="52" height="52" viewBox="0 0 52 52" fill="none" 
+                width="64" height="64" viewBox="0 0 52 52" fill="none" 
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }} // Apple-like spring/ease
@@ -165,27 +165,27 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }} 
             exit={{ opacity: 0, scale: 0.96, y: -10 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className={`flex items-center gap-10 p-10 rounded-[32px] ${theme.card}`}
+            className={`flex items-center gap-12 p-12 rounded-[40px] ${theme.card}`}
           >
-            {/* QR Container - Visible border added, padding reduced to bring border closer */}
-            <div className="p-2 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
-              <img src={qrCodeUrl} alt="QR" className="w-48 h-48 mix-blend-multiply block" />
+            {/* QR Container - Larger size (w-56) and adjusted padding */}
+            <div className="p-3 bg-white rounded-3xl shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
+              <img src={qrCodeUrl} alt="QR" className="w-56 h-56 mix-blend-multiply block" />
             </div>
             
             {/* Text Content */}
-            <div className="max-w-xs flex flex-col justify-center gap-3">
+            <div className="max-w-xs flex flex-col justify-center gap-4">
               <div className="flex items-center gap-3">
-                <FaSpotify className="w-8 h-8 text-[#1DB954]" />
-                <h2 className={`text-2xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
+                <FaSpotify className="w-9 h-9 text-[#1DB954]" />
+                <h2 className={`text-3xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
               </div>
-              <p className={`text-lg leading-snug font-medium ${theme.subtitle}`}>
+              <p className={`text-xl leading-snug font-medium ${theme.subtitle}`}>
                 Inquadra il codice per collegare il tuo account <strong>Spotify Premium</strong>.
               </p>
             </div>
           </motion.div>
         )}
 
-        {/* Minimal Error Card */}
+        {/* Enlarged Error Card */}
         {uiState === 'PREMIUM_ERROR' && (
           <motion.div 
             key="error"
@@ -193,38 +193,37 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className={`flex flex-col items-center text-center p-6 rounded-[28px] max-w-[280px] w-full ${theme.card}`}
+            className={`flex flex-col items-center text-center p-8 rounded-[32px] max-w-[340px] w-full ${theme.card}`}
           >
             <FeedbackIcon type="error" isNight={isNight} />
-            <h2 className={`text-lg font-bold mb-1.5 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
-            <p className={`text-[13px] mb-5 leading-relaxed font-medium px-2 ${theme.subtitle}`}>
-              È necessario un abbonamento Spotify Premium attivo.
+            <h2 className={`text-xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
+            <p className={`text-[15px] mb-6 leading-relaxed font-medium px-1 ${theme.subtitle}`}>
+              È necessario un abbonamento Spotify Premium attivo per utilizzare l'integrazione.
             </p>
             <button 
               onClick={handleRetry}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm transition-transform active:scale-95 w-full ${theme.buttonPrimary}`}
+              className={`flex items-center justify-center gap-2 px-6 py-3.5 rounded-full font-semibold text-base transition-transform active:scale-95 w-full ${theme.buttonPrimary}`}
             >
-              <FiRefreshCw className="w-4 h-4" />
+              <FiRefreshCw className="w-5 h-5" />
               Riprova
             </button>
           </motion.div>
         )}
 
-        {/* Minimal Success/Loading Card */}
+        {/* Enlarged Success/Loading Card */}
         {uiState === 'LOADING' && (
           <motion.div 
             key="load" 
             initial={{ opacity: 0, scale: 0.95 }} 
             animate={{ opacity: 1, scale: 1 }} 
-            className={`flex flex-col items-center justify-center p-8 rounded-[32px] min-w-[240px] aspect-square ${theme.card}`}
+            className={`flex flex-col items-center justify-center p-10 rounded-[36px] min-w-[280px] aspect-square ${theme.card}`}
           >
-            {/* Show success tick briefly before/while loading */}
             <FeedbackIcon type="success" isNight={isNight} />
-            <div className="flex flex-col items-center gap-3 mt-1">
-                <h2 className={`text-lg font-bold tracking-tight ${theme.title}`}>Collegato</h2>
+            <div className="flex flex-col items-center gap-3 mt-2">
+                <h2 className={`text-xl font-bold tracking-tight ${theme.title}`}>Collegato</h2>
                 <div className="flex items-center gap-2">
-                    <div className={`w-4 h-4 border-2 rounded-full animate-spin ${theme.spinner}`} />
-                    <p className={`text-sm font-medium ${theme.subtitle}`}>Caricamento...</p>
+                    <div className={`w-5 h-5 border-2 rounded-full animate-spin ${theme.spinner}`} />
+                    <p className={`text-base font-medium ${theme.subtitle}`}>Caricamento...</p>
                 </div>
             </div>
           </motion.div>
