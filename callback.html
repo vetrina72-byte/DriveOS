@@ -57,7 +57,22 @@
   .success-icon {
     width: 80px;
     height: 80px;
+    display: block;
   }
+  
+  /* Animation for the static page */
+  .icon-bg {
+    animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    transform-origin: center;
+  }
+  .icon-mark {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: draw 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards 0.3s;
+  }
+  
+  @keyframes scaleIn { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
 </style>
 </head>
 <body>
@@ -66,9 +81,10 @@
   </div>
   
   <div class="container">
-    <!-- Success Icon (cutout style) -->
-    <svg class="success-icon" viewBox="0 0 48 48" fill="white" xmlns="http://www.w3.org/2000/svg" aria-label="Success checkmark">
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M24,0 C10.745,0 0,10.745 0,24 C0,37.255 10.745,48 24,48 C37.255,48 48,37.255 48,24 C48,10.745 37.255,0 24,0 Z M35.707,18.707 C36.098,18.317 36.098,17.683 35.707,17.293 C35.317,16.902 34.683,16.902 34.293,17.293 L23,28.586 L15.707,21.293 C15.317,20.902 14.683,20.902 14.293,21.293 C13.902,21.683 13.902,22.317 14.293,22.707 L22.293,30.707 C22.683,31.098 23.317,31.098 23.707,30.707 L35.707,18.707 Z"/>
+    <!-- Success Icon (Filled style) -->
+    <svg class="success-icon" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+      <circle class="icon-bg" cx="26" cy="26" r="26" fill="#32D74B" />
+      <polyline class="icon-mark" points="14 27 22 35 38 17" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
 
     <!-- Success Message -->

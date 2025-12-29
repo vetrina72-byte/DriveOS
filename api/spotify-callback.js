@@ -21,19 +21,19 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Si è verificato un problema tecnico. Riprova.';
   }
   
-  // Replicating the "FeedbackIcon" logic from the React component using pure SVG/CSS
+  // Filled Icon Style
   // Success Color: Light Mode #34C759, Dark Mode #32D74B
   // Error Color: Light Mode #FF3B30, Dark Mode #FF453A
   
   const iconSvg = success 
       ? `<svg class="icon-svg success" viewBox="0 0 52 52">
-           <circle class="checkmark-circle" cx="26" cy="26" r="23" fill="none"/>
-           <polyline class="checkmark-check" points="14 27 22 35 38 17" fill="none"/>
+           <circle class="icon-bg" cx="26" cy="26" r="26"/>
+           <polyline class="icon-mark" points="14 27 22 35 38 17"/>
          </svg>`
       : `<svg class="icon-svg error" viewBox="0 0 52 52">
-           <circle class="cross-circle" cx="26" cy="26" r="23" fill="none"/>
-           <path class="cross-line" d="M16 16L36 36" fill="none"/>
-           <path class="cross-line delay" d="M36 16L16 36" fill="none"/>
+           <circle class="icon-bg" cx="26" cy="26" r="26"/>
+           <path class="icon-mark" d="M17 17L35 35"/>
+           <path class="icon-mark" d="M35 17L17 35"/>
          </svg>`;
 
   const html = `
@@ -97,40 +97,31 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         width: 100%;
         height: 100%;
         display: block;
+        overflow: visible;
       }
 
-      /* Circle Background Ring */
-      .checkmark-circle, .cross-circle {
-        stroke-width: 3;
-        stroke-miterlimit: 10;
-        stroke: currentColor;
-        stroke-opacity: 0.2;
+      /* Circle Background */
+      .icon-bg {
+        fill: currentColor;
+        transform-origin: center;
+        animation: scaleInElastic 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
-      /* Animated Paths */
-      .checkmark-check, .cross-line {
-        stroke-dasharray: 100;
-        stroke-dashoffset: 100;
-        stroke-width: 3;
+      /* Marks (Check/Cross) */
+      .icon-mark {
+        fill: none;
+        stroke: #FFFFFF;
+        stroke-width: 4;
         stroke-linecap: round;
         stroke-linejoin: round;
-        stroke: currentColor;
-      }
-
-      /* Success Animation */
-      .icon-svg.success { color: var(--accent-success); }
-      .icon-svg.success .checkmark-check {
+        stroke-dasharray: 100;
+        stroke-dashoffset: 100;
         animation: draw 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards 0.2s;
       }
 
-      /* Error Animation */
+      /* Theme Colors */
+      .icon-svg.success { color: var(--accent-success); }
       .icon-svg.error { color: var(--accent-error); }
-      .icon-svg.error .cross-line {
-        animation: draw 0.4s cubic-bezier(0.65, 0, 0.45, 1) forwards 0.2s;
-      }
-      .icon-svg.error .cross-line.delay {
-        animation-delay: 0.35s;
-      }
 
       h1 { 
         font-size: 24px; 
@@ -149,6 +140,10 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
 
       @keyframes scaleIn { 
         to { opacity: 1; transform: scale(1); } 
+      }
+      @keyframes scaleInElastic {
+        0% { transform: scale(0); }
+        100% { transform: scale(1); }
       }
       @keyframes draw {
         to { stroke-dashoffset: 0; }
