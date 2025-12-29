@@ -9,28 +9,30 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   let title = success ? 'Collegato' : 'Non riuscito';
   let displayMessage = '';
   let showRetry = false;
+  let iconClass = success ? 'success' : 'error';
   
   if (success) {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
-    // Specific messaging for non-premium accounts - NO BUTTONS requested
+    // Requested specific message for non-premium accounts
     title = 'Accesso Negato';
     displayMessage = 'Errore: L\'accesso non può essere eseguito perché non disponi di un account Premium.';
-    showRetry = false; 
+    showRetry = false; // Explicitly no buttons
   } else if (errorType === 'access_denied') {
     title = 'Annullato';
     displayMessage = 'Hai annullato la richiesta di accesso.';
     showRetry = true;
+  } else if (errorType === 'session_expired') {
+    // Specific message for page refreshes / used codes
+    title = 'Sessione Scaduta';
+    displayMessage = 'Il codice di accesso è scaduto o è già stato utilizzato. Scansiona nuovamente il QR code sull\'auto.';
+    showRetry = false;
   } else {
     // Generic technical error
     title = 'Errore Tecnico';
     displayMessage = 'Si è verificato un problema durante la connessione. Verifica la tua rete e riprova.';
     showRetry = true;
   }
-  
-  // Icon styling: Filled circle
-  // Success Color: Light Mode #34C759, Dark Mode #32D74B
-  // Error Color: Light Mode #FF3B30, Dark Mode #FF453A
   
   const iconSvg = success 
       ? `<svg class="icon-svg success" viewBox="0 0 52 52">
@@ -60,9 +62,6 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         --btn-bg: #ffffff;
         --btn-text: #000000;
       }
-
-      /* Force Dark Mode look for consistency with app, or respect device preference if desired. 
-         Here keeping it dark/sleek as per "Tesla" aesthetic usually implied. */
       
       body { 
         background: var(--bg-color); 
@@ -189,29 +188,26 @@ export default async function handler(req, res) {
     return sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
 
-  // --- CHECK PREVIOUS STATE START ---
-  // If the user refreshes the page, the 'code' will be invalid (already used).
-  // We check Redis to see if we already processed this session successfully or with a specific error.
+  // --- CHECK PREVIOUS STATE ---
+  // If the user refreshes the page, check Redis first.
   try {
     const cachedStateRaw = await redis.get(`spotify:${sessionId}`);
     if (cachedStateRaw) {
       const cachedState = JSON.parse(cachedStateRaw);
       
-      // If we previously determined this user is Non-Premium, return that error again immediately.
+      // If previously rejected for non-premium, show that specific error again.
       if (cachedState.error === 'premium_required') {
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       }
       
-      // If we previously authenticated successfully, show success again.
+      // If previously successful, show success.
       if (cachedState.access_token) {
         return sendCallbackPage(res, { success: true });
       }
     }
   } catch (cacheErr) {
-    console.error(`[SPOTIFY CALLBACK] Error reading cache for retry check: ${cacheErr}`);
-    // Proceed to try exchange if cache read fails
+    console.error(`[SPOTIFY CALLBACK] Cache read error: ${cacheErr}`);
   }
-  // --- CHECK PREVIOUS STATE END ---
 
   const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
   const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
@@ -224,10 +220,16 @@ export default async function handler(req, res) {
     });
     
     const tokenData = await tokenRes.json();
+    
     if (!tokenRes.ok) {
-        // Only mark as technical error if we haven't already marked it as something else in Redis
-        // But since we checked Redis above, this is a genuine new failure (e.g. timeout or bad code).
         console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
+        // Handle "invalid_grant" (usually means code already used/refresh) differently
+        if (tokenData.error === 'invalid_grant') {
+             // We tried cache above and failed, so we don't know the state.
+             // Assume expired instead of generic technical error.
+             return sendCallbackPage(res, { success: false, errorType: 'session_expired' });
+        }
+
         if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'token_exchange_failed' }), 'EX', 120);
         return sendCallbackPage(res, { success: false, errorType: 'technical' });
     }
@@ -240,10 +242,11 @@ export default async function handler(req, res) {
     
     const userData = await userRes.json();
 
-    // Robust check for premium product
+    // Check for premium product
     if (!userData.product || userData.product !== 'premium') {
       console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
-      await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 600); 
+      // Cache this specific error state for 1 HOUR so refreshes show the correct message
+      await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600); 
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
@@ -255,7 +258,7 @@ export default async function handler(req, res) {
     sendCallbackPage(res, { success: true });
 
   } catch (e) {
-    console.error(`[SPOTIFY CALLBACK] Eccezione: ${e.message}`);
+    console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
     sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
