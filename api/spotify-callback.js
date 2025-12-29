@@ -13,15 +13,16 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   if (success) {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
-    title = 'Richiesto Premium';
-    displayMessage = 'Impossibile proseguire con l’accesso perché non disponi di un account Premium.';
-    showRetry = false; // Explicitly no retry button for premium error
-  } else if (errorType === 'access_denied') {
+    // Specific messaging for non-premium accounts
     title = 'Accesso Negato';
+    displayMessage = 'Errore: non puoi accedere perché non disponi di un account Premium.';
+    showRetry = false; // No buttons for this specific error
+  } else if (errorType === 'access_denied') {
+    title = 'Annullato';
     displayMessage = 'Hai annullato la richiesta di accesso.';
     showRetry = true;
   } else {
-    // Technical error
+    // Generic technical error
     title = 'Errore Tecnico';
     displayMessage = 'Si è verificato un problema durante la connessione. Verifica la tua rete e riprova.';
     showRetry = true;
