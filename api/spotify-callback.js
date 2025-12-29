@@ -13,10 +13,10 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   if (success) {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
-    // Specific messaging for non-premium accounts
-    title = 'Accesso Negato';
+    // Specific messaging for non-premium accounts - NO BUTTONS requested
+    title = 'Errore';
     displayMessage = 'Errore: non puoi accedere perché non disponi di un account Premium.';
-    showRetry = false; // No buttons for this specific error
+    showRetry = false; 
   } else if (errorType === 'access_denied') {
     title = 'Annullato';
     displayMessage = 'Hai annullato la richiesta di accesso.';
@@ -89,7 +89,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       }
 
       .container {
-        max-width: 360px; /* Slightly wider */
+        max-width: 400px; /* Wider container */
         width: 100%;
         opacity: 0;
         transform: scale(0.95);
@@ -97,9 +97,9 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       }
 
       .icon-wrapper {
-        width: 80px; /* Larger icon */
-        height: 80px;
-        margin: 0 auto 32px;
+        width: 96px; /* Enlarged Icon */
+        height: 96px;
+        margin: 0 auto 36px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -133,18 +133,18 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       .icon-svg.error { color: var(--accent-error); }
 
       h1 { 
-        font-size: 28px; /* Larger Title */
+        font-size: 32px; /* Enlarged Title */
         font-weight: 700; 
-        margin: 0 0 16px; 
+        margin: 0 0 20px; 
         letter-spacing: -0.01em;
       }
 
       p { 
         color: var(--text-secondary); 
-        font-size: 18px; /* Larger Text */
+        font-size: 20px; /* Enlarged Text */
         line-height: 1.5; 
         font-weight: 400; 
-        margin: 0 0 40px; 
+        margin: 0 0 48px; 
       }
 
       .retry-btn {
@@ -152,9 +152,9 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         background: var(--btn-bg);
         color: var(--btn-text);
         text-decoration: none;
-        font-size: 17px;
+        font-size: 19px; /* Enlarged Button Text */
         font-weight: 600;
-        padding: 14px 32px;
+        padding: 16px 36px;
         border-radius: 99px;
         transition: opacity 0.2s;
       }
@@ -222,7 +222,9 @@ export default async function handler(req, res) {
 
     if (userData.product !== 'premium') {
       console.log(`[SPOTIFY CALLBACK] Account NON premium per sessione: ${sessionId}`);
+      // Notify the frontend via Redis so it shows the error on the main screen too
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 600); 
+      // Show specific error page on phone
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
