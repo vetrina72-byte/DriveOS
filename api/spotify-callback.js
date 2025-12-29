@@ -12,12 +12,11 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   if (success) {
     displayMessage = 'Hai collegato con successo il tuo account Spotify. Puoi tornare all\'auto.';
   } else if (errorType === 'premium_required') {
-    displayMessage = 'Accesso negato. Per accedere è richiesto un account premium.';
+    displayMessage = 'Accesso negato. È necessario un account Premium per continuare.';
   } else {
-    displayMessage = 'Errore durante la configurazione. Riprova la scansione.';
+    displayMessage = 'Errore durante la configurazione. Riprova la scansione dell\'auto.';
   }
   
-  // Icona X rossa per errore, Spunta verde per successo
   const iconHtml = success 
       ? `<div class="icon success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>`
       : `<div class="icon error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>`;
@@ -31,7 +30,8 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     <title>${title}</title>
     <style>
       body { background: #000; color: #fff; font-family: -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-      .card { background: #111; padding: 40px; border-radius: 30px; width: 85%; max-width: 400px; border: 1px solid #222; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+      .card { background: #111; padding: 40px; border-radius: 30px; width: 85%; max-width: 400px; border: 1px solid #222; box-shadow: 0 20px 50px rgba(0,0,0,0.5); animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+      @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
       .icon { width: 100px; height: 100px; border-radius: 50%; margin: 0 auto 30px; display: flex; align-items: center; justify-content: center; }
       .success { background: rgba(29, 185, 84, 0.1); color: #1DB954; }
       .error { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
@@ -78,17 +78,18 @@ export default async function handler(req, res) {
 
     // Controllo Premium
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+    if (!userRes.ok) return sendCallbackPage(res, { success: false });
+    
     const userData = await userRes.json();
 
     if (userData.product !== 'premium') {
       console.log(`[SPOTIFY CALLBACK] Account NON premium rilevato per sessione: ${sessionId}`);
-      // Notifica l'errore a Redis in modo che l'Infotainment lo riceva
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 300); 
       sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       return;
     }
     
-    console.log(`[SPOTIFY CALLBACK] Successo per sessione: ${sessionId}`);
+    console.log(`[SPOTIFY CALLBACK] Successo Premium per sessione: ${sessionId}`);
     await redis.set(`spotify:${sessionId}`, JSON.stringify({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
