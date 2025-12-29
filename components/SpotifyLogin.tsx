@@ -12,40 +12,52 @@ interface SpotifyLoginProps {
     isNight?: boolean;
 }
 
-// Icon component: Clean, thin strokes, animated drawing effect
+// Icon component: High quality, fluid drawing animations
 const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: boolean }) => {
     const isSuccess = type === 'success';
-    const color = isSuccess ? '#22c55e' : '#ef4444';
+    // Apple-like colors: Green #32D74B (Dark mode) / #34C759 (Light mode), Red #FF453A (Dark) / #FF3B30 (Light)
+    const successColor = isNight ? '#32D74B' : '#34C759';
+    const errorColor = isNight ? '#FF453A' : '#FF3B30';
+    const color = isSuccess ? successColor : errorColor;
     
     return (
-        <div className={`flex items-center justify-center mb-6`}>
+        <div className={`flex items-center justify-center mb-5 relative`}>
             <motion.svg 
-                width="64" height="64" viewBox="0 0 24 24" fill="none" 
-                stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.4, ease: "backOut" }}
+                width="52" height="52" viewBox="0 0 52 52" fill="none" 
+                stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }} // Apple-like spring/ease
             >
+                {/* Optional subtle circle background for better definition */}
+                <motion.circle 
+                    cx="26" cy="26" r="23" 
+                    strokeOpacity={0.2}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                />
+
                 {isSuccess ? (
                     <motion.polyline 
-                        points="20 6 9 17 4 12"
+                        points="14 27 22 35 38 17"
                         initial={{ pathLength: 0 }}
                         animate={{ pathLength: 1 }}
-                        transition={{ duration: 0.4, delay: 0.1, ease: "easeInOut" }}
+                        transition={{ duration: 0.5, delay: 0.1, ease: "easeInOut" }}
                     />
                 ) : (
                     <>
-                        <motion.line 
-                            x1="18" y1="6" x2="6" y2="18"
+                        <motion.path 
+                            d="M16 16L36 36"
                             initial={{ pathLength: 0 }}
                             animate={{ pathLength: 1 }}
-                            transition={{ duration: 0.3, delay: 0.1, ease: "easeOut" }}
+                            transition={{ duration: 0.3, delay: 0.1, ease: "easeInOut" }}
                         />
-                        <motion.line 
-                            x1="6" y1="6" x2="18" y2="18"
+                        <motion.path 
+                            d="M36 16L16 36"
                             initial={{ pathLength: 0 }}
                             animate={{ pathLength: 1 }}
-                            transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
+                            transition={{ duration: 0.3, delay: 0.25, ease: "easeInOut" }}
                         />
                     </>
                 )}
@@ -82,11 +94,14 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         if (data.authenticated && data.access_token) {
           clearInterval(pollTimer.current!);
           setUiState('LOADING');
-          login({
-            access_token: data.access_token,
-            expires_in: 3600,
-            expires_at: data.expires_at
-          });
+          // Short delay to show success state before switching context
+          setTimeout(() => {
+              login({
+                access_token: data.access_token,
+                expires_in: 3600,
+                expires_at: data.expires_at
+              });
+          }, 1500);
         } else if (data.error) {
           console.log(`[SPOTIFY LOGIN] Ricevuto stato errore: ${data.error}. Stop polling.`);
           clearInterval(pollTimer.current!);
@@ -111,26 +126,21 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
 
   // --- REFINED THEME CONFIGURATION ---
   const theme = {
-    // Night: Rich Dark Gray (#1c1c1e) - Apple style dark mode card
-    // Day: Pure White (#ffffff) - Clean, opaque, with soft shadow
+    // Night: Deep, rich dark gray (#1C1C1E) matching iOS system backgrounds
+    // Day: Pure white with subtle shadow
     card: isNight 
-        ? 'bg-[#1c1c1e] border border-white/5 shadow-2xl' 
-        : 'bg-white border border-gray-100 shadow-[0_8px_40px_rgba(0,0,0,0.08)]', 
+        ? 'bg-[#1C1C1E] border border-white/5 shadow-2xl' 
+        : 'bg-white border border-black/5 shadow-[0_12px_40px_rgba(0,0,0,0.12)]', 
     
-    title: isNight ? 'text-white' : 'text-gray-900',
-    subtitle: isNight ? 'text-gray-400' : 'text-gray-500',
+    title: isNight ? 'text-white' : 'text-black',
+    subtitle: isNight ? 'text-[#AEAEB2]' : 'text-[#636366]', // Apple system gray colors
     
-    // QR Code Container Configuration
-    // In Day mode, we remove border and shadow to blend seamlessly with the white card
-    qrBg: 'bg-white', 
-    qrBorder: isNight ? 'border border-transparent' : 'border-none', 
-    qrShadow: isNight ? 'shadow-sm' : 'shadow-none',
-
-    button: isNight 
-        ? 'bg-white text-black hover:bg-gray-200' 
-        : 'bg-black text-white hover:bg-gray-800',
-        
-    spinner: isNight ? 'border-white' : 'border-black',
+    // Buttons
+    buttonPrimary: isNight 
+        ? 'bg-white text-black hover:bg-[#F2F2F7]' 
+        : 'bg-black text-white hover:bg-[#3A3A3C]',
+    
+    spinner: isNight ? 'border-[#AEAEB2] border-t-white' : 'border-[#C7C7CC] border-t-black',
   };
 
   return (
@@ -140,47 +150,48 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         {uiState === 'ATTESA' && (
           <motion.div 
             key="qr"
-            initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+            initial={{ opacity: 0, scale: 0.96, y: 10 }} 
             animate={{ opacity: 1, scale: 1, y: 0 }} 
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+            exit={{ opacity: 0, scale: 0.96, y: -10 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             className={`flex items-center gap-10 p-10 rounded-[32px] ${theme.card}`}
           >
-            {/* QR Container */}
-            <div className={`p-3 rounded-3xl ${theme.qrBg} ${theme.qrBorder} ${theme.qrShadow} flex-shrink-0`}>
-              <img src={qrCodeUrl} alt="QR" className="w-48 h-48 rounded-2xl mix-blend-multiply" />
+            {/* QR Container - Clean and simple */}
+            <div className="p-1 bg-white rounded-2xl shadow-sm overflow-hidden flex-shrink-0">
+              <img src={qrCodeUrl} alt="QR" className="w-48 h-48 mix-blend-normal block" />
             </div>
             
             {/* Text Content */}
-            <div className="max-w-xs flex flex-col justify-center gap-2">
-              <div className="flex items-center gap-3 mb-2">
+            <div className="max-w-xs flex flex-col justify-center gap-3">
+              <div className="flex items-center gap-3">
                 <FaSpotify className="w-8 h-8 text-[#1DB954]" />
-                <h2 className={`text-3xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
+                <h2 className={`text-2xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
               </div>
               <p className={`text-lg leading-snug font-medium ${theme.subtitle}`}>
-                Scansiona il codice per collegare il tuo account <strong>Spotify Premium</strong>.
+                Inquadra il codice per collegare il tuo account <strong>Spotify Premium</strong>.
               </p>
             </div>
           </motion.div>
         )}
 
+        {/* Minimal Error Card */}
         {uiState === 'PREMIUM_ERROR' && (
           <motion.div 
             key="error"
-            initial={{ opacity: 0, scale: 0.9, y: 10 }} 
-            animate={{ opacity: 1, scale: 1, y: 0 }}
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className={`flex flex-col items-center text-center p-8 rounded-[32px] max-w-[340px] w-full ${theme.card}`}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className={`flex flex-col items-center text-center p-6 rounded-[28px] max-w-[280px] w-full ${theme.card}`}
           >
             <FeedbackIcon type="error" isNight={isNight} />
-            <h2 className={`text-xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
-            <p className={`text-sm mb-6 leading-relaxed font-medium ${theme.subtitle}`}>
-              L'integrazione richiede un abbonamento Spotify Premium attivo per funzionare.
+            <h2 className={`text-lg font-bold mb-1.5 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
+            <p className={`text-[13px] mb-5 leading-relaxed font-medium px-2 ${theme.subtitle}`}>
+              È necessario un abbonamento Spotify Premium attivo.
             </p>
             <button 
               onClick={handleRetry}
-              className={`flex items-center justify-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all active:scale-95 shadow-md w-full ${theme.button}`}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm transition-transform active:scale-95 w-full ${theme.buttonPrimary}`}
             >
               <FiRefreshCw className="w-4 h-4" />
               Riprova
@@ -188,15 +199,23 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           </motion.div>
         )}
 
+        {/* Minimal Success/Loading Card */}
         {uiState === 'LOADING' && (
           <motion.div 
             key="load" 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            className="flex flex-col items-center gap-5"
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            className={`flex flex-col items-center justify-center p-8 rounded-[32px] min-w-[240px] aspect-square ${theme.card}`}
           >
-            <div className={`w-10 h-10 border-4 border-t-transparent rounded-full animate-spin ${theme.spinner}`} />
-            <p className={`text-base font-semibold ${theme.title}`}>Connessione in corso...</p>
+            {/* Show success tick briefly before/while loading */}
+            <FeedbackIcon type="success" isNight={isNight} />
+            <div className="flex flex-col items-center gap-3 mt-1">
+                <h2 className={`text-lg font-bold tracking-tight ${theme.title}`}>Collegato</h2>
+                <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 border-2 rounded-full animate-spin ${theme.spinner}`} />
+                    <p className={`text-sm font-medium ${theme.subtitle}`}>Caricamento...</p>
+                </div>
+            </div>
           </motion.div>
         )}
 

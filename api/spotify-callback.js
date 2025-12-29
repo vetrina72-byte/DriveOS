@@ -21,11 +21,20 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Si è verificato un problema tecnico. Riprova.';
   }
   
-  // SVG Icons with thin strokes and animated classes
-  // The 'icon-svg' class triggers the keyframe animation defined in the style block.
+  // Replicating the "FeedbackIcon" logic from the React component using pure SVG/CSS
+  // Success Color: Light Mode #34C759, Dark Mode #32D74B
+  // Error Color: Light Mode #FF3B30, Dark Mode #FF453A
+  
   const iconSvg = success 
-      ? `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-      : `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+      ? `<svg class="icon-svg success" viewBox="0 0 52 52">
+           <circle class="checkmark-circle" cx="26" cy="26" r="23" fill="none"/>
+           <polyline class="checkmark-check" points="14 27 22 35 38 17" fill="none"/>
+         </svg>`
+      : `<svg class="icon-svg error" viewBox="0 0 52 52">
+           <circle class="cross-circle" cx="26" cy="26" r="23" fill="none"/>
+           <path class="cross-line" d="M16 16L36 36" fill="none"/>
+           <path class="cross-line delay" d="M36 16L16 36" fill="none"/>
+         </svg>`;
 
   const html = `
     <!doctype html>
@@ -47,8 +56,8 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         :root {
           --bg-color: #000000;
           --text-primary: #ffffff;
-          --text-secondary: #86868b;
-          --accent-success: #30D158;
+          --text-secondary: #8E8E93;
+          --accent-success: #32D74B;
           --accent-error: #FF453A;
         }
       }
@@ -69,15 +78,15 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       }
 
       .container {
-        max-width: 340px;
-        animation: easeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        max-width: 320px;
         opacity: 0;
-        transform: translateY(10px);
+        transform: scale(0.95);
+        animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
       .icon-wrapper {
-        width: 64px;
-        height: 64px;
+        width: 60px;
+        height: 60px;
         margin: 0 auto 24px;
         display: flex;
         align-items: center;
@@ -87,21 +96,41 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
       .icon-svg {
         width: 100%;
         height: 100%;
+        display: block;
       }
-      
-      /* Animation for drawing the stroke */
-      .icon-svg polyline, .icon-svg line {
+
+      /* Circle Background Ring */
+      .checkmark-circle, .cross-circle {
+        stroke-width: 3;
+        stroke-miterlimit: 10;
+        stroke: currentColor;
+        stroke-opacity: 0.2;
+      }
+
+      /* Animated Paths */
+      .checkmark-check, .cross-line {
         stroke-dasharray: 100;
         stroke-dashoffset: 100;
-        animation: draw 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.3s;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke: currentColor;
       }
 
-      @keyframes draw {
-        to { stroke-dashoffset: 0; }
+      /* Success Animation */
+      .icon-svg.success { color: var(--accent-success); }
+      .icon-svg.success .checkmark-check {
+        animation: draw 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards 0.2s;
       }
 
-      .success-color { color: var(--accent-success); }
-      .error-color { color: var(--accent-error); }
+      /* Error Animation */
+      .icon-svg.error { color: var(--accent-error); }
+      .icon-svg.error .cross-line {
+        animation: draw 0.4s cubic-bezier(0.65, 0, 0.45, 1) forwards 0.2s;
+      }
+      .icon-svg.error .cross-line.delay {
+        animation-delay: 0.35s;
+      }
 
       h1 { 
         font-size: 24px; 
@@ -118,14 +147,17 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         margin: 0; 
       }
 
-      @keyframes easeUp { 
-        to { opacity: 1; transform: translateY(0); } 
+      @keyframes scaleIn { 
+        to { opacity: 1; transform: scale(1); } 
+      }
+      @keyframes draw {
+        to { stroke-dashoffset: 0; }
       }
     </style>
     </head>
     <body>
       <div class="container">
-        <div class="icon-wrapper ${success ? 'success-color' : 'error-color'}">
+        <div class="icon-wrapper">
           ${iconSvg}
         </div>
         <h1>${title}</h1>
