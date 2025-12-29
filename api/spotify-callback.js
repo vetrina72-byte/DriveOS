@@ -14,7 +14,8 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
     title = 'Richiesto Premium';
-    displayMessage = 'L’accesso non è possibile perché l\'account non dispone di un abbonamento Spotify Premium attivo.';
+    displayMessage = 'Impossibile proseguire con l’accesso perché non disponi di un account Premium.';
+    showRetry = false; // Explicitly no retry button for premium error
   } else if (errorType === 'access_denied') {
     title = 'Accesso Negato';
     displayMessage = 'Hai annullato la richiesta di accesso.';
