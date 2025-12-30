@@ -16,7 +16,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   } else if (errorType === 'premium_required') {
     // Requested specific message for non-premium accounts
     title = 'Errore';
-    displayMessage = 'Non è possibile accedere perché non dispone di un account Premium.';
+    displayMessage = 'Non è possibile accedere perché non dispone di un account premium.';
     showRetry = false; // Explicitly no buttons
   } else if (errorType === 'access_denied') {
     title = 'Annullato';
