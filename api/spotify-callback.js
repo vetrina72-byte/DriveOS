@@ -6,30 +6,27 @@ const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_URL = 'https://api.spotify.com/v1/me';
 
 const sendCallbackPage = (res, { success = true, errorType = '' }) => {
-  let title = success ? 'Collegato' : 'Non riuscito';
+  let title = success ? 'Collegato' : 'Errore'; // Changed default title for error
   let displayMessage = '';
-  let showRetry = false;
+  // Removed showRetry logic completely as requested ("Nessun pulsante...").
   
   if (success) {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
-    // MESSAGGIO SPECIFICO E FISSO PER GLI ACCOUNT NON PREMIUM
+    // Requested specific message for non-premium (and mapped errors)
     title = 'Errore';
     displayMessage = 'Non è possibile accedere perché non dispone di un account Premium.';
-    showRetry = false; // NESSUN PULSANTE, NESSUNA AZIONE
   } else if (errorType === 'access_denied') {
     title = 'Annullato';
     displayMessage = 'Hai annullato la richiesta di accesso.';
-    showRetry = true;
   } else if (errorType === 'session_expired') {
     title = 'Sessione Scaduta';
     displayMessage = 'Il codice di accesso è scaduto o è già stato utilizzato. Scansiona nuovamente il QR code sull\'auto.';
-    showRetry = false;
   } else {
-    // Generic technical error
-    title = 'Errore Tecnico';
-    displayMessage = 'Si è verificato un problema durante la connessione. Verifica la tua rete e riprova.';
-    showRetry = true;
+    // Fallback for unknown errors - adhering to strict "No Technical Error" request
+    // We treat generic failures as access denied/premium required to avoid confusion
+    title = 'Errore';
+    displayMessage = 'Non è possibile accedere. Assicurati di disporre di un account Premium.';
   }
   
   const iconSvg = success 
@@ -43,6 +40,7 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
            <path class="icon-mark" d="M35 17L17 35"/>
          </svg>`;
 
+  // Removed retry button HTML block entirely
   const html = `
     <!doctype html>
     <html lang="it">
@@ -57,8 +55,6 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         --text-secondary: #a1a1aa;
         --accent-success: #32D74B;
         --accent-error: #FF453A;
-        --btn-bg: #ffffff;
-        --btn-text: #000000;
       }
       
       body { 
@@ -138,19 +134,6 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         margin: 0 0 40px; 
       }
 
-      .retry-btn {
-        display: inline-block;
-        background: var(--btn-bg);
-        color: var(--btn-text);
-        text-decoration: none;
-        font-size: 17px;
-        font-weight: 600;
-        padding: 14px 32px;
-        border-radius: 99px;
-        transition: opacity 0.2s;
-      }
-      .retry-btn:active { opacity: 0.7; }
-
       @keyframes scaleIn { to { opacity: 1; transform: scale(1); } }
       @keyframes scaleInElastic { 0% { transform: scale(0); } 100% { transform: scale(1); } }
       @keyframes draw { to { stroke-dashoffset: 0; } }
@@ -163,7 +146,6 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
         </div>
         <h1>${title}</h1>
         <p>${displayMessage}</p>
-        ${showRetry ? '<a href="#" onclick="window.close()" class="retry-btn">Chiudi e Riprova</a>' : ''}
       </div>
       ${success ? '<script>setTimeout(() => { if(window.close) window.close(); }, 4000);</script>' : ''}
     </body>
@@ -187,20 +169,18 @@ export default async function handler(req, res) {
   }
 
   // --- CONTROLLO STATO PRECEDENTE ---
-  // Recuperiamo lo stato dalla cache. Questo è cruciale per i tentativi successivi.
   let cachedState = null;
   try {
     const cachedStateRaw = await redis.get(`spotify:${sessionId}`);
     if (cachedStateRaw) {
       cachedState = JSON.parse(cachedStateRaw);
       
-      // Se avevamo già determinato che serve Premium, restituiamo SEMPRE quell'errore,
-      // ignorando qualsiasi altro stato (es. codice scaduto).
+      // Se avevamo già determinato che serve Premium (o user_fetch_failed mappato a premium),
+      // restituiamo SEMPRE quell'errore.
       if (cachedState.error === 'premium_required') {
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       }
       
-      // Se l'utente era già loggato con successo, mostriamo successo.
       if (cachedState.access_token) {
         return sendCallbackPage(res, { success: true });
       }
@@ -224,8 +204,6 @@ export default async function handler(req, res) {
     if (!tokenRes.ok) {
         console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
         
-        // Se il token fallisce (es. codice già usato), controlliamo di nuovo se avevamo già
-        // marcato la sessione come 'premium_required'.
         if (cachedState && cachedState.error === 'premium_required') {
              return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
         }
@@ -239,9 +217,13 @@ export default async function handler(req, res) {
     }
 
     const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+    
+    // CRITICAL FIX: Treat user fetch failure as "Premium Required" / Access Denied
     if (!userRes.ok) {
-        if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'user_fetch_failed' }), 'EX', 120);
-        return sendCallbackPage(res, { success: false, errorType: 'technical' });
+        console.error(`[SPOTIFY CALLBACK] User Fetch Failed for session: ${sessionId}. Mapping to Premium Required.`);
+        // Map user_fetch_failed to premium_required for UX consistency
+        await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600);
+        return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
     
     const userData = await userRes.json();
@@ -249,8 +231,6 @@ export default async function handler(req, res) {
     // --- CONTROLLO PRODOTTO PREMIUM ---
     if (!userData.product || userData.product !== 'premium') {
       console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
-      // Memorizziamo questo stato per 1 ORA in modo che i tentativi successivi (anche con codice scaduto)
-      // restituiscano sempre questo errore specifico.
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600); 
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
@@ -264,11 +244,19 @@ export default async function handler(req, res) {
 
   } catch (e) {
     console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
-    // Anche in caso di eccezione, se sapevamo già che era non-premium, mostriamo quello.
+    
+    // If we knew it was premium required, show that.
     if (cachedState && cachedState.error === 'premium_required') {
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
+    
+    // If explicit exception, default to premium required message if we want to avoid "Technical Error" at all costs?
+    // User said: "Non deve comparire: nessun Errore tecnico".
+    // We map generic exceptions to 'premium_required' style message in the catch block to be safe.
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
-    sendCallbackPage(res, { success: false, errorType: 'technical' });
+    
+    // Using 'premium_required' error type even for generic exceptions to satisfy "Always show... Access Denied"
+    // OR allow the fallback 'technical' in sendCallbackPage which we renamed to generic Error without retry.
+    return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
   }
 }
