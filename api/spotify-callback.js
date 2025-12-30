@@ -9,21 +9,19 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
   let title = success ? 'Collegato' : 'Non riuscito';
   let displayMessage = '';
   let showRetry = false;
-  let iconClass = success ? 'success' : 'error';
   
   if (success) {
     displayMessage = 'Il tuo account Spotify è stato collegato correttamente.';
   } else if (errorType === 'premium_required') {
-    // Requested specific message for non-premium accounts
+    // MESSAGGIO SPECIFICO E FISSO PER GLI ACCOUNT NON PREMIUM
     title = 'Errore';
     displayMessage = 'Non è possibile accedere perché non dispone di un account Premium.';
-    showRetry = false; // Explicitly no buttons
+    showRetry = false; // NESSUN PULSANTE, NESSUNA AZIONE
   } else if (errorType === 'access_denied') {
     title = 'Annullato';
     displayMessage = 'Hai annullato la richiesta di accesso.';
     showRetry = true;
   } else if (errorType === 'session_expired') {
-    // Specific message for page refreshes / used codes
     title = 'Sessione Scaduta';
     displayMessage = 'Il codice di accesso è scaduto o è già stato utilizzato. Scansiona nuovamente il QR code sull\'auto.';
     showRetry = false;
@@ -188,19 +186,21 @@ export default async function handler(req, res) {
     return sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
 
-  // --- CHECK PREVIOUS STATE ---
-  // If the user refreshes the page, check Redis first.
+  // --- CONTROLLO STATO PRECEDENTE ---
+  // Recuperiamo lo stato dalla cache. Questo è cruciale per i tentativi successivi.
+  let cachedState = null;
   try {
     const cachedStateRaw = await redis.get(`spotify:${sessionId}`);
     if (cachedStateRaw) {
-      const cachedState = JSON.parse(cachedStateRaw);
+      cachedState = JSON.parse(cachedStateRaw);
       
-      // If previously rejected for non-premium, show that specific error again.
+      // Se avevamo già determinato che serve Premium, restituiamo SEMPRE quell'errore,
+      // ignorando qualsiasi altro stato (es. codice scaduto).
       if (cachedState.error === 'premium_required') {
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       }
       
-      // If previously successful, show success.
+      // Se l'utente era già loggato con successo, mostriamo successo.
       if (cachedState.access_token) {
         return sendCallbackPage(res, { success: true });
       }
@@ -223,10 +223,14 @@ export default async function handler(req, res) {
     
     if (!tokenRes.ok) {
         console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
-        // Handle "invalid_grant" (usually means code already used/refresh) differently
+        
+        // Se il token fallisce (es. codice già usato), controlliamo di nuovo se avevamo già
+        // marcato la sessione come 'premium_required'.
+        if (cachedState && cachedState.error === 'premium_required') {
+             return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+        }
+
         if (tokenData.error === 'invalid_grant') {
-             // We tried cache above and failed, so we don't know the state.
-             // Assume expired instead of generic technical error.
              return sendCallbackPage(res, { success: false, errorType: 'session_expired' });
         }
 
@@ -242,10 +246,11 @@ export default async function handler(req, res) {
     
     const userData = await userRes.json();
 
-    // Check for premium product
+    // --- CONTROLLO PRODOTTO PREMIUM ---
     if (!userData.product || userData.product !== 'premium') {
       console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
-      // Cache this specific error state for 1 HOUR so refreshes show the correct message
+      // Memorizziamo questo stato per 1 ORA in modo che i tentativi successivi (anche con codice scaduto)
+      // restituiscano sempre questo errore specifico.
       await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600); 
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
@@ -259,6 +264,10 @@ export default async function handler(req, res) {
 
   } catch (e) {
     console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
+    // Anche in caso di eccezione, se sapevamo già che era non-premium, mostriamo quello.
+    if (cachedState && cachedState.error === 'premium_required') {
+        return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+    }
     if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
     sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
