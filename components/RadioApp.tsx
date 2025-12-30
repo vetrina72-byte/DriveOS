@@ -500,7 +500,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
             >
                 {/* --- DRAG HANDLE --- */}
                 <div
-                    className="absolute top-0 bottom-0 -left-10 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group"
+                    className={`absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`}
                     onPointerDown={handlePointerDown}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
@@ -508,7 +508,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
                     aria-label="Drag to close"
                 >
                     <div 
-                        className={`w-1 h-32 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
+                        className={`w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
                     />
                 </div>
                 {/* ------------------- */}

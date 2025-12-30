@@ -64,17 +64,31 @@ const SpotifyPlayer = ({
         partyPlaylists, topTracks, artistRadioTracks, trackRecommendations, savedAlbums, madeForYou
     } = useAuth();
     
-    // --- PHYSICS ENGINE REFS ---
+    // --- STATE & REFS ---
     const panelRef = useRef<HTMLDivElement>(null);
     
+    // We need a local state to track if we are in "Vertical Mode" (Layered) or "Side Mode".
+    // Crucially, we only update this when isOpen is true. 
+    // If isOpen becomes false (closing), we keep the *last* known mode so the exit animation 
+    // happens in the correct direction (Down vs Right), ignoring the parent resetting props.
+    const [renderLayered, setRenderLayered] = useState(isMapsLayered);
+    const isVerticalRef = useRef(isMapsLayered);
+
+    useEffect(() => {
+        if (isOpen) {
+            setRenderLayered(!!isMapsLayered);
+            isVerticalRef.current = !!isMapsLayered;
+        }
+    }, [isMapsLayered, isOpen]);
+
     // Single source of truth for the animation physics
     const physics = useRef({
-        currentX: 100,      // Current translateX percentage (0 = open, 100 = closed)
-        targetX: 100,       // Target translateX percentage
+        currentPercent: 100, // 0 = open, 100 = closed
+        targetPercent: 100,
         isDragging: false,
-        dragStartX: 0,      // Screen pixel X where drag started
-        dragStartCurrentX: 0, // currentX value at the moment drag started
-        panelWidth: 0,      // Cached panel width in pixels
+        dragStart: 0,        // Pixel value (X or Y depending on mode)
+        dragStartPercent: 0, // Percent value at start of drag
+        panelDimension: 0,   // Width or Height in pixels
         animationId: 0
     });
 
@@ -83,46 +97,42 @@ const SpotifyPlayer = ({
 
     // Constants
     const ANIMATION_SPEED = 0.18; // Lerp factor
-    const CLOSE_THRESHOLD_PERCENT = 25; // Drag past 25% to close
+    const CLOSE_THRESHOLD_PERCENT = 20; // Drag past 20% to close
 
     // --- MAIN LOOP ---
     useEffect(() => {
         const update = () => {
             const state = physics.current;
             const panel = panelRef.current;
+            const isVertical = isVerticalRef.current; // Read from ref for atomic updates in loop
 
             // 1. Update Physics
             if (!state.isDragging) {
                 // Smoothly interpolate towards target
-                const diff = state.targetX - state.currentX;
+                const diff = state.targetPercent - state.currentPercent;
                 if (Math.abs(diff) > 0.01) {
-                    state.currentX += diff * ANIMATION_SPEED;
+                    state.currentPercent += diff * ANIMATION_SPEED;
                 } else {
-                    state.currentX = state.targetX;
+                    state.currentPercent = state.targetPercent;
                 }
             }
-            // If dragging, currentX is updated directly in pointerMove
 
             // 2. Render
             if (panel) {
-                const isVertical = isMapsLayered;
-                // Clamp visual output to avoid floating point jitter at 0 or 100
-                // but only strictly clamp if not dragging to allow elastic feeling (optional, here we strict clamp)
-                let visualX = state.currentX;
+                // Clamp visual output
+                let visualPercent = state.currentPercent;
                 if (!state.isDragging) {
-                    if (visualX < 0.01) visualX = 0;
-                    if (visualX > 99.9) visualX = 100;
+                    if (visualPercent < 0.01) visualPercent = 0;
+                    if (visualPercent > 99.9) visualPercent = 100;
                 }
 
+                // If Layered -> Vertical Translation (Y) -> Close Downwards
+                // If Normal -> Horizontal Translation (X) -> Close Rightwards
                 if (isVertical) {
-                    panel.style.transform = `translateY(${visualX}%)`;
+                    panel.style.transform = `translateY(${visualPercent}%)`;
                 } else {
-                    panel.style.transform = `translateX(${visualX}%)`;
+                    panel.style.transform = `translateX(${visualPercent}%)`;
                 }
-                
-                // Opacity fade optimization: slightly fade out when closing
-                // opacity = 1 when x=0, opacity=0.5 when x=100
-                // panel.style.opacity = `${1 - (visualX / 200)}`; 
             }
 
             state.animationId = requestAnimationFrame(update);
@@ -130,35 +140,31 @@ const SpotifyPlayer = ({
 
         physics.current.animationId = requestAnimationFrame(update);
         return () => cancelAnimationFrame(physics.current.animationId);
-    }, [isMapsLayered]);
+    }, []); 
 
     // --- SYNC REACT PROP TO PHYSICS TARGET ---
     useEffect(() => {
         const state = physics.current;
         
-        // Only update target if not dragging (drag rules all)
+        // Only update target if not dragging
         if (!state.isDragging) {
             if (isOpen) {
-                state.targetX = 0;
+                state.targetPercent = 0; // Slide IN (0%)
                 const timer = setTimeout(() => triggerHomeContentFetch(), 400);
                 return () => clearTimeout(timer);
             } else {
-                state.targetX = 100;
+                state.targetPercent = 100; // Slide OUT (100%)
                 const timer = setTimeout(() => {
                     setView({ type: 'home' });
                     setViewHistory([]);
                 }, 500);
                 return () => clearTimeout(timer);
             }
-        } else {
-            // Edge case: Prop changed WHILE dragging.
-            // We ignore it for now, the drag release logic will decide the final state.
         }
     }, [isOpen, triggerHomeContentFetch]);
 
     // --- INTERACTION HANDLERS ---
     const handlePointerDown = (e: React.PointerEvent) => {
-        // Allow interaction even if currently animating (catch mid-flight)
         if (!panelRef.current) return;
         
         e.stopPropagation();
@@ -166,9 +172,19 @@ const SpotifyPlayer = ({
         
         const state = physics.current;
         state.isDragging = true;
-        state.dragStartX = e.clientX;
-        state.dragStartCurrentX = state.currentX; // Capture exact current position
-        state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+        
+        // Use the latched renderLayered state to decide axis interaction
+        if (renderLayered) {
+            // Vertical Dragging (Top Handle)
+            state.dragStart = e.clientY;
+            state.panelDimension = panelRef.current.offsetHeight || window.innerHeight;
+        } else {
+            // Horizontal Dragging (Left Handle)
+            state.dragStart = e.clientX;
+            state.panelDimension = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+        }
+        
+        state.dragStartPercent = state.currentPercent; 
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
@@ -176,20 +192,17 @@ const SpotifyPlayer = ({
         if (!state.isDragging) return;
         e.stopPropagation();
 
-        const deltaPx = e.clientX - state.dragStartX;
-        const deltaPercent = (deltaPx / state.panelWidth) * 100;
+        const currentPos = renderLayered ? e.clientY : e.clientX;
+        const deltaPx = currentPos - state.dragStart;
+        const deltaPercent = (deltaPx / state.panelDimension) * 100;
         
-        // Calculate raw new position
-        let newPercent = state.dragStartCurrentX + deltaPercent;
+        let newPercent = state.dragStartPercent + deltaPercent;
         
-        // Constraint: Cannot go below 0 (Widening/Left)
+        // Constraint: Cannot go below 0 (Fully Open state)
+        // Closing means going towards 100% (Positive)
         if (newPercent < 0) newPercent = 0;
         
-        // Constraint: No upper limit technically needed, but visual clamping at 100 is fine
-        // Letting it go >100 adds rubber banding which might feel weird for a closing drawer
-        // Let's allow it slightly for feedback but mostly it implies closing.
-        
-        state.currentX = newPercent;
+        state.currentPercent = newPercent;
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
@@ -200,18 +213,13 @@ const SpotifyPlayer = ({
         state.isDragging = false;
 
         // Decision Logic
-        // If we are significantly past 25%, close it.
-        // Also consider velocity? Simple threshold is usually more robust for UI.
-        
-        if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
+        if (state.currentPercent > CLOSE_THRESHOLD_PERCENT) {
             // Close
-            state.targetX = 100;
-            if (isOpen) onClose(); // Tell React
+            state.targetPercent = 100;
+            if (isOpen) onClose(); 
         } else {
             // Re-open (Snap back)
-            state.targetX = 0;
-            // No need to call onOpen since isOpen is presumably true, 
-            // but if it wasn't, the useEffect would have handled it.
+            state.targetPercent = 0;
         }
     };
 
@@ -275,8 +283,21 @@ const SpotifyPlayer = ({
     };
 
     // Styling
-    const backgroundColor = isNight ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    const backgroundColor = isNight ? '#000000' : '#f7f7f7';
     const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
+
+    // --- CONDITIONAL HANDLE STYLES & POSITIONING ---
+    // Rule: Handle must always be OUTSIDE the box.
+    // Rule: If renderLayered (Spotify over Maps) -> Handle on TOP, Horizontal Pill.
+    // Rule: If !renderLayered (Spotify alone) -> Handle on LEFT, Vertical Pill.
+    
+    const handleContainerClass = renderLayered
+        ? `absolute -top-12 left-0 right-0 h-12 flex items-end justify-center pb-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
+        : `absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
+
+    const handlePillClass = renderLayered
+        ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-110 ${handleColorClass}` // Horizontal Pill
+        : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`; // Vertical Pill
 
     return (
         <div 
@@ -294,22 +315,19 @@ const SpotifyPlayer = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative backdrop-blur-lg`}
+              className={`w-full h-full flex flex-col relative`}
               style={{ backgroundColor }}
             >
-                {/* --- DRAG HANDLE --- */}
+                {/* --- DRAG HANDLE (CONDITIONAL POS) --- */}
                 <div
-                    className="absolute top-0 bottom-0 -left-10 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group"
+                    className={handleContainerClass}
                     onPointerDown={handlePointerDown}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
                     onPointerLeave={handlePointerUp}
                     aria-label="Drag to close"
                 >
-                    {/* Visual Pill */}
-                    <div 
-                        className={`w-1 h-32 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
-                    />
+                    <div className={handlePillClass} />
                 </div>
                 {/* ------------------- */}
 
