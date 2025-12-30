@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FaSpotify } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
-import { generateUUID } from '../lib/sessionId';
+import { generateUUID, getSessionId } from '../lib/sessionId';
 import { FiRefreshCw } from 'react-icons/fi';
 
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=4`;
@@ -81,7 +81,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, clearError } = useAuth();
   const [uiState, setUiState] = useState<'IDLE' | 'ATTESA' | 'PREMIUM_ERROR' | 'LOADING'>('IDLE');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const sidRef = useRef<string>(generateUUID());
+  // Use getSessionId() to ensure the QR code uses the same persistent ID that the rest of the app uses.
+  const sidRef = useRef<string>(getSessionId());
   const pollTimer = useRef<number | null>(null);
 
   const startLogin = useCallback(() => {
@@ -130,7 +131,12 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   }, [startLogin]);
 
   const handleRetry = () => {
-    sidRef.current = generateUUID();
+    // Generate a NEW session ID on retry to clear any server-side error state (like premium_required)
+    // and save it to localStorage so the rest of the app picks it up immediately.
+    const newSid = generateUUID();
+    localStorage.setItem('spotify_session_id', newSid);
+    sidRef.current = newSid;
+    
     setUiState('IDLE');
     setTimeout(startLogin, 100);
   };

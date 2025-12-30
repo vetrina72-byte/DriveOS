@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
 import apiClient from '../api';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
@@ -180,7 +181,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, []);
     
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
-        const sessionId = sessionIdRef.current;
+        const sessionId = getSessionId(); // Use direct access to ensure freshness
         if (!sessionId) { logout(); return false; }
         try {
             const res = await fetch('/api/refresh-token', {
@@ -356,6 +357,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         if (authError) { setState(s => ({...s, error: authError, isLoading: false})); return; }
         if (!tokenData?.access_token) { setState(s => ({...s, error: 'Token missing.', isLoading: false})); return; }
         try {
+            // SYNC SESSION ID: Make sure ref matches localStorage, as SpotifyLogin just updated localStorage
+            sessionIdRef.current = getSessionId(); 
+            
             const { access_token, expires_in } = tokenData;
             const expiresAt = tokenData.expires_at || (Date.now() + expires_in * 1000);
             localStorage.setItem('accessToken', access_token);
@@ -402,10 +406,12 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         if (isPlayerSdkReady) {
             const deviceId = getDeviceId();
             if (deviceId) {
+                // Use getSessionId() directly to ensure we use the latest one
+                const currentSessionId = getSessionId();
                 fetch('/api/transfer-player', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionId: sessionIdRef.current, device_id: deviceId })
+                    body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId })
                 }).catch(() => {});
             }
         }

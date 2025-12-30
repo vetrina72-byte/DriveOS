@@ -1,3 +1,4 @@
+
 import { app, BrowserWindow, session } from 'electron';
 import isDev from 'electron-is-dev';
 import path from 'path';
@@ -87,7 +88,10 @@ function createAuthServer() {
     const sessionData = authStore.get(sessionId);
 
     if (sessionData && sessionData.status === 'completed') {
-      authStore.delete(sessionId); // This is a one-time use token
+      // DO NOT DELETE THE SESSION HERE
+      // We must keep it alive for subsequent requests if using local store logic, 
+      // or at least let it expire by TTL.
+      // authStore.delete(sessionId); 
       res.status(200).json({ status: 'completed', tokens: sessionData.tokens });
     } else {
       res.status(202).json({ status: 'pending' }); // 202 Accepted means "not ready yet, keep polling"
