@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import YouTube from 'react-youtube';
@@ -15,7 +16,6 @@ import {
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo } from '../types';
-// FIX: Import getPlayerInstance to access the Spotify player instance.
 import { getPlayerInstance } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
@@ -51,10 +51,7 @@ interface MusicPlayerProps {
  * A seekable progress bar for the Spotify player with smooth, real-time updates.
  * This component uses `requestAnimationFrame` to interpolate the track's progress between
  * official state updates from the Spotify SDK, providing a fluid user experience. It also
- * handles user seeking (clicking and dragging).
- * 
- * @param {SpotifyPlayer | null} player - The Spotify Web Playback SDK player instance.
- * @param {SpotifyPlayerState} state - The current player state from the SDK.
+ * handles user seeking (clicking and dragging) with optimistic UI updates to prevent flickering.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const [displayPosition, setDisplayPosition] = useState(state.position);
@@ -63,9 +60,16 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const animationFrameRef = useRef(0);
     const lastStatePositionRef = useRef(state.position);
     const lastStateUpdateTimestampRef = useRef(performance.now());
+    
+    // Ref to ignore incoming state updates for a short period after seeking
+    // This prevents the bar from "bouncing" back to the old position before the server catches up
+    const ignoreRemoteUpdatesUntil = useRef(0);
 
     useEffect(() => {
         if (!isSeeking) {
+            // Critical check: ignore stale updates right after a seek
+            if (Date.now() < ignoreRemoteUpdatesUntil.current) return;
+
             setDisplayPosition(state.position);
             lastStatePositionRef.current = state.position;
             lastStateUpdateTimestampRef.current = performance.now();
@@ -110,9 +114,15 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = (e: MouseEvent) => {
             const finalPosition = getSeekPosition(e.clientX);
             player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
+            
+            // Optimistically update local state so animation continues smoothly from here
             lastStatePositionRef.current = finalPosition;
             lastStateUpdateTimestampRef.current = performance.now();
             setDisplayPosition(finalPosition);
+            
+            // Ignore external state updates for 1.5 seconds to allow Spotify backend to sync
+            ignoreRemoteUpdatesUntil.current = Date.now() + 1500;
+            
             setIsSeeking(false);
         };
 
