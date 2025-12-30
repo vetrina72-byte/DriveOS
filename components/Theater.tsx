@@ -1,6 +1,5 @@
 
-import React, { useRef } from 'react';
-// FIX: Import `Variants` type from framer-motion to resolve type error.
+import React, { useRef, useEffect } from 'react';
 import { motion, Variants } from 'framer-motion';
 
 // A self-contained component for the service button with 3D hover effects.
@@ -104,15 +103,6 @@ const ServiceButton = ({ service, isNight, onClick }: {
     );
 };
 
-
-// Framer Motion Variants for the choreographed entry animation
-// Accelerated spring physics for snappier feel
-const panelVariant: Variants = {
-    initial: { x: '100%' },
-    animate: { x: '0%', transition: { type: 'spring', stiffness: 300, damping: 30 } },
-    exit: { x: '100%', transition: { type: 'spring', stiffness: 400, damping: 35 } },
-};
-
 // FIX: Explicitly type variants with the `Variants` type.
 const driveOsHeaderVariant: Variants = {
     initial: { opacity: 0, y: 'calc(50vh - 150px)', scale: 1.5 },
@@ -158,6 +148,105 @@ const Theater = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
 }) => {
+    const panelRef = useRef<HTMLDivElement>(null);
+
+    // --- PHYSICS ENGINE (Unified) ---
+    const physics = useRef({
+        currentX: 100, // 0 = open, 100 = closed
+        targetX: 100,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartCurrentX: 0,
+        panelWidth: 0,
+        animationId: 0
+    });
+
+    const ANIMATION_SPEED = 0.18; 
+    const CLOSE_THRESHOLD_PERCENT = 25;
+
+    // --- PHYSICS LOOP ---
+    useEffect(() => {
+        const update = () => {
+            const state = physics.current;
+            const panel = panelRef.current;
+
+            // 1. Update Physics
+            if (!state.isDragging) {
+                const diff = state.targetX - state.currentX;
+                if (Math.abs(diff) > 0.01) {
+                    state.currentX += diff * ANIMATION_SPEED;
+                } else {
+                    state.currentX = state.targetX;
+                }
+            }
+
+            // 2. Render
+            if (panel) {
+                let visualX = state.currentX;
+                if (!state.isDragging) {
+                    if (visualX < 0.01) visualX = 0;
+                    if (visualX > 99.9) visualX = 100;
+                }
+                panel.style.transform = `translateX(${visualX}%)`;
+            }
+
+            state.animationId = requestAnimationFrame(update);
+        };
+
+        physics.current.animationId = requestAnimationFrame(update);
+        return () => cancelAnimationFrame(physics.current.animationId);
+    }, []);
+
+    // --- SYNC ON MOUNT ---
+    useEffect(() => {
+        // When mounted, trigger open animation
+        const state = physics.current;
+        if (!state.isDragging) {
+            state.targetX = 0; // Open
+        }
+    }, []);
+
+    // --- DRAG HANDLERS ---
+    const handlePointerDown = (e: React.PointerEvent) => {
+        if (!panelRef.current) return;
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        
+        const state = physics.current;
+        state.isDragging = true;
+        state.dragStartX = e.clientX;
+        state.dragStartCurrentX = state.currentX;
+        state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        const state = physics.current;
+        if (!state.isDragging) return;
+        e.stopPropagation();
+
+        const deltaPx = e.clientX - state.dragStartX;
+        const deltaPercent = (deltaPx / state.panelWidth) * 100;
+        
+        let newPercent = state.dragStartCurrentX + deltaPercent;
+        if (newPercent < 0) newPercent = 0; // Prevent widening
+        
+        state.currentX = newPercent;
+    };
+
+    const handlePointerUp = (e: React.PointerEvent) => {
+        e.stopPropagation();
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        
+        const state = physics.current;
+        state.isDragging = false;
+
+        if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
+            state.targetX = 100;
+            onClose(); // Parent unmounts us
+        } else {
+            state.targetX = 0;
+        }
+    };
 
     const handleServiceClick = () => {
         // Functionality removed as per user request.
@@ -190,25 +279,40 @@ const Theater = ({
         { name: 'Prime Video', url: 'https://www.primevideo.com', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/90/Prime_Video_logo_%282024%29.svg', logoClassName: 'w-36', glowColor: '#00A8E1' }
     ];
 
+    const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
+
     return (
-        <motion.div
-            variants={panelVariant}
-            initial="initial"
-            animate="animate"
-            exit="exit"
+        <div
+            ref={panelRef}
             className="spotify-app-panel w-2/3 shadow-2xl flex"
             style={{
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,
+                willChange: 'transform',
+                // Start initially closed (physics loop will open it)
+                transform: 'translateX(100%)' 
             }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="theater-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div
-                className="theater-container"
-            >
+            <div className="theater-container relative">
+                {/* --- DRAG HANDLE --- */}
+                <div
+                    className="absolute top-0 bottom-0 -left-10 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group"
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
+                    aria-label="Drag to close"
+                >
+                    <div 
+                        className={`w-1 h-32 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
+                    />
+                </div>
+                {/* ------------------- */}
+
                 <motion.header 
                     className="theater-header"
                     initial="initial"
@@ -247,7 +351,7 @@ const Theater = ({
                     ))}
                 </motion.main>
             </div>
-        </motion.div>
+        </div>
     );
 };
 

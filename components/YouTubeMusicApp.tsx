@@ -64,6 +64,7 @@ const logoUrlLight = "https://upload.wikimedia.org/wikipedia/commons/0/0a/YouTub
 
 const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({ 
     isOpen, 
+    onClose,
     isNight, 
     spotifyPlayerTop, 
     spotifyPlayerBottom,
@@ -75,11 +76,23 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     onQuotaError,
 }) => {
     const { playYouTube } = useAuth();
-    const [translateX, setTranslateX] = useState(100);
-    const animationFrameId = useRef<number | null>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+
+    // --- PHYSICS ENGINE (Unified) ---
+    const physics = useRef({
+        currentX: 100, // 0 = open, 100 = closed
+        targetX: 100,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartCurrentX: 0,
+        panelWidth: 0,
+        animationId: 0
+    });
+
+    const ANIMATION_SPEED = 0.18; 
+    const CLOSE_THRESHOLD_PERCENT = 25;
 
     const [error, setError] = useState<string | null>(null);
-    
     const [searchQuery, setSearchQuery] = useState('');
     const [submittedQuery, setSubmittedQuery] = useState('');
     const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
@@ -87,9 +100,90 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const [selectedPlaylist, setSelectedPlaylist] = useState<{ id: string; name: string; images?: { url: string }[], description?: string } | null>(null);
     const [isQuotaModalDismissed, setIsQuotaModalDismissed] = useState(false);
 
-    // Accelerated speeds
-    const openingBoxSpeed = 6.5; 
-    const closingBoxSpeed = 12.0;
+    // --- PHYSICS LOOP ---
+    useEffect(() => {
+        const update = () => {
+            const state = physics.current;
+            const panel = panelRef.current;
+
+            // 1. Update Physics
+            if (!state.isDragging) {
+                const diff = state.targetX - state.currentX;
+                if (Math.abs(diff) > 0.01) {
+                    state.currentX += diff * ANIMATION_SPEED;
+                } else {
+                    state.currentX = state.targetX;
+                }
+            }
+
+            // 2. Render
+            if (panel) {
+                let visualX = state.currentX;
+                if (!state.isDragging) {
+                    if (visualX < 0.01) visualX = 0;
+                    if (visualX > 99.9) visualX = 100;
+                }
+                panel.style.transform = `translateX(${visualX}%)`;
+            }
+
+            state.animationId = requestAnimationFrame(update);
+        };
+
+        physics.current.animationId = requestAnimationFrame(update);
+        return () => cancelAnimationFrame(physics.current.animationId);
+    }, []);
+
+    // --- SYNC REACT PROP TO PHYSICS TARGET ---
+    useEffect(() => {
+        const state = physics.current;
+        if (!state.isDragging) {
+            state.targetX = isOpen ? 0 : 100;
+        }
+    }, [isOpen]);
+
+    // --- DRAG HANDLERS ---
+    const handlePointerDown = (e: React.PointerEvent) => {
+        if (!panelRef.current) return;
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        
+        const state = physics.current;
+        state.isDragging = true;
+        state.dragStartX = e.clientX;
+        state.dragStartCurrentX = state.currentX;
+        state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        const state = physics.current;
+        if (!state.isDragging) return;
+        e.stopPropagation();
+
+        const deltaPx = e.clientX - state.dragStartX;
+        const deltaPercent = (deltaPx / state.panelWidth) * 100;
+        
+        let newPercent = state.dragStartCurrentX + deltaPercent;
+        if (newPercent < 0) newPercent = 0; // Prevent widening
+        
+        state.currentX = newPercent;
+    };
+
+    const handlePointerUp = (e: React.PointerEvent) => {
+        e.stopPropagation();
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        
+        const state = physics.current;
+        state.isDragging = false;
+
+        if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
+            state.targetX = 100;
+            if (isOpen) onClose();
+        } else {
+            state.targetX = 0;
+        }
+    };
+
+    const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
     
     useEffect(() => {
         // Reset dismissed state if the quota error is resolved and comes back later
@@ -97,31 +191,6 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             setIsQuotaModalDismissed(false);
         }
     }, [homeDataQuotaExceeded]);
-
-    useEffect(() => {
-        let lastTime = performance.now();
-        const animate = (now: number) => {
-            const delta = (now - lastTime) / 1000;
-            lastTime = now;
-            setTranslateX(currentX => {
-                const target = isOpen ? 0 : 100;
-                const speed = isOpen ? openingBoxSpeed : closingBoxSpeed;
-                const damp = 1 - Math.exp(-speed * delta);
-                const newX = currentX + (target - currentX) * damp;
-                if (Math.abs(target - newX) < 0.1) {
-                    if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-                    return target;
-                }
-                return newX;
-            });
-            animationFrameId.current = requestAnimationFrame(animate);
-        };
-        if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-        animationFrameId.current = requestAnimationFrame(animate);
-        return () => {
-            if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-        };
-    }, [isOpen, openingBoxSpeed, closingBoxSpeed]);
 
     const handleSearchSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -253,12 +322,13 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
 
     return (
         <div 
+            ref={panelRef}
             className="spotify-app-panel w-2/3 flex shadow-2xl"
             style={{
-                transform: `translateX(${translateX}%)`,
+                // Transform managed by physics loop
                 top: `${spotifyPlayerTop}px`,
                 bottom: `${spotifyPlayerBottom}px`,
-                willChange: 'transform', // Important for smooth animation
+                willChange: 'transform',
             }}
             aria-hidden={!isOpen}
             role="dialog"
@@ -270,6 +340,21 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
               className={`w-full h-full flex flex-col relative backdrop-blur-lg`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
+                {/* --- DRAG HANDLE --- */}
+                <div
+                    className="absolute top-0 bottom-0 -left-10 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group"
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
+                    aria-label="Drag to close"
+                >
+                    <div 
+                        className={`w-1 h-32 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
+                    />
+                </div>
+                {/* ------------------- */}
+
                 <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <img 
