@@ -96,6 +96,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const [isPlayerSdkReady, setIsPlayerSdkReady] = useState(false);
     const [lastPlayInitiated, setLastPlayInitiated] = useState(0);
     
+    // Lock mechanism to prevent double playback requests
+    const isSwitchingTrack = useRef(false);
+    
     const latestOptimisticItem = useRef<MediaItem | null>(null);
 
     const [homeContentLoading, setHomeContentLoading] = useState(false);
@@ -181,7 +184,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, []);
     
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
-        const sessionId = getSessionId(); // Use direct access to ensure freshness
+        const sessionId = getSessionId(); 
         if (!sessionId) { logout(); return false; }
         try {
             const res = await fetch('/api/refresh-token', {
@@ -224,9 +227,20 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
-            const stillLoading = s.isLoading && !(newState && newState.track_window.current_track);
-            return { ...s, spotifyState: newState, isLoading: stillLoading, source: newState ? 'spotify' : null };
+            
+            // Critical fix: If we receive a new state, stop loading.
+            // Check if track matches what we tried to play? Not strictly necessary if we trust the flow.
+            // If track is missing, it might mean "not ready", but generally state update means "something happened".
+            const isLoading = isSwitchingTrack.current; 
+            
+            return { 
+                ...s, 
+                spotifyState: newState, 
+                isLoading: isLoading ? s.isLoading : false, // Only clear loading if not currently switching
+                source: newState ? 'spotify' : null 
+            };
         });
+        
         if (newState) {
             localStorage.setItem("last_is_playing", String(!newState.paused));
             localStorage.setItem("last_progress_ms", String(newState.position));
@@ -357,7 +371,6 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         if (authError) { setState(s => ({...s, error: authError, isLoading: false})); return; }
         if (!tokenData?.access_token) { setState(s => ({...s, error: 'Token missing.', isLoading: false})); return; }
         try {
-            // SYNC SESSION ID: Make sure ref matches localStorage, as SpotifyLogin just updated localStorage
             sessionIdRef.current = getSessionId(); 
             
             const { access_token, expires_in } = tokenData;
@@ -372,7 +385,16 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         } catch (err) { logout(); setState(s => ({...s, error: 'Login failed.', isLoading: false})); }
     }, [fetchUserInfo, logout]);
     
+    // Updated robust play function
     const play = useCallback(async (options: PlayOptions, itemForOptimisticUpdate?: MediaItem) => {
+        if (isSwitchingTrack.current) {
+            console.log('Skipping play request: already switching');
+            return;
+        }
+        
+        isSwitchingTrack.current = true;
+
+        // Optimistic UI updates
         if (itemForOptimisticUpdate) {
             latestOptimisticItem.current = itemForOptimisticUpdate;
             try { localStorage.setItem('last_optimistic_item', JSON.stringify(itemForOptimisticUpdate)); } catch (e) {}
@@ -383,9 +405,29 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.setItem("last_progress_ms", "0");
         localStorage.setItem("last_is_playing", "true");
         setLastPlayInitiated(Date.now());
-        setNowPlaying(prev => ({ ...prev, source: 'spotify', radioStation: null, youtubeTrack: null, isLoading: true }));
-        const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
-        if (!success) setNowPlaying(prev => ({ ...prev, isLoading: false }));
+        
+        // Indicate loading
+        setNowPlaying(prev => ({ 
+            ...prev, 
+            source: 'spotify', 
+            radioStation: null, 
+            youtubeTrack: null, 
+            isLoading: true 
+        }));
+
+        try {
+            const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
+            if (!success) {
+                // If failed, stop loading indicator so user isn't stuck
+                setNowPlaying(prev => ({ ...prev, isLoading: false }));
+                console.error("Playback failed or timed out.");
+            }
+        } catch (error) {
+            console.error("Exception during play:", error);
+            setNowPlaying(prev => ({ ...prev, isLoading: false }));
+        } finally {
+            isSwitchingTrack.current = false;
+        }
     }, [attemptRefreshAndUpdatePlayerToken]);
     
     useEffect(() => {
@@ -399,6 +441,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         const expiresAt = Number(localStorage.getItem('expiresAt') || '0');
         if (expiresAt > Date.now() + 60000) return localStorage.getItem('accessToken') || '';
         const refreshed = await attemptRefreshAndUpdatePlayerToken();
+        // Return from localStorage as it's the source of truth after refresh
         return localStorage.getItem('accessToken') || '';
     }, [attemptRefreshAndUpdatePlayerToken]);
 
@@ -406,7 +449,6 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         if (isPlayerSdkReady) {
             const deviceId = getDeviceId();
             if (deviceId) {
-                // Use getSessionId() directly to ensure we use the latest one
                 const currentSessionId = getSessionId();
                 fetch('/api/transfer-player', {
                     method: 'POST',
@@ -430,7 +472,6 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 if (!ok) logout();
             },
             onAccountError: (message: string) => {
-                // Spotify account_error occurs when non-premium user tries to use the SDK
                 console.error('ACCOUNT ERROR', message);
                 logout();
                 setState(s => ({ ...s, error: 'Premium required' }));

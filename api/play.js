@@ -19,7 +19,8 @@ export default async function handler(req, res) {
   const url = deviceId ? `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}` : `https://api.spotify.com/v1/me/player/play`;
 
   try {
-    console.log('🔄 [PROXY PLAY] Calling spotify /me/player/play');
+    console.log(`▶️ [PROXY PLAY] Request to Spotify (${deviceId ? 'Device Specific' : 'Active Device'})`);
+    
     const spotifyRes = await fetch(url, {
       method: 'PUT',
       headers: {
@@ -29,15 +30,24 @@ export default async function handler(req, res) {
       body: JSON.stringify(body || {})
     });
 
-    const text = await spotifyRes.text();
     if (!spotifyRes.ok) {
-      console.error(`❌ [PROXY PLAY] spotify returned ${spotifyRes.status} ${text}`);
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(spotifyRes.status).send(text);
+        const text = await spotifyRes.text();
+        console.error(`❌ [PROXY PLAY] Failed: ${spotifyRes.status} - ${text}`);
+        
+        // Parse error to see if it is a restriction
+        try {
+            const errJson = JSON.parse(text);
+            if (errJson.error?.reason === 'NO_ACTIVE_DEVICE') {
+                return res.status(404).json({ error: 'no_active_device' });
+            }
+        } catch(e) {}
+
+        return res.status(spotifyRes.status).send(text);
     }
-    return res.status(spotifyRes.status).send(text || '');
+
+    return res.status(204).send('');
   } catch (e) {
-    console.error(`❌ [PROXY PLAY] Error proxying request`, e.message);
-    return res.status(500).json({error: 'proxy_failed'});
+    console.error(`🔥 [PROXY PLAY] Exception:`, e.message);
+    return res.status(500).json({error: 'proxy_exception'});
   }
 }

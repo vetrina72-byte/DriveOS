@@ -1,3 +1,4 @@
+
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import { getSessionId } from './sessionId';
 import type { PlayOptions } from '../types';
@@ -36,6 +37,7 @@ export function initSpotifyPlayerOnce(options: InitOptions) {
             });
 
             player.addListener('ready', (details) => {
+                console.log('[Spotify SDK] Ready with Device ID', details.device_id);
                 spotifyDeviceId = details.device_id;
                 playerReady = true;
                 options.onReady(details);
@@ -43,29 +45,42 @@ export function initSpotifyPlayerOnce(options: InitOptions) {
             });
 
             player.addListener('not_ready', (details) => {
+                console.warn('[Spotify SDK] Device ID has gone offline', details.device_id);
                 playerReady = false;
+                // Important: clear the device ID so we know we need to reconnect/transfer later
+                if (spotifyDeviceId === details.device_id) {
+                    spotifyDeviceId = null; 
+                }
                 options.onNotReady(details);
             });
             
             player.addListener('player_state_changed', options.onStateChange);
 
             player.addListener('initialization_error', ({ message }) => {
+                console.error('[Spotify SDK] Initialization Error', message);
                 reject(new Error(message));
             });
 
             player.addListener('authentication_error', ({ message }) => {
+                console.error('[Spotify SDK] Auth Error', message);
                 options.onAuthError(message);
             });
 
             player.addListener('account_error', ({ message }) => {
+                console.error('[Spotify SDK] Account Error', message);
                 options.onAccountError(message);
             });
 
             player.addListener('playback_error', ({ message }) => {
+                console.error('[Spotify SDK] Playback Error', message);
                 options.onPlaybackError(message);
             });
 
-            player.connect().catch(err => {
+            player.connect().then(success => {
+                if (success) {
+                    console.log('[Spotify SDK] Connected successfully!');
+                }
+            }).catch(err => {
                 reject(err);
             });
 
@@ -125,20 +140,7 @@ async function setVolumeSafe(volume: number) {
     await spotifyPlayer.setVolume(volume);
     return true;
   } catch (err) {
-    try {
-      const sessionId = getSessionId();
-      const resp = await fetch('/api/transfer-player', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
-      });
-      if (resp.ok) {
-        await new Promise(r => setTimeout(r, 250));
-        await spotifyPlayer.setVolume(volume);
-        return true;
-      }
-      return false;
-    } catch (ex) { return false; }
+    return false;
   }
 }
 
@@ -150,35 +152,78 @@ export async function setVolumeFinal(volume: number) {
   return await setVolumeSafe(volume);
 }
 
+/**
+ * Executes a play command safely, handling device activation and token refresh automatically.
+ */
 export async function safePlay(options: PlayOptions, attemptRefresh: () => Promise<boolean>): Promise<boolean> {
-    if (!playerReady || !spotifyDeviceId) return false;
     const sessionId = getSessionId();
+    
+    // 1. Check if we have a device ID from the SDK.
+    if (!spotifyDeviceId) {
+        console.warn('[safePlay] No local device ID found. SDK might not be ready.');
+        // We can't play if we don't know our own device ID.
+        return false;
+    }
+
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
-    const tryPlay = () => fetch('/api/play', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
-        body: JSON.stringify(playRequest)
-    });
-    let response = await tryPlay();
-    if (response.ok) return true;
-    if (response.status === 404) {
-        const transferResponse = await fetch('/api/transfer-player', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
-        });
-        if (transferResponse.ok) {
-            await new Promise(r => setTimeout(r, 300));
-            const retryResponse = await tryPlay();
-            if (retryResponse.ok) return true;
+
+    const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
+        try {
+            const res = await fetch('/api/play', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+                body: JSON.stringify(playRequest)
+            });
+            return { ok: res.ok, status: res.status };
+        } catch (e) {
+            console.error('[safePlay] Network error during play:', e);
+            return { ok: false, status: 500 };
+        }
+    };
+
+    // 2. Attempt playback
+    let result = await doPlay();
+
+    if (result.ok) return true;
+
+    // 3. Handle 404 (Device Not Found / Inactive)
+    if (result.status === 404) {
+        console.log('[safePlay] Device 404 (Inactive). Attempting transfer/wake-up...');
+        
+        try {
+            const transferRes = await fetch('/api/transfer-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
+            });
+
+            if (transferRes.ok) {
+                // Wait a moment for Spotify backend to register the transfer
+                await new Promise(r => setTimeout(r, 500));
+                console.log('[safePlay] Transfer successful. Retrying play...');
+                result = await doPlay();
+                if (result.ok) return true;
+            } else {
+                console.error('[safePlay] Transfer failed.');
+            }
+        } catch (e) {
+            console.error('[safePlay] Error during transfer:', e);
         }
     }
-    if (response.status === 401 || response.status === 400) {
+
+    // 4. Handle 401 (Token Expired)
+    if (result.status === 401) {
+        console.log('[safePlay] Token expired (401). Refreshing...');
         const refreshed = await attemptRefresh();
         if (refreshed) {
-            const retryResponse = await tryPlay();
-            if (retryResponse.ok) return true;
+            // Retry once with new token (handled implicitly by backend/session manager, 
+            // but we need to ensure the proxy uses the fresh data, which it pulls from Redis/Session)
+            await new Promise(r => setTimeout(r, 200)); // Small grace period
+            result = await doPlay();
+            if (result.ok) return true;
         }
     }
+
+    console.error(`[safePlay] Final failure. Status: ${result.status}`);
     return false;
 }
