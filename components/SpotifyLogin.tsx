@@ -23,7 +23,7 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
     return (
         <div className={`flex items-center justify-center mb-6 relative`}>
             <motion.svg 
-                width="80" height="80" viewBox="0 0 52 52" fill="none" 
+                width="64" height="64" viewBox="0 0 52 52" fill="none" 
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }} // Apple-like spring/ease
@@ -165,27 +165,27 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }} 
             exit={{ opacity: 0, scale: 0.96, y: -10 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className={`flex items-center gap-16 p-16 rounded-[48px] ${theme.card}`}
+            className={`flex items-center gap-12 p-12 rounded-[48px] ${theme.card}`}
           >
-            {/* QR Container - Even Larger size (w-64) and adjusted padding */}
-            <div className="p-4 bg-white rounded-[32px] shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
-              <img src={qrCodeUrl} alt="QR" className="w-64 h-64 mix-blend-multiply block" />
+            {/* QR Container - Reduced size for "airy" feel */}
+            <div className="p-4 bg-white rounded-[28px] shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
+              <img src={qrCodeUrl} alt="QR" className="w-52 h-52 mix-blend-multiply block" />
             </div>
             
             {/* Text Content */}
-            <div className="max-w-sm flex flex-col justify-center gap-6">
-              <div className="flex items-center gap-4">
-                <FaSpotify className="w-12 h-12 text-[#1DB954]" />
-                <h2 className={`text-4xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
+            <div className="max-w-xs flex flex-col justify-center gap-5">
+              <div className="flex items-center gap-3">
+                <FaSpotify className="w-10 h-10 text-[#1DB954]" />
+                <h2 className={`text-3xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
               </div>
-              <p className={`text-2xl leading-snug font-medium ${theme.subtitle}`}>
+              <p className={`text-xl leading-snug font-medium ${theme.subtitle}`}>
                 Inquadra il codice per collegare il tuo account <strong>Spotify Premium</strong>.
               </p>
             </div>
           </motion.div>
         )}
 
-        {/* Enlarged Error Card */}
+        {/* Error Card - Wider, shorter, more elegant */}
         {uiState === 'PREMIUM_ERROR' && (
           <motion.div 
             key="error"
@@ -193,37 +193,37 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className={`flex flex-col items-center text-center p-12 rounded-[40px] max-w-[400px] w-full ${theme.card}`}
+            className={`flex flex-col items-center text-center px-12 py-10 rounded-[32px] max-w-[560px] w-full ${theme.card}`}
           >
             <FeedbackIcon type="error" isNight={isNight} />
-            <h2 className={`text-2xl font-bold mb-3 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
-            <p className={`text-lg mb-8 leading-relaxed font-medium px-2 ${theme.subtitle}`}>
-              È necessario un abbonamento Spotify Premium attivo per utilizzare l'integrazione.
+            <h2 className={`text-2xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
+            <p className={`text-lg mb-6 leading-relaxed font-medium px-4 ${theme.subtitle}`}>
+              È necessario un abbonamento Spotify Premium attivo per utilizzare questa integrazione.
             </p>
             <button 
               onClick={handleRetry}
-              className={`flex items-center justify-center gap-2.5 px-8 py-4 rounded-full font-bold text-lg transition-transform active:scale-95 w-full ${theme.buttonPrimary}`}
+              className={`flex items-center justify-center gap-2 px-8 py-3 rounded-full font-bold text-base transition-transform active:scale-95 w-2/3 ${theme.buttonPrimary}`}
             >
-              <FiRefreshCw className="w-6 h-6" />
+              <FiRefreshCw className="w-5 h-5" />
               Riprova
             </button>
           </motion.div>
         )}
 
-        {/* Enlarged Success/Loading Card */}
+        {/* Success/Loading Card - More compact */}
         {uiState === 'LOADING' && (
           <motion.div 
             key="load" 
             initial={{ opacity: 0, scale: 0.95 }} 
             animate={{ opacity: 1, scale: 1 }} 
-            className={`flex flex-col items-center justify-center p-14 rounded-[48px] min-w-[320px] aspect-square ${theme.card}`}
+            className={`flex flex-col items-center justify-center p-10 rounded-[40px] min-w-[280px] aspect-square ${theme.card}`}
           >
             <FeedbackIcon type="success" isNight={isNight} />
-            <div className="flex flex-col items-center gap-4 mt-4">
-                <h2 className={`text-2xl font-bold tracking-tight ${theme.title}`}>Collegato</h2>
-                <div className="flex items-center gap-3">
-                    <div className={`w-6 h-6 border-[3px] rounded-full animate-spin ${theme.spinner}`} />
-                    <p className={`text-lg font-medium ${theme.subtitle}`}>Caricamento...</p>
+            <div className="flex flex-col items-center gap-3 mt-2">
+                <h2 className={`text-xl font-bold tracking-tight ${theme.title}`}>Collegato</h2>
+                <div className="flex items-center gap-2.5">
+                    <div className={`w-5 h-5 border-[2.5px] rounded-full animate-spin ${theme.spinner}`} />
+                    <p className={`text-base font-medium ${theme.subtitle}`}>Caricamento...</p>
                 </div>
             </div>
           </motion.div>
