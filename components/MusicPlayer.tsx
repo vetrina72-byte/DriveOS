@@ -71,11 +71,23 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // Critical check: ignore stale updates right after a seek
             if (Date.now() < ignoreRemoteUpdatesUntil.current) return;
 
+            // Jitter reduction:
+            // Calculate projected position based on last sync
+            const timeSinceLastSync = performance.now() - lastStateUpdateTimestampRef.current;
+            const projectedPos = lastStatePositionRef.current + timeSinceLastSync;
+            const drift = Math.abs(state.position - projectedPos);
+
+            // If drift is minor (< 250ms) and we are playing, ignore this update to maintain smoothness
+            // We ensure playhead > 1s to avoid ignoring initial start
+            if (drift < 250 && !state.paused && state.position > 1000) {
+                return;
+            }
+
             setDisplayPosition(state.position);
             lastStatePositionRef.current = state.position;
             lastStateUpdateTimestampRef.current = performance.now();
         }
-    }, [state.position, isSeeking]);
+    }, [state.position, isSeeking, state.paused]);
 
     // Reset timestamp when resuming playback to prevent jumps (The "balzi strani" fix)
     useEffect(() => {
@@ -87,7 +99,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // Also force update display to current known state to ensure visual sync start
             setDisplayPosition(state.position);
         }
-    }, [state.paused, state.position]);
+    }, [state.paused]); // Removed state.position dependency here to avoid double-reset fighting
 
     // Handle tab visibility change to prevent "jumps" when returning to the tab
     useEffect(() => {
@@ -403,7 +415,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     dockedConfig, 
     floatingConfig, 
     playerControlsSize,
-    playerControlsGap,
+    playerControlsGap, 
     playerControlsVerticalPosition,
     spinnerSize,
     spinnerShuffleGap,

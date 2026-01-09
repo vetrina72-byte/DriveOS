@@ -480,7 +480,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         // If we are currently showing a remote device (activeDevice is set),
         // we assume the user wants to bring playback HERE.
         
-        const isResume = Object.keys(options).length === 0;
+        const isResume = Object.keys(options).length === 0 && !options.context_uri && !options.uris;
         const isTransfer = !!nowPlaying.activeDevice;
         // Only show spinner if transferring or loading a new track/context.
         // If simply resuming, keep existing loading state (likely false) to avoid spinner flash.
@@ -508,6 +508,24 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 activeDevice: null // Optimistically clear remote device UI
             };
         });
+
+        // --- FAST PATH: LOCAL RESUME ---
+        // If it's a resume action, and we are NOT casting/remote, use the local SDK directly.
+        if (isResume && !nowPlaying.activeDevice) {
+             const player = getPlayerInstance();
+             if (player) {
+                 try {
+                     await player.resume();
+                     isSwitchingTrack.current = false;
+                     // Ensure we fetch recent plays after a bit
+                     setLastPlayInitiated(Date.now()); 
+                     return; // Success, skip the API call
+                 } catch (e) {
+                     console.warn("Local resume failed, falling back to API", e);
+                     // If fail, proceed to API call below
+                 }
+             }
+        }
 
         if (nowPlaying.activeDevice) {
             console.log('[AuthContext] Taking control from remote device...');
