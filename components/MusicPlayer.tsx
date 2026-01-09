@@ -52,14 +52,14 @@ interface MusicPlayerProps {
  * Uses local override to prevent "rubber-banding" after seeking.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Initial calculation
-    const calculatePosition = () => {
+    // Helper to calculate live position for initialization
+    const getLivePosition = () => {
         if (state.paused) return state.position;
-        const age = (Date.now() - state.timestamp); 
-        return Math.min(state.duration, state.position + age);
+        const elapsed = Date.now() - state.timestamp;
+        return Math.min(state.duration, state.position + elapsed);
     };
 
-    const [displayPosition, setDisplayPosition] = useState(() => calculatePosition());
+    const [displayPosition, setDisplayPosition] = useState(getLivePosition);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     
@@ -68,52 +68,47 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
     // Main Update Loop
     useEffect(() => {
+        // CASE 1: Seeking (User dragging)
+        // Handled by mouse events, no loop needed.
+        if (isSeeking) return;
+
+        // CASE 2: Paused
+        // STOP the loop immediately. Snap to the official server position.
+        // Clear override to prevent any "jump forward" from stale predictions.
+        if (state.paused) {
+            seekOverrideRef.current = null;
+            setDisplayPosition(state.position);
+            return;
+        }
+
+        // CASE 3: Playing
         let animationFrameId: number;
         
         const update = () => {
-            if (isSeeking) {
-                // If dragging, do nothing (handled by mouse events)
-                return;
-            }
-
             const now = Date.now();
             let effectivePosition = 0;
 
             // 1. Calculate SDK authoritative position (Server Truth)
             const sdkElapsed = now - state.timestamp;
-            // Ensure we don't go negative or beyond duration
-            const sdkPosition = state.paused 
-                ? state.position 
-                : Math.max(0, Math.min(state.duration, state.position + sdkElapsed));
+            const sdkPosition = Math.max(0, Math.min(state.duration, state.position + sdkElapsed));
 
             // 2. Check for Seek Override (Local Truth)
-            // If the user just seeked, the SDK might still report the OLD position for a second or two.
-            // We use our local calculation until the SDK "catches up".
+            // If the user just seeked, the SDK might still report the OLD position for a second.
             if (seekOverrideRef.current) {
                 const { pos: seekPos, time: seekTime } = seekOverrideRef.current;
                 const overrideElapsed = now - seekTime;
                 
                 // Simulate local playback from the seek point
-                const localPosition = state.paused 
-                    ? seekPos 
-                    : Math.max(0, Math.min(state.duration, seekPos + overrideElapsed));
+                const localPosition = Math.max(0, Math.min(state.duration, seekPos + overrideElapsed));
 
                 const diff = Math.abs(sdkPosition - localPosition);
                 const timeSinceSeek = now - seekTime;
 
-                // Sync Condition: If SDK position is close to our local position (within 1s),
-                // it means the server has processed the seek. We can release the override.
-                if (timeSinceSeek > 500 && diff < 1000) {
+                // Sync Condition: If SDK position catches up (is close) or timeout passes
+                if ((timeSinceSeek > 500 && diff < 1000) || timeSinceSeek > 3000) {
                     seekOverrideRef.current = null; 
                     effectivePosition = sdkPosition;
-                } 
-                // Safety Timeout: After 3 seconds, force sync to SDK even if it jumps, to avoid permanent drift.
-                else if (timeSinceSeek > 3000) {
-                    seekOverrideRef.current = null;
-                    effectivePosition = sdkPosition;
-                } 
-                else {
-                    // Otherwise, trust local input
+                } else {
                     effectivePosition = localPosition;
                 }
             } else {
