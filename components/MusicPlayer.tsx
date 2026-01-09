@@ -77,6 +77,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         }
     }, [state.position, isSeeking]);
 
+    // Reset timestamp when resuming playback to prevent jumps (The "balzi strani" fix)
+    useEffect(() => {
+        if (!state.paused) {
+            lastStateUpdateTimestampRef.current = performance.now();
+            lastStatePositionRef.current = state.position;
+        }
+    }, [state.paused, state.position]);
+
     // Handle tab visibility change to prevent "jumps" when returning to the tab
     useEffect(() => {
         const handleVisibilityChange = () => {
@@ -168,7 +176,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                  <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] transition-opacity"
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>

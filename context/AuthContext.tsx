@@ -620,7 +620,21 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         setVolumeFinal(state.isMuted ? (state.lastVolume > 0 ? state.lastVolume : 0.5) : 0);
     }, [state.isMuted, state.lastVolume, setVolumeFinal]);
 
-    const pauseSpotify = useCallback(async () => { getPlayerInstance()?.pause(); }, []);
+    const pauseSpotify = useCallback(async () => { 
+        // Optimistic UI update: Immediately show paused state
+        setNowPlaying(prev => {
+            if (prev.spotifyState) {
+                return {
+                    ...prev,
+                    spotifyState: { ...prev.spotifyState, paused: true }
+                };
+            }
+            return prev;
+        });
+        
+        getPlayerInstance()?.pause(); 
+    }, []);
+
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => { pauseSpotify(); setNowPlaying(prev => ({ ...prev, source: 'youtube', youtubeTrack: track, youtubePlaylist: playlist, radioStation: null, isLoading: prev.source !== 'youtube' })); }, [pauseSpotify]);
     const clearError = useCallback(() => { setState(s => ({...s, error: null})); }, []);
     const unlockAutoplay = useCallback(() => { getPlayerInstance()?.resume().then(() => setAutoplayBlocked(false)).catch(() => {}); }, []);
