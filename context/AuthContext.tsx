@@ -621,7 +621,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [state.isMuted, state.lastVolume, setVolumeFinal]);
 
     const pauseSpotify = useCallback(async () => { 
-        // Optimistic UI update: Immediately show paused state
+        // Optimistic UI update: Immediately show paused state to improve responsiveness
         setNowPlaying(prev => {
             if (prev.spotifyState) {
                 return {

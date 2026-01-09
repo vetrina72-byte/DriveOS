@@ -80,8 +80,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     // Reset timestamp when resuming playback to prevent jumps (The "balzi strani" fix)
     useEffect(() => {
         if (!state.paused) {
+            // RESUME EVENT: Reset anchors to prevent jumping from accumulated delta time while paused
             lastStateUpdateTimestampRef.current = performance.now();
             lastStatePositionRef.current = state.position;
+            
+            // Also force update display to current known state to ensure visual sync start
+            setDisplayPosition(state.position);
         }
     }, [state.paused, state.position]);
 
@@ -171,12 +175,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     return (
         <div
             ref={progressRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-hidden"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
             onMouseDown={handleMouseDown}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                  <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] transition-opacity"
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>
@@ -244,12 +248,12 @@ const YouTubeProgressBar = ({
     return (
         <div
             ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-hidden"
+            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
             onMouseDown={handleMouseDown}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                 <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)]"
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>
