@@ -225,32 +225,30 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         return () => { if (refreshTimeoutId.current) clearTimeout(refreshTimeoutId.current); }
     }, [state.isAuthenticated, state.expiresAt, scheduleRefresh]);
 
-    // NEW: Function to check remote player state (API Polling)
+    // NUOVO: Funzione per controllare lo stato del player remoto (API Polling)
     const checkRemotePlayerState = useCallback(async () => {
         if (!state.accessToken) return;
         try {
-            // Fetch current playback state from Spotify API to see if another device is active
+            // Chiede a Spotify chi sta suonando
             const response = await apiClient.get('/me/player');
             
             if (response.status === 200 && response.data) {
                 const { device, item, is_playing } = response.data;
                 const localDeviceId = getDeviceId();
                 
-                // If the active device is NOT the local SDK, update state to show remote playback
+                // Se il dispositivo attivo NON è quello locale, aggiorniamo lo stato per mostrare la UI remota
                 if (device && device.id !== localDeviceId) {
                     setNowPlaying(prev => ({
                         ...prev,
-                        source: 'spotify', // Still Spotify source
-                        activeDevice: device, // Store the remote device info
-                        // We can also create a fake "SpotifyPlayerState" here if we want to show track info
-                        // But for now, we rely on activeDevice to toggle the UI view
+                        source: 'spotify', 
+                        activeDevice: device, // Memorizza info dispositivo remoto
                     }));
                 } else if (!is_playing && nowPlaying.source === 'spotify' && !nowPlaying.spotifyState) {
-                    // Nothing playing anywhere
+                    // Nessuno sta suonando
                     setNowPlaying(prev => ({ ...prev, activeDevice: null }));
                 }
             } else if (response.status === 204) {
-                // No content = nothing playing
+                // 204 No Content = nulla in riproduzione
                 setNowPlaying(prev => ({ ...prev, activeDevice: null }));
             }
         } catch (e) {
@@ -264,17 +262,17 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             
             const isLoading = isSwitchingTrack.current; 
             
-            // If local state is null (player disconnected or transferred), check remote
+            // Se lo stato locale è null (disconnesso/trasferito), controlliamo chi ha preso il controllo
             if (newState === null) {
-                // Immediately check who took over
+                // Controllo immediato
                 checkRemotePlayerState();
                 
-                // Set up polling for remote state while local is inactive
+                // Avvia polling per tenere aggiornato lo stato remoto - 1.5s FAST POLLING
                 if (!remotePollIntervalRef.current) {
-                    remotePollIntervalRef.current = window.setInterval(checkRemotePlayerState, 5000);
+                    remotePollIntervalRef.current = window.setInterval(checkRemotePlayerState, 1500);
                 }
             } else {
-                // If local state is active, clear remote polling
+                // Se lo stato locale è attivo, fermiamo il polling remoto
                 if (remotePollIntervalRef.current) {
                     clearInterval(remotePollIntervalRef.current);
                     remotePollIntervalRef.current = null;
@@ -286,9 +284,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 spotifyState: newState, 
                 isLoading: isLoading ? s.isLoading : false, 
                 source: 'spotify',
-                // If newState exists, we are the active device (usually), so clear activeDevice (remote)
-                // However, be careful: SDK state updates even if paused. 
-                // But generally newState means *this* player is the focus.
+                // Se newState esiste, siamo noi il dispositivo attivo (di solito), quindi puliamo activeDevice
                 activeDevice: newState ? null : s.activeDevice 
             };
         });
@@ -302,7 +298,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
     }, [setNowPlaying, checkRemotePlayerState]);
     
-    // Cleanup polling on unmount
+    // Cleanup polling all'unmount
     useEffect(() => {
         return () => {
             if (remotePollIntervalRef.current) {
@@ -467,15 +463,38 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.setItem("last_is_playing", "true");
         setLastPlayInitiated(Date.now());
         
-        // Indicate loading
-        setNowPlaying(prev => ({ 
-            ...prev, 
-            source: 'spotify', 
-            radioStation: null, 
-            youtubeTrack: null, 
-            isLoading: true,
-            activeDevice: null // Clear remote device on local play request
-        }));
+        // --- SPECIAL HANDLER FOR "LISTEN HERE" (TRANSFER) ---
+        // If we are currently showing a remote device (activeDevice is set),
+        // we assume the user wants to bring playback HERE.
+        // To prevent double playback, we first pause the remote, wait, then play/transfer to local.
+        if (nowPlaying.activeDevice) {
+            console.log('[AuthContext] Taking control from remote device...');
+            try {
+                // 1. Force pause on the current remote device (if playing)
+                if (nowPlaying.activeDevice.is_active) {
+                    await apiClient.put('/me/player/pause').catch(() => {});
+                    await new Promise(r => setTimeout(r, 300)); // Brief wait for Spotify backend
+                }
+                
+                // 2. Clear the active device visual state immediately
+                setNowPlaying(prev => ({ ...prev, activeDevice: null, isLoading: true }));
+
+                // 3. Let the safePlay logic handle waking up the local player.
+                // NOTE: safePlay will see no deviceId active locally, wake it up, and transfer.
+            } catch (e) {
+                console.error("Error taking control:", e);
+            }
+        } else {
+             // Normal play request
+             setNowPlaying(prev => ({ 
+                ...prev, 
+                source: 'spotify', 
+                radioStation: null, 
+                youtubeTrack: null, 
+                isLoading: true,
+                activeDevice: null 
+            }));
+        }
 
         try {
             const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
@@ -489,7 +508,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         } finally {
             isSwitchingTrack.current = false;
         }
-    }, [attemptRefreshAndUpdatePlayerToken]);
+    }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice]);
     
     useEffect(() => {
         if (lastPlayInitiated > 0) {

@@ -275,7 +275,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
 const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyDevice, isNight: boolean, onTakeControl: () => void }) => {
     const DeviceIcon = () => {
         const type = device.type.toLowerCase();
-        const style = { width: '40px', height: '40px' };
+        const style = { width: '22px', height: '22px' };
         if (type === 'smartphone' || type === 'phone') return <FiSmartphone style={style} />;
         if (type === 'computer' || type === 'desktop' || type === 'laptop') return <FiMonitor style={style} />;
         if (type === 'speaker') return <FiSpeaker style={style} />;
@@ -287,19 +287,22 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
     };
 
     return (
-        <div className="w-full h-full flex flex-col justify-center items-center px-4 py-2 bg-black/40 backdrop-blur-sm rounded-xl">
-            <div className={`p-4 rounded-full mb-3 ${isNight ? 'bg-zinc-800 text-green-500' : 'bg-white text-green-600'}`}>
-                <DeviceIcon />
+        <div className="w-full h-full flex flex-row items-center justify-between px-6 py-2 bg-black/40 backdrop-blur-md rounded-xl overflow-hidden">
+            <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className={`p-3 rounded-full flex-shrink-0 ${isNight ? 'bg-zinc-800 text-green-500' : 'bg-white text-green-600'}`}>
+                    <DeviceIcon />
+                </div>
+                <div className="flex flex-col justify-center overflow-hidden">
+                    <p className={`text-[10px] font-bold uppercase tracking-wider ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>In riproduzione su</p>
+                    <h3 className={`text-base font-bold truncate ${isNight ? 'text-white' : 'text-zinc-800'}`}>
+                        {device.name}
+                    </h3>
+                </div>
             </div>
-            <div className="text-center">
-                <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>In riproduzione su</p>
-                <h3 className={`text-lg font-bold truncate max-w-[280px] ${isNight ? 'text-white' : 'text-zinc-800'}`}>
-                    {device.name}
-                </h3>
-            </div>
+            
             <button 
                 onClick={onTakeControl}
-                className="mt-4 px-6 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-full text-sm transition-transform active:scale-95 shadow-lg"
+                className="flex-shrink-0 ml-4 px-5 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-full text-sm transition-transform active:scale-95 shadow-lg whitespace-nowrap"
             >
                 Ascolta qui
             </button>

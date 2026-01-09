@@ -120,7 +120,7 @@ export interface NowPlayingState {
   youtubeTrack: YouTubeTrackInfo | null;
   youtubePlaylist?: YouTubeTrackInfo[];
   isLoading?: boolean;
-  activeDevice?: SpotifyDevice | null; // New field to track remote devices
+  activeDevice?: SpotifyDevice | null; // Nuovo campo per tracciare dispositivi remoti
 }
 
 // Export PlayOptions to be used by the spotify-player utility
