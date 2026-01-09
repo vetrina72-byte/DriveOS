@@ -49,22 +49,21 @@ interface MusicPlayerProps {
 
 /**
  * A seekable progress bar for the Spotify player with smooth, real-time updates.
- * This component uses `requestAnimationFrame` to interpolate the track's progress between
- * official state updates from the Spotify SDK, providing a fluid user experience. It also
- * handles user seeking (clicking and dragging) with optimistic UI updates to prevent flickering.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const [displayPosition, setDisplayPosition] = useState(state.position);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
+    
+    // We use a reference to track the "anchor" time. 
+    // This allows us to calculate elapsed time accurately even if the component re-renders or the tab was backgrounded.
     const lastStatePositionRef = useRef(state.position);
-    const lastStateUpdateTimestampRef = useRef(performance.now());
+    const lastStateUpdateTimestampRef = useRef(Date.now());
+    
     const visualPositionRef = useRef(state.position);
     const prevPausedRef = useRef(state.paused);
     
-    // Ref to ignore incoming state updates for a short period after seeking
-    // This prevents the bar from "bouncing" back to the old position before the server catches up
     const ignoreRemoteUpdatesUntil = useRef(0);
 
     // Sync state when props change
@@ -76,89 +75,70 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const isPaused = state.paused;
         prevPausedRef.current = isPaused;
 
-        // CASE 1: Play -> Pause Transition
-        // When we pause, the optimistic update might send a stale position (e.g. from 5s ago).
-        // We MUST ignore this and freeze the bar exactly where it visually is.
+        // CASE 1: Play -> Pause
+        // Freeze visual position to avoid jumping back to a potentially stale state.position
         if (wasPlaying && isPaused) {
-            // Update internal anchors so if we resume, we start from this visual point
             lastStatePositionRef.current = visualPositionRef.current;
-            lastStateUpdateTimestampRef.current = performance.now();
+            lastStateUpdateTimestampRef.current = Date.now();
             return; 
         }
 
-        // CASE 2: Pause -> Play Transition
-        // When we resume, the optimistic update sends the old paused position.
-        // We should start animating from our current visual spot, not jump to the stale state position.
+        // CASE 2: Pause -> Play
+        // Resume animation from current visual position
         if (!wasPlaying && !isPaused) {
             lastStatePositionRef.current = visualPositionRef.current;
-            lastStateUpdateTimestampRef.current = performance.now();
+            lastStateUpdateTimestampRef.current = Date.now();
             return;
         }
 
         // CASE 3: Steady State - Paused
-        // If we receive a new state while already paused (e.g. SDK update correcting the time),
-        // only accept it if it's significantly different. Small jumps look like glitches.
         if (isPaused) {
              const diff = Math.abs(state.position - visualPositionRef.current);
              if (diff < 500) return; // Ignore small adjustments while paused
         }
 
         // CASE 4: Steady State - Playing
-        // Check for drift between our smooth animation and the server's reported time.
-        // If drift is small, ignore the update to prevent micro-stutters.
-        const timeSinceLastSync = performance.now() - lastStateUpdateTimestampRef.current;
+        // Check for drift. If visual position is reasonably close to where state says it should be, don't jump.
+        const timeSinceLastSync = Date.now() - lastStateUpdateTimestampRef.current;
         const projectedPos = lastStatePositionRef.current + timeSinceLastSync;
         const drift = Math.abs(state.position - projectedPos);
         
-        // If playing and drift is small (< 250ms), ignore this update to maintain smoothness.
-        // We ensure playhead > 1s to avoid ignoring start-of-song resets.
-        if (!isPaused && drift < 250 && state.position > 1000) {
+        // Tolerance: If drift is < 500ms, keep animating smoothly.
+        if (!isPaused && drift < 500 && state.position > 1000) {
             return;
         }
 
-        // Hard Sync (Seek, Track Change, or Large Drift)
+        // Hard Sync: State has changed significantly (seek, track change, or loop)
         visualPositionRef.current = state.position;
         setDisplayPosition(state.position);
         lastStatePositionRef.current = state.position;
-        lastStateUpdateTimestampRef.current = performance.now();
+        lastStateUpdateTimestampRef.current = Date.now();
 
     }, [state.position, isSeeking, state.paused]);
 
-    // Handle tab visibility change to prevent "jumps" when returning to the tab
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (!document.hidden && !isSeeking) {
-                // Force sync on tab focus to ensure we aren't showing very old data
-                setDisplayPosition(state.position);
-                visualPositionRef.current = state.position;
-                lastStatePositionRef.current = state.position;
-                lastStateUpdateTimestampRef.current = performance.now();
-            }
-        };
-
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    }, [state.position, isSeeking]);
-
+    // Animation Loop
     useEffect(() => {
         if (state.paused || isSeeking) {
             cancelAnimationFrame(animationFrameRef.current);
             return;
         }
+        
         const animate = () => {
-            const timeSinceLastUpdate = performance.now() - lastStateUpdateTimestampRef.current;
+            // Calculate true elapsed time based on wall clock
+            const timeSinceLastUpdate = Date.now() - lastStateUpdateTimestampRef.current;
             const newAnimatedPosition = lastStatePositionRef.current + timeSinceLastUpdate;
             
-            // Clamp to duration to prevent overflow
             const clampedPosition = Math.min(newAnimatedPosition, state.duration);
             
             visualPositionRef.current = clampedPosition;
             setDisplayPosition(clampedPosition);
+            
             animationFrameRef.current = requestAnimationFrame(animate);
         };
+        
         animationFrameRef.current = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameRef.current);
-    }, [state.paused, state.duration, isSeeking]);
+    }, [state.paused, state.duration, isSeeking]); // Depend only on paused state to start/stop loop
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player || !state.duration) return;
@@ -184,13 +164,13 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const finalPosition = getSeekPosition(e.clientX);
             player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
             
-            // Optimistically update local state so animation continues smoothly from here
+            // Optimistically update local state
             lastStatePositionRef.current = finalPosition;
-            lastStateUpdateTimestampRef.current = performance.now();
+            lastStateUpdateTimestampRef.current = Date.now();
             visualPositionRef.current = finalPosition;
             setDisplayPosition(finalPosition);
             
-            // Ignore external state updates for 1.5 seconds to allow Spotify backend to sync
+            // Ignore external updates briefly
             ignoreRemoteUpdatesUntil.current = Date.now() + 1500;
             
             setIsSeeking(false);
@@ -206,7 +186,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     }, [isSeeking, player, state.duration]);
     
     const progressPercentage = state.duration > 0 ? (displayPosition / state.duration) * 100 : 0;
-    // Clamp visual percentage to 100% just in case
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
     
     return (
@@ -439,7 +418,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     isNight, 
     dockedConfig, 
     floatingConfig, 
-    playerControlsSize,
+    playerControlsSize, 
     playerControlsGap, 
     playerControlsVerticalPosition,
     spinnerSize,

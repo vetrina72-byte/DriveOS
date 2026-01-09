@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
@@ -57,6 +58,32 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
     const containerRef = useRef<HTMLDivElement>(null);
     const autoCloseTimeoutRef = useRef<number | null>(null);
     const [popupPosition, setPopupPosition] = useState({ bottom: 0, left: 0 });
+
+    // --- VISUAL VOLUME INTERPOLATION ---
+    const [visualVolume, setVisualVolume] = useState(volume);
+    
+    // Smoothly animate visualVolume towards the actual volume prop
+    useEffect(() => {
+        let animationFrameId: number;
+        
+        const animate = () => {
+            setVisualVolume(current => {
+                const diff = volume - current;
+                // Snap if very close
+                if (Math.abs(diff) < 0.005) return volume;
+                // Interpolate (adjust 0.2 for speed)
+                return current + diff * 0.2;
+            });
+            
+            // Keep animating if we haven't reached target
+            if (Math.abs(volume - visualVolume) > 0.005) {
+                animationFrameId = requestAnimationFrame(animate);
+            }
+        };
+        
+        animationFrameId = requestAnimationFrame(animate);
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [volume, visualVolume]); // Depend on volume (target) and visualVolume (current state)
 
     const volumeRef = useRef(volume);
     useEffect(() => {
@@ -131,13 +158,17 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         }
     };
     
+    // When user drags, we update the REAL volume immediately for responsiveness,
+    // and also force visualVolume to match to avoid lag/fighting during drag.
     const handleVolumeInput = (newVolume: number) => {
         setVolumeLive(newVolume);
+        setVisualVolume(newVolume); // Force sync during manual drag
         resetAutoCloseTimer();
     };
     
     const handleVolumeChange = (newVolume: number) => {
         setVolumeFinal(newVolume);
+        setVisualVolume(newVolume);
         resetAutoCloseTimer();
     };
 
@@ -148,6 +179,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         const currentVol = volumeRef.current;
         const newVol = clamp(currentVol + (direction === 'up' ? STEP : -STEP), 0, 1);
         setVolumeFinal(newVol);
+        // We let the useEffect handle the visual animation for button presses
     }, [setVolumeFinal]);
 
     const handleArrowPress = useCallback((direction: 'up' | 'down') => {
@@ -165,7 +197,9 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
 
     const thumbSize = volumeSliderThickness * 2.2;
     const thumbMarginTop = ((thumbSize - volumeSliderThickness) / -2) + volumeSliderThumbOffsetY;
-    const progressPercentage = volume * 100;
+    
+    // Use visualVolume for the gradient background to animate it
+    const progressPercentage = visualVolume * 100;
 
     const sliderPopup = isSliderVisible && (
         <div
@@ -190,7 +224,9 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
                     min="0"
                     max="1"
                     step="0.01"
-                    value={volume}
+                    // Control the input with the REAL volume so drag starts from correct place
+                    // But the background style uses visualVolume
+                    value={volume} 
                     onInput={(e) => handleVolumeInput(parseFloat((e.target as HTMLInputElement).value))}
                     onChange={(e) => handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
                     onPointerUp={(e) => handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
