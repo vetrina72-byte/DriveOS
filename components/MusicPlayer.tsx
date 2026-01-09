@@ -61,6 +61,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const lastStatePositionRef = useRef(state.position);
     const lastStateUpdateTimestampRef = useRef(performance.now());
     const visualPositionRef = useRef(state.position);
+    const prevPausedRef = useRef(state.paused);
     
     // Ref to ignore incoming state updates for a short period after seeking
     // This prevents the bar from "bouncing" back to the old position before the server catches up
@@ -68,62 +69,66 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
     // Sync state when props change
     useEffect(() => {
-        if (!isSeeking) {
-            // Critical check: ignore stale updates right after a seek
-            if (Date.now() < ignoreRemoteUpdatesUntil.current) return;
+        if (isSeeking) return;
+        if (Date.now() < ignoreRemoteUpdatesUntil.current) return;
 
-            // Jitter reduction:
-            // Calculate projected position based on last sync
-            const timeSinceLastSync = performance.now() - lastStateUpdateTimestampRef.current;
-            const projectedPos = lastStatePositionRef.current + timeSinceLastSync;
-            const drift = Math.abs(state.position - projectedPos);
+        const wasPlaying = !prevPausedRef.current;
+        const isPaused = state.paused;
+        prevPausedRef.current = isPaused;
 
-            // If drift is minor (< 250ms) and we are playing, ignore this update to maintain smoothness
-            // We ensure playhead > 1s to avoid ignoring initial start
-            if (drift < 250 && !state.paused && state.position > 1000) {
-                return;
-            }
-
-            // FIX: Prevent backward jump on pause
-            // When pausing, the SDK often reports a position slightly behind where our smooth animation reached.
-            // If the difference is small (< 800ms), we prefer the visual continuity (freeze where it is)
-            // rather than snapping back.
-            if (state.paused) {
-                const visualDiff = visualPositionRef.current - state.position;
-                if (visualDiff > 0 && visualDiff < 800) {
-                     // Update internal anchors to be correct, but SKIP visual update
-                     lastStatePositionRef.current = state.position;
-                     lastStateUpdateTimestampRef.current = performance.now();
-                     return;
-                }
-            }
-
-            visualPositionRef.current = state.position;
-            setDisplayPosition(state.position);
-            lastStatePositionRef.current = state.position;
+        // CASE 1: Play -> Pause Transition
+        // When we pause, the optimistic update might send a stale position (e.g. from 5s ago).
+        // We MUST ignore this and freeze the bar exactly where it visually is.
+        if (wasPlaying && isPaused) {
+            // Update internal anchors so if we resume, we start from this visual point
+            lastStatePositionRef.current = visualPositionRef.current;
             lastStateUpdateTimestampRef.current = performance.now();
+            return; 
         }
+
+        // CASE 2: Pause -> Play Transition
+        // When we resume, the optimistic update sends the old paused position.
+        // We should start animating from our current visual spot, not jump to the stale state position.
+        if (!wasPlaying && !isPaused) {
+            lastStatePositionRef.current = visualPositionRef.current;
+            lastStateUpdateTimestampRef.current = performance.now();
+            return;
+        }
+
+        // CASE 3: Steady State - Paused
+        // If we receive a new state while already paused (e.g. SDK update correcting the time),
+        // only accept it if it's significantly different. Small jumps look like glitches.
+        if (isPaused) {
+             const diff = Math.abs(state.position - visualPositionRef.current);
+             if (diff < 500) return; // Ignore small adjustments while paused
+        }
+
+        // CASE 4: Steady State - Playing
+        // Check for drift between our smooth animation and the server's reported time.
+        // If drift is small, ignore the update to prevent micro-stutters.
+        const timeSinceLastSync = performance.now() - lastStateUpdateTimestampRef.current;
+        const projectedPos = lastStatePositionRef.current + timeSinceLastSync;
+        const drift = Math.abs(state.position - projectedPos);
+        
+        // If playing and drift is small (< 250ms), ignore this update to maintain smoothness.
+        // We ensure playhead > 1s to avoid ignoring start-of-song resets.
+        if (!isPaused && drift < 250 && state.position > 1000) {
+            return;
+        }
+
+        // Hard Sync (Seek, Track Change, or Large Drift)
+        visualPositionRef.current = state.position;
+        setDisplayPosition(state.position);
+        lastStatePositionRef.current = state.position;
+        lastStateUpdateTimestampRef.current = performance.now();
+
     }, [state.position, isSeeking, state.paused]);
-
-    // Reset timestamp when resuming playback to prevent jumps (The "balzi strani" fix)
-    useEffect(() => {
-        if (!state.paused) {
-            // RESUME EVENT: Reset anchors to prevent jumping from accumulated delta time while paused
-            lastStateUpdateTimestampRef.current = performance.now();
-            lastStatePositionRef.current = state.position;
-            
-            // Also force update display to current known state to ensure visual sync start
-            visualPositionRef.current = state.position;
-            setDisplayPosition(state.position);
-        }
-    }, [state.paused]); // Removed state.position dependency here to avoid double-reset fighting
 
     // Handle tab visibility change to prevent "jumps" when returning to the tab
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (!document.hidden && !isSeeking) {
-                // When tab becomes visible, force sync to the last known state immediately
-                // to avoid interpolation jumps from stale performance.now() deltas
+                // Force sync on tab focus to ensure we aren't showing very old data
                 setDisplayPosition(state.position);
                 visualPositionRef.current = state.position;
                 lastStatePositionRef.current = state.position;
