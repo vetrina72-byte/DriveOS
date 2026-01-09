@@ -5,17 +5,17 @@ import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio
+    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
 } from 'react-icons/fi';
 import { 
-    IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
+    IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp, IoGameControllerOutline
 } from 'react-icons/io5';
 import { 
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
-import type { RadioStation, YouTubeTrackInfo } from '../types';
+import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
@@ -272,6 +272,41 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
     );
 };
 
+const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyDevice, isNight: boolean, onTakeControl: () => void }) => {
+    const DeviceIcon = () => {
+        const type = device.type.toLowerCase();
+        const style = { width: '40px', height: '40px' };
+        if (type === 'smartphone' || type === 'phone') return <FiSmartphone style={style} />;
+        if (type === 'computer' || type === 'desktop' || type === 'laptop') return <FiMonitor style={style} />;
+        if (type === 'speaker') return <FiSpeaker style={style} />;
+        if (type === 'tv' || type === 'castvideo') return <FiTv style={style} />;
+        if (type === 'tablet') return <FiTablet style={style} />;
+        if (type === 'castaudio' || type === 'audio_dongle') return <FiCast style={style} />;
+        if (type === 'gameconsole') return <IoGameControllerOutline style={style} />;
+        return <FiBluetooth style={style} />; // Default/Generic
+    };
+
+    return (
+        <div className="w-full h-full flex flex-col justify-center items-center px-4 py-2 bg-black/40 backdrop-blur-sm rounded-xl">
+            <div className={`p-4 rounded-full mb-3 ${isNight ? 'bg-zinc-800 text-green-500' : 'bg-white text-green-600'}`}>
+                <DeviceIcon />
+            </div>
+            <div className="text-center">
+                <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>In riproduzione su</p>
+                <h3 className={`text-lg font-bold truncate max-w-[280px] ${isNight ? 'text-white' : 'text-zinc-800'}`}>
+                    {device.name}
+                </h3>
+            </div>
+            <button 
+                onClick={onTakeControl}
+                className="mt-4 px-6 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-full text-sm transition-transform active:scale-95 shadow-lg"
+            >
+                Ascolta qui
+            </button>
+        </div>
+    );
+};
+
 const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft'>) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
@@ -357,6 +392,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setNowPlaying, 
       volume, 
       playYouTube, 
+      play, // Imported play from AuthContext
       isAutoplayBlocked,
       unlockAutoplay
   } = useAuth();
@@ -373,7 +409,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
     const playerState = nowPlaying.spotifyState;
-    const { radioStation, youtubeTrack, youtubePlaylist, source } = nowPlaying;
+    const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
 
     const audioRef = useRef<HTMLAudioElement>(null);
     const hlsRef = useRef<any>(null);
@@ -397,6 +433,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [nowPlaying.isLoading, debugSpinner]);
 
     const player = getPlayerInstance();
+    // Check if we are active LOCALLY
     const isPlayerActive = player && playerState && playerState.track_window.current_track;
     const currentTrack = playerState?.track_window.current_track;
     const currentTrackUri = currentTrack?.uri;
@@ -668,7 +705,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleTogglePlay = () => {
         if (source === 'spotify') {
-            player?.togglePlay();
+            // Updated to use the context play function with empty options.
+            // This triggers 'safePlay' which handles reconnection/transfer if needed.
+            // Passing {} tells the backend to just 'resume' current context or transfer.
+            play({}); 
         } else if (source === 'radio') {
             const audio = audioRef.current;
             if (audio) {
@@ -812,6 +852,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     const renderPlayerContent = () => {
         const showSpinner = nowPlaying.isLoading ?? false;
+
+        // --- NEW: REMOTE DEVICE VIEW ---
+        // If Spotify source is active, but local player is NOT active, and we have a remote device:
+        if (source === 'spotify' && !isPlayerActive && activeDevice) {
+            return (
+                <RemotePlayerView 
+                    device={activeDevice} 
+                    isNight={isNight} 
+                    onTakeControl={() => play({})} 
+                />
+            );
+        }
 
         if (source === 'youtube' && youtubeTrack) {
             const { title, channelTitle, thumbnail } = youtubeTrack;

@@ -89,7 +89,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [nowPlaying, setNowPlaying] = useState<NowPlayingState>({
-        source: null, spotifyState: null, radioStation: null, radioContext: [], youtubeTrack: null, isLoading: false,
+        source: null, spotifyState: null, radioStation: null, radioContext: [], youtubeTrack: null, isLoading: false, activeDevice: null
     });
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
     const [isAutoplayBlocked, setAutoplayBlocked] = useState(false);
@@ -142,6 +142,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
+    const remotePollIntervalRef = useRef<number | null>(null);
 
     const triggerDataRefresh = useCallback(() => setRefreshTrigger(p => p + 1), []);
 
@@ -224,20 +225,71 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         return () => { if (refreshTimeoutId.current) clearTimeout(refreshTimeoutId.current); }
     }, [state.isAuthenticated, state.expiresAt, scheduleRefresh]);
 
+    // NEW: Function to check remote player state (API Polling)
+    const checkRemotePlayerState = useCallback(async () => {
+        if (!state.accessToken) return;
+        try {
+            // Fetch current playback state from Spotify API to see if another device is active
+            const response = await apiClient.get('/me/player');
+            
+            if (response.status === 200 && response.data) {
+                const { device, item, is_playing } = response.data;
+                const localDeviceId = getDeviceId();
+                
+                // If the active device is NOT the local SDK, update state to show remote playback
+                if (device && device.id !== localDeviceId) {
+                    setNowPlaying(prev => ({
+                        ...prev,
+                        source: 'spotify', // Still Spotify source
+                        activeDevice: device, // Store the remote device info
+                        // We can also create a fake "SpotifyPlayerState" here if we want to show track info
+                        // But for now, we rely on activeDevice to toggle the UI view
+                    }));
+                } else if (!is_playing && nowPlaying.source === 'spotify' && !nowPlaying.spotifyState) {
+                    // Nothing playing anywhere
+                    setNowPlaying(prev => ({ ...prev, activeDevice: null }));
+                }
+            } else if (response.status === 204) {
+                // No content = nothing playing
+                setNowPlaying(prev => ({ ...prev, activeDevice: null }));
+            }
+        } catch (e) {
+            console.error("Error checking remote player state", e);
+        }
+    }, [state.accessToken, nowPlaying.source, nowPlaying.spotifyState]);
+
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
             
-            // Critical fix: If we receive a new state, stop loading.
-            // Check if track matches what we tried to play? Not strictly necessary if we trust the flow.
-            // If track is missing, it might mean "not ready", but generally state update means "something happened".
             const isLoading = isSwitchingTrack.current; 
             
+            // If local state is null (player disconnected or transferred), check remote
+            if (newState === null) {
+                // Immediately check who took over
+                checkRemotePlayerState();
+                
+                // Set up polling for remote state while local is inactive
+                if (!remotePollIntervalRef.current) {
+                    remotePollIntervalRef.current = window.setInterval(checkRemotePlayerState, 5000);
+                }
+            } else {
+                // If local state is active, clear remote polling
+                if (remotePollIntervalRef.current) {
+                    clearInterval(remotePollIntervalRef.current);
+                    remotePollIntervalRef.current = null;
+                }
+            }
+
             return { 
                 ...s, 
                 spotifyState: newState, 
-                isLoading: isLoading ? s.isLoading : false, // Only clear loading if not currently switching
-                source: newState ? 'spotify' : null 
+                isLoading: isLoading ? s.isLoading : false, 
+                source: 'spotify',
+                // If newState exists, we are the active device (usually), so clear activeDevice (remote)
+                // However, be careful: SDK state updates even if paused. 
+                // But generally newState means *this* player is the focus.
+                activeDevice: newState ? null : s.activeDevice 
             };
         });
         
@@ -248,8 +300,17 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (newState.context && newState.context.uri) localStorage.setItem("last_context_uri", newState.context.uri);
             else localStorage.removeItem("last_context_uri");
         }
-    }, [setNowPlaying]);
+    }, [setNowPlaying, checkRemotePlayerState]);
     
+    // Cleanup polling on unmount
+    useEffect(() => {
+        return () => {
+            if (remotePollIntervalRef.current) {
+                clearInterval(remotePollIntervalRef.current);
+            }
+        };
+    }, []);
+
     const fetchUserInfo = useCallback(async () => {
         try { const { data } = await apiClient.get('/me'); return data; } catch (err) { return null; }
     }, []);
@@ -412,13 +473,13 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             source: 'spotify', 
             radioStation: null, 
             youtubeTrack: null, 
-            isLoading: true 
+            isLoading: true,
+            activeDevice: null // Clear remote device on local play request
         }));
 
         try {
             const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
             if (!success) {
-                // If failed, stop loading indicator so user isn't stuck
                 setNowPlaying(prev => ({ ...prev, isLoading: false }));
                 console.error("Playback failed or timed out.");
             }

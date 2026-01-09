@@ -152,17 +152,54 @@ export async function setVolumeFinal(volume: number) {
   return await setVolumeSafe(volume);
 }
 
+// Helper to reconnect and wait for a new Device ID
+async function reconnectAndGetDeviceId(player: SpotifyPlayer): Promise<string | null> {
+    return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+            console.warn('[Spotify SDK] Timeout waiting for device_id after reconnect');
+            resolve(null);
+        }, 4000); // 4 second timeout
+
+        const onReady = (details: { device_id: string }) => {
+            clearTimeout(timeout);
+            player.removeListener('ready', onReady);
+            console.log('[Spotify SDK] Reconnected successfully, new ID:', details.device_id);
+            resolve(details.device_id);
+        };
+
+        player.addListener('ready', onReady);
+        player.disconnect(); // Force disconnect first to ensure clean state
+        setTimeout(() => {
+            player.connect().catch(e => {
+                console.error("Connect failed", e);
+                clearTimeout(timeout);
+                resolve(null);
+            });
+        }, 100);
+    });
+}
+
 /**
  * Executes a play command safely, handling device activation and token refresh automatically.
  */
 export async function safePlay(options: PlayOptions, attemptRefresh: () => Promise<boolean>): Promise<boolean> {
     const sessionId = getSessionId();
     
-    // 1. Check if we have a device ID from the SDK.
+    // 1. Check if we have a device ID. If not, try to wake up the player.
     if (!spotifyDeviceId) {
-        console.warn('[safePlay] No local device ID found. SDK might not be ready.');
-        // We can't play if we don't know our own device ID.
-        return false;
+        console.warn('[safePlay] No local device ID. Player might be asleep. Attempting to wake up...');
+        if (spotifyPlayer) {
+            const newId = await reconnectAndGetDeviceId(spotifyPlayer);
+            if (newId) {
+                spotifyDeviceId = newId;
+            } else {
+                console.error('[safePlay] Failed to wake up player.');
+                return false;
+            }
+        } else {
+            console.error('[safePlay] Player instance missing.');
+            return false;
+        }
     }
 
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
@@ -206,51 +243,23 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
             } else {
                 console.error('[safePlay] Transfer failed. Attempting hard reconnect...');
                 
-                // New Logic: If transfer fails (device truly dead), restart the player connection
+                // If transfer failed, the device ID might be truly dead/rotated.
                 if (spotifyPlayer) {
-                    const newDevicePromise = new Promise<string>((resolve, reject) => {
-                        const timeout = setTimeout(() => {
-                            spotifyPlayer?.removeListener('ready', onReady);
-                            reject(new Error('Timeout waiting for new Device ID'));
-                        }, 5000);
-
-                        const onReady = (details: { device_id: string }) => {
-                            clearTimeout(timeout);
-                            spotifyPlayer?.removeListener('ready', onReady);
-                            resolve(details.device_id);
-                        };
-
-                        spotifyPlayer.addListener('ready', onReady);
-                    });
-
-                    spotifyPlayer.disconnect();
-                    const connected = await spotifyPlayer.connect();
-
-                    if (connected) {
-                        try {
-                            const newDeviceId = await newDevicePromise;
-                            console.log('[safePlay] Reconnected. New Device ID:', newDeviceId);
-                            
-                            // Update global and request IDs
-                            spotifyDeviceId = newDeviceId;
-                            playRequest.deviceId = newDeviceId;
-                            
-                            // Force transfer to new ID
-                            await fetch('/api/transfer-player', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ sessionId, device_id: newDeviceId })
-                            });
-                            
-                            await new Promise(r => setTimeout(r, 300));
-
-                            // Retry play
-                            result = await doPlay();
-                            if (result.ok) return true;
-
-                        } catch (reconnectErr) {
-                            console.error('[safePlay] Reconnect sequence failed:', reconnectErr);
-                        }
+                    const newId = await reconnectAndGetDeviceId(spotifyPlayer);
+                    if (newId) {
+                        spotifyDeviceId = newId;
+                        playRequest.deviceId = newId;
+                        
+                        // Force transfer to new ID
+                        await fetch('/api/transfer-player', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionId, device_id: newId })
+                        });
+                        
+                        await new Promise(r => setTimeout(r, 300));
+                        result = await doPlay();
+                        if (result.ok) return true;
                     }
                 }
             }
@@ -264,9 +273,7 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         console.log('[safePlay] Token expired (401). Refreshing...');
         const refreshed = await attemptRefresh();
         if (refreshed) {
-            // Retry once with new token (handled implicitly by backend/session manager, 
-            // but we need to ensure the proxy uses the fresh data, which it pulls from Redis/Session)
-            await new Promise(r => setTimeout(r, 200)); // Small grace period
+            await new Promise(r => setTimeout(r, 200)); 
             result = await doPlay();
             if (result.ok) return true;
         }
