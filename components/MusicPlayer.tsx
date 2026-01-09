@@ -48,112 +48,98 @@ interface MusicPlayerProps {
 }
 
 /**
- * A seekable progress bar for the Spotify player with seek stabilization and smooth updates.
+ * A direct, non-interpolated progress bar for the Spotify player.
+ * Uses local override to prevent "rubber-banding" after seeking.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Initial calculation to prevent jump on mount
-    const calculateInitialPosition = () => {
+    // Initial calculation
+    const calculatePosition = () => {
         if (state.paused) return state.position;
         const age = (Date.now() - state.timestamp); 
         return Math.min(state.duration, state.position + age);
     };
 
-    const [displayPosition, setDisplayPosition] = useState(() => calculateInitialPosition());
+    const [displayPosition, setDisplayPosition] = useState(() => calculatePosition());
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
-    const animationFrameRef = useRef(0);
     
-    // We maintain a separate visual reference for smooth interpolation
-    const currentVisualPositionRef = useRef(calculateInitialPosition());
+    // SEEK OVERRIDE: Stores the local simulation state after a seek
+    const seekOverrideRef = useRef<{ pos: number, time: number } | null>(null);
 
-    // SEEK STABILIZATION REFS
-    const seekTargetRef = useRef<number | null>(null);
-    const seekTimeRef = useRef<number>(0);
-
-    // Animation Loop
+    // Main Update Loop
     useEffect(() => {
-        if (isSeeking) {
-            cancelAnimationFrame(animationFrameRef.current);
-            return;
-        }
+        let animationFrameId: number;
         
-        const animate = () => {
+        const update = () => {
+            if (isSeeking) {
+                // If dragging, do nothing (handled by mouse events)
+                return;
+            }
+
             const now = Date.now();
-            let targetPos = 0;
+            let effectivePosition = 0;
 
-            // 1. Calculate authoritative position from SDK (Base Truth)
-            const age = now - state.timestamp;
-            const sdkPos = state.paused ? state.position : Math.min(state.duration, state.position + age);
+            // 1. Calculate SDK authoritative position (Server Truth)
+            const sdkElapsed = now - state.timestamp;
+            // Ensure we don't go negative or beyond duration
+            const sdkPosition = state.paused 
+                ? state.position 
+                : Math.max(0, Math.min(state.duration, state.position + sdkElapsed));
 
-            // 2. Seek Stabilization Logic
-            // If we recently seeked, ignore the SDK for a while because it lags behind.
-            if (seekTargetRef.current !== null) {
-                const timeSinceSeek = now - seekTimeRef.current;
+            // 2. Check for Seek Override (Local Truth)
+            // If the user just seeked, the SDK might still report the OLD position for a second or two.
+            // We use our local calculation until the SDK "catches up".
+            if (seekOverrideRef.current) {
+                const { pos: seekPos, time: seekTime } = seekOverrideRef.current;
+                const overrideElapsed = now - seekTime;
                 
-                // "Grace period" of 2 seconds where we trust our simulation over the SDK
-                if (timeSinceSeek < 2000) {
-                    // Simulate playback from the point we seeked to
-                    const simulatedPos = state.paused 
-                        ? seekTargetRef.current 
-                        : Math.min(state.duration, seekTargetRef.current + timeSinceSeek);
+                // Simulate local playback from the seek point
+                const localPosition = state.paused 
+                    ? seekPos 
+                    : Math.max(0, Math.min(state.duration, seekPos + overrideElapsed));
 
-                    // Check if SDK has caught up (is close enough to our simulation)
-                    // We add a small 300ms buffer before accepting sync to ensure it's not an old packet
-                    if (Math.abs(sdkPos - simulatedPos) < 250 && timeSinceSeek > 300) {
-                        // Synced! Release control to SDK
-                        seekTargetRef.current = null;
-                        targetPos = sdkPos;
-                    } else {
-                        // Still waiting for sync, keep simulating
-                        targetPos = simulatedPos;
-                    }
-                } else {
-                    // Timeout passed, force sync to SDK even if it jumps (safety fallback)
-                    seekTargetRef.current = null;
-                    targetPos = sdkPos;
+                const diff = Math.abs(sdkPosition - localPosition);
+                const timeSinceSeek = now - seekTime;
+
+                // Sync Condition: If SDK position is close to our local position (within 1s),
+                // it means the server has processed the seek. We can release the override.
+                if (timeSinceSeek > 500 && diff < 1000) {
+                    seekOverrideRef.current = null; 
+                    effectivePosition = sdkPosition;
+                } 
+                // Safety Timeout: After 3 seconds, force sync to SDK even if it jumps, to avoid permanent drift.
+                else if (timeSinceSeek > 3000) {
+                    seekOverrideRef.current = null;
+                    effectivePosition = sdkPosition;
+                } 
+                else {
+                    // Otherwise, trust local input
+                    effectivePosition = localPosition;
                 }
             } else {
-                // Normal operation
-                targetPos = sdkPos;
+                // Normal operation: Direct mapping to SDK time
+                effectivePosition = sdkPosition;
             }
 
-            // 3. Visual Interpolation
-            const currentVis = currentVisualPositionRef.current;
-            const diff = targetPos - currentVis;
-
-            let newPos;
+            // Direct update, NO LERP
+            setDisplayPosition(effectivePosition);
             
-            // Logic for "Decisive" movement
-            if (seekTargetRef.current !== null) {
-                 // During seek stabilization, we want very fast convergence to the target
-                 // to show the user "we are here", without elastic bouncing.
-                 // Using 0.8 factor makes it almost instant but slightly smoothed.
-                 newPos = currentVis + diff * 0.8;
-            } else if (Math.abs(diff) > 2000) {
-                // Large external jump (e.g. track change), slide fast
-                newPos = currentVis + diff * 0.2;
-            } else {
-                // Normal playback - very tight tracking
-                newPos = currentVis + diff * 0.5;
-            }
-
-            // Clamp bounds
-            newPos = Math.max(0, Math.min(newPos, state.duration));
-
-            currentVisualPositionRef.current = newPos;
-            setDisplayPosition(newPos);
-            
-            animationFrameRef.current = requestAnimationFrame(animate);
+            animationFrameId = requestAnimationFrame(update);
         };
         
-        animationFrameRef.current = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(animationFrameRef.current);
+        animationFrameId = requestAnimationFrame(update);
+        return () => cancelAnimationFrame(animationFrameId);
     }, [state.paused, state.duration, state.position, state.timestamp, isSeeking]); 
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player || !state.duration) return;
-        cancelAnimationFrame(animationFrameRef.current);
         setIsSeeking(true);
+        
+        // Immediate visual update on click start
+        const rect = progressRef.current.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+        const newPos = Math.round(state.duration * ratio);
+        setDisplayPosition(newPos);
     }, [player, state.duration]);
 
     useEffect(() => {
@@ -168,8 +154,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         const handleMouseMove = (e: MouseEvent) => {
             const pos = getSeekPosition(e.clientX);
+            // Instant update during drag
             setDisplayPosition(pos);
-            currentVisualPositionRef.current = pos;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
@@ -178,15 +164,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // 1. Commit seek to Player
             player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
             
-            // 2. Set Stabilization Flags
-            seekTargetRef.current = finalPosition;
-            seekTimeRef.current = Date.now();
+            // 2. Set Local Override
+            // This tells the loop: "Ignore the old SDK timestamp for a moment, assume we are at `finalPosition` now"
+            seekOverrideRef.current = { pos: finalPosition, time: Date.now() };
             
             // 3. Update visual immediately
-            currentVisualPositionRef.current = finalPosition;
             setDisplayPosition(finalPosition);
             
-            // 4. Resume animation loop
+            // 4. End seeking state
             setIsSeeking(false);
         };
 
