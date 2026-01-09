@@ -473,16 +473,17 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 // 1. Force pause on the current remote device (if playing)
                 if (nowPlaying.activeDevice.is_active) {
                     await apiClient.put('/me/player/pause').catch(() => {});
-                    await new Promise(r => setTimeout(r, 300)); // Brief wait for Spotify backend
+                    // Wait a bit longer to ensure the backend processes the pause before we ask to play elsewhere
+                    await new Promise(r => setTimeout(r, 500)); 
                 }
                 
-                // 2. Clear the active device visual state immediately
+                // 2. Clear the active device visual state immediately to prevent UI flash
                 setNowPlaying(prev => ({ ...prev, activeDevice: null, isLoading: true }));
 
-                // 3. Let the safePlay logic handle waking up the local player.
-                // NOTE: safePlay will see no deviceId active locally, wake it up, and transfer.
+                // 3. Proceed to safePlay which will wake up the local device.
             } catch (e) {
                 console.error("Error taking control:", e);
+                // Even if remote pause fails, we proceed to try and play locally
             }
         } else {
              // Normal play request
@@ -499,8 +500,14 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         try {
             const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
             if (!success) {
+                // Only reset loading if it failed. If it succeeded, we wait for SDK state change to clear loading.
                 setNowPlaying(prev => ({ ...prev, isLoading: false }));
                 console.error("Playback failed or timed out.");
+            } else {
+                // Safety timeout: if state doesn't change in 3s, clear loading manually to avoid infinite spinner
+                setTimeout(() => {
+                    setNowPlaying(prev => prev.isLoading ? ({ ...prev, isLoading: false }) : prev);
+                }, 3000);
             }
         } catch (error) {
             console.error("Exception during play:", error);
@@ -542,7 +549,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     useEffect(() => {
         if (!state.isAuthenticated || !state.accessToken) { getPlayerInstance()?.disconnect(); return; }
         initSpotifyPlayerOnce({
-            name: 'Mio Infotainment',
+            name: 'Drive OS',
             getAccessToken: getAccessTokenForPlayer,
             onReady: () => setIsPlayerSdkReady(true),
             onNotReady: () => setIsPlayerSdkReady(false),

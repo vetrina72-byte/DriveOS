@@ -396,6 +396,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       volume, 
       playYouTube, 
       play, // Imported play from AuthContext
+      pauseSpotify, // Imported pauseSpotify
       isAutoplayBlocked,
       unlockAutoplay
   } = useAuth();
@@ -708,10 +709,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleTogglePlay = () => {
         if (source === 'spotify') {
-            // Updated to use the context play function with empty options.
-            // This triggers 'safePlay' which handles reconnection/transfer if needed.
-            // Passing {} tells the backend to just 'resume' current context or transfer.
-            play({}); 
+            if (playerState?.paused) {
+                // Resume
+                play({});
+            } else {
+                // Pause
+                pauseSpotify();
+            }
         } else if (source === 'radio') {
             const audio = audioRef.current;
             if (audio) {
