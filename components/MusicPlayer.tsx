@@ -60,6 +60,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const animationFrameRef = useRef(0);
     const lastStatePositionRef = useRef(state.position);
     const lastStateUpdateTimestampRef = useRef(performance.now());
+    const visualPositionRef = useRef(state.position);
     
     // Ref to ignore incoming state updates for a short period after seeking
     // This prevents the bar from "bouncing" back to the old position before the server catches up
@@ -83,6 +84,21 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 return;
             }
 
+            // FIX: Prevent backward jump on pause
+            // When pausing, the SDK often reports a position slightly behind where our smooth animation reached.
+            // If the difference is small (< 800ms), we prefer the visual continuity (freeze where it is)
+            // rather than snapping back.
+            if (state.paused) {
+                const visualDiff = visualPositionRef.current - state.position;
+                if (visualDiff > 0 && visualDiff < 800) {
+                     // Update internal anchors to be correct, but SKIP visual update
+                     lastStatePositionRef.current = state.position;
+                     lastStateUpdateTimestampRef.current = performance.now();
+                     return;
+                }
+            }
+
+            visualPositionRef.current = state.position;
             setDisplayPosition(state.position);
             lastStatePositionRef.current = state.position;
             lastStateUpdateTimestampRef.current = performance.now();
@@ -97,6 +113,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             lastStatePositionRef.current = state.position;
             
             // Also force update display to current known state to ensure visual sync start
+            visualPositionRef.current = state.position;
             setDisplayPosition(state.position);
         }
     }, [state.paused]); // Removed state.position dependency here to avoid double-reset fighting
@@ -108,6 +125,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 // When tab becomes visible, force sync to the last known state immediately
                 // to avoid interpolation jumps from stale performance.now() deltas
                 setDisplayPosition(state.position);
+                visualPositionRef.current = state.position;
                 lastStatePositionRef.current = state.position;
                 lastStateUpdateTimestampRef.current = performance.now();
             }
@@ -129,6 +147,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // Clamp to duration to prevent overflow
             const clampedPosition = Math.min(newAnimatedPosition, state.duration);
             
+            visualPositionRef.current = clampedPosition;
             setDisplayPosition(clampedPosition);
             animationFrameRef.current = requestAnimationFrame(animate);
         };
@@ -163,6 +182,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // Optimistically update local state so animation continues smoothly from here
             lastStatePositionRef.current = finalPosition;
             lastStateUpdateTimestampRef.current = performance.now();
+            visualPositionRef.current = finalPosition;
             setDisplayPosition(finalPosition);
             
             // Ignore external state updates for 1.5 seconds to allow Spotify backend to sync
