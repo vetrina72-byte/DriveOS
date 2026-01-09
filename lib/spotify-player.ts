@@ -204,10 +204,58 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
                 result = await doPlay();
                 if (result.ok) return true;
             } else {
-                console.error('[safePlay] Transfer failed.');
+                console.error('[safePlay] Transfer failed. Attempting hard reconnect...');
+                
+                // New Logic: If transfer fails (device truly dead), restart the player connection
+                if (spotifyPlayer) {
+                    const newDevicePromise = new Promise<string>((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            spotifyPlayer?.removeListener('ready', onReady);
+                            reject(new Error('Timeout waiting for new Device ID'));
+                        }, 5000);
+
+                        const onReady = (details: { device_id: string }) => {
+                            clearTimeout(timeout);
+                            spotifyPlayer?.removeListener('ready', onReady);
+                            resolve(details.device_id);
+                        };
+
+                        spotifyPlayer.addListener('ready', onReady);
+                    });
+
+                    spotifyPlayer.disconnect();
+                    const connected = await spotifyPlayer.connect();
+
+                    if (connected) {
+                        try {
+                            const newDeviceId = await newDevicePromise;
+                            console.log('[safePlay] Reconnected. New Device ID:', newDeviceId);
+                            
+                            // Update global and request IDs
+                            spotifyDeviceId = newDeviceId;
+                            playRequest.deviceId = newDeviceId;
+                            
+                            // Force transfer to new ID
+                            await fetch('/api/transfer-player', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ sessionId, device_id: newDeviceId })
+                            });
+                            
+                            await new Promise(r => setTimeout(r, 300));
+
+                            // Retry play
+                            result = await doPlay();
+                            if (result.ok) return true;
+
+                        } catch (reconnectErr) {
+                            console.error('[safePlay] Reconnect sequence failed:', reconnectErr);
+                        }
+                    }
+                }
             }
         } catch (e) {
-            console.error('[safePlay] Error during transfer:', e);
+            console.error('[safePlay] Error during transfer/reconnect:', e);
         }
     }
 
