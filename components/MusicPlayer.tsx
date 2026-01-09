@@ -48,27 +48,27 @@ interface MusicPlayerProps {
 }
 
 /**
- * A seekable progress bar for the Spotify player with smooth, real-time updates and fluid seek animation.
+ * A seekable progress bar for the Spotify player with seek stabilization and smooth updates.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Calculated true elapsed time based on state timestamp + wall clock
-    const calculateTargetPosition = () => {
+    // Initial calculation to prevent jump on mount
+    const calculateInitialPosition = () => {
         if (state.paused) return state.position;
-        // Use state.timestamp (usually performance.now() or similar from SDK) to sync precisely
-        // Fallback to 0 drift if timestamp is missing (rare)
         const age = (Date.now() - state.timestamp); 
-        return state.position + age;
+        return Math.min(state.duration, state.position + age);
     };
 
-    // Initialize with the *correct* projected time, not just the stale state.position
-    // This fixes the "left behind" issue when returning to the app.
-    const [displayPosition, setDisplayPosition] = useState(() => calculateTargetPosition());
+    const [displayPosition, setDisplayPosition] = useState(() => calculateInitialPosition());
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
     
     // We maintain a separate visual reference for smooth interpolation
-    const currentVisualPositionRef = useRef(calculateTargetPosition());
+    const currentVisualPositionRef = useRef(calculateInitialPosition());
+
+    // SEEK STABILIZATION REFS
+    const seekTargetRef = useRef<number | null>(null);
+    const seekTimeRef = useRef<number>(0);
 
     // Animation Loop
     useEffect(() => {
@@ -78,26 +78,66 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         }
         
         const animate = () => {
-            const targetPos = calculateTargetPosition();
-            const currentPos = currentVisualPositionRef.current;
-            const diff = targetPos - currentPos;
+            const now = Date.now();
+            let targetPos = 0;
 
-            // INTERPOLATION LOGIC:
-            // If difference is large (e.g., user clicked seek, or track changed), Lerp slowly for fluid "slide".
-            // If difference is small (normal playback), Lerp fast (or snap) to stay accurate.
-            
-            let newPos;
-            if (Math.abs(diff) > 1000) {
-                // Large jump: Smooth slide (Teleportation animation)
-                newPos = currentPos + diff * 0.1; 
-                // Snap if close enough to avoid infinite asymptotic slide
-                if (Math.abs(targetPos - newPos) < 10) newPos = targetPos;
+            // 1. Calculate authoritative position from SDK (Base Truth)
+            const age = now - state.timestamp;
+            const sdkPos = state.paused ? state.position : Math.min(state.duration, state.position + age);
+
+            // 2. Seek Stabilization Logic
+            // If we recently seeked, ignore the SDK for a while because it lags behind.
+            if (seekTargetRef.current !== null) {
+                const timeSinceSeek = now - seekTimeRef.current;
+                
+                // "Grace period" of 2 seconds where we trust our simulation over the SDK
+                if (timeSinceSeek < 2000) {
+                    // Simulate playback from the point we seeked to
+                    const simulatedPos = state.paused 
+                        ? seekTargetRef.current 
+                        : Math.min(state.duration, seekTargetRef.current + timeSinceSeek);
+
+                    // Check if SDK has caught up (is close enough to our simulation)
+                    // We add a small 300ms buffer before accepting sync to ensure it's not an old packet
+                    if (Math.abs(sdkPos - simulatedPos) < 250 && timeSinceSeek > 300) {
+                        // Synced! Release control to SDK
+                        seekTargetRef.current = null;
+                        targetPos = sdkPos;
+                    } else {
+                        // Still waiting for sync, keep simulating
+                        targetPos = simulatedPos;
+                    }
+                } else {
+                    // Timeout passed, force sync to SDK even if it jumps (safety fallback)
+                    seekTargetRef.current = null;
+                    targetPos = sdkPos;
+                }
             } else {
-                // Normal playback: Basically real-time, very fast catchup
-                newPos = currentPos + diff * 0.5;
+                // Normal operation
+                targetPos = sdkPos;
             }
 
-            // Clamp
+            // 3. Visual Interpolation
+            const currentVis = currentVisualPositionRef.current;
+            const diff = targetPos - currentVis;
+
+            let newPos;
+            
+            // Logic for "Decisive" movement
+            if (seekTargetRef.current !== null) {
+                 // During seek stabilization, we want very fast convergence to the target
+                 // to show the user "we are here", without elastic bouncing.
+                 // Using 0.8 factor makes it almost instant but slightly smoothed.
+                 newPos = currentVis + diff * 0.8;
+            } else if (Math.abs(diff) > 2000) {
+                // Large external jump (e.g. track change), slide fast
+                newPos = currentVis + diff * 0.2;
+            } else {
+                // Normal playback - very tight tracking
+                newPos = currentVis + diff * 0.5;
+            }
+
+            // Clamp bounds
             newPos = Math.max(0, Math.min(newPos, state.duration));
 
             currentVisualPositionRef.current = newPos;
@@ -134,13 +174,19 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         const handleMouseUp = (e: MouseEvent) => {
             const finalPosition = getSeekPosition(e.clientX);
+            
+            // 1. Commit seek to Player
             player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
             
-            // Set visuals immediately to target so the interpolation (when effect resumes)
-            // starts from here towards the new time.
+            // 2. Set Stabilization Flags
+            seekTargetRef.current = finalPosition;
+            seekTimeRef.current = Date.now();
+            
+            // 3. Update visual immediately
             currentVisualPositionRef.current = finalPosition;
             setDisplayPosition(finalPosition);
             
+            // 4. Resume animation loop
             setIsSeeking(false);
         };
 
