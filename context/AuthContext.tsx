@@ -99,6 +99,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     // Lock mechanism to prevent double playback requests
     const isSwitchingTrack = useRef(false);
     
+    // Lock mechanism to prevent UI flickering during device transfer
+    const isTransferring = useRef(false);
+    
     const latestOptimisticItem = useRef<MediaItem | null>(null);
 
     const [homeContentLoading, setHomeContentLoading] = useState(false);
@@ -228,6 +231,10 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     // NUOVO: Funzione per controllare lo stato del player remoto (API Polling)
     const checkRemotePlayerState = useCallback(async () => {
         if (!state.accessToken) return;
+        // CRITICAL: Skip polling if we are actively transferring to local device
+        // This prevents the UI from momentarily flickering back to "Remote View" due to stale API data
+        if (isTransferring.current) return;
+
         try {
             // Chiede a Spotify chi sta suonando
             const response = await apiClient.get('/me/player');
@@ -257,6 +264,12 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [state.accessToken, nowPlaying.source, nowPlaying.spotifyState]);
 
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
+        // If we get a valid state update from the SDK, we know the local player is active.
+        // We can safely unlock the transfer flag.
+        if (newState) {
+            isTransferring.current = false;
+        }
+
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
             
@@ -467,24 +480,44 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         // If we are currently showing a remote device (activeDevice is set),
         // we assume the user wants to bring playback HERE.
         
-        // IMMEDIATELY update state to remove remote UI and show spinner if needed.
-        // This makes the button click feel instant.
-        // We only force spinner if we are grabbing from remote.
-        // If we are just resuming locally (no activeDevice), keep isLoading false/as-is to avoid spinner flash.
-        setNowPlaying(prev => ({ 
-            ...prev, 
-            source: 'spotify', 
-            radioStation: null, 
-            youtubeTrack: null, 
-            // If activeDevice was present, show loading immediately while we transfer
-            // If just resuming local playback (options is empty), keep isLoading false
-            // If starting new track (options has data), show loading
-            isLoading: !!prev.activeDevice || (Object.keys(options).length > 0),
-            activeDevice: null // Optimistically clear remote device UI
-        }));
+        const isResume = Object.keys(options).length === 0;
+        const isTransfer = !!nowPlaying.activeDevice;
+        // Only show spinner if transferring or loading a new track/context.
+        // If simply resuming, keep existing loading state (likely false) to avoid spinner flash.
+        const shouldShowSpinner = isTransfer || !isResume;
+
+        // IMMEDIATELY update state to remove remote UI and show spinner.
+        setNowPlaying(prev => {
+            // OPTIMISTIC UPDATE: If resuming locally, force paused=false immediately
+            // This updates the UI (Play icon becomes Pause icon) instantly.
+            let nextSpotifyState = prev.spotifyState;
+            if (isResume && !prev.activeDevice && prev.spotifyState) {
+                nextSpotifyState = {
+                    ...prev.spotifyState,
+                    paused: false
+                };
+            }
+
+            return { 
+                ...prev, 
+                spotifyState: nextSpotifyState, // Apply optimistic state
+                source: 'spotify', 
+                radioStation: null, 
+                youtubeTrack: null, 
+                isLoading: shouldShowSpinner, // Conditionally show spinner based on action type
+                activeDevice: null // Optimistically clear remote device UI
+            };
+        });
 
         if (nowPlaying.activeDevice) {
             console.log('[AuthContext] Taking control from remote device...');
+            isTransferring.current = true; // Block polling updates to prevent UI flickering back
+            
+            // Safety timeout to reset the transfer lock if something goes wrong
+            setTimeout(() => {
+                isTransferring.current = false;
+            }, 8000);
+
             try {
                 // 1. Force pause on the current remote device (if playing)
                 if (nowPlaying.activeDevice.is_active) {
