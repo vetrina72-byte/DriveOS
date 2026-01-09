@@ -61,6 +61,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
 
     // --- VISUAL VOLUME INTERPOLATION ---
     const [visualVolume, setVisualVolume] = useState(volume);
+    const lastInputValue = useRef(volume);
     
     // Smoothly animate visualVolume towards the actual volume prop
     useEffect(() => {
@@ -69,9 +70,9 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         const animate = () => {
             setVisualVolume(current => {
                 const diff = volume - current;
-                // Snap if very close
+                // Snap if very close to target
                 if (Math.abs(diff) < 0.005) return volume;
-                // Interpolate (adjust 0.2 for speed)
+                // Interpolate (adjust 0.2 for speed/fluidity)
                 return current + diff * 0.2;
             });
             
@@ -83,11 +84,13 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         
         animationFrameId = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [volume, visualVolume]); // Depend on volume (target) and visualVolume (current state)
+    }, [volume, visualVolume]);
 
     const volumeRef = useRef(volume);
     useEffect(() => {
         volumeRef.current = volume;
+        // Only sync ref if we are not actively dragging, to avoid fighting the user
+        // However, we rely on handleVolumeInput to update lastInputValue during interaction.
     }, [volume]);
 
     const VolumeIcon = volume === 0 || isMuted ? FiVolumeX : volume < 0.5 ? FiVolume1 : FiVolume2;
@@ -158,17 +161,36 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
         }
     };
     
-    // When user drags, we update the REAL volume immediately for responsiveness,
-    // and also force visualVolume to match to avoid lag/fighting during drag.
+    // When user drags/clicks
     const handleVolumeInput = (newVolume: number) => {
+        lastInputValue.current = newVolume;
         setVolumeLive(newVolume);
-        setVisualVolume(newVolume); // Force sync during manual drag
+        
+        // VISUAL TRICK:
+        // If the change is small (drag), update visualVolume immediately for responsiveness.
+        // If the change is large (click on empty space), do NOT update visualVolume immediately.
+        // This forces the input thumb (bound to visualVolume) to stay put for a frame,
+        // allowing the useEffect above to interpolate it smoothly to the new target.
+        const diff = Math.abs(newVolume - visualVolume);
+        
+        // Threshold: 0.05 (5%) allows fast dragging to feel responsive, 
+        // while anything larger triggers the smooth animation.
+        if (diff < 0.05) {
+            setVisualVolume(newVolume); // Snap for drag
+        }
+        // Else: let interpolation handle the slide for click/jump
+        
         resetAutoCloseTimer();
     };
     
     const handleVolumeChange = (newVolume: number) => {
+        lastInputValue.current = newVolume;
         setVolumeFinal(newVolume);
-        setVisualVolume(newVolume);
+        
+        const diff = Math.abs(newVolume - visualVolume);
+        if (diff < 0.05) {
+            setVisualVolume(newVolume);
+        }
         resetAutoCloseTimer();
     };
 
@@ -224,12 +246,13 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
                     min="0"
                     max="1"
                     step="0.01"
-                    // Control the input with the REAL volume so drag starts from correct place
-                    // But the background style uses visualVolume
-                    value={volume} 
+                    // Bind value to visualVolume so the thumb moves with the animation (ball follows bar)
+                    value={visualVolume} 
                     onInput={(e) => handleVolumeInput(parseFloat((e.target as HTMLInputElement).value))}
-                    onChange={(e) => handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
-                    onPointerUp={(e) => handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
+                    // IMPORTANT: DO NOT use onChange. It conflicts with the animation on single clicks.
+                    // We rely on onPointerUp/onTouchEnd to commit the final value tracked in lastInputValue.
+                    onPointerUp={() => handleVolumeChange(lastInputValue.current)}
+                    onTouchEnd={() => handleVolumeChange(lastInputValue.current)}
                     className="volume-slider"
                     aria-label="Volume slider"
                     style={{

@@ -48,97 +48,67 @@ interface MusicPlayerProps {
 }
 
 /**
- * A seekable progress bar for the Spotify player with smooth, real-time updates.
+ * A seekable progress bar for the Spotify player with smooth, real-time updates and fluid seek animation.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    const [displayPosition, setDisplayPosition] = useState(state.position);
+    // Calculated true elapsed time based on state timestamp + wall clock
+    const calculateTargetPosition = () => {
+        if (state.paused) return state.position;
+        // Use state.timestamp (usually performance.now() or similar from SDK) to sync precisely
+        // Fallback to 0 drift if timestamp is missing (rare)
+        const age = (Date.now() - state.timestamp); 
+        return state.position + age;
+    };
+
+    // Initialize with the *correct* projected time, not just the stale state.position
+    // This fixes the "left behind" issue when returning to the app.
+    const [displayPosition, setDisplayPosition] = useState(() => calculateTargetPosition());
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef(0);
     
-    // We use a reference to track the "anchor" time. 
-    // This allows us to calculate elapsed time accurately even if the component re-renders or the tab was backgrounded.
-    const lastStatePositionRef = useRef(state.position);
-    const lastStateUpdateTimestampRef = useRef(Date.now());
-    
-    const visualPositionRef = useRef(state.position);
-    const prevPausedRef = useRef(state.paused);
-    
-    const ignoreRemoteUpdatesUntil = useRef(0);
-
-    // Sync state when props change
-    useEffect(() => {
-        if (isSeeking) return;
-        if (Date.now() < ignoreRemoteUpdatesUntil.current) return;
-
-        const wasPlaying = !prevPausedRef.current;
-        const isPaused = state.paused;
-        prevPausedRef.current = isPaused;
-
-        // CASE 1: Play -> Pause
-        // Freeze visual position to avoid jumping back to a potentially stale state.position
-        if (wasPlaying && isPaused) {
-            lastStatePositionRef.current = visualPositionRef.current;
-            lastStateUpdateTimestampRef.current = Date.now();
-            return; 
-        }
-
-        // CASE 2: Pause -> Play
-        // Resume animation from current visual position
-        if (!wasPlaying && !isPaused) {
-            lastStatePositionRef.current = visualPositionRef.current;
-            lastStateUpdateTimestampRef.current = Date.now();
-            return;
-        }
-
-        // CASE 3: Steady State - Paused
-        if (isPaused) {
-             const diff = Math.abs(state.position - visualPositionRef.current);
-             if (diff < 500) return; // Ignore small adjustments while paused
-        }
-
-        // CASE 4: Steady State - Playing
-        // Check for drift. If visual position is reasonably close to where state says it should be, don't jump.
-        const timeSinceLastSync = Date.now() - lastStateUpdateTimestampRef.current;
-        const projectedPos = lastStatePositionRef.current + timeSinceLastSync;
-        const drift = Math.abs(state.position - projectedPos);
-        
-        // Tolerance: If drift is < 500ms, keep animating smoothly.
-        if (!isPaused && drift < 500 && state.position > 1000) {
-            return;
-        }
-
-        // Hard Sync: State has changed significantly (seek, track change, or loop)
-        visualPositionRef.current = state.position;
-        setDisplayPosition(state.position);
-        lastStatePositionRef.current = state.position;
-        lastStateUpdateTimestampRef.current = Date.now();
-
-    }, [state.position, isSeeking, state.paused]);
+    // We maintain a separate visual reference for smooth interpolation
+    const currentVisualPositionRef = useRef(calculateTargetPosition());
 
     // Animation Loop
     useEffect(() => {
-        if (state.paused || isSeeking) {
+        if (isSeeking) {
             cancelAnimationFrame(animationFrameRef.current);
             return;
         }
         
         const animate = () => {
-            // Calculate true elapsed time based on wall clock
-            const timeSinceLastUpdate = Date.now() - lastStateUpdateTimestampRef.current;
-            const newAnimatedPosition = lastStatePositionRef.current + timeSinceLastUpdate;
+            const targetPos = calculateTargetPosition();
+            const currentPos = currentVisualPositionRef.current;
+            const diff = targetPos - currentPos;
+
+            // INTERPOLATION LOGIC:
+            // If difference is large (e.g., user clicked seek, or track changed), Lerp slowly for fluid "slide".
+            // If difference is small (normal playback), Lerp fast (or snap) to stay accurate.
             
-            const clampedPosition = Math.min(newAnimatedPosition, state.duration);
-            
-            visualPositionRef.current = clampedPosition;
-            setDisplayPosition(clampedPosition);
+            let newPos;
+            if (Math.abs(diff) > 1000) {
+                // Large jump: Smooth slide (Teleportation animation)
+                newPos = currentPos + diff * 0.1; 
+                // Snap if close enough to avoid infinite asymptotic slide
+                if (Math.abs(targetPos - newPos) < 10) newPos = targetPos;
+            } else {
+                // Normal playback: Basically real-time, very fast catchup
+                newPos = currentPos + diff * 0.5;
+            }
+
+            // Clamp
+            newPos = Math.max(0, Math.min(newPos, state.duration));
+
+            currentVisualPositionRef.current = newPos;
+            setDisplayPosition(newPos);
             
             animationFrameRef.current = requestAnimationFrame(animate);
         };
         
         animationFrameRef.current = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameRef.current);
-    }, [state.paused, state.duration, isSeeking]); // Depend only on paused state to start/stop loop
+    }, [state.paused, state.duration, state.position, state.timestamp, isSeeking]); 
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player || !state.duration) return;
@@ -157,21 +127,19 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         };
 
         const handleMouseMove = (e: MouseEvent) => {
-            setDisplayPosition(getSeekPosition(e.clientX));
+            const pos = getSeekPosition(e.clientX);
+            setDisplayPosition(pos);
+            currentVisualPositionRef.current = pos;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
             const finalPosition = getSeekPosition(e.clientX);
             player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
             
-            // Optimistically update local state
-            lastStatePositionRef.current = finalPosition;
-            lastStateUpdateTimestampRef.current = Date.now();
-            visualPositionRef.current = finalPosition;
+            // Set visuals immediately to target so the interpolation (when effect resumes)
+            // starts from here towards the new time.
+            currentVisualPositionRef.current = finalPosition;
             setDisplayPosition(finalPosition);
-            
-            // Ignore external updates briefly
-            ignoreRemoteUpdatesUntil.current = Date.now() + 1500;
             
             setIsSeeking(false);
         };
