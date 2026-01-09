@@ -115,6 +115,20 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 }
             }
 
+            // BUG FIX: 0-GLITCH PROTECTION ON PLAY
+            // When resuming, SDK sometimes briefly reports position 0 before correcting to current time.
+            // If we were well into the track (>5s), and suddenly we get 0 (or near 0), ignore it temporarily.
+            if (!state.paused && !seekOverrideRef.current) {
+                if (lastRenderedPosRef.current > 5000 && sdkPosition < 1000) {
+                    // Suspicious drop to 0 while playing. Stick to last render to avoid glitch.
+                    // We assume user didn't restart the song manually via seek (checked by seekOverrideRef).
+                    // If user used "Prev" button, this might delay the UI update by a split second until 
+                    // the SDK sends a real 0 state consistently or track changes. 
+                    // But track change is handled above.
+                    sdkPosition = lastRenderedPosRef.current;
+                }
+            }
+
             // 2. Check for Seek Override (Local Truth)
             if (seekOverrideRef.current) {
                 const { pos: seekPos, time: seekTime } = seekOverrideRef.current;
