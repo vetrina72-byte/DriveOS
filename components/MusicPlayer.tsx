@@ -65,6 +65,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     // This prevents the bar from "bouncing" back to the old position before the server catches up
     const ignoreRemoteUpdatesUntil = useRef(0);
 
+    // Sync state when props change
     useEffect(() => {
         if (!isSeeking) {
             // Critical check: ignore stale updates right after a seek
@@ -76,6 +77,22 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         }
     }, [state.position, isSeeking]);
 
+    // Handle tab visibility change to prevent "jumps" when returning to the tab
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (!document.hidden && !isSeeking) {
+                // When tab becomes visible, force sync to the last known state immediately
+                // to avoid interpolation jumps from stale performance.now() deltas
+                setDisplayPosition(state.position);
+                lastStatePositionRef.current = state.position;
+                lastStateUpdateTimestampRef.current = performance.now();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, [state.position, isSeeking]);
+
     useEffect(() => {
         if (state.paused || isSeeking) {
             cancelAnimationFrame(animationFrameRef.current);
@@ -84,7 +101,11 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const animate = () => {
             const timeSinceLastUpdate = performance.now() - lastStateUpdateTimestampRef.current;
             const newAnimatedPosition = lastStatePositionRef.current + timeSinceLastUpdate;
-            setDisplayPosition(Math.min(newAnimatedPosition, state.duration));
+            
+            // Clamp to duration to prevent overflow
+            const clampedPosition = Math.min(newAnimatedPosition, state.duration);
+            
+            setDisplayPosition(clampedPosition);
             animationFrameRef.current = requestAnimationFrame(animate);
         };
         animationFrameRef.current = requestAnimationFrame(animate);
@@ -136,14 +157,16 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     }, [isSeeking, player, state.duration]);
     
     const progressPercentage = state.duration > 0 ? (displayPosition / state.duration) * 100 : 0;
+    // Clamp visual percentage to 100% just in case
+    const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
     
     return (
         <div
             ref={progressRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)]"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-hidden"
             onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
+            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ transform: 'translateY(-50%)' }} 
@@ -208,14 +231,15 @@ const YouTubeProgressBar = ({
 
     const displayPosition = isSeeking ? localPosition : progress.position;
     const progressPercentage = progress.duration > 0 ? (displayPosition / progress.duration) * 100 : 0;
+    const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
         <div
             ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)]"
+            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-hidden"
             onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
+            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                 <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)]"
                     style={{ transform: 'translateY(-50%)' }} 
@@ -341,7 +365,7 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
                 </div>
             </div>
             {/* Progress bar */}
-            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)]" />
+            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden" />
             {/* Controls */}
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
@@ -858,8 +882,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     );
     
     const renderPlayerContent = () => {
-        const showSpinner = nowPlaying.isLoading ?? false;
-
         // --- NEW: REMOTE DEVICE VIEW ---
         // If Spotify source is active, but local player is NOT active, and we have a remote device:
         if (source === 'spotify' && !isPlayerActive && activeDevice) {

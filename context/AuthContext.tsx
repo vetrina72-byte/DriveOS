@@ -466,7 +466,23 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         // --- SPECIAL HANDLER FOR "LISTEN HERE" (TRANSFER) ---
         // If we are currently showing a remote device (activeDevice is set),
         // we assume the user wants to bring playback HERE.
-        // To prevent double playback, we first pause the remote, wait, then play/transfer to local.
+        
+        // IMMEDIATELY update state to remove remote UI and show spinner if needed.
+        // This makes the button click feel instant.
+        // We only force spinner if we are grabbing from remote.
+        // If we are just resuming locally (no activeDevice), keep isLoading false/as-is to avoid spinner flash.
+        setNowPlaying(prev => ({ 
+            ...prev, 
+            source: 'spotify', 
+            radioStation: null, 
+            youtubeTrack: null, 
+            // If activeDevice was present, show loading immediately while we transfer
+            // If just resuming local playback (options is empty), keep isLoading false
+            // If starting new track (options has data), show loading
+            isLoading: !!prev.activeDevice || (Object.keys(options).length > 0),
+            activeDevice: null // Optimistically clear remote device UI
+        }));
+
         if (nowPlaying.activeDevice) {
             console.log('[AuthContext] Taking control from remote device...');
             try {
@@ -476,25 +492,11 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                     // Wait a bit longer to ensure the backend processes the pause before we ask to play elsewhere
                     await new Promise(r => setTimeout(r, 500)); 
                 }
-                
-                // 2. Clear the active device visual state immediately to prevent UI flash
-                setNowPlaying(prev => ({ ...prev, activeDevice: null, isLoading: true }));
-
-                // 3. Proceed to safePlay which will wake up the local device.
+                // 2. Proceed to safePlay which will wake up the local device.
             } catch (e) {
                 console.error("Error taking control:", e);
                 // Even if remote pause fails, we proceed to try and play locally
             }
-        } else {
-             // Normal play request
-             setNowPlaying(prev => ({ 
-                ...prev, 
-                source: 'spotify', 
-                radioStation: null, 
-                youtubeTrack: null, 
-                isLoading: true,
-                activeDevice: null 
-            }));
         }
 
         try {
