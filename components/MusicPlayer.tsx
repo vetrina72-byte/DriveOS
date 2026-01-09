@@ -63,48 +63,64 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     
+    // Store the last rendered position to prevent backward jumps on pause
+    const lastRenderedPosRef = useRef<number>(state.position);
+    // Store track ID to reset logic when song changes
+    const lastTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
+    
     // SEEK OVERRIDE: Stores the local simulation state after a seek
     const seekOverrideRef = useRef<{ pos: number, time: number } | null>(null);
 
     // Main Update Loop
     useEffect(() => {
-        // CASE 1: Seeking (User dragging)
-        // Handled by mouse events, no loop needed.
-        if (isSeeking) return;
+        const currentTrackId = state.track_window.current_track?.id;
 
-        // CASE 2: Paused
-        // STOP the loop immediately. Snap to the official server position.
-        // Clear override to prevent any "jump forward" from stale predictions.
-        if (state.paused) {
+        // RESET IF TRACK CHANGED
+        if (currentTrackId !== lastTrackIdRef.current) {
+            lastTrackIdRef.current = currentTrackId || null;
+            lastRenderedPosRef.current = 0;
             seekOverrideRef.current = null;
-            setDisplayPosition(state.position);
-            return;
         }
 
-        // CASE 3: Playing
+        // CASE 1: Seeking (User dragging) - Handled by mouse events
+        if (isSeeking) return;
+
         let animationFrameId: number;
-        
+
         const update = () => {
             const now = Date.now();
             let effectivePosition = 0;
 
-            // 1. Calculate SDK authoritative position (Server Truth)
+            // 1. Calculate SDK authoritative position
             const sdkElapsed = now - state.timestamp;
-            const sdkPosition = Math.max(0, Math.min(state.duration, state.position + sdkElapsed));
+            // Basic position from SDK
+            let sdkPosition = state.paused 
+                ? state.position 
+                : Math.max(0, Math.min(state.duration, state.position + sdkElapsed));
+
+            // BUG FIX: ANTI-ROLLBACK ON PAUSE
+            // If we are paused, and the SDK reports a position significantly OLDER than 
+            // what we last displayed, ignore it. This happens when 'paused' event fires 
+            // with a stale timestamp before the final update.
+            if (state.paused && !seekOverrideRef.current) {
+                // If the drop is significant (> 500ms) and we are on the same track, clamp it.
+                if (lastRenderedPosRef.current - sdkPosition > 500) {
+                    sdkPosition = lastRenderedPosRef.current;
+                }
+            }
 
             // 2. Check for Seek Override (Local Truth)
-            // If the user just seeked, the SDK might still report the OLD position for a second.
             if (seekOverrideRef.current) {
                 const { pos: seekPos, time: seekTime } = seekOverrideRef.current;
                 const overrideElapsed = now - seekTime;
                 
-                // Simulate local playback from the seek point
-                const localPosition = Math.max(0, Math.min(state.duration, seekPos + overrideElapsed));
+                const localPosition = state.paused 
+                    ? seekPos 
+                    : Math.max(0, Math.min(state.duration, seekPos + overrideElapsed));
 
                 const diff = Math.abs(sdkPosition - localPosition);
                 const timeSinceSeek = now - seekTime;
 
-                // Sync Condition: If SDK position catches up (is close) or timeout passes
                 if ((timeSinceSeek > 500 && diff < 1000) || timeSinceSeek > 3000) {
                     seekOverrideRef.current = null; 
                     effectivePosition = sdkPosition;
@@ -112,29 +128,38 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                     effectivePosition = localPosition;
                 }
             } else {
-                // Normal operation: Direct mapping to SDK time
                 effectivePosition = sdkPosition;
             }
 
-            // Direct update, NO LERP
+            // Update refs and state
+            lastRenderedPosRef.current = effectivePosition;
             setDisplayPosition(effectivePosition);
             
-            animationFrameId = requestAnimationFrame(update);
+            // Only continue loop if playing. If paused, we update once (to apply clamp) and stop.
+            if (!state.paused) {
+                animationFrameId = requestAnimationFrame(update);
+            }
         };
         
-        animationFrameId = requestAnimationFrame(update);
-        return () => cancelAnimationFrame(animationFrameId);
-    }, [state.paused, state.duration, state.position, state.timestamp, isSeeking]); 
+        // Run update at least once to handle the state change immediately
+        update();
+        
+        return () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        };
+    }, [state.paused, state.duration, state.position, state.timestamp, isSeeking, state.track_window.current_track?.id]); 
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player || !state.duration) return;
         setIsSeeking(true);
         
-        // Immediate visual update on click start
         const rect = progressRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
         const newPos = Math.round(state.duration * ratio);
+        
+        // Update visuals immediately
         setDisplayPosition(newPos);
+        lastRenderedPosRef.current = newPos;
     }, [player, state.duration]);
 
     useEffect(() => {
@@ -149,7 +174,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         const handleMouseMove = (e: MouseEvent) => {
             const pos = getSeekPosition(e.clientX);
-            // Instant update during drag
             setDisplayPosition(pos);
         };
 
@@ -160,11 +184,11 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
             
             // 2. Set Local Override
-            // This tells the loop: "Ignore the old SDK timestamp for a moment, assume we are at `finalPosition` now"
             seekOverrideRef.current = { pos: finalPosition, time: Date.now() };
             
             // 3. Update visual immediately
             setDisplayPosition(finalPosition);
+            lastRenderedPosRef.current = finalPosition;
             
             // 4. End seeking state
             setIsSeeking(false);
