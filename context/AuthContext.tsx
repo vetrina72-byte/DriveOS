@@ -150,6 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
         try {
             const sid = sessionIdRef.current;
+            console.log('[Auth] Attempting silent token refresh...');
             const res = await fetch(`/api/refresh-token`, {
                 method: 'POST',
                 headers: { 'x-session-id': sid },
@@ -160,6 +161,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const { access_token, expires_in, expires_at } = data;
                 const newExpiresAt = expires_at || (Date.now() + expires_in * 1000);
                 
+                console.log('[Auth] Silent refresh successful. New expiry:', new Date(newExpiresAt).toLocaleTimeString());
+
                 localStorage.setItem('accessToken', access_token);
                 localStorage.setItem('expiresAt', String(newExpiresAt));
                 apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
@@ -170,10 +173,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     expiresAt: newExpiresAt,
                 }));
                 return true;
+            } else {
+                console.warn('[Auth] Silent refresh failed:', data.error);
+                return false;
             }
-            return false;
         } catch (e) {
-            console.error('Refresh token failed', e);
+            console.error('[Auth] Refresh token network error', e);
             return false;
         }
     }, []);
@@ -252,6 +257,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         initFromStorage();
     }, [fetchUserInfo, logout, attemptRefreshAndUpdatePlayerToken]);
 
+    // --- PROACTIVE REFRESH TIMER ---
+    // This effect ensures the token is refreshed SILENTLY 2 minutes before it expires.
+    useEffect(() => {
+        if (!state.isAuthenticated || !state.expiresAt || !state.accessToken) return;
+
+        const now = Date.now();
+        const timeUntilExpiry = state.expiresAt - now;
+        
+        // Refresh 2 minutes before expiry
+        const refreshBuffer = 2 * 60 * 1000; 
+        const delay = timeUntilExpiry - refreshBuffer;
+
+        // If delay is negative (already expired or close to), refresh immediately (via Math.max(0))
+        // If delay is huge, it sets a long timer.
+        
+        console.log(`[Auth] Scheduling silent refresh in ${Math.round(Math.max(0, delay) / 1000)} seconds.`);
+
+        const timerId = setTimeout(async () => {
+            await attemptRefreshAndUpdatePlayerToken();
+        }, Math.max(0, delay));
+
+        return () => clearTimeout(timerId);
+    }, [state.isAuthenticated, state.expiresAt, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
+
+
     const login = useCallback(async (tokenData?: TokenData | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));
         if (authError) { setState(s => ({...s, error: authError, isLoading: false})); return; }
@@ -282,13 +312,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         initSpotifyPlayerOnce({
             name: 'Tesla Web Player',
             getAccessToken: async () => {
-                if (state.expiresAt && Date.now() > state.expiresAt - 60000) {
+                // FIX: Check localStorage directly to avoid stale closures in the Singleton SDK instance.
+                const storedExpiresAt = Number(localStorage.getItem('expiresAt') || '0');
+                const storedToken = localStorage.getItem('accessToken') || '';
+
+                if (storedExpiresAt && Date.now() > storedExpiresAt - 60000) {
                     const refreshed = await attemptRefreshAndUpdatePlayerToken();
                     if (refreshed) {
                         return localStorage.getItem('accessToken') || '';
                     }
                 }
-                return state.accessToken || '';
+                return storedToken;
             },
             onReady: ({ device_id }) => {
                 setIsPlayerReady(true);
