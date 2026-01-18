@@ -358,23 +358,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [state.isAuthenticated, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
-        setNowPlaying(s => ({
-            ...s,
-            source: 'spotify',
-            isLoading: true, // Show spinner
-            radioStation: null, // Clear other sources
-            youtubeTrack: null
-        }));
+        setNowPlaying(s => {
+            // Optimistic Update for responsiveness
+            const optimisticState = s.spotifyState ? { ...s.spotifyState, paused: false } : null;
+            return {
+                ...s,
+                source: 'spotify',
+                isLoading: false, // REMOVED SPINNER as requested
+                spotifyState: optimisticState, // Set playing immediately
+                radioStation: null, // Clear other sources
+                youtubeTrack: null
+            };
+        });
 
         try {
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
         } catch (e) {
             console.error("Play failed", e);
-            setNowPlaying(s => ({ ...s, isLoading: false }));
+            // Optional: We could set loading false here, but we already set it to false above.
         }
     }, [attemptRefreshAndUpdatePlayerToken]);
 
     const pauseSpotify = useCallback(async () => {
+        // Optimistic Update for responsiveness
+        setNowPlaying(s => {
+            if (s.spotifyState && !s.spotifyState.paused) {
+                return {
+                    ...s,
+                    spotifyState: { ...s.spotifyState, paused: true }
+                };
+            }
+            return s;
+        });
+
         try {
             await apiClient.put('/me/player/pause');
         } catch (e) { console.error(e); }
