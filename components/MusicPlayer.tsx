@@ -48,197 +48,152 @@ interface MusicPlayerProps {
 }
 
 /**
- * A direct, non-interpolated progress bar for the Spotify player.
- * Uses local override to prevent "rubber-banding" after seeking.
+ * Enhanced Spotify Progress Bar with Absolute Timestamp Anchoring.
+ * This approach calculates position based on (Date.now() - anchor), ensuring that
+ * even if the tab is backgrounded (and requestAnimationFrame pauses), the position
+ * is instantly correct upon return. It uses a threshold to ignore minor network jitters
+ * from Spotify's SDK updates while respecting legitimate seeks.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Helper to calculate live position for initialization
-    const getLivePosition = () => {
-        if (state.paused) return state.position;
-        const elapsed = Date.now() - state.timestamp;
-        return Math.min(state.duration, state.position + elapsed);
-    };
-
-    const [displayPosition, setDisplayPosition] = useState(getLivePosition);
-    const [isSeeking, setIsSeeking] = useState(false);
+    // Current visual position in ms
+    const [visualPosition, setVisualPosition] = useState(state.position);
+    // User is currently dragging the handle
+    const [isDragging, setIsDragging] = useState(false);
+    
     const progressRef = useRef<HTMLDivElement>(null);
     
-    // Store the last rendered position to prevent backward jumps on pause
-    const lastRenderedPosRef = useRef<number>(state.position);
-    // Store track ID to reset logic when song changes
-    const lastTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
+    // The anchor represents the timestamp when the track would have started at 0:00.
+    // Derived as: Anchor = Date.now() - Current_Track_Position.
+    const playbackAnchorRef = useRef<number>(Date.now() - state.position);
     
-    // SEEK OVERRIDE: Stores the local simulation state after a seek
-    const seekOverrideRef = useRef<{ pos: number, time: number } | null>(null);
+    // Track previous pause state to detect Resume actions
+    const wasPausedRef = useRef(state.paused);
 
-    // Main Update Loop
+    // --- STATE SYNCHRONIZATION ---
     useEffect(() => {
-        const currentTrackId = state.track_window.current_track?.id;
+        // If dragging, do not update from props
+        if (isDragging) return;
 
-        // RESET IF TRACK CHANGED
-        // Critical Fix: Only reset if we have a valid currentTrackId that is DIFFERENT from the last one.
-        // If currentTrackId is null/undefined (temporary SDK glitch), we do NOT reset.
-        if (currentTrackId && lastTrackIdRef.current && currentTrackId !== lastTrackIdRef.current) {
-            lastTrackIdRef.current = currentTrackId;
-            lastRenderedPosRef.current = 0;
-            seekOverrideRef.current = null;
-        } else if (!lastTrackIdRef.current && currentTrackId) {
-             // First initialization
-             lastTrackIdRef.current = currentTrackId;
+        const now = Date.now();
+        const isPaused = state.paused;
+        const wasPaused = wasPausedRef.current;
+
+        if (isPaused) {
+            // If paused, strictly sync to the reported position
+            setVisualPosition(state.position);
+        } else {
+            // If Playing...
+            const newAnchor = now - state.position;
+            const currentAnchor = playbackAnchorRef.current;
+            
+            // Check delta between current anchor and new theoretical anchor
+            const diff = Math.abs(newAnchor - currentAnchor);
+
+            // Update the anchor if:
+            // 1. We just transitioned from Paused -> Playing (Resume)
+            // 2. The drift is significant (> 1000ms), implying a Seek or Track Change
+            // 3. We are very close to start/end (edge case stability)
+            const isResume = wasPaused && !isPaused;
+            const isSeekOrDrift = diff > 1000;
+            
+            if (isResume || isSeekOrDrift) {
+                playbackAnchorRef.current = newAnchor;
+                // Immediate update to avoid visual lag
+                setVisualPosition(state.position);
+            }
+            // Else: drift is small (network jitter), ignore it to keep bar smooth.
         }
 
-        // CASE 1: Seeking (User dragging) - Handled by mouse events
-        if (isSeeking) return;
+        wasPausedRef.current = isPaused;
+    }, [state.position, state.paused, state.duration, isDragging]);
+
+    // --- ANIMATION LOOP ---
+    useEffect(() => {
+        if (state.paused || isDragging) return;
 
         let animationFrameId: number;
 
-        const update = () => {
+        const animate = () => {
             const now = Date.now();
-            let effectivePosition = 0;
-
-            // 1. Calculate SDK authoritative position
-            const sdkElapsed = now - state.timestamp;
-            // Basic position from SDK
-            let sdkPosition = state.paused 
-                ? state.position 
-                : Math.max(0, Math.min(state.duration, state.position + sdkElapsed));
-
-            // BUG FIX: ANTI-ROLLBACK ON PAUSE
-            // If we are paused, and the SDK reports a position significantly OLDER than 
-            // what we last displayed, ignore it. This happens when 'paused' event fires 
-            // with a stale timestamp or 0 before the final update.
-            if (state.paused && !seekOverrideRef.current) {
-                // If the drop is significant (> 500ms) we clamp it to the last known visual position.
-                // This prevents the visual "jump back" when stopping.
-                if (lastRenderedPosRef.current - sdkPosition > 500) {
-                    sdkPosition = lastRenderedPosRef.current;
-                }
-            }
-
-            // BUG FIX: 0-GLITCH PROTECTION ON PLAY
-            // When resuming, SDK sometimes briefly reports position 0 before correcting to current time.
-            // If we were well into the track (>5s), and suddenly we get 0 (or near 0), ignore it temporarily.
-            if (!state.paused && !seekOverrideRef.current) {
-                if (lastRenderedPosRef.current > 5000 && sdkPosition < 1000) {
-                    // Suspicious drop to 0 while playing. Stick to last render to avoid glitch.
-                    // We assume user didn't restart the song manually via seek (checked by seekOverrideRef).
-                    // If user used "Prev" button, this might delay the UI update by a split second until 
-                    // the SDK sends a real 0 state consistently or track changes. 
-                    // But track change is handled above.
-                    sdkPosition = lastRenderedPosRef.current;
-                }
-            }
-
-            // 2. Check for Seek Override (Local Truth)
-            if (seekOverrideRef.current) {
-                const { pos: seekPos, time: seekTime } = seekOverrideRef.current;
-                const overrideElapsed = now - seekTime;
-                
-                const localPosition = state.paused 
-                    ? seekPos 
-                    : Math.max(0, Math.min(state.duration, seekPos + overrideElapsed));
-
-                const diff = Math.abs(sdkPosition - localPosition);
-                const timeSinceSeek = now - seekTime;
-
-                // Sync Condition: Release override if SDK catches up OR timeout (3s) passes
-                if ((timeSinceSeek > 500 && diff < 1000) || timeSinceSeek > 3000) {
-                    seekOverrideRef.current = null; 
-                    effectivePosition = sdkPosition;
-                } else {
-                    effectivePosition = localPosition;
-                }
-            } else {
-                effectivePosition = sdkPosition;
-            }
-
-            // Update refs and state
-            // Only update lastRenderedPosRef if the new position is plausible (not 0 if we were at 50s)
-            // unless it's a new track (handled by the reset logic above)
-            if (effectivePosition > 0 || lastRenderedPosRef.current < 1000) {
-                 lastRenderedPosRef.current = effectivePosition;
-            }
+            // Calculate position based on absolute time anchor.
+            // This is immune to frame drops or background tab throttling.
+            const position = now - playbackAnchorRef.current;
             
-            setDisplayPosition(effectivePosition);
+            // Clamp to duration
+            const clamped = Math.min(state.duration, Math.max(0, position));
             
-            // Only continue loop if playing. If paused, we update once (to apply clamp) and stop.
-            if (!state.paused) {
-                animationFrameId = requestAnimationFrame(update);
-            }
+            setVisualPosition(clamped);
+            
+            animationFrameId = requestAnimationFrame(animate);
         };
-        
-        // Run update at least once to handle the state change immediately
-        update();
-        
-        return () => {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        };
-    }, [state.paused, state.duration, state.position, state.timestamp, isSeeking, state.track_window.current_track?.id]); 
-    
-    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (!progressRef.current || !player || !state.duration) return;
-        setIsSeeking(true);
-        
+
+        animationFrameId = requestAnimationFrame(animate);
+
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [state.paused, isDragging, state.duration]);
+
+    // --- INTERACTION HANDLERS ---
+    const calculatePosFromEvent = (clientX: number) => {
+        if (!progressRef.current || !state.duration) return 0;
         const rect = progressRef.current.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
-        const newPos = Math.round(state.duration * ratio);
-        
-        // Update visuals immediately
-        setDisplayPosition(newPos);
-        lastRenderedPosRef.current = newPos;
-    }, [player, state.duration]);
+        const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
+        return Math.round(state.duration * ratio);
+    };
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (!state.duration) return;
+        setIsDragging(true);
+        const newPos = calculatePosFromEvent(e.clientX);
+        setVisualPosition(newPos);
+    };
 
     useEffect(() => {
-        if (!isSeeking) return;
-
-        const getSeekPosition = (clientX: number): number => {
-            if (!progressRef.current || !state.duration) return 0;
-            const rect = progressRef.current.getBoundingClientRect();
-            const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-            return Math.round(state.duration * ratio);
-        };
+        if (!isDragging) return;
 
         const handleMouseMove = (e: MouseEvent) => {
-            const pos = getSeekPosition(e.clientX);
-            setDisplayPosition(pos);
+            const newPos = calculatePosFromEvent(e.clientX);
+            setVisualPosition(newPos);
         };
 
-        const handleMouseUp = (e: MouseEvent) => {
-            const finalPosition = getSeekPosition(e.clientX);
+        const handleMouseUp = async (e: MouseEvent) => {
+            const finalPos = calculatePosFromEvent(e.clientX);
             
-            // 1. Commit seek to Player
-            player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
+            // Update visual state
+            setVisualPosition(finalPos);
             
-            // 2. Set Local Override
-            seekOverrideRef.current = { pos: finalPosition, time: Date.now() };
+            // Update the anchor immediately so if we resume rendering before SDK update, it's correct relative to now
+            playbackAnchorRef.current = Date.now() - finalPos;
+
+            // Send command
+            if (player) {
+                await player.seek(finalPos);
+            }
             
-            // 3. Update visual immediately
-            setDisplayPosition(finalPosition);
-            lastRenderedPosRef.current = finalPosition;
-            
-            // 4. End seeking state
-            setIsSeeking(false);
+            setIsDragging(false);
         };
 
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
-        
+
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isSeeking, player, state.duration]);
-    
-    const progressPercentage = state.duration > 0 ? (displayPosition / state.duration) * 100 : 0;
+    }, [isDragging, player, state.duration]);
+
+    const progressPercentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
-    
+
     return (
         <div
             ref={progressRef}
             className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
             onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
+            <div 
+                className="h-full rounded-full bg-[var(--progress-fill)] relative" 
+                style={{ width: `${visualPercentage}%` }}
+            >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
                     style={{ transform: 'translateY(-50%)' }} 
