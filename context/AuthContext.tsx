@@ -149,8 +149,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
         try {
+            // LOG RICHIESTO: "1" quando si attiva il refresh
+            console.log('1 [REFRESH ATTIVATO]'); 
+            
             const sid = sessionIdRef.current;
-            console.log('[Auth] Attempting silent token refresh...');
             const res = await fetch(`/api/refresh-token`, {
                 method: 'POST',
                 headers: { 'x-session-id': sid },
@@ -161,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const { access_token, expires_in, expires_at } = data;
                 const newExpiresAt = expires_at || (Date.now() + expires_in * 1000);
                 
-                console.log('[Auth] Silent refresh successful. New expiry:', new Date(newExpiresAt).toLocaleTimeString());
+                console.log('[Auth] Refresh successful. Next expiry:', new Date(newExpiresAt).toLocaleTimeString());
 
                 localStorage.setItem('accessToken', access_token);
                 localStorage.setItem('expiresAt', String(newExpiresAt));
@@ -174,7 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }));
                 return true;
             } else {
-                console.warn('[Auth] Silent refresh failed:', data.error);
+                console.warn('[Auth] Refresh failed:', data.error);
                 return false;
             }
         } catch (e) {
@@ -257,28 +259,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         initFromStorage();
     }, [fetchUserInfo, logout, attemptRefreshAndUpdatePlayerToken]);
 
-    // --- PROACTIVE REFRESH TIMER ---
-    // This effect ensures the token is refreshed SILENTLY 2 minutes before it expires.
+    // --- PROACTIVE REFRESH POLLING ---
+    // Checks every 60 seconds if the token is about to expire (< 5 mins).
+    // This is more robust than a single setTimeout which can be killed by browser throttling.
     useEffect(() => {
         if (!state.isAuthenticated || !state.expiresAt || !state.accessToken) return;
 
-        const now = Date.now();
-        const timeUntilExpiry = state.expiresAt - now;
+        const checkTokenValidity = async () => {
+            const now = Date.now();
+            const timeUntilExpiry = state.expiresAt! - now;
+            const refreshBuffer = 5 * 60 * 1000; // Refresh 5 minutes before expiry
+
+            // Log Timer: Prints remaining time every 60 seconds
+            if (timeUntilExpiry > 0) {
+                const mins = Math.floor(timeUntilExpiry / 60000);
+                const secs = Math.floor((timeUntilExpiry % 60000) / 1000);
+                console.log(`[Auth Timer] Refresh token tra: ${mins}m ${secs}s`);
+            }
+
+            if (timeUntilExpiry < refreshBuffer) {
+                await attemptRefreshAndUpdatePlayerToken();
+            }
+        };
+
+        const intervalId = setInterval(checkTokenValidity, 60000);
         
-        // Refresh 2 minutes before expiry
-        const refreshBuffer = 2 * 60 * 1000; 
-        const delay = timeUntilExpiry - refreshBuffer;
+        // Run check immediately to catch cases where we load near expiry
+        checkTokenValidity();
 
-        // If delay is negative (already expired or close to), refresh immediately (via Math.max(0))
-        // If delay is huge, it sets a long timer.
-        
-        console.log(`[Auth] Scheduling silent refresh in ${Math.round(Math.max(0, delay) / 1000)} seconds.`);
-
-        const timerId = setTimeout(async () => {
-            await attemptRefreshAndUpdatePlayerToken();
-        }, Math.max(0, delay));
-
-        return () => clearTimeout(timerId);
+        return () => clearInterval(intervalId);
     }, [state.isAuthenticated, state.expiresAt, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
 
@@ -310,7 +319,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!state.isAuthenticated || !state.accessToken) return;
 
         initSpotifyPlayerOnce({
-            name: 'Tesla Web Player',
+            name: 'DriveOS', // Changed device name here
             getAccessToken: async () => {
                 // FIX: Check localStorage directly to avoid stale closures in the Singleton SDK instance.
                 const storedExpiresAt = Number(localStorage.getItem('expiresAt') || '0');
