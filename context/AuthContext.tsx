@@ -359,12 +359,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
         setNowPlaying(s => {
-            // Optimistic Update for responsiveness
-            const optimisticState = s.spotifyState ? { ...s.spotifyState, paused: false } : null;
+            // Construct an instant "fake" player state from the clicked item details.
+            // This ensures the player UI pops up immediately even if the SDK isn't ready.
+            const fakeState: SpotifyPlayerState | null = itemForOptimisticUpdate ? {
+                context: { uri: options.context_uri || null, metadata: null },
+                disallows: {},
+                duration: 0,
+                paused: false,
+                position: 0,
+                repeat_mode: 0,
+                shuffle: false,
+                track_window: {
+                    current_track: {
+                        id: itemForOptimisticUpdate.id,
+                        uri: itemForOptimisticUpdate.uri,
+                        type: 'track',
+                        media_type: 'audio',
+                        name: itemForOptimisticUpdate.name,
+                        is_playable: true,
+                        album: {
+                            uri: '',
+                            name: itemForOptimisticUpdate.album?.name || '',
+                            images: itemForOptimisticUpdate.images || itemForOptimisticUpdate.album?.images || []
+                        },
+                        artists: itemForOptimisticUpdate.artists?.map(a => ({ uri: '', name: a.name })) || []
+                    },
+                    next_tracks: [],
+                    previous_tracks: []
+                },
+                timestamp: Date.now()
+            } : null;
+
+            // If we already have state, just unpause it optimistically.
+            // If not, use the fake state.
+            const optimisticState = s.spotifyState ? { ...s.spotifyState, paused: false } : fakeState;
+
             return {
                 ...s,
                 source: 'spotify',
-                isLoading: false, // REMOVED SPINNER as requested
+                isLoading: false, 
                 spotifyState: optimisticState, // Set playing immediately
                 radioStation: null, // Clear other sources
                 youtubeTrack: null
@@ -375,7 +408,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
         } catch (e) {
             console.error("Play failed", e);
-            // Optional: We could set loading false here, but we already set it to false above.
         }
     }, [attemptRefreshAndUpdatePlayerToken]);
 

@@ -52,7 +52,7 @@ interface MusicPlayerProps {
  * Features:
  * 1. Single Source of Truth: While playing, ONLY local anchor dictates position.
  * 2. Instant Reset: Detects track ID change immediately to prevent interpolation glitches.
- * 3. Smart Pause: Ignores stale position updates during pause transitions.
+ * 3. Passive Pause: Freezes exactly on animation end, ignoring minor server-side regressions.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
@@ -64,53 +64,52 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const anchorRef = useRef<number | null>(null);
     const rafRef = useRef<number>();
     
-    // Seek lock to prevent rubber-banding
-    const lastSeekTimeRef = useRef<number>(0);
+    // Keep track of previous paused state to detect transitions
+    const prevPaused = useRef(state.paused);
     
     // Track previous position to detect actual changes vs stale updates
     const prevStatePosition = useRef(state.position);
     
     // Track ID Guard & Reset Logic
-    // We use a fallback 'unknown' but we treat it carefully in the reset logic
     const currentTrackId = state.track_window?.current_track?.id;
     const activeTrackIdRef = useRef<string | null | undefined>(currentTrackId);
 
     // --- 1. INSTANT RESET ON TRACK CHANGE (Render Phase) ---
-    // Only reset if we have a valid NEW track ID. Ignores 'undefined' or 'null' glitches.
+    // Only reset if we have a valid NEW track ID.
     if (currentTrackId && activeTrackIdRef.current !== currentTrackId) {
         activeTrackIdRef.current = currentTrackId;
-        // Force visual reset to 0 immediately
         setVisualPosition(0);
-        // If playing, reset anchor to NOW (0ms). If paused, null.
         anchorRef.current = !state.paused ? Date.now() : null;
-        // Reset previous position tracker to avoid drift logic firing on new track
         prevStatePosition.current = 0;
     }
 
     // --- 2. SYNC LOGIC (Effect Phase) ---
-    // Only runs when 'state' changes (Spotify update) or 'isDragging' changes.
-    // CRITICAL: DOES NOT depend on visualPosition to prevent feedback loops.
     useEffect(() => {
         if (isDragging) return;
 
         const now = Date.now();
         const isPlaying = !state.paused;
-        const isSeeking = (now - lastSeekTimeRef.current) < 2500;
+        const wasPlaying = !prevPaused.current;
+        
+        // Transition Detection
+        const justPaused = !isPlaying && wasPlaying;
+        const justResumed = isPlaying && !wasPlaying;
 
         if (isPlaying) {
             // CASE: PLAYING
-            if (anchorRef.current === null) {
+            if (anchorRef.current === null || justResumed) {
                 // Resume or Start: Initialize anchor based on Spotify's position
                 anchorRef.current = now - state.position;
+                setVisualPosition(state.position);
             } else {
                 // Already Playing: Check for Remote Seek (Large Jump)
+                // We ignore small drifts to prevent jitter/looping
                 const expected = now - anchorRef.current;
                 const actual = state.position;
                 const diff = Math.abs(expected - actual);
 
                 // Only correct if difference is HUGE (> 2.5s), implying a seek/skip.
-                // Otherwise, IGNORE server state to prevent "looping/fighting".
-                if (diff > 2500 && !isSeeking) {
+                if (diff > 2500) {
                     anchorRef.current = now - actual;
                     setVisualPosition(actual);
                 }
@@ -119,20 +118,27 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // CASE: PAUSED
             anchorRef.current = null;
             
-            // Smart Pause Sync:
-            // When we optimistically pause, state.paused becomes true but state.position is old (stale).
-            // We should NOT update visualPosition in that case, or the bar jumps back.
-            // We only update if the server actually sends a NEW position (different from last render).
-            const hasPositionChanged = state.position !== prevStatePosition.current;
-            
-            if (!isSeeking && hasPositionChanged) {
-                setVisualPosition(state.position);
+            if (justPaused) {
+                // STOPPED: Do nothing.
+                // We leave visualPosition exactly where the animation loop left it.
+                // Spotify usually reports a position slightly *behind* our animation.
+                // Updating now would cause a visual "jump back". We want it frozen.
+            } else {
+                // ALREADY PAUSED:
+                // Only update if there is a significant change (e.g. user scrubbed on another device)
+                // or if the track changed (handled by reset logic above).
+                const diff = Math.abs(state.position - visualPosition);
+                // 500ms threshold allows for small server corrections to be ignored
+                if (diff > 500) {
+                    setVisualPosition(state.position);
+                }
             }
         }
         
+        prevPaused.current = state.paused;
         prevStatePosition.current = state.position;
 
-    }, [state, isDragging]);
+    }, [state, isDragging]); // Dependent on state changes
 
     // --- 3. ANIMATION LOOP ---
     useEffect(() => {
@@ -183,7 +189,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = async (e: MouseEvent) => {
             const finalPos = calculatePosFromEvent(e.clientX);
             setVisualPosition(finalPos);
-            lastSeekTimeRef.current = Date.now();
             
             // If playing, update anchor immediately so local playback continues seamlessly
             if (!state.paused) {
