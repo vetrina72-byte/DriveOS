@@ -48,91 +48,117 @@ interface MusicPlayerProps {
 }
 
 /**
- * Enhanced Spotify Progress Bar with Absolute Timestamp Anchoring.
- * This approach calculates position based on (Date.now() - anchor), ensuring that
- * even if the tab is backgrounded (and requestAnimationFrame pauses), the position
- * is instantly correct upon return. It uses a threshold to ignore minor network jitters
- * from Spotify's SDK updates while respecting legitimate seeks.
+ * Enhanced Spotify Progress Bar with Anti-Jump Logic.
+ * This component decouples the visual progress from the Spotify SDK state to prevent jitter.
+ * 
+ * Logic:
+ * 1. Playing: Uses requestAnimationFrame + Date.now() for perfectly smooth movement.
+ * 2. Pausing: FREEZES visual state immediately. Ignores minor SDK drift (< 2s) to prevent "jump back".
+ * 3. Resuming: Resumes from CURRENT visual state to prevent "jump forward".
+ * 4. Seeking: Ignores SDK updates for 2s to allow server to catch up.
+ * 5. Track Change: Resets instantly to 0.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Current visual position in ms
+    // Current visual position in ms (The source of truth for the UI)
     const [visualPosition, setVisualPosition] = useState(state.position);
-    // User is currently dragging the handle
     const [isDragging, setIsDragging] = useState(false);
+    const [isSeeking, setIsSeeking] = useState(false);
     
-    const progressRef = useRef<HTMLDivElement>(null);
+    // The anchor represents the system time when the track "started" at 0:00.
+    // Current Position = Date.now() - anchor.
+    const anchorRef = useRef<number | null>(null);
+    const rafRef = useRef<number>();
     
-    // The anchor represents the timestamp when the track would have started at 0:00.
-    // Derived as: Anchor = Date.now() - Current_Track_Position.
-    const playbackAnchorRef = useRef<number>(Date.now() - state.position);
-    
-    // Track previous pause state to detect Resume actions
-    const wasPausedRef = useRef(state.paused);
+    // Track previous state to detect edges
+    const prevTrackId = useRef<string | null>(state.track_window?.current_track?.id || null);
+    const prevPaused = useRef<boolean>(state.paused);
 
-    // --- STATE SYNCHRONIZATION ---
+    // --- MAIN SYNC LOGIC ---
     useEffect(() => {
-        // If dragging, do not update from props
         if (isDragging) return;
 
-        const now = Date.now();
-        const isPaused = state.paused;
-        const wasPaused = wasPausedRef.current;
-
-        if (isPaused) {
-            // If paused, strictly sync to the reported position
-            setVisualPosition(state.position);
-        } else {
-            // If Playing...
-            const newAnchor = now - state.position;
-            const currentAnchor = playbackAnchorRef.current;
-            
-            // Check delta between current anchor and new theoretical anchor
-            const diff = Math.abs(newAnchor - currentAnchor);
-
-            // Update the anchor if:
-            // 1. We just transitioned from Paused -> Playing (Resume)
-            // 2. The drift is significant (> 1000ms), implying a Seek or Track Change
-            // 3. We are very close to start/end (edge case stability)
-            const isResume = wasPaused && !isPaused;
-            const isSeekOrDrift = diff > 1000;
-            
-            if (isResume || isSeekOrDrift) {
-                playbackAnchorRef.current = newAnchor;
-                // Immediate update to avoid visual lag
-                setVisualPosition(state.position);
-            }
-            // Else: drift is small (network jitter), ignore it to keep bar smooth.
+        const currentTrackId = state.track_window?.current_track?.id || null;
+        const isTrackChange = currentTrackId !== prevTrackId.current;
+        const isToggledPause = state.paused !== prevPaused.current;
+        
+        // 1. TRACK CHANGE: Hard Reset
+        if (isTrackChange) {
+            setVisualPosition(0);
+            anchorRef.current = Date.now(); // Reset anchor to now (0 position)
+            prevTrackId.current = currentTrackId;
+            return; 
         }
 
-        wasPausedRef.current = isPaused;
-    }, [state.position, state.paused, state.duration, isDragging]);
+        // 2. PAUSE/PLAY TOGGLE
+        if (isToggledPause) {
+            if (state.paused) {
+                // Changing to PAUSED:
+                // Stop everything. Keep visualPosition exactly where it is.
+                // Do NOT sync to state.position yet to avoid "jump back".
+                anchorRef.current = null;
+                if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            } else {
+                // Changing to PLAYING:
+                // Set anchor based on CURRENT VISUAL POSITION to ensure continuity.
+                // This prevents "jump forward".
+                anchorRef.current = Date.now() - visualPosition;
+            }
+            prevPaused.current = state.paused;
+            return;
+        }
+
+        // 3. CONTINUOUS UPDATES (Drift Correction)
+        // If we are actively seeking/dragging, ignore server updates
+        if (isSeeking) return;
+
+        // Calculate discrepancy
+        // If playing, where SHOULD we be vs where the server says we are?
+        if (!state.paused && anchorRef.current !== null) {
+            const theoreticalPos = Date.now() - anchorRef.current;
+            const drift = Math.abs(theoreticalPos - state.position);
+
+            // Only snap if drift is HUGE (> 2000ms) - likely an external seek
+            if (drift > 2000) {
+                anchorRef.current = Date.now() - state.position;
+                setVisualPosition(state.position);
+            }
+        }
+        
+        // If paused, verify we aren't wildly off (e.g. seek while paused)
+        if (state.paused) {
+            const diff = Math.abs(visualPosition - state.position);
+            // Snap only if difference is large (> 1.5s)
+            if (diff > 1500) {
+                setVisualPosition(state.position);
+            }
+        }
+
+    }, [state.position, state.paused, state.track_window?.current_track?.id, isDragging, isSeeking, visualPosition]);
 
     // --- ANIMATION LOOP ---
     useEffect(() => {
         if (state.paused || isDragging) return;
 
-        let animationFrameId: number;
-
         const animate = () => {
-            const now = Date.now();
-            // Calculate position based on absolute time anchor.
-            // This is immune to frame drops or background tab throttling.
-            const position = now - playbackAnchorRef.current;
-            
-            // Clamp to duration
-            const clamped = Math.min(state.duration, Math.max(0, position));
-            
-            setVisualPosition(clamped);
-            
-            animationFrameId = requestAnimationFrame(animate);
+            if (anchorRef.current !== null) {
+                const now = Date.now();
+                // Always calculate from anchor to prevent accumulation errors
+                const nextPos = now - anchorRef.current;
+                setVisualPosition(Math.min(nextPos, state.duration));
+            }
+            rafRef.current = requestAnimationFrame(animate);
         };
 
-        animationFrameId = requestAnimationFrame(animate);
+        rafRef.current = requestAnimationFrame(animate);
 
-        return () => cancelAnimationFrame(animationFrameId);
+        return () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        };
     }, [state.paused, isDragging, state.duration]);
 
     // --- INTERACTION HANDLERS ---
+    const progressRef = useRef<HTMLDivElement>(null);
+
     const calculatePosFromEvent = (clientX: number) => {
         if (!progressRef.current || !state.duration) return 0;
         const rect = progressRef.current.getBoundingClientRect();
@@ -143,6 +169,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const handleMouseDown = (e: React.MouseEvent) => {
         if (!state.duration) return;
         setIsDragging(true);
+        setIsSeeking(true); // Block server updates
         const newPos = calculatePosFromEvent(e.clientX);
         setVisualPosition(newPos);
     };
@@ -158,18 +185,20 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = async (e: MouseEvent) => {
             const finalPos = calculatePosFromEvent(e.clientX);
             
-            // Update visual state
             setVisualPosition(finalPos);
+            // Recalculate anchor immediately so play resumes smoothly from here
+            anchorRef.current = Date.now() - finalPos;
             
-            // Update the anchor immediately so if we resume rendering before SDK update, it's correct relative to now
-            playbackAnchorRef.current = Date.now() - finalPos;
-
-            // Send command
             if (player) {
                 await player.seek(finalPos);
             }
             
             setIsDragging(false);
+            
+            // Release seeking lock after 2 seconds to let server catch up
+            setTimeout(() => {
+                setIsSeeking(false);
+            }, 2000);
         };
 
         window.addEventListener('mousemove', handleMouseMove);
