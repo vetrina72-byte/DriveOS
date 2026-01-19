@@ -47,115 +47,73 @@ interface MusicPlayerProps {
     spinnerLeft: number | undefined;
 }
 
-const formatTime = (ms: number) => {
-    if (!ms && ms !== 0) return '-:--';
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-};
-
 /**
  * Robust Spotify Progress Bar.
  * Features:
- * 1. Seek Lock: Ignores server updates for 2.5s after manual seek to prevent rubber-banding.
- * 2. Visual Ref: Uses a ref to track current visual position for smooth Resume operations.
- * 3. Auto-Healing Anchor: Ensures play state always has a valid time anchor.
+ * 1. Seek Lock: Ignores server updates for 2.5s after manual seek.
+ * 2. Instant Reset: Detects track ID change immediately to prevent interpolation glitches.
+ * 3. Zero Lag: Starts animating from 0 immediately on new track.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Current visual position in ms (Source of truth for UI)
+    // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
     const [isDragging, setIsDragging] = useState(false);
-    
     const progressRef = useRef<HTMLDivElement>(null);
     
-    // The timestamp when the track logically started at 0:00.
-    // Current Position = Date.now() - anchor.
+    // Anchor timestamp: Time = Now - Anchor
     const anchorRef = useRef<number | null>(null);
     const rafRef = useRef<number>();
     
-    // Stores the timestamp of the last manual seek to ignore SDK updates for a short time
+    // Seek lock to prevent rubber-banding
     const lastSeekTimeRef = useRef<number>(0);
     
-    // Stores the latest visual position to avoid stale closures in effects
-    const visualPosRef = useRef(state.position);
-    // Sync ref with state on every render
-    visualPosRef.current = visualPosition;
+    // Track ID Guard: Ensures we don't animate old track time on new track
+    const currentTrackId = state.track_window?.current_track?.id || 'unknown';
+    const activeTrackIdRef = useRef<string>(currentTrackId);
 
-    // Track previous state to detect edges
-    const prevTrackId = useRef<string | null>(state.track_window?.current_track?.id || null);
-    const prevPaused = useRef<boolean>(state.paused);
+    // Immediate Reset Logic (Pre-Effect)
+    // If prop track ID differs from ref, we are in a "new track" frame.
+    // We update ref immediately and reset anchor to avoid "infinite jump".
+    if (activeTrackIdRef.current !== currentTrackId) {
+        activeTrackIdRef.current = currentTrackId;
+        // If we are playing, anchor to NOW (starting at 0). If paused, null.
+        anchorRef.current = state.paused ? null : Date.now();
+        // Force visual position to 0 for this render cycle (though state update handles next)
+        if (visualPosition !== 0) setVisualPosition(0); 
+    }
 
     // --- SYNC LOGIC ---
     useEffect(() => {
         if (isDragging) return;
 
         const now = Date.now();
-        // Ignore server updates for 2.5s after a seek to prevent "rubber-banding"
         const isSeeking = (now - lastSeekTimeRef.current) < 2500;
 
-        const currentTrackId = state.track_window?.current_track?.id || null;
-        const isTrackChange = currentTrackId !== prevTrackId.current;
-        const isToggledPause = state.paused !== prevPaused.current;
-
-        // 1. TRACK CHANGE
-        if (isTrackChange) {
-            setVisualPosition(0);
-            visualPosRef.current = 0;
-            // If playing, anchor to NOW (0ms). If paused, null.
-            anchorRef.current = state.paused ? null : now;
-            
-            prevTrackId.current = currentTrackId;
-            prevPaused.current = state.paused;
-            return;
-        }
-
-        // 2. PAUSE/PLAY TOGGLE
-        if (isToggledPause) {
-            if (state.paused) {
-                // Playing -> Paused: Stop anchor, keep visual pos static
-                anchorRef.current = null;
-            } else {
-                // Paused -> Playing: Resume from CURRENT visual pos
-                // This prevents the bar from jumping forward/back to server time immediately.
-                // New Anchor = Now - Current Visual Pos
-                anchorRef.current = now - visualPosRef.current;
-            }
-            prevPaused.current = state.paused;
-            return;
-        }
-
-        // 3. SERVER SYNC (While Playing)
+        // Sync Anchor if missing or drifted
         if (!state.paused) {
-            // Auto-Heal: Ensure anchor exists if we are playing
             if (anchorRef.current === null) {
+                // Determine start time based on server position
                 anchorRef.current = now - state.position;
-            } 
-            
-            // Drift Correction (only if not seeking)
-            if (!isSeeking && anchorRef.current !== null) {
+            } else {
+                // Drift check
                 const expected = now - anchorRef.current;
                 const actual = state.position;
                 const drift = Math.abs(expected - actual);
-
-                // High threshold (1.5s) to allow local smoothness, but catch big jumps
-                // (e.g. looping tracks, external seeks on phone)
-                if (drift > 1500) {
+                
+                // If drift > 1.5s and we haven't sought recently, sync hard
+                if (drift > 1500 && !isSeeking) {
                     anchorRef.current = now - actual;
                     setVisualPosition(actual);
                 }
             }
-        } 
-        // 4. SERVER SYNC (While Paused)
-        else if (state.paused && !isSeeking) {
-            // If paused, we expect visual to match server eventually.
-            // Only update if discrepancy is real (avoid jitter)
-            if (Math.abs(visualPosRef.current - state.position) > 500) {
+        } else {
+            // Paused
+            anchorRef.current = null;
+            if (!isSeeking && Math.abs(visualPosition - state.position) > 500) {
                 setVisualPosition(state.position);
             }
         }
-
-    }, [state, isDragging]);
+    }, [state, isDragging, visualPosition]); // Re-run on state updates
 
     // --- ANIMATION LOOP ---
     useEffect(() => {
@@ -165,10 +123,11 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         }
 
         const animate = () => {
-            if (anchorRef.current !== null) {
+            // Guard: Only animate if anchor is valid AND matches current track
+            // This prevents the "infinite jump" if a frame slips in before reset
+            if (anchorRef.current !== null && activeTrackIdRef.current === currentTrackId) {
                 const now = Date.now();
                 const nextPos = now - anchorRef.current;
-                // Clamp to reasonable bounds
                 const clamped = Math.min(Math.max(0, nextPos), state.duration);
                 setVisualPosition(clamped);
             }
@@ -176,13 +135,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         };
 
         rafRef.current = requestAnimationFrame(animate);
-
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state.paused, isDragging, state.duration]);
+    }, [state.paused, isDragging, state.duration, currentTrackId]);
 
-    // --- INTERACTION HANDLERS ---
+    // --- INTERACTION ---
     const calculatePosFromEvent = (clientX: number) => {
         if (!progressRef.current || !state.duration) return 0;
         const rect = progressRef.current.getBoundingClientRect();
@@ -201,35 +159,24 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         if (!isDragging) return;
 
         const handleMouseMove = (e: MouseEvent) => {
-            const newPos = calculatePosFromEvent(e.clientX);
-            setVisualPosition(newPos);
+            setVisualPosition(calculatePosFromEvent(e.clientX));
         };
 
         const handleMouseUp = async (e: MouseEvent) => {
             const finalPos = calculatePosFromEvent(e.clientX);
-            
-            // 1. Immediate UI update
             setVisualPosition(finalPos);
-            
-            // 2. Set seek lock timestamp to prevent server interference
             lastSeekTimeRef.current = Date.now();
             
-            // 3. Update anchor so playing continues smoothly from here
             if (!state.paused) {
                 anchorRef.current = Date.now() - finalPos;
             }
             
             setIsDragging(false);
-            
-            // 4. Send command
-            if (player) {
-                await player.seek(finalPos);
-            }
+            if (player) await player.seek(finalPos);
         };
 
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
-
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
@@ -240,25 +187,19 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
-        <div className="w-full flex flex-col gap-1.5">
-            <div
-                ref={progressRef}
-                className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
-                onMouseDown={handleMouseDown}
+        <div
+            ref={progressRef}
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
+            onMouseDown={handleMouseDown}
+        >
+            <div 
+                className="h-full rounded-full bg-[var(--progress-fill)] relative" 
+                style={{ width: `${visualPercentage}%` }}
             >
-                <div 
-                    className="h-full rounded-full bg-[var(--progress-fill)] relative" 
-                    style={{ width: `${visualPercentage}%` }}
-                >
-                     <div 
-                        className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
-                        style={{ transform: 'translateY(-50%)' }} 
-                    />
-                </div>
-            </div>
-            <div className="flex justify-between text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-                <span>{formatTime(visualPosition)}</span>
-                <span>{formatTime(state.duration)}</span>
+                 <div 
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
+                    style={{ transform: 'translateY(-50%)' }} 
+                />
             </div>
         </div>
     );
@@ -322,22 +263,16 @@ const YouTubeProgressBar = ({
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
-        <div className="w-full flex flex-col gap-1.5">
-            <div
-                ref={progressRef}
-                className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
-                onMouseDown={handleMouseDown}
-            >
-                <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
-                    <div 
-                        className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
-                        style={{ transform: 'translateY(-50%)' }} 
-                    />
-                </div>
-            </div>
-            <div className="flex justify-between text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-                <span>{formatTime(displayPosition * 1000)}</span>
-                <span>{formatTime(progress.duration * 1000)}</span>
+        <div
+            ref={progressRef}
+            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
+            onMouseDown={handleMouseDown}
+        >
+            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
+                <div 
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
+                    style={{ transform: 'translateY(-50%)' }} 
+                />
             </div>
         </div>
     );
@@ -513,26 +448,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setNowPlaying, 
       volume, 
       playYouTube, 
-      play, // Imported play from AuthContext
-      pauseSpotify, // Imported pauseSpotify
+      play, 
+      pauseSpotify, 
       isAutoplayBlocked,
       unlockAutoplay
   } = useAuth();
     const playerContainerRef = useRef<HTMLDivElement>(null);
-    
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
     const [isQueueClosing, setIsQueueClosing] = useState(false);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(true);
-    
     const [isLiked, setIsLiked] = useState(false);
-
     const spotifyQueueButtonRef = useRef<HTMLButtonElement>(null);
     const youTubeQueueButtonRef = useRef<HTMLButtonElement>(null);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
-    
     const playerState = nowPlaying.spotifyState;
     const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
-
     const audioRef = useRef<HTMLAudioElement>(null);
     const hlsRef = useRef<any>(null);
     const [isRadioPlaying, setIsRadioPlaying] = useState(false);
@@ -545,17 +475,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const hasEndedRef = useRef(false);
     const prevPositionRef = useRef(0);
 
-    useEffect(() => {
-        const show = nowPlaying.isLoading || debugSpinner;
-        if (show) {
-            console.log('🔄 [SPINNER] show');
-        } else {
-            console.log('🔄 [SPINNER] hide');
-        }
-    }, [nowPlaying.isLoading, debugSpinner]);
-
     const player = getPlayerInstance();
-    // Check if we are active LOCALLY
     const isPlayerActive = player && playerState && playerState.track_window.current_track;
     const currentTrack = playerState?.track_window.current_track;
     const currentTrackUri = currentTrack?.uri;
@@ -564,7 +484,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (source === 'spotify') {
             const newIsEnabled = !isAutoQueueEnabled;
             setIsAutoQueueEnabled(newIsEnabled);
-    
             if (!newIsEnabled && visibleQueue === 'spotify') {
                 setIsQueueClosing(true);
                 setTimeout(() => {
@@ -588,27 +507,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     useEffect(() => {
         if (!playerState || playerState.paused || !currentTrackUri) return;
-
         const { position, duration, disallows } = playerState;
         const positionDelta = position - prevPositionRef.current;
-        const isBackwardsSeek = positionDelta < -2000; // User seeks back > 2s
+        const isBackwardsSeek = positionDelta < -2000;
         const isNearEnd = duration > 15000 && (duration - position) < 15000;
         const canSkipNext = !disallows.skipping_next;
 
         if (isBackwardsSeek && !isNearEnd && visibleQueue === 'spotify') {
-            // Hide popover if user seeks away from the end
             setIsQueueClosing(true);
             setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 300);
         } else if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify') {
-            // Show popover if near the end and it's not already visible
             setIsQueueClosing(false);
             setVisibleQueue('spotify');
         }
-
         prevPositionRef.current = position;
     }, [playerState, currentTrackUri, visibleQueue, isAutoQueueEnabled]);
 
-    // Effect for hiding popover on track change
     const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
@@ -621,38 +535,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [currentTrackUri, visibleQueue]);
     
     useEffect(() => {
-        if (audioRef.current) {
-            audioRef.current.volume = volume;
-        }
-        if (youtubePlayerRef.current) {
-            youtubePlayerRef.current.setVolume(volume * 100);
-        }
+        if (audioRef.current) audioRef.current.volume = volume;
+        if (youtubePlayerRef.current) youtubePlayerRef.current.setVolume(volume * 100);
     }, [volume]);
     
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
-
         const cleanup = () => {
-            if (hlsRef.current) {
-                hlsRef.current.destroy();
-                hlsRef.current = null;
-            }
-            audio.pause();
-            audio.removeAttribute('src');
-            audio.load();
+            if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+            audio.pause(); audio.removeAttribute('src'); audio.load();
         };
-        
-        const handleCanPlay = () => {
-            if (nowPlaying.source === 'radio') {
-                setNowPlaying(s => ({ ...s, isLoading: false }));
-            }
-        };
+        const handleCanPlay = () => { if (nowPlaying.source === 'radio') setNowPlaying(s => ({ ...s, isLoading: false })); };
 
         if (source === 'radio' && radioStation?.url_resolved) {
             const streamUrl = radioStation.url_resolved;
             cleanup();
-
             if (window.Hls.isSupported() && streamUrl.includes('.m3u8')) {
                 const hls = new window.Hls();
                 hlsRef.current = hls;
@@ -661,27 +559,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
                     audio.play().catch(e => console.error("Radio autoplay failed:", e));
                 });
-                hls.on(window.Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal) {
-                        console.error('Fatal HLS error, destroying instance.', data);
-                        cleanup();
-                    }
-                });
             } else {
                 audio.src = streamUrl;
                 audio.play().catch(e => console.error("Radio autoplay failed:", e));
             }
-        } else {
-            cleanup();
-        }
+        } else { cleanup(); }
 
         const handlePlay = () => setIsRadioPlaying(true);
         const handlePause = () => setIsRadioPlaying(false);
-
         audio.addEventListener('play', handlePlay);
         audio.addEventListener('pause', handlePause);
         audio.addEventListener('canplay', handleCanPlay);
-
         return () => {
             audio.removeEventListener('play', handlePlay);
             audio.removeEventListener('pause', handlePause);
@@ -690,87 +578,39 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
     }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
     
-    useEffect(() => {
-        if (source === 'youtube' && youtubeTrack?.videoId) {
-            setCurrentYouTubeVideoId(youtubeTrack.videoId);
-        }
-    }, [source, youtubeTrack]);
-    
-    useEffect(() => {
-        const player = youtubePlayerRef.current;
-        if (player && typeof player.pauseVideo === 'function') {
-            if (source !== 'youtube') {
-                player.pauseVideo();
-            }
-        }
-    }, [source]);
+    useEffect(() => { if (source === 'youtube' && youtubeTrack?.videoId) setCurrentYouTubeVideoId(youtubeTrack.videoId); }, [source, youtubeTrack]);
+    useEffect(() => { if (youtubePlayerRef.current && typeof youtubePlayerRef.current.pauseVideo === 'function') if (source !== 'youtube') youtubePlayerRef.current.pauseVideo(); }, [source]);
 
     const handleYouTubeEnd = useCallback(() => {
-        if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) {
-            return;
-        }
-    
-        const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
-            track => track.videoId === nowPlaying.youtubeTrack?.videoId
-        );
-    
-        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
-            return;
-        }
-    
-        const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
-        playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+        if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) return;
+        const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(track => track.videoId === nowPlaying.youtubeTrack?.videoId);
+        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) return;
+        playYouTube(nowPlaying.youtubePlaylist[currentTrackIndex + 1], nowPlaying.youtubePlaylist);
     }, [nowPlaying, playYouTube]);
 
     useEffect(() => {
-        if (progressIntervalRef.current) {
-            clearInterval(progressIntervalRef.current);
-        }
-
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
         if (source === 'youtube' && youtubePlayerRef.current) {
             progressIntervalRef.current = window.setInterval(() => {
                 const player = youtubePlayerRef.current;
                 if (!player || typeof player.getPlayerState !== 'function' || typeof player.getCurrentTime !== 'function') return;
-
                 const playerState = player.getPlayerState();
                 const position = player.getCurrentTime();
                 const duration = player.getDuration();
-                
-                if (playerState === 1 && !isYouTubeSeeking) {
-                    if (duration > 0) {
-                        setYouTubeProgress({ position, duration });
-                    }
-                }
-                
-                const hasFinished = playerState === 0 || (duration > 0 && position >= duration - 0.6);
-
-                if (hasFinished && !hasEndedRef.current) {
-                    hasEndedRef.current = true;
-                    handleYouTubeEnd();
-                }
+                if (playerState === 1 && !isYouTubeSeeking && duration > 0) setYouTubeProgress({ position, duration });
+                if ((playerState === 0 || (duration > 0 && position >= duration - 0.6)) && !hasEndedRef.current) { hasEndedRef.current = true; handleYouTubeEnd(); }
             }, 500);
         }
-
-        return () => {
-            if (progressIntervalRef.current) {
-                clearInterval(progressIntervalRef.current);
-            }
-        };
+        return () => { if (progressIntervalRef.current) clearInterval(progressIntervalRef.current); };
     }, [source, isYouTubePlaying, isYouTubeSeeking, handleYouTubeEnd]);
     
-    useEffect(() => {
-        if (source === 'youtube') {
-            setYouTubeProgress({ position: 0, duration: 1 });
-        }
-    }, [youtubeTrack?.videoId, source]);
+    useEffect(() => { if (source === 'youtube') setYouTubeProgress({ position: 0, duration: 1 }); }, [youtubeTrack?.videoId, source]);
     
     useEffect(() => {
         const playerEl = playerContainerRef.current;
         const buttonRef = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
         if (!visibleQueue || !playerEl || !buttonRef) return;
-
         let animationFrameId: number;
-
         const calculatePosition = () => {
             const playerRect = playerEl.getBoundingClientRect();
             setPopoverPosition({
@@ -779,19 +619,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 transform: 'translateX(-50%)',
             });
         };
-        
-        const updateLoop = () => {
-            calculatePosition();
-            animationFrameId = requestAnimationFrame(updateLoop);
-        };
-
+        const updateLoop = () => { calculatePosition(); animationFrameId = requestAnimationFrame(updateLoop); };
         animationFrameId = requestAnimationFrame(updateLoop);
         window.addEventListener('resize', calculatePosition);
-        
-        return () => {
-            cancelAnimationFrame(animationFrameId);
-            window.removeEventListener('resize', calculatePosition);
-        };
+        return () => { cancelAnimationFrame(animationFrameId); window.removeEventListener('resize', calculatePosition); };
     }, [visibleQueue, queuePopoverBottomOffset]);
     
     useEffect(() => {
@@ -801,147 +632,57 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             try {
                 const { data } = await apiClient.get(`/me/tracks/contains?ids=${trackId}`);
                 setIsLiked(data[0] || false);
-            } catch (e) {
-                console.error("Failed to check if track is liked", e);
-                setIsLiked(false);
-            }
+            } catch (e) { setIsLiked(false); }
         };
         checkIsLiked();
     }, [playerState?.track_window?.current_track?.id]);
 
-    const handleYoutubeReady = (event: { target: any }) => {
-        youtubePlayerRef.current = event.target;
-        youtubePlayerRef.current.setVolume(volume * 100);
-    };
-
+    const handleYoutubeReady = (event: { target: any }) => { youtubePlayerRef.current = event.target; youtubePlayerRef.current.setVolume(volume * 100); };
     const handleYoutubeStateChange = (event: { data: number }) => {
         const playerState = event.data;
         const playerIsPlaying = playerState === 1;
         setIsYouTubePlaying(playerIsPlaying);
-    
-        if (playerIsPlaying) {
-            hasEndedRef.current = false;
-            setNowPlaying(s => ({ ...s, isLoading: false }));
-        }
+        if (playerIsPlaying) { hasEndedRef.current = false; setNowPlaying(s => ({ ...s, isLoading: false })); }
     };
 
     const handleTogglePlay = () => {
-        if (source === 'spotify') {
-            if (playerState?.paused) {
-                // Resume
-                play({});
-            } else {
-                // Pause
-                pauseSpotify();
-            }
-        } else if (source === 'radio') {
-            const audio = audioRef.current;
-            if (audio) {
-                if (audio.paused) {
-                    audio.play().catch(e => console.error("Failed to play radio stream:", e));
-                } else {
-                    audio.pause();
-                }
-            }
-        } else if (source === 'youtube' && youtubePlayerRef.current) {
-            const playerState = youtubePlayerRef.current.getPlayerState();
-            if (playerState === 1) {
-                youtubePlayerRef.current.pauseVideo();
-            } else {
-                youtubePlayerRef.current.playVideo();
-            }
-        }
+        if (source === 'spotify') playerState?.paused ? play({}) : pauseSpotify();
+        else if (source === 'radio') audioRef.current?.paused ? audioRef.current.play().catch(console.error) : audioRef.current?.pause();
+        else if (source === 'youtube' && youtubePlayerRef.current) youtubePlayerRef.current.getPlayerState() === 1 ? youtubePlayerRef.current.pauseVideo() : youtubePlayerRef.current.playVideo();
     };
 
     const handleNextTrack = () => {
         if (source === 'spotify') {
-            // Optimistic update for zero-latency feel
             if (playerState && playerState.track_window.next_tracks.length > 0) {
                 const nextTrack = playerState.track_window.next_tracks[0];
-                const newNextTracks = playerState.track_window.next_tracks.slice(1);
-                
-                setNowPlaying(prev => {
-                    if (!prev.spotifyState) return prev;
-                    return {
-                        ...prev,
-                        spotifyState: {
-                            ...prev.spotifyState,
-                            paused: false,
-                            position: 0,
-                            // Use existing duration as placeholder or 0, avoids flickering
-                            duration: (nextTrack as any).duration_ms || prev.spotifyState?.duration || 0,
-                            track_window: {
-                                ...prev.spotifyState.track_window,
-                                current_track: nextTrack,
-                                next_tracks: newNextTracks,
-                            }
-                        }
-                    };
-                });
+                setNowPlaying(prev => prev.spotifyState ? ({
+                    ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (nextTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: nextTrack, next_tracks: prev.spotifyState.track_window.next_tracks.slice(1) } }
+                }) : prev);
             }
             player?.nextTrack();
-        } else if (source === 'radio') {
-            onStationChange('next');
-        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
-             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
-                track => track.videoId === nowPlaying.youtubeTrack?.videoId
-            );
-            if (currentTrackIndex > -1 && currentTrackIndex < nowPlaying.youtubePlaylist.length - 1) {
-                const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
-                playYouTube(nextTrack, nowPlaying.youtubePlaylist);
-            }
+        } else if (source === 'radio') onStationChange('next');
+        else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
+             const idx = nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId);
+             if (idx > -1 && idx < nowPlaying.youtubePlaylist.length - 1) playYouTube(nowPlaying.youtubePlaylist[idx + 1], nowPlaying.youtubePlaylist);
         }
     };
     
     const handlePrevTrack = () => {
         if (source === 'spotify') {
-            // Logic to mimic Spotify: < 3s -> Prev song, > 3s -> Restart song
             if (playerState && playerState.position > 3000) {
-                // Optimistic Restart
-                setNowPlaying(prev => {
-                    if (!prev.spotifyState) return prev;
-                    return {
-                        ...prev,
-                        spotifyState: { ...prev.spotifyState, position: 0 }
-                    };
-                });
+                setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: { ...prev.spotifyState, position: 0 } }) : prev);
                 player?.seek(0);
             } else if (playerState && playerState.track_window.previous_tracks.length > 0) {
-                // Optimistic Prev
                 const prevTrack = playerState.track_window.previous_tracks[playerState.track_window.previous_tracks.length - 1];
-                const newPrevTracks = playerState.track_window.previous_tracks.slice(0, -1);
-                
-                setNowPlaying(prev => {
-                    if (!prev.spotifyState) return prev;
-                    return {
-                        ...prev,
-                        spotifyState: {
-                            ...prev.spotifyState,
-                            paused: false,
-                            position: 0,
-                            duration: (prevTrack as any).duration_ms || prev.spotifyState?.duration || 0,
-                            track_window: {
-                                ...prev.spotifyState.track_window,
-                                current_track: prevTrack,
-                                previous_tracks: newPrevTracks
-                            }
-                        }
-                    };
-                });
+                setNowPlaying(prev => prev.spotifyState ? ({
+                    ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (prevTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: prevTrack, previous_tracks: prev.spotifyState.track_window.previous_tracks.slice(0, -1) } }
+                }) : prev);
                 player?.previousTrack();
-            } else {
-                player?.previousTrack();
-            }
-        } else if (source === 'radio') {
-            onStationChange('prev');
-        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
-             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
-                track => track.videoId === nowPlaying.youtubeTrack?.videoId
-            );
-            if (currentTrackIndex > 0) {
-                const prevTrack = nowPlaying.youtubePlaylist[currentTrackIndex - 1];
-                playYouTube(prevTrack, nowPlaying.youtubePlaylist);
-            }
+            } else player?.previousTrack();
+        } else if (source === 'radio') onStationChange('prev');
+        else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
+             const idx = nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId);
+             if (idx > 0) playYouTube(nowPlaying.youtubePlaylist[idx - 1], nowPlaying.youtubePlaylist);
         }
     };
 
@@ -950,110 +691,38 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (!trackId) return;
         const originalIsLiked = isLiked;
         setIsLiked(!originalIsLiked);
-        try {
-            if (originalIsLiked) {
-                await apiClient.delete(`/me/tracks`, { data: { ids: [trackId] } });
-            } else {
-                await apiClient.put(`/me/tracks`, { ids: [trackId] });
-            }
-        } catch (e) {
-            console.error("Failed to update like status", e);
-            setIsLiked(originalIsLiked);
-        }
+        try { originalIsLiked ? await apiClient.delete(`/me/tracks`, { data: { ids: [trackId] } }) : await apiClient.put(`/me/tracks`, { ids: [trackId] }); } catch (e) { setIsLiked(originalIsLiked); }
     };
 
-    const handleToggleShuffle = () => {
-        if (!playerState || !player) return;
-        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
-    };
-
-    const handleToggleRepeat = () => {
-        if (!playerState || !player) return;
-        const nextState = (playerState.repeat_mode + 1) % 3;
-        const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
-        apiClient.put(`/me/player/repeat?state=${repeatMode}`);
-    };
+    const handleToggleShuffle = () => playerState && apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
+    const handleToggleRepeat = () => playerState && apiClient.put(`/me/player/repeat?state=${(playerState.repeat_mode + 1) % 3 === 0 ? 'off' : (playerState.repeat_mode + 1) % 3 === 1 ? 'context' : 'track'}`);
     
-    const handleSeekYouTube = useCallback((position: number) => {
-        if (youtubePlayerRef.current) {
-            youtubePlayerRef.current.seekTo(position, true);
-        }
-    }, []);
-    
-    const handleYouTubeSeekStart = useCallback(() => {
-        setIsYouTubeSeeking(true);
-    }, []);
-    
-    const handleYouTubeSeekEnd = useCallback(() => {
-        setIsYouTubeSeeking(false);
-        if (youtubePlayerRef.current) {
-            const position = youtubePlayerRef.current.getCurrentTime();
-            const duration = youtubePlayerRef.current.getDuration();
-            setYouTubeProgress({ position, duration });
-        }
-    }, []);
+    const handleSeekYouTube = useCallback((position: number) => youtubePlayerRef.current?.seekTo(position, true), []);
+    const handleYouTubeSeekStart = useCallback(() => setIsYouTubeSeeking(true), []);
+    const handleYouTubeSeekEnd = useCallback(() => { setIsYouTubeSeeking(false); if (youtubePlayerRef.current) setYouTubeProgress({ position: youtubePlayerRef.current.getCurrentTime(), duration: youtubePlayerRef.current.getDuration() }); }, []);
 
     const playerStyle: React.CSSProperties = useMemo(() => {
-        let baseStyle: React.CSSProperties;
-    
-        if (isAnyAppOpen) {
-            baseStyle = {
-                width: `${dockedConfig.width}px`,
-                height: `${dockedConfig.height}px`,
-                bottom: `${dockedConfig.bottom}px`,
-                left: `${dockedConfig.left}px`,
-                transform: 'none',
-            };
-        } else {
-            const { width, bottom, height, otherWidgetWidth } = floatingConfig;
-            baseStyle = {
-                width: `${width}px`,
-                height: `${height}px`,
-                bottom: `${bottom}px`,
-                left: `calc(50% - ${otherWidgetWidth / 2}px - 8px - ${width / 2}px)`,
-                transform: 'none',
-            };
-        }
+        let baseStyle: React.CSSProperties = isAnyAppOpen ? { width: `${dockedConfig.width}px`, height: `${dockedConfig.height}px`, bottom: `${dockedConfig.bottom}px`, left: `${dockedConfig.left}px`, transform: 'none' } : { width: `${floatingConfig.width}px`, height: `${floatingConfig.height}px`, bottom: `${floatingConfig.bottom}px`, left: `calc(50% - ${floatingConfig.otherWidgetWidth / 2}px - 8px - ${floatingConfig.width / 2}px)`, transform: 'none' };
         baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
-        // Use a more specific transition property to avoid animating background-color
         baseStyle.transition = 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
         return baseStyle;
     }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
 
-    const themeClasses = isNight 
-        ? 'border-zinc-700/80' 
-        : 'border-zinc-300';
+    const themeClasses = isNight ? 'border-zinc-700/80' : 'border-zinc-300';
     
     const AutoplayUnlockOverlay = () => (
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 rounded-xl">
             <p className="text-white font-semibold text-center">L'autoplay è bloccato dal browser.</p>
-            <button
-                onClick={() => unlockAutoplay()}
-                className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-3 px-6 rounded-full text-base transition-all transform hover:scale-105"
-            >
-                Riprendi musica
-            </button>
+            <button onClick={() => unlockAutoplay()} className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-3 px-6 rounded-full text-base transition-all transform hover:scale-105">Riprendi musica</button>
         </div>
     );
     
     const renderPlayerContent = () => {
-        // --- NEW: REMOTE DEVICE VIEW ---
-        // If Spotify source is active, but local player is NOT active, and we have a remote device:
-        if (source === 'spotify' && !isPlayerActive && activeDevice) {
-            return (
-                <RemotePlayerView 
-                    device={activeDevice} 
-                    isNight={isNight} 
-                    onTakeControl={() => play({})} 
-                />
-            );
-        }
-
+        if (source === 'spotify' && !isPlayerActive && activeDevice) return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
         if (source === 'youtube' && youtubeTrack) {
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
-
             return (
                  <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
@@ -1065,243 +734,101 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                     </div>
-                    <YouTubeProgressBar 
-                        progress={youTubeProgress} 
-                        isSeeking={isYouTubeSeeking}
-                        onSeek={handleSeekYouTube}
-                        onSeekStart={handleYouTubeSeekStart}
-                        onSeekEnd={handleYouTubeSeekEnd}
-                    />
+                    <YouTubeProgressBar progress={youTubeProgress} isSeeking={isYouTubeSeeking} onSeek={handleSeekYouTube} onSeekStart={handleYouTubeSeekStart} onSeekEnd={handleYouTubeSeekEnd}/>
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap * 0.8}px` }}>
                             <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
-                                {isYouTubePlaying
-                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
-                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
-                                }
-                            </button>
+                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>{isYouTubePlaying ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button>
                             <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
-                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
-                                <BsList style={{ width: '20px', height: '20px'}} />
-                            </button>
+                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}><BsList style={{ width: '20px', height: '20px'}} /></button>
                         </div>
                     </div>
                 </div>
             );
         }
-
         if (source === 'radio' && radioStation) {
             const { name, favicon, tags } = radioStation;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isFavorite = favoriteStationUUIDs.includes(radioStation.stationuuid);
-            
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            {favicon ? 
-                                <img src={favicon} alt={name} className="w-12 h-12 rounded-lg object-contain bg-zinc-800 flex-shrink-0 shadow-lg" /> 
-                                : 
-                                <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                                    <FiRadio className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                                </div>
-                            }
-                            <div className="overflow-hidden flex-grow">
-                                <div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div>
-                            </div>
+                            {favicon ? <img src={favicon} alt={name} className="w-12 h-12 rounded-lg object-contain bg-zinc-800 flex-shrink-0 shadow-lg" /> : <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}><FiRadio className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} /></div>}
+                            <div className="overflow-hidden flex-grow"><div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div></div>
                         </div>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
-                                {isRadioPlaying
-                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
-                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
-                                }
-                            </button>
-                            <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
-                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} />
-                            </button>
-                        </div>
+                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}><button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button><button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>{isRadioPlaying ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button><button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button><button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} /></button></div>
                         <div className="flex-1 flex justify-end items-center"></div>
                     </div>
                 </div>
             );
         }
-
         if (source === 'spotify' && isPlayerActive) {
             const { name: trackName, album, artists } = playerState.track_window.current_track!;
             const imageUrl = album.images[0]?.url;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
-            const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
-            
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3 min-w-0">
-                            {imageUrl && (
-                                <div className="flex-shrink-0">
-                                    <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" />
-                                </div>
-                            )}
-                            <div className="overflow-hidden flex-grow">
-                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div>
-                            </div>
+                            {imageUrl && (<div className="flex-shrink-0"><img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" /></div>)}
+                            <div className="overflow-hidden flex-grow"><div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div></div>
                         </div>
                         <div className="flex items-center gap-5">
-                            <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}>
-                                <button
-                                    onClick={handleToggleShuffle}
-                                    className="transition"
-                                    style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}
-                                    aria-label={playerState.shuffle ? "Disable shuffle" : "Enable shuffle"}
-                                >
-                                    <PiShuffleBold className="w-5 h-5" />
-                                </button>
-                            </div>
-                            <button
-                                onClick={handleToggleRepeat}
-                                className="transition"
-                                style={{ color: playerState.repeat_mode > 0 ? buttonActiveColor : inactiveButtonColor }}
-                                aria-label={`Set repeat mode. Current: ${playerState.repeat_mode === 0 ? 'off' : playerState.repeat_mode === 1 ? 'context' : 'track'}`}
-                            >
-                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5" /> : <PiRepeatBold className="w-5 h-5" />}
-                            </button>
+                            <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}><button onClick={handleToggleShuffle} className="transition" style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}><PiShuffleBold className="w-5 h-5" /></button></div>
+                            <button onClick={handleToggleRepeat} className="transition" style={{ color: playerState.repeat_mode > 0 ? buttonActiveColor : inactiveButtonColor }}>{playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5" /> : <PiRepeatBold className="w-5 h-5" />}</button>
                         </div>
                     </div>
-                    
                     <SpotifyProgressBar player={player} state={playerState} />
-                    
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                          <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
-                                {playerState.paused 
-                                    ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
-                                    : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
-                                }
-                            </button>
+                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>{playerState.paused ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button>
                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button
-                                onClick={handleToggleLike}
-                                className="transition"
-                                style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}
-                            >
-                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
-                            </button>
+                            <button onClick={handleToggleLike} className="transition" style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} /></button>
                         </div>
                          <div className="flex-1 flex justify-end items-center">
-                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
-                                <BsList style={{ width: '20px', height: '20px'}} />
-                            </button>
+                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}><BsList style={{ width: '20px', height: '20px'}} /></button>
                         </div>
                     </div>
                 </div>
             );
         }
-        
-        // Default / Initial State
         return <DisabledPlayerView {...{ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }} />;
     };
 
     const nextSpotifyTrack = playerState?.track_window.next_tracks[0];
-    const nextYouTubeTrack = nowPlaying.youtubePlaylist && nowPlaying.youtubeTrack
-        ? nowPlaying.youtubePlaylist[nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId) + 1]
-        : null;
-
+    const nextYouTubeTrack = nowPlaying.youtubePlaylist && nowPlaying.youtubeTrack ? nowPlaying.youtubePlaylist[nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId) + 1] : null;
     const nextTrackDetails = useMemo(() => {
-        if (visibleQueue === 'spotify' && nextSpotifyTrack) {
-            return {
-                name: nextSpotifyTrack.name,
-                description: nextSpotifyTrack.artists.map(a => a.name).join(', '),
-                imageUrl: nextSpotifyTrack.album.images[0]?.url,
-            };
-        }
-        if (visibleQueue === 'youtube' && nextYouTubeTrack) {
-            return {
-                name: nextYouTubeTrack.title,
-                description: nextYouTubeTrack.channelTitle,
-                imageUrl: nextYouTubeTrack.thumbnail,
-            };
-        }
+        if (visibleQueue === 'spotify' && nextSpotifyTrack) return { name: nextSpotifyTrack.name, description: nextSpotifyTrack.artists.map(a => a.name).join(', '), imageUrl: nextSpotifyTrack.album.images[0]?.url, };
+        if (visibleQueue === 'youtube' && nextYouTubeTrack) return { name: nextYouTubeTrack.title, description: nextYouTubeTrack.channelTitle, imageUrl: nextYouTubeTrack.thumbnail, };
         return null;
     }, [visibleQueue, nextSpotifyTrack, nextYouTubeTrack]);
 
-    const spinnerStyle: React.CSSProperties = {
-        top: spinnerTop !== undefined ? `${spinnerTop}px` : 'auto',
-        right: spinnerRight !== undefined ? `${spinnerRight}px` : 'auto',
-        bottom: spinnerBottom !== undefined ? `${spinnerBottom}px` : 'auto',
-        left: spinnerLeft !== undefined ? `${spinnerLeft}px` : 'auto',
-    };
-    
-    const spinnerVisualDivStyle: React.CSSProperties = {
-        width: `${spinnerSize}px`,
-        height: `${spinnerSize}px`,
-        borderWidth: `${Math.max(2, spinnerSize / 8)}px`,
-    };
+    const spinnerStyle: React.CSSProperties = { top: spinnerTop !== undefined ? `${spinnerTop}px` : 'auto', right: spinnerRight !== undefined ? `${spinnerRight}px` : 'auto', bottom: spinnerBottom !== undefined ? `${spinnerBottom}px` : 'auto', left: spinnerLeft !== undefined ? `${spinnerLeft}px` : 'auto', };
+    const spinnerVisualDivStyle: React.CSSProperties = { width: `${spinnerSize}px`, height: `${spinnerSize}px`, borderWidth: `${Math.max(2, spinnerSize / 8)}px`, };
 
     return (
         <>
-            <div 
-                ref={playerContainerRef}
-                className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg ${themeClasses}`}
-                style={playerStyle}
-            >
+            <div ref={playerContainerRef} className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg ${themeClasses}`} style={playerStyle}>
                 <div className="relative w-full h-full">
-                    {(nowPlaying.isLoading || debugSpinner) && (
-                        <div className="player-spinner-overlay" style={spinnerStyle}>
-                            <div className="spinner-visual" style={spinnerVisualDivStyle}></div>
-                        </div>
-                    )}
+                    {(nowPlaying.isLoading || debugSpinner) && (<div className="player-spinner-overlay" style={spinnerStyle}><div className="spinner-visual" style={spinnerVisualDivStyle}></div></div>)}
                     {isAutoplayBlocked && <AutoplayUnlockOverlay />}
                     {renderPlayerContent()}
                     <audio ref={audioRef} playsInline crossOrigin="anonymous" />
-                    <div style={{ display: 'none' }}>
-                        <YouTube
-                            videoId={currentYouTubeVideoId}
-                            opts={{
-                                height: '195',
-                                width: '320',
-                                playerVars: {
-                                    autoplay: 1,
-                                    controls: 0,
-                                    disablekb: 1,
-                                    modestbranding: 1,
-                                    playsinline: 1,
-                                },
-                            }}
-                            onReady={handleYoutubeReady}
-                            onStateChange={handleYoutubeStateChange}
-                            onEnd={handleYouTubeEnd}
-                        />
-                    </div>
+                    <div style={{ display: 'none' }}><YouTube videoId={currentYouTubeVideoId} opts={{ height: '195', width: '320', playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, playsinline: 1, }, }} onReady={handleYoutubeReady} onStateChange={handleYoutubeStateChange} onEnd={handleYouTubeEnd} /></div>
                 </div>
             </div>
-            {visibleQueue && (
-                <QueuePopover
-                    isNight={isNight}
-                    nextTrack={nextTrackDetails}
-                    position={popoverPosition}
-                    onClose={() => setVisibleQueue(null)}
-                    isClosing={isQueueClosing}
-                    height={queuePopoverHeight}
-                    scale={queuePopoverScale}
-                    width={queuePopoverWidth}
-                    offsetX={queuePopoverOffsetX}
-                />
-            )}
+            {visibleQueue && (<QueuePopover isNight={isNight} nextTrack={nextTrackDetails} position={popoverPosition} onClose={() => setVisibleQueue(null)} isClosing={isQueueClosing} height={queuePopoverHeight} scale={queuePopoverScale} width={queuePopoverWidth} offsetX={queuePopoverOffsetX} />)}
         </>
     );
 };
