@@ -125,9 +125,18 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 // Updating now would cause a visual "jump back". We want it frozen.
             } else {
                 // ALREADY PAUSED:
+                
+                // --- FIRST STOP GLITCH FIX ---
+                // If the server reports '0' (or extremely low) but we are visually far ahead,
+                // it's likely a state sync glitch (optimistic update vs real state).
+                // Ignore it to prevent the bar from snapping to 0 and back.
+                if (state.position === 0 && visualPosition > 2000) {
+                    return; 
+                }
+
                 // Only update if there is a significant change (e.g. user scrubbed on another device)
-                // or if the track changed (handled by reset logic above).
                 const diff = Math.abs(state.position - visualPosition);
+                
                 // 500ms threshold allows for small server corrections to be ignored
                 if (diff > 500) {
                     setVisualPosition(state.position);

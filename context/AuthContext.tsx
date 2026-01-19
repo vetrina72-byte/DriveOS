@@ -104,6 +104,44 @@ const initialNowPlaying: NowPlayingState = {
     activeDevice: null
 };
 
+// Helper to construct a partial SpotifyPlayerState from the API response
+const mapApiPlaybackToState = (data: any): SpotifyPlayerState | null => {
+    if (!data || !data.item) return null;
+    
+    // Construct a state object compatible with the SDK's SpotifyPlayerState interface
+    return {
+        context: {
+            uri: data.context?.uri || null,
+            metadata: null,
+        },
+        disallows: {}, // API doesn't provide this easily, default empty
+        duration: data.item.duration_ms,
+        paused: !data.is_playing,
+        position: data.progress_ms,
+        repeat_mode: data.repeat_state === 'track' ? 2 : data.repeat_state === 'context' ? 1 : 0,
+        shuffle: data.shuffle_state,
+        timestamp: data.timestamp,
+        track_window: {
+            current_track: {
+                id: data.item.id,
+                uri: data.item.uri,
+                type: data.item.type,
+                media_type: 'audio',
+                name: data.item.name,
+                is_playable: true,
+                album: {
+                    uri: data.item.album.uri,
+                    name: data.item.album.name,
+                    images: data.item.album.images
+                },
+                artists: data.item.artists
+            },
+            next_tracks: [], // API doesn't provide easily
+            previous_tracks: [] // API doesn't provide easily
+        }
+    };
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, setState] = useState<AuthState>(initialAuthState);
     const [nowPlaying, setNowPlaying] = useState<NowPlayingState>(initialNowPlaying);
@@ -314,6 +352,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setState(s => ({ ...s, error: null }));
     }, []);
 
+    // --- PLAYBACK SYNC & PERSISTENCE ---
+    useEffect(() => {
+        if (!state.isAuthenticated) return;
+
+        const fetchCurrentPlayback = async () => {
+            try {
+                // 1. Try to get real state from Spotify to sync with other devices
+                const { data } = await apiClient.get('/me/player');
+                
+                if (data && data.item) {
+                    const mappedState = mapApiPlaybackToState(data);
+                    
+                    if (mappedState) {
+                        setNowPlaying(prev => ({
+                            ...prev,
+                            source: 'spotify',
+                            spotifyState: mappedState,
+                            activeDevice: data.device,
+                            isLoading: false
+                        }));
+                        return; // Successfully synced, stop here
+                    }
+                }
+            } catch (e) { console.warn('Failed to fetch player state', e); }
+
+            // 2. Fallback: Load from LocalStorage if no active session
+            const saved = localStorage.getItem('last_played_track');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // Set as paused to avoid auto-starting unexpectedly
+                    setNowPlaying(prev => ({ 
+                        ...prev, 
+                        source: 'spotify',
+                        spotifyState: { ...parsed.spotifyState, paused: true },
+                        isLoading: false
+                    }));
+                } catch(e) {}
+            }
+        };
+
+        fetchCurrentPlayback();
+    }, [state.isAuthenticated]);
+
+    // Save current track to LocalStorage whenever it updates
+    useEffect(() => {
+        if (nowPlaying.source === 'spotify' && nowPlaying.spotifyState?.track_window?.current_track) {
+            localStorage.setItem('last_played_track', JSON.stringify({
+                source: 'spotify',
+                spotifyState: nowPlaying.spotifyState,
+            }));
+        }
+    }, [nowPlaying]);
+
+
     // Player Logic
     useEffect(() => {
         if (!state.isAuthenticated || !state.accessToken) return;
@@ -338,16 +431,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
             onNotReady: () => setIsPlayerReady(false),
             onStateChange: (playerState) => {
+                // If the player state is null (inactive), we might still want to show the last played track
+                // (which we restored from API or LocalStorage), but marked as paused.
+                // We assume that if `playerState` is provided, it's authoritative.
                 if (playerState) {
                     setNowPlaying(prev => ({
                         ...prev,
                         source: 'spotify',
                         spotifyState: playerState,
-                        isLoading: false // Clear loading on state update
+                        isLoading: false
                     }));
-                } else {
-                    setNowPlaying(prev => ({ ...prev, spotifyState: null }));
-                }
+                } 
+                // We DO NOT reset `nowPlaying` to null here anymore, to preserve the "Last Played" UI.
             },
             onAuthError: (msg) => console.error(msg),
             onAccountError: (msg) => console.error(msg),
