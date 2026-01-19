@@ -50,9 +50,9 @@ interface MusicPlayerProps {
 /**
  * Robust Spotify Progress Bar.
  * Features:
- * 1. Seek Lock: Ignores server updates for 2.5s after manual seek.
+ * 1. Single Source of Truth: While playing, ONLY local anchor dictates position.
  * 2. Instant Reset: Detects track ID change immediately to prevent interpolation glitches.
- * 3. Zero Lag: Starts animating from 0 immediately on new track.
+ * 3. Zero Drift Correction: Ignores minor server diffs to prevent looping/glitching.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
@@ -60,62 +60,66 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const [isDragging, setIsDragging] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
     
-    // Anchor timestamp: Time = Now - Anchor
+    // Anchor timestamp: Time = Now - Anchor. If null, we are not animating.
     const anchorRef = useRef<number | null>(null);
     const rafRef = useRef<number>();
     
     // Seek lock to prevent rubber-banding
     const lastSeekTimeRef = useRef<number>(0);
     
-    // Track ID Guard: Ensures we don't animate old track time on new track
+    // Track ID Guard & Reset Logic
     const currentTrackId = state.track_window?.current_track?.id || 'unknown';
     const activeTrackIdRef = useRef<string>(currentTrackId);
 
-    // Immediate Reset Logic (Pre-Effect)
-    // If prop track ID differs from ref, we are in a "new track" frame.
-    // We update ref immediately and reset anchor to avoid "infinite jump".
+    // --- 1. INSTANT RESET ON TRACK CHANGE (Render Phase) ---
+    // This prevents the "infinite jump" by resetting before any paint/effect
     if (activeTrackIdRef.current !== currentTrackId) {
         activeTrackIdRef.current = currentTrackId;
-        // If we are playing, anchor to NOW (starting at 0). If paused, null.
-        anchorRef.current = state.paused ? null : Date.now();
-        // Force visual position to 0 for this render cycle (though state update handles next)
-        if (visualPosition !== 0) setVisualPosition(0); 
+        // Force visual reset
+        setVisualPosition(0);
+        // If playing, reset anchor to NOW (0ms). If paused, null.
+        anchorRef.current = !state.paused ? Date.now() : null;
     }
 
-    // --- SYNC LOGIC ---
+    // --- 2. SYNC LOGIC (Effect Phase) ---
+    // Only runs when 'state' changes (Spotify update) or 'isDragging' changes.
+    // CRITICAL: DOES NOT depend on visualPosition to prevent feedback loops.
     useEffect(() => {
         if (isDragging) return;
 
         const now = Date.now();
+        const isPlaying = !state.paused;
         const isSeeking = (now - lastSeekTimeRef.current) < 2500;
 
-        // Sync Anchor if missing or drifted
-        if (!state.paused) {
+        if (isPlaying) {
+            // CASE: PLAYING
             if (anchorRef.current === null) {
-                // Determine start time based on server position
+                // Resume or Start: Initialize anchor based on Spotify's position
                 anchorRef.current = now - state.position;
             } else {
-                // Drift check
+                // Already Playing: Check for Remote Seek (Large Jump)
                 const expected = now - anchorRef.current;
                 const actual = state.position;
-                const drift = Math.abs(expected - actual);
-                
-                // If drift > 1.5s and we haven't sought recently, sync hard
-                if (drift > 1500 && !isSeeking) {
+                const diff = Math.abs(expected - actual);
+
+                // Only correct if difference is HUGE (> 2.5s), implying a seek/skip.
+                // Otherwise, IGNORE server state to prevent "looping/fighting".
+                if (diff > 2500 && !isSeeking) {
                     anchorRef.current = now - actual;
                     setVisualPosition(actual);
                 }
             }
         } else {
-            // Paused
+            // CASE: PAUSED
             anchorRef.current = null;
-            if (!isSeeking && Math.abs(visualPosition - state.position) > 500) {
+            // When paused, we trust the server position to ensure resume happens correctly
+            if (!isSeeking) {
                 setVisualPosition(state.position);
             }
         }
-    }, [state, isDragging, visualPosition]); // Re-run on state updates
+    }, [state, isDragging]); // removed visualPosition dependency
 
-    // --- ANIMATION LOOP ---
+    // --- 3. ANIMATION LOOP ---
     useEffect(() => {
         if (state.paused || isDragging) {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -123,11 +127,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         }
 
         const animate = () => {
-            // Guard: Only animate if anchor is valid AND matches current track
-            // This prevents the "infinite jump" if a frame slips in before reset
-            if (anchorRef.current !== null && activeTrackIdRef.current === currentTrackId) {
+            if (anchorRef.current !== null) {
                 const now = Date.now();
                 const nextPos = now - anchorRef.current;
+                // Clamp to duration
                 const clamped = Math.min(Math.max(0, nextPos), state.duration);
                 setVisualPosition(clamped);
             }
@@ -138,7 +141,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state.paused, isDragging, state.duration, currentTrackId]);
+    }, [state.paused, isDragging, state.duration]);
 
     // --- INTERACTION ---
     const calculatePosFromEvent = (clientX: number) => {
@@ -167,6 +170,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             setVisualPosition(finalPos);
             lastSeekTimeRef.current = Date.now();
             
+            // If playing, update anchor immediately so local playback continues seamlessly
             if (!state.paused) {
                 anchorRef.current = Date.now() - finalPos;
             }
