@@ -443,47 +443,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [state.isAuthenticated, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
-        setNowPlaying(s => {
-            const fakeState: SpotifyPlayerState | null = itemForOptimisticUpdate ? {
-                context: { uri: options.context_uri || null, metadata: null },
-                disallows: {},
-                duration: 0,
-                paused: false,
-                position: 0,
-                repeat_mode: 0,
-                shuffle: false,
-                track_window: {
-                    current_track: {
-                        id: itemForOptimisticUpdate.id,
-                        uri: itemForOptimisticUpdate.uri,
-                        type: 'track',
-                        media_type: 'audio',
-                        name: itemForOptimisticUpdate.name,
-                        is_playable: true,
-                        album: {
-                            uri: '',
-                            name: itemForOptimisticUpdate.album?.name || '',
-                            images: itemForOptimisticUpdate.images || itemForOptimisticUpdate.album?.images || []
-                        },
-                        artists: itemForOptimisticUpdate.artists?.map(a => ({ uri: '', name: a.name })) || []
-                    },
-                    next_tracks: [],
-                    previous_tracks: []
-                },
-                timestamp: Date.now()
-            } : null;
-
-            const optimisticState = s.spotifyState ? { ...s.spotifyState, paused: false } : fakeState;
-
-            return {
-                ...s,
-                source: 'spotify',
-                isLoading: false, 
-                spotifyState: optimisticState, 
-                radioStation: null,
-                youtubeTrack: null
-            };
-        });
+        setNowPlaying(s => ({
+            ...s,
+            source: 'spotify',
+            isLoading: true, 
+            radioStation: null,
+            youtubeTrack: null
+        }));
 
         try {
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);

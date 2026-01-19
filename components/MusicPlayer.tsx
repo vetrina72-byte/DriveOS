@@ -48,119 +48,118 @@ interface MusicPlayerProps {
 }
 
 /**
- * Deterministic Spotify Progress Bar.
- * 
- * Logic:
- * 1. Playing: RenderPos = State.position + (Now - State.timestamp). 
- *    This linear interpolation ensures smooth updates at 60fps independent of API poll rate.
- * 2. Paused: RenderPos = FROZEN.
- *    We use a "Visual Latch" (frozenPosition ref) to lock the visual state the moment pause happens.
- *    We actively ignore backward jumps from the server caused by latency.
- *    We only unlock if the server reports a new position > 5000ms away (indicating a user seek).
+ * Deterministic Spotify Progress Bar with Seek Locking.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
-    const [isDragging, setIsDragging] = useState(false);
-    const progressRef = useRef<HTMLDivElement>(null);
+    
+    // --- STATE MACHINE REFS ---
+    // 1. isDragging: User is actively holding the handle. UI is 100% manual.
+    const isDragging = useRef(false);
+    
+    // 2. seekLock: User released handle, waiting for Spotify to catch up.
+    // Contains { targetPos: number, timestamp: number }
+    const seekLock = useRef<{ targetPos: number; timestamp: number } | null>(null);
+    
     const rafRef = useRef<number>();
-    
-    // The visual latch. If not null, we render THIS value instead of state.position.
-    const frozenPosition = useRef<number | null>(state.paused ? state.position : null);
-    
-    const lastStateRef = useRef(state);
+    const progressBarRef = useRef<HTMLDivElement>(null);
 
-    // --- LINEAR INTERPOLATION LOOP (The "Engine") ---
+    // --- RENDER LOOP ---
     useEffect(() => {
         const loop = () => {
-            if (isDragging) return; // UI Control overrides engine
+            const now = Date.now();
 
-            // Case 1: Playing
-            if (!state.paused) {
-                // If we were frozen, unfreeze now
-                frozenPosition.current = null;
+            // PRIORITY 1: User Interaction (Dragging)
+            // Do nothing here. Visual position is updated via mouse events.
+            if (isDragging.current) {
+                rafRef.current = requestAnimationFrame(loop);
+                return;
+            }
 
-                // Calculate exact position based on system clock delta
-                // state.timestamp is the exact time the server snapshot was taken
-                // fallback to Date.now() if 0 (rare)
-                const anchorTime = state.timestamp || Date.now();
-                const now = Date.now();
-                const elapsedSinceSnapshot = now - anchorTime;
-                
-                // Determine raw position
-                let nextPos = state.position + elapsedSinceSnapshot;
-                
-                // Clamp to duration to prevent overshooting
-                nextPos = Math.min(nextPos, state.duration);
-                
-                setVisualPosition(nextPos);
-            } 
-            // Case 2: Paused
-            else {
-                // If we don't have a latch yet, grab one NOW.
-                // This captures the exact millisecond where the animation stopped.
-                if (frozenPosition.current === null) {
-                    frozenPosition.current = visualPosition; 
+            // PRIORITY 2: Seek Lock (Post-Drag Stabilization)
+            if (seekLock.current) {
+                // If we are in lock mode, we FORCE the visual position to the target.
+                // We ignore the SDK state unless it has "caught up".
+                setVisualPosition(seekLock.current.targetPos);
+
+                // Convergence Check:
+                // Has the SDK reported a position close enough to our target?
+                // Or has enough time passed (safety timeout)?
+                const serverPos = state.position + (now - state.timestamp); // Extrapolated server pos
+                const diff = Math.abs(serverPos - seekLock.current.targetPos);
+                const timeSinceLock = now - seekLock.current.timestamp;
+
+                // Unlock conditions:
+                // 1. We are within 1.5s of the target (success)
+                // 2. It's been > 2.5s (timeout/fail safe)
+                // 3. Track changed ID (context switch)
+                if (diff < 1500 || timeSinceLock > 2500) {
+                    seekLock.current = null; // Release lock
                 }
-
-                // DRIFT CHECK: Has the user seeked?
-                // The server says we are at 'state.position'.
-                // Our frozen UI says 'frozenPosition'.
-                // If the difference is huge (> 5 seconds), it's a seek/skip. Update UI.
-                const drift = Math.abs(state.position - frozenPosition.current);
                 
-                if (drift > 5000) {
-                    // Break the latch, snap to new server position
-                    frozenPosition.current = state.position;
+                rafRef.current = requestAnimationFrame(loop);
+                return;
+            }
+
+            // PRIORITY 3: Normal Playback (Interpolation)
+            if (!state.paused) {
+                // Sanity Check: If state timestamp is absurdly old (> 60s), ignore interpolation
+                // to prevent massive forward jumps on resume.
+                const timeSinceUpdate = now - state.timestamp;
+                if (timeSinceUpdate > 60000) {
                     setVisualPosition(state.position);
                 } else {
-                    // Maintain the latch. Ignore minor server corrections.
-                    // This prevents the "backward jump" glitch.
-                    setVisualPosition(frozenPosition.current);
+                    const interpolated = state.position + timeSinceUpdate;
+                    setVisualPosition(Math.min(interpolated, state.duration));
                 }
+            } else {
+                // Paused: Stick to reported position
+                setVisualPosition(state.position);
             }
-            
+
             rafRef.current = requestAnimationFrame(loop);
         };
 
         rafRef.current = requestAnimationFrame(loop);
-        
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state, isDragging, visualPosition]); // Dependencies crucial for closure freshness
+    }, [state]); // Re-bind loop when state (source of truth) updates
 
-    // --- INTERACTION ---
-    const calculatePosFromEvent = (clientX: number) => {
-        if (!progressRef.current || !state.duration) return 0;
-        const rect = progressRef.current.getBoundingClientRect();
+    // --- INTERACTION HANDLERS ---
+    const calculatePos = (clientX: number) => {
+        if (!progressBarRef.current || !state.duration) return 0;
+        const rect = progressBarRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
         return Math.round(state.duration * ratio);
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        if (!state.duration) return;
-        setIsDragging(true);
-        const newPos = calculatePosFromEvent(e.clientX);
+        isDragging.current = true;
+        const newPos = calculatePos(e.clientX);
         setVisualPosition(newPos);
-        // Break the latch immediately on user interaction
-        frozenPosition.current = newPos; 
     };
 
     useEffect(() => {
-        if (!isDragging) return;
-
         const handleMouseMove = (e: MouseEvent) => {
-            setVisualPosition(calculatePosFromEvent(e.clientX));
+            if (!isDragging.current) return;
+            setVisualPosition(calculatePos(e.clientX));
         };
 
-        const handleMouseUp = async (e: MouseEvent) => {
-            const finalPos = calculatePosFromEvent(e.clientX);
-            setVisualPosition(finalPos);
-            frozenPosition.current = finalPos; // Latch visually here
+        const handleMouseUp = (e: MouseEvent) => {
+            if (!isDragging.current) return;
             
-            setIsDragging(false);
-            if (player) await player.seek(finalPos);
+            const finalPos = calculatePos(e.clientX);
+            setVisualPosition(finalPos);
+            
+            // ENGAGE SEEK LOCK
+            // This prevents the bar from snapping back to the old server time
+            seekLock.current = { targetPos: finalPos, timestamp: Date.now() };
+            isDragging.current = false;
+
+            if (player) {
+                player.seek(finalPos).catch(err => console.error("Seek failed", err));
+            }
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -169,20 +168,20 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDragging, player, state.duration]);
+    }, [player, state.duration]);
 
-    const progressPercentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
-    const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
+    const percentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
+    const clampedPercent = Math.min(100, Math.max(0, percentage));
 
     return (
         <div
-            ref={progressRef}
+            ref={progressBarRef}
             className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
             onMouseDown={handleMouseDown}
         >
             <div 
-                className="h-full rounded-full bg-[var(--progress-fill)] relative" 
-                style={{ width: `${visualPercentage}%` }}
+                className="h-full rounded-full bg-[var(--progress-fill)] relative transition-none" // Disable CSS transition for JS anim
+                style={{ width: `${clampedPercent}%` }}
             >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
