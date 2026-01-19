@@ -48,13 +48,11 @@ interface MusicPlayerProps {
 }
 
 /**
- * Enhanced Spotify Progress Bar.
- * Solves synchronization issues by decoupling the visual animation from the server state updates.
- * 
- * Key behaviors:
- * 1. Resume: Anchors to CURRENT visual position (no jump forward/back).
- * 2. Pause: Stops exactly where it is (no snap to server time).
- * 3. Seek/Drift: Only snaps to server time if difference > 2 seconds.
+ * Robust Spotify Progress Bar.
+ * Features:
+ * 1. Seek Lock: Ignores server updates for 2.5s after manual seek to prevent rubber-banding.
+ * 2. Visual Ref: Uses a ref to track current visual position for smooth Resume operations.
+ * 3. Auto-Healing Anchor: Ensures play state always has a valid time anchor.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms (Source of truth for UI)
@@ -68,25 +66,36 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const anchorRef = useRef<number | null>(null);
     const rafRef = useRef<number>();
     
-    // Previous state tracking to detect edges
+    // Stores the timestamp of the last manual seek to ignore SDK updates for a short time
+    const lastSeekTimeRef = useRef<number>(0);
+    
+    // Stores the latest visual position to avoid stale closures in effects
+    const visualPosRef = useRef(state.position);
+    // Sync ref with state on every render
+    visualPosRef.current = visualPosition;
+
+    // Track previous state to detect edges
     const prevTrackId = useRef<string | null>(state.track_window?.current_track?.id || null);
     const prevPaused = useRef<boolean>(state.paused);
 
     // --- SYNC LOGIC ---
-    // Runs only when `state` changes (SDK update) or drag state changes.
-    // DOES NOT depend on visualPosition to avoid dependency loops.
     useEffect(() => {
         if (isDragging) return;
+
+        const now = Date.now();
+        // Ignore server updates for 2.5s after a seek to prevent "rubber-banding"
+        const isSeeking = (now - lastSeekTimeRef.current) < 2500;
 
         const currentTrackId = state.track_window?.current_track?.id || null;
         const isTrackChange = currentTrackId !== prevTrackId.current;
         const isToggledPause = state.paused !== prevPaused.current;
 
-        // 1. TRACK CHANGE: Hard Reset
+        // 1. TRACK CHANGE
         if (isTrackChange) {
             setVisualPosition(0);
-            // If we are playing, start new anchor immediately from now
-            anchorRef.current = state.paused ? null : Date.now();
+            visualPosRef.current = 0;
+            // If playing, anchor to NOW (0ms). If paused, null.
+            anchorRef.current = state.paused ? null : now;
             
             prevTrackId.current = currentTrackId;
             prevPaused.current = state.paused;
@@ -96,49 +105,51 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         // 2. PAUSE/PLAY TOGGLE
         if (isToggledPause) {
             if (state.paused) {
-                // Transition: PLAYING -> PAUSED
-                // Stop the anchor. Leave visualPosition EXACTLY where it is.
+                // Playing -> Paused: Stop anchor, keep visual pos static
                 anchorRef.current = null;
             } else {
-                // Transition: PAUSED -> PLAYING
-                // Resume from CURRENT visual position to prevent jump.
-                // New Anchor = Now - CurrentVisualPos
-                // We use the functional state setter to get the latest visualPosition securely if needed,
-                // but since we are in an effect triggered by state change, we can assume the last render's
-                // visualPosition is accurate enough for continuity.
-                anchorRef.current = Date.now() - visualPosition;
+                // Paused -> Playing: Resume from CURRENT visual pos
+                // This prevents the bar from jumping forward/back to server time immediately.
+                // New Anchor = Now - Current Visual Pos
+                anchorRef.current = now - visualPosRef.current;
             }
             prevPaused.current = state.paused;
             return;
         }
 
-        // 3. DRIFT CORRECTION (While Playing)
-        // If the server says we are at X, but our animation says Y, and difference is huge,
-        // it means an external event happened (seek on phone, buffering lag, etc).
-        if (!state.paused && anchorRef.current !== null) {
-            const expected = Date.now() - anchorRef.current;
-            const actual = state.position;
-            const drift = Math.abs(expected - actual);
+        // 3. SERVER SYNC (While Playing)
+        if (!state.paused) {
+            // Auto-Heal: Ensure anchor exists if we are playing
+            if (anchorRef.current === null) {
+                anchorRef.current = now - state.position;
+            } 
+            
+            // Drift Correction (only if not seeking)
+            if (!isSeeking && anchorRef.current !== null) {
+                const expected = now - anchorRef.current;
+                const actual = state.position;
+                const drift = Math.abs(expected - actual);
 
-            // Threshold 2000ms: large enough to ignore network jitter, small enough to catch seeks.
-            if (drift > 2000) {
-                anchorRef.current = Date.now() - actual;
-                setVisualPosition(actual);
+                // High threshold (1.5s) to allow local smoothness, but catch big jumps
+                // (e.g. looping tracks, external seeks on phone)
+                if (drift > 1500) {
+                    anchorRef.current = now - actual;
+                    setVisualPosition(actual);
+                }
             }
-        }
-
-        // 4. EXTERNAL SEEK (While Paused)
-        // If paused, and server position changes significantly (e.g. user scrubbed on another device)
-        if (state.paused) {
-            if (Math.abs(visualPosition - state.position) > 1000) {
+        } 
+        // 4. SERVER SYNC (While Paused)
+        else if (state.paused && !isSeeking) {
+            // If paused, we expect visual to match server eventually.
+            // Only update if discrepancy is real (avoid jitter)
+            if (Math.abs(visualPosRef.current - state.position) > 500) {
                 setVisualPosition(state.position);
             }
         }
 
-    }, [state, isDragging]); // Explicitly omitted visualPosition
+    }, [state, isDragging]);
 
     // --- ANIMATION LOOP ---
-    // Runs independently to ensure smooth 60fps updates
     useEffect(() => {
         if (state.paused || isDragging) {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -149,7 +160,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             if (anchorRef.current !== null) {
                 const now = Date.now();
                 const nextPos = now - anchorRef.current;
-                setVisualPosition(Math.min(nextPos, state.duration));
+                // Clamp to reasonable bounds
+                const clamped = Math.min(Math.max(0, nextPos), state.duration);
+                setVisualPosition(clamped);
             }
             rafRef.current = requestAnimationFrame(animate);
         };
@@ -187,17 +200,20 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = async (e: MouseEvent) => {
             const finalPos = calculatePosFromEvent(e.clientX);
             
-            // Immediate visual update
+            // 1. Immediate UI update
             setVisualPosition(finalPos);
             
-            // If playing, update anchor so animation continues smoothly from here
+            // 2. Set seek lock timestamp to prevent server interference
+            lastSeekTimeRef.current = Date.now();
+            
+            // 3. Update anchor so playing continues smoothly from here
             if (!state.paused) {
                 anchorRef.current = Date.now() - finalPos;
             }
             
             setIsDragging(false);
             
-            // Send actual seek command
+            // 4. Send command
             if (player) {
                 await player.seek(finalPos);
             }
