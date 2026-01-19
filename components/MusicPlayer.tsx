@@ -48,27 +48,26 @@ interface MusicPlayerProps {
 }
 
 /**
- * ROCK-SOLID SPOTIFY PROGRESS BAR (v3)
+ * ROCK-SOLID SPOTIFY PROGRESS BAR (v4)
  * 
- * Features:
- * 1. Strict Pause: No ghost counting during pause.
- * 2. Anti-Anticipation: Waits for server playback during device transfers ("Listen Here").
- * 3. Smart Sync: Snaps only when necessary, drifts smoothly otherwise.
+ * Logic Overview:
+ * 1. Strict Pause: When paused, the internal timer is nulled. No ghost time accumulates.
+ * 2. Smart Drift: If visual bar is slightly ahead of server on pause (latency), we freeze instead of jumping back.
+ * 3. Buffering Guard: If bar tries to move but server is stuck (loading/buffering), we hold the bar.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
     
-    // Refs for precision and state access without re-renders
+    // Refs for state access inside the loop without triggering re-renders
     const stateRef = useRef(state);
     const isDragging = useRef(false);
     const rafRef = useRef<number>();
     
-    // Timer ref: Null means "timer stopped"
+    // Timer ref: Null means "timer stopped". number means "timestamp of last frame".
     const lastTickRef = useRef<number | null>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
     
-    // Track current visual position in ref for synch logic inside effects
+    // We track the current visual position in a ref to perform logic inside effects
     const visualPosRef = useRef(visualPosition);
     visualPosRef.current = visualPosition;
 
@@ -82,42 +81,43 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const isTrackChange = prevTrackId !== newTrackId;
 
         // SCENARIO 1: TRACK CHANGE
-        // Reset immediately to 0 to prevent interpolating from old track end to new track start.
+        // Immediate hard reset.
         if (isTrackChange) {
             setVisualPosition(0);
-            lastTickRef.current = null; // Kill the timer
+            lastTickRef.current = null; // Kill the timer immediately
         } 
         else {
             // SCENARIO 2: PLAY -> PAUSE
+            // Problem: SDK sends "paused" state with a position slightly older than our visual bar (latency).
+            // Fix: If we are visually ahead, ignore the SDK position and just freeze where we are.
             if (!prevState.paused && newState.paused) {
-                // Determine if we should snap or freeze.
-                // If server says we are BEHIND where we visually are (latency), ignore server.
-                const diff = visualPosRef.current - newState.position;
+                const drift = visualPosRef.current - newState.position;
                 
-                // If diff is positive (we are ahead), and small (< 2s), we assume latency and FREEZE.
-                // If diff is huge, it's likely a seek/restart, so we SNAP.
-                if (diff > 0 && diff < 2000) {
-                    // Freeze at current visual position
+                // If drift is positive (we are ahead) and < 2000ms, assume it's just latency and FREEZE.
+                // If drift is huge, it might be a user seek or restart, so we snap.
+                if (drift > 0 && drift < 2000) {
+                    // Do nothing -> Visual position freezes at current value
                 } else {
                     setVisualPosition(newState.position);
                 }
                 
-                // CRITICAL: Stop the timer.
+                // CRITICAL: Kill the timer so no "ghost time" is added while paused.
                 lastTickRef.current = null;
             } 
             
             // SCENARIO 3: PAUSE -> PLAY
+            // Problem: Starting timer with old timestamp causes a huge jump.
+            // Fix: We set position to server state, and ensure timer is null so it resets on next frame.
             else if (prevState.paused && !newState.paused) {
-                // We are resuming. Align with server start point.
                 setVisualPosition(newState.position);
-                // CRITICAL: Reset timer to null so next loop frame initializes a fresh delta=0.
                 lastTickRef.current = null;
             }
             
-            // SCENARIO 4: SEEK (while paused or playing)
+            // SCENARIO 4: SEEK (while playing or paused)
+            // If the position jumps significantly without a play/pause change.
             else if (Math.abs(prevState.position - newState.position) > 2000) {
                 setVisualPosition(newState.position);
-                // If seeking while playing, we might need a frame to re-align
+                // If playing, reset timer to avoid interpolation glitches
                 if (!newState.paused) lastTickRef.current = null;
             }
         }
@@ -133,13 +133,13 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // 1. STOP CONDITION
             // If paused or dragging, we do NOT advance time.
             if (currentState.paused || isDragging.current) {
-                lastTickRef.current = null; // Ensure timer is dead
+                lastTickRef.current = null; 
                 rafRef.current = requestAnimationFrame(loop);
                 return;
             }
 
             // 2. START CONDITION
-            // If timer was dead, restart it now. Delta is 0 this frame.
+            // If timer was dead (just resumed), initialize it now. Delta is 0 this frame.
             if (lastTickRef.current === null) {
                 lastTickRef.current = timestamp;
                 rafRef.current = requestAnimationFrame(loop);
@@ -150,36 +150,31 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const dt = timestamp - lastTickRef.current;
             lastTickRef.current = timestamp;
 
-            // 4. CALCULATE NEW POSITION
+            // 4. CALCULATE & CLAMP
             setVisualPosition(prevPos => {
                 const nextLocalPos = prevPos + dt;
                 
-                // --- DRIFT PROTECTION (Anti-Ghosting & Anti-Anticipation) ---
-                
-                // Calculate where the Server says we are right now
-                // (Server Position + Time elapsed since that state update arrived)
+                // --- DRIFT PROTECTION (Buffering Guard) ---
+                // Calculate where the Server says we should be
                 const sdkElapsed = Date.now() - currentState.timestamp;
                 const sdkExpectedPos = currentState.position + sdkElapsed;
-
                 const drift = nextLocalPos - sdkExpectedPos;
 
-                // Case A: BUFFERING GUARD (Local ahead of Server)
-                // If we are moving but server is stuck (e.g. loading on new device),
-                // drift will be positive. If > 300ms, we HOLD.
+                // Case A: BUFFERING (Local ahead of Server)
+                // We are moving, but server isn't confirming progress (drift increasing).
+                // If we get too far ahead (> 300ms), wait for server.
                 if (drift > 300) {
-                    return prevPos; // Hold position, wait for audio
+                    return prevPos; // Hold
                 }
 
                 // Case B: CATCH UP (Local behind Server)
-                // If audio started and we are lagging > 300ms, SNAP forward.
+                // Server jumped ahead (network lag catchup). Snap forward.
                 if (drift < -300) {
                     return sdkExpectedPos;
                 }
 
-                // Case C: Normal Playback
-                // Clamp to duration just in case
+                // Case C: Normal
                 if (nextLocalPos > currentState.duration) return currentState.duration;
-                
                 return nextLocalPos;
             });
 
@@ -217,10 +212,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             if (!isDragging.current) return;
             
             const finalPos = calculatePos(e.clientX);
-            setVisualPosition(finalPos); // Snap visual immediately
+            setVisualPosition(finalPos); 
             isDragging.current = false;
             
-            // Reset timer to avoid jump
+            // Reset timer to avoid jump on next frame
             lastTickRef.current = performance.now();
 
             if (player) {
