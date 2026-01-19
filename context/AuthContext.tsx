@@ -93,7 +93,7 @@ const initialAuthState: AuthState = {
     error: null,
 };
 
-const initialNowPlaying: NowPlayingState = {
+const defaultNowPlaying: NowPlayingState = {
     source: null,
     spotifyState: null,
     radioStation: null,
@@ -144,7 +144,26 @@ const mapApiPlaybackToState = (data: any): SpotifyPlayerState | null => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, setState] = useState<AuthState>(initialAuthState);
-    const [nowPlaying, setNowPlaying] = useState<NowPlayingState>(initialNowPlaying);
+    
+    // --- SYNCHRONOUS HYDRATION (Cold Start Fix) ---
+    // Initialize state lazily from localStorage to ensure UI renders with data on first paint.
+    const [nowPlaying, setNowPlaying] = useState<NowPlayingState>(() => {
+        try {
+            const saved = localStorage.getItem('last_played_track');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Ensure it starts paused to avoid ghost audio logic issues
+                if (parsed.spotifyState) {
+                    parsed.spotifyState.paused = true;
+                }
+                return { ...defaultNowPlaying, ...parsed, isLoading: false };
+            }
+        } catch (e) {
+            console.error("Failed to hydrate player state:", e);
+        }
+        return defaultNowPlaying;
+    });
+
     const [isPlayerReady, setIsPlayerReady] = useState(false);
     const [volume, setVolume] = useState(0.5);
     const [isMuted, setIsMuted] = useState(false);
@@ -187,9 +206,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
         try {
-            // LOG RICHIESTO: "1" quando si attiva il refresh
-            console.log('1 [REFRESH ATTIVATO]'); 
-            
             const sid = sessionIdRef.current;
             const res = await fetch(`/api/refresh-token`, {
                 method: 'POST',
@@ -201,8 +217,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const { access_token, expires_in, expires_at } = data;
                 const newExpiresAt = expires_at || (Date.now() + expires_in * 1000);
                 
-                console.log('[Auth] Refresh successful. Next expiry:', new Date(newExpiresAt).toLocaleTimeString());
-
                 localStorage.setItem('accessToken', access_token);
                 localStorage.setItem('expiresAt', String(newExpiresAt));
                 apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
@@ -214,7 +228,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }));
                 return true;
             } else {
-                console.warn('[Auth] Refresh failed:', data.error);
                 return false;
             }
         } catch (e) {
@@ -233,7 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         delete apiClient.defaults.headers.common['Authorization'];
         
         setState(initialAuthState);
-        setNowPlaying(initialNowPlaying);
+        setNowPlaying(defaultNowPlaying);
         // Clear data
         setContinueListeningItems([]);
         setUserPlaylists([]);
@@ -298,8 +311,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [fetchUserInfo, logout, attemptRefreshAndUpdatePlayerToken]);
 
     // --- PROACTIVE REFRESH POLLING ---
-    // Checks every 60 seconds if the token is about to expire (< 5 mins).
-    // This is more robust than a single setTimeout which can be killed by browser throttling.
     useEffect(() => {
         if (!state.isAuthenticated || !state.expiresAt || !state.accessToken) return;
 
@@ -308,21 +319,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const timeUntilExpiry = state.expiresAt! - now;
             const refreshBuffer = 5 * 60 * 1000; // Refresh 5 minutes before expiry
 
-            // Log Timer: Prints remaining time every 60 seconds
-            if (timeUntilExpiry > 0) {
-                const mins = Math.floor(timeUntilExpiry / 60000);
-                const secs = Math.floor((timeUntilExpiry % 60000) / 1000);
-                console.log(`[Auth Timer] Refresh token tra: ${mins}m ${secs}s`);
-            }
-
             if (timeUntilExpiry < refreshBuffer) {
                 await attemptRefreshAndUpdatePlayerToken();
             }
         };
 
         const intervalId = setInterval(checkTokenValidity, 60000);
-        
-        // Run check immediately to catch cases where we load near expiry
         checkTokenValidity();
 
         return () => clearInterval(intervalId);
@@ -365,46 +367,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const mappedState = mapApiPlaybackToState(data);
                     
                     if (mappedState) {
-                        setNowPlaying(prev => ({
-                            ...prev,
-                            source: 'spotify',
-                            spotifyState: mappedState,
-                            activeDevice: data.device,
-                            isLoading: false
-                        }));
-                        return; // Successfully synced, stop here
+                        setNowPlaying(prev => {
+                            const newState = {
+                                ...prev,
+                                source: 'spotify' as const,
+                                spotifyState: mappedState,
+                                activeDevice: data.device,
+                                isLoading: false
+                            };
+                            // Persist explicitly here
+                            localStorage.setItem('last_played_track', JSON.stringify({
+                                source: 'spotify',
+                                spotifyState: mappedState
+                            }));
+                            return newState;
+                        });
+                        return;
                     }
                 }
             } catch (e) { console.warn('Failed to fetch player state', e); }
-
-            // 2. Fallback: Load from LocalStorage if no active session
-            const saved = localStorage.getItem('last_played_track');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    // Set as paused to avoid auto-starting unexpectedly
-                    setNowPlaying(prev => ({ 
-                        ...prev, 
-                        source: 'spotify',
-                        spotifyState: { ...parsed.spotifyState, paused: true },
-                        isLoading: false
-                    }));
-                } catch(e) {}
-            }
         };
 
         fetchCurrentPlayback();
     }, [state.isAuthenticated]);
-
-    // Save current track to LocalStorage whenever it updates
-    useEffect(() => {
-        if (nowPlaying.source === 'spotify' && nowPlaying.spotifyState?.track_window?.current_track) {
-            localStorage.setItem('last_played_track', JSON.stringify({
-                source: 'spotify',
-                spotifyState: nowPlaying.spotifyState,
-            }));
-        }
-    }, [nowPlaying]);
 
 
     // Player Logic
@@ -412,9 +397,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!state.isAuthenticated || !state.accessToken) return;
 
         initSpotifyPlayerOnce({
-            name: 'DriveOS', // Changed device name here
+            name: 'DriveOS', 
             getAccessToken: async () => {
-                // FIX: Check localStorage directly to avoid stale closures in the Singleton SDK instance.
                 const storedExpiresAt = Number(localStorage.getItem('expiresAt') || '0');
                 const storedToken = localStorage.getItem('accessToken') || '';
 
@@ -431,18 +415,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
             onNotReady: () => setIsPlayerReady(false),
             onStateChange: (playerState) => {
-                // If the player state is null (inactive), we might still want to show the last played track
-                // (which we restored from API or LocalStorage), but marked as paused.
-                // We assume that if `playerState` is provided, it's authoritative.
+                // If the player state is null (inactive), we keep showing the last known state (as paused)
+                // If it is active, we update and PERSIST immediately.
                 if (playerState) {
-                    setNowPlaying(prev => ({
-                        ...prev,
-                        source: 'spotify',
-                        spotifyState: playerState,
-                        isLoading: false
-                    }));
+                    setNowPlaying(prev => {
+                        const newState = {
+                            ...prev,
+                            source: 'spotify' as const,
+                            spotifyState: playerState,
+                            isLoading: false
+                        };
+                        // PERSISTENCE POINT
+                        localStorage.setItem('last_played_track', JSON.stringify({
+                            source: 'spotify',
+                            spotifyState: playerState,
+                        }));
+                        return newState;
+                    });
                 } 
-                // We DO NOT reset `nowPlaying` to null here anymore, to preserve the "Last Played" UI.
             },
             onAuthError: (msg) => console.error(msg),
             onAccountError: (msg) => console.error(msg),
@@ -454,8 +444,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
         setNowPlaying(s => {
-            // Construct an instant "fake" player state from the clicked item details.
-            // This ensures the player UI pops up immediately even if the SDK isn't ready.
             const fakeState: SpotifyPlayerState | null = itemForOptimisticUpdate ? {
                 context: { uri: options.context_uri || null, metadata: null },
                 disallows: {},
@@ -485,16 +473,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 timestamp: Date.now()
             } : null;
 
-            // If we already have state, just unpause it optimistically.
-            // If not, use the fake state.
             const optimisticState = s.spotifyState ? { ...s.spotifyState, paused: false } : fakeState;
 
             return {
                 ...s,
                 source: 'spotify',
                 isLoading: false, 
-                spotifyState: optimisticState, // Set playing immediately
-                radioStation: null, // Clear other sources
+                spotifyState: optimisticState, 
+                radioStation: null,
                 youtubeTrack: null
             };
         });
@@ -507,7 +493,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [attemptRefreshAndUpdatePlayerToken]);
 
     const pauseSpotify = useCallback(async () => {
-        // Optimistic Update for responsiveness
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
                 return {
@@ -535,23 +520,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
     }, []);
 
-    // Home Data Fetching (Simplified for brevity, assume implementation handles endpoints)
+    // Home Data Fetching (Simplified)
     const triggerHomeContentFetch = useCallback(async () => {
         if (homeContentFetched || homeContentLoading || !state.isAuthenticated) return;
         setHomeContentLoading(true);
         setHomeContentError(null);
         
         try {
-            // Mocking fetch logic - in reality this calls many endpoints
             const [
                 recent, releases, playlists, madeForYouList, artists, 
                 charts, genres, shows, party, topTrks, 
-                // ... other endpoints
             ] = await Promise.all([
                 apiClient.get('/me/player/recently-played?limit=10').catch(()=>({data:{items:[]}})),
                 apiClient.get('/browse/new-releases?limit=10').catch(()=>({data:{albums:{items:[]}}})),
                 apiClient.get('/me/playlists?limit=10').catch(()=>({data:{items:[]}})),
-                // ... mocked responses for others to avoid huge block
                 Promise.resolve({data:{message: '', playlists: {items: []}}}), // madeForYouPlaylists
                 apiClient.get('/me/top/artists?limit=10').catch(()=>({data:{items:[]}})),
                 Promise.resolve({data:{playlists:{items:[]}}}), // charts
@@ -561,7 +543,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 apiClient.get('/me/top/tracks?limit=10').catch(()=>({data:{items:[]}})),
             ]);
 
-            // Map data
             setContinueListeningItems(recent.data.items.map((i: any) => i.track || i).filter(Boolean));
             setNewReleases(releases.data.albums.items);
             setUserPlaylists(playlists.data.items);
@@ -573,8 +554,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setPartyPlaylists(party.data.playlists.items);
             setTopTracks(topTrks.data.items);
             
-            // ... set others ...
-
             setHomeContentFetched(true);
         } catch (e) {
             setHomeContentError('Failed to load home content.');
@@ -594,7 +573,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
     }, []);
 
-    // Volume
     const setVolumeLive = useCallback((vol: number) => {
         setVolume(vol);
         setVolumeThrottled(vol);
@@ -607,7 +585,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unlockAutoplay = useCallback(() => {
         setIsAutoplayBlocked(false);
-        // Maybe try to resume?
     }, []);
 
     const contextValue: AuthContextType = {

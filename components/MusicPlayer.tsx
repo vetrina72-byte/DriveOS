@@ -48,131 +48,87 @@ interface MusicPlayerProps {
 }
 
 /**
- * Robust Spotify Progress Bar.
- * Features:
- * 1. Single Source of Truth: While playing, ONLY local anchor dictates position.
- * 2. Instant Reset: Detects track ID change immediately to prevent interpolation glitches.
- * 3. Passive Pause: Freezes exactly on animation end, ignoring minor server-side regressions.
+ * Deterministic Spotify Progress Bar.
+ * 
+ * Logic:
+ * 1. Playing: RenderPos = State.position + (Now - State.timestamp). 
+ *    This linear interpolation ensures smooth updates at 60fps independent of API poll rate.
+ * 2. Paused: RenderPos = FROZEN.
+ *    We use a "Visual Latch" (frozenPosition ref) to lock the visual state the moment pause happens.
+ *    We actively ignore backward jumps from the server caused by latency.
+ *    We only unlock if the server reports a new position > 5000ms away (indicating a user seek).
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
     const [isDragging, setIsDragging] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
-    
-    // Anchor timestamp: Time = Now - Anchor. If null, we are not animating.
-    const anchorRef = useRef<number | null>(null);
     const rafRef = useRef<number>();
     
-    // Keep track of previous paused state to detect transitions
-    const prevPaused = useRef(state.paused);
+    // The visual latch. If not null, we render THIS value instead of state.position.
+    const frozenPosition = useRef<number | null>(state.paused ? state.position : null);
     
-    // Track previous position to detect actual changes vs stale updates
-    const prevStatePosition = useRef(state.position);
-    
-    // Track ID Guard & Reset Logic
-    const currentTrackId = state.track_window?.current_track?.id;
-    const activeTrackIdRef = useRef<string | null | undefined>(currentTrackId);
+    const lastStateRef = useRef(state);
 
-    // --- 1. INSTANT RESET ON TRACK CHANGE (Render Phase) ---
-    // Only reset if we have a valid NEW track ID.
-    if (currentTrackId && activeTrackIdRef.current !== currentTrackId) {
-        activeTrackIdRef.current = currentTrackId;
-        setVisualPosition(0);
-        anchorRef.current = !state.paused ? Date.now() : null;
-        prevStatePosition.current = 0;
-    }
-
-    // --- 2. SYNC LOGIC (Effect Phase) ---
+    // --- LINEAR INTERPOLATION LOOP (The "Engine") ---
     useEffect(() => {
-        if (isDragging) return;
+        const loop = () => {
+            if (isDragging) return; // UI Control overrides engine
 
-        const now = Date.now();
-        const isPlaying = !state.paused;
-        const wasPlaying = !prevPaused.current;
-        
-        // Transition Detection
-        const justPaused = !isPlaying && wasPlaying;
-        const justResumed = isPlaying && !wasPlaying;
+            // Case 1: Playing
+            if (!state.paused) {
+                // If we were frozen, unfreeze now
+                frozenPosition.current = null;
 
-        if (isPlaying) {
-            // CASE: PLAYING
-            if (anchorRef.current === null || justResumed) {
-                // Resume or Start: Initialize anchor based on Spotify's position
-                anchorRef.current = now - state.position;
-                setVisualPosition(state.position);
-            } else {
-                // Already Playing: Check for Remote Seek (Large Jump)
-                // We ignore small drifts to prevent jitter/looping
-                const expected = now - anchorRef.current;
-                const actual = state.position;
-                const diff = Math.abs(expected - actual);
-
-                // Only correct if difference is HUGE (> 2.5s), implying a seek/skip.
-                if (diff > 2500) {
-                    anchorRef.current = now - actual;
-                    setVisualPosition(actual);
-                }
-            }
-        } else {
-            // CASE: PAUSED
-            anchorRef.current = null;
-            
-            if (justPaused) {
-                // STOPPED: Do nothing.
-                // We leave visualPosition exactly where the animation loop left it.
-                // Spotify usually reports a position slightly *behind* our animation.
-                // Updating now would cause a visual "jump back". We want it frozen.
-            } else {
-                // ALREADY PAUSED:
-                
-                // --- PASSIVE PAUSE FIX ---
-                // If the server reports '0' (or extremely low) but we are visually far ahead,
-                // it's likely a state sync glitch (optimistic update vs real state) or initial buffer.
-                // Ignore it to prevent the bar from snapping to 0 and back.
-                if (state.position === 0 && visualPosition > 2000) {
-                    return; 
-                }
-
-                // Only update if there is a significant change (e.g. user scrubbed on another device)
-                // We use a 2000ms threshold to tolerate latency differences between clients.
-                // If the difference is small, we trust our local "frozen" visual position.
-                const diff = Math.abs(state.position - visualPosition);
-                
-                if (diff > 2000) {
-                    setVisualPosition(state.position);
-                }
-            }
-        }
-        
-        prevPaused.current = state.paused;
-        prevStatePosition.current = state.position;
-
-    }, [state, isDragging]); // Dependent on state changes
-
-    // --- 3. ANIMATION LOOP ---
-    useEffect(() => {
-        if (state.paused || isDragging) {
-            if (rafRef.current) cancelAnimationFrame(rafRef.current);
-            return;
-        }
-
-        const animate = () => {
-            if (anchorRef.current !== null) {
+                // Calculate exact position based on system clock delta
+                // state.timestamp is the exact time the server snapshot was taken
+                // fallback to Date.now() if 0 (rare)
+                const anchorTime = state.timestamp || Date.now();
                 const now = Date.now();
-                const nextPos = now - anchorRef.current;
-                // Clamp to duration
-                const clamped = Math.min(Math.max(0, nextPos), state.duration);
-                setVisualPosition(clamped);
+                const elapsedSinceSnapshot = now - anchorTime;
+                
+                // Determine raw position
+                let nextPos = state.position + elapsedSinceSnapshot;
+                
+                // Clamp to duration to prevent overshooting
+                nextPos = Math.min(nextPos, state.duration);
+                
+                setVisualPosition(nextPos);
+            } 
+            // Case 2: Paused
+            else {
+                // If we don't have a latch yet, grab one NOW.
+                // This captures the exact millisecond where the animation stopped.
+                if (frozenPosition.current === null) {
+                    frozenPosition.current = visualPosition; 
+                }
+
+                // DRIFT CHECK: Has the user seeked?
+                // The server says we are at 'state.position'.
+                // Our frozen UI says 'frozenPosition'.
+                // If the difference is huge (> 5 seconds), it's a seek/skip. Update UI.
+                const drift = Math.abs(state.position - frozenPosition.current);
+                
+                if (drift > 5000) {
+                    // Break the latch, snap to new server position
+                    frozenPosition.current = state.position;
+                    setVisualPosition(state.position);
+                } else {
+                    // Maintain the latch. Ignore minor server corrections.
+                    // This prevents the "backward jump" glitch.
+                    setVisualPosition(frozenPosition.current);
+                }
             }
-            rafRef.current = requestAnimationFrame(animate);
+            
+            rafRef.current = requestAnimationFrame(loop);
         };
 
-        rafRef.current = requestAnimationFrame(animate);
+        rafRef.current = requestAnimationFrame(loop);
+        
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state.paused, isDragging, state.duration]);
+    }, [state, isDragging, visualPosition]); // Dependencies crucial for closure freshness
 
     // --- INTERACTION ---
     const calculatePosFromEvent = (clientX: number) => {
@@ -187,6 +143,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         setIsDragging(true);
         const newPos = calculatePosFromEvent(e.clientX);
         setVisualPosition(newPos);
+        // Break the latch immediately on user interaction
+        frozenPosition.current = newPos; 
     };
 
     useEffect(() => {
@@ -199,11 +157,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = async (e: MouseEvent) => {
             const finalPos = calculatePosFromEvent(e.clientX);
             setVisualPosition(finalPos);
-            
-            // If playing, update anchor immediately so local playback continues seamlessly
-            if (!state.paused) {
-                anchorRef.current = Date.now() - finalPos;
-            }
+            frozenPosition.current = finalPos; // Latch visually here
             
             setIsDragging(false);
             if (player) await player.seek(finalPos);
@@ -215,7 +169,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDragging, player, state.duration, state.paused]);
+    }, [isDragging, player, state.duration]);
 
     const progressPercentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
