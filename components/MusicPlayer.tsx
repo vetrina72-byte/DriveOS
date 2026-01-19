@@ -48,25 +48,27 @@ interface MusicPlayerProps {
 }
 
 /**
- * ROCK-SOLID SPOTIFY PROGRESS BAR
+ * ROCK-SOLID SPOTIFY PROGRESS BAR (v3)
  * 
- * Risolve definitivamente:
- * 1. Saltelli indietro alla pausa (Logica "Freeze on Pause").
- * 2. Scatti in avanti al resume (Logica "No Ghost Progress").
- * 3. Scatti all'avvio traccia (Reset immediato su cambio ID).
+ * Features:
+ * 1. Strict Pause: No ghost counting during pause.
+ * 2. Anti-Anticipation: Waits for server playback during device transfers ("Listen Here").
+ * 3. Smart Sync: Snaps only when necessary, drifts smoothly otherwise.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
     
-    // Refs for state management without re-renders
+    // Refs for precision and state access without re-renders
     const stateRef = useRef(state);
     const isDragging = useRef(false);
     const rafRef = useRef<number>();
-    const lastTickRef = useRef<number>(performance.now());
+    
+    // Timer ref: Null means "timer stopped"
+    const lastTickRef = useRef<number | null>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
     
-    // Track current visual position in ref for synch logic
+    // Track current visual position in ref for synch logic inside effects
     const visualPosRef = useRef(visualPosition);
     visualPosRef.current = visualPosition;
 
@@ -79,41 +81,44 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const newTrackId = newState.track_window?.current_track?.id;
         const isTrackChange = prevTrackId !== newTrackId;
 
-        // SCENARIO 1: CAMBIO TRACCIA
-        // Reset immediato e incondizionato a 0.
+        // SCENARIO 1: TRACK CHANGE
+        // Reset immediately to 0 to prevent interpolating from old track end to new track start.
         if (isTrackChange) {
             setVisualPosition(0);
-            lastTickRef.current = performance.now();
+            lastTickRef.current = null; // Kill the timer
         } 
         else {
             // SCENARIO 2: PLAY -> PAUSE
-            // Il bug "saltello indietro": l'SDK manda un evento "paused" con una position vecchia.
-            // Soluzione: Se la nuova posizione è indietro rispetto a quella visiva, IGNORIAMO l'update.
             if (!prevState.paused && newState.paused) {
-                const drift = visualPosRef.current - newState.position;
+                // Determine if we should snap or freeze.
+                // If server says we are BEHIND where we visually are (latency), ignore server.
+                const diff = visualPosRef.current - newState.position;
                 
-                // Se la differenza è negativa (newState è avanti), ok aggiornare.
-                // Se la differenza è positiva (newState è indietro), è uno "stale update".
-                // Tolleranza di 50ms per piccoli jitter.
-                if (drift < 50) {
-                    setVisualPosition(newState.position);
+                // If diff is positive (we are ahead), and small (< 2s), we assume latency and FREEZE.
+                // If diff is huge, it's likely a seek/restart, so we SNAP.
+                if (diff > 0 && diff < 2000) {
+                    // Freeze at current visual position
                 } else {
-                    // FREEZE: Non facciamo nulla. La barra resta visivamente dov'è.
-                    // Il loop di animazione si fermerà perché paused=true.
+                    setVisualPosition(newState.position);
                 }
+                
+                // CRITICAL: Stop the timer.
+                lastTickRef.current = null;
             } 
             
             // SCENARIO 3: PAUSE -> PLAY
-            // Dobbiamo riallinearci al server, ma senza scatti.
             else if (prevState.paused && !newState.paused) {
+                // We are resuming. Align with server start point.
                 setVisualPosition(newState.position);
-                lastTickRef.current = performance.now(); // Reset timer per evitare salti dovuti al tempo trascorso
+                // CRITICAL: Reset timer to null so next loop frame initializes a fresh delta=0.
+                lastTickRef.current = null;
             }
             
-            // SCENARIO 4: SEEK (mentre in pausa o play)
-            // Se la posizione cambia drasticamente (>1s) senza cambio stato play/pause, è un seek.
-            else if (Math.abs(prevState.position - newState.position) > 1000) {
+            // SCENARIO 4: SEEK (while paused or playing)
+            else if (Math.abs(prevState.position - newState.position) > 2000) {
                 setVisualPosition(newState.position);
+                // If seeking while playing, we might need a frame to re-align
+                if (!newState.paused) lastTickRef.current = null;
             }
         }
 
@@ -123,54 +128,64 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     // --- EFFECT 2: ANIMATION LOOP (The Engine) ---
     useEffect(() => {
         const loop = (timestamp: number) => {
+            const currentState = stateRef.current;
+
+            // 1. STOP CONDITION
+            // If paused or dragging, we do NOT advance time.
+            if (currentState.paused || isDragging.current) {
+                lastTickRef.current = null; // Ensure timer is dead
+                rafRef.current = requestAnimationFrame(loop);
+                return;
+            }
+
+            // 2. START CONDITION
+            // If timer was dead, restart it now. Delta is 0 this frame.
+            if (lastTickRef.current === null) {
+                lastTickRef.current = timestamp;
+                rafRef.current = requestAnimationFrame(loop);
+                return;
+            }
+
+            // 3. UPDATE STEP
             const dt = timestamp - lastTickRef.current;
             lastTickRef.current = timestamp;
 
-            const currentState = stateRef.current;
-
-            // Se l'utente sta trascinando, non aggiorniamo.
-            if (isDragging.current) {
-                rafRef.current = requestAnimationFrame(loop);
-                return;
-            }
-
-            // CRUCIALE: Se è in pausa, NON avanzare.
-            // Questo previene il "Ghost Progress" (avanzamento nascosto).
-            if (currentState.paused) {
-                // Non facciamo nulla. visualPosition rimane congelata.
-                rafRef.current = requestAnimationFrame(loop);
-                return;
-            }
-
-            // Se è in play, avanziamo
+            // 4. CALCULATE NEW POSITION
             setVisualPosition(prevPos => {
-                // 1. Avanzamento lineare basato sul tempo reale locale
-                let nextPos = prevPos + dt;
+                const nextLocalPos = prevPos + dt;
                 
-                // 2. Clamping sulla durata
-                if (nextPos > currentState.duration) nextPos = currentState.duration;
+                // --- DRIFT PROTECTION (Anti-Ghosting & Anti-Anticipation) ---
+                
+                // Calculate where the Server says we are right now
+                // (Server Position + Time elapsed since that state update arrived)
+                const sdkElapsed = Date.now() - currentState.timestamp;
+                const sdkExpectedPos = currentState.position + sdkElapsed;
 
-                // 3. Drift Correction (Correzione dolce)
-                // Calcoliamo dove dovremmo essere secondo l'SDK
-                const sdkAge = Date.now() - currentState.timestamp; 
-                const sdkExpectedPos = currentState.position + sdkAge;
-                const drift = Math.abs(nextPos - sdkExpectedPos);
+                const drift = nextLocalPos - sdkExpectedPos;
 
-                // Se il drift è enorme (> 2 secondi), scatta subito (seek o lag pesante).
-                if (drift > 2000) {
+                // Case A: BUFFERING GUARD (Local ahead of Server)
+                // If we are moving but server is stuck (e.g. loading on new device),
+                // drift will be positive. If > 300ms, we HOLD.
+                if (drift > 300) {
+                    return prevPos; // Hold position, wait for audio
+                }
+
+                // Case B: CATCH UP (Local behind Server)
+                // If audio started and we are lagging > 300ms, SNAP forward.
+                if (drift < -300) {
                     return sdkExpectedPos;
                 }
+
+                // Case C: Normal Playback
+                // Clamp to duration just in case
+                if (nextLocalPos > currentState.duration) return currentState.duration;
                 
-                // Se il drift è medio (> 200ms), correggiamo leggermente la velocità per convergere
-                // (Rubber banding molto sottile, opzionale, qui facciamo snap solo su grossi errori)
-                
-                return nextPos;
+                return nextLocalPos;
             });
 
             rafRef.current = requestAnimationFrame(loop);
         };
 
-        lastTickRef.current = performance.now();
         rafRef.current = requestAnimationFrame(loop);
 
         return () => {
@@ -202,18 +217,18 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             if (!isDragging.current) return;
             
             const finalPos = calculatePos(e.clientX);
-            setVisualPosition(finalPos); // Snap visivo immediato
+            setVisualPosition(finalPos); // Snap visual immediately
             isDragging.current = false;
             
-            // Reset timer per evitare salti al prossimo frame
+            // Reset timer to avoid jump
             lastTickRef.current = performance.now();
 
             if (player) {
-                // Optimistic update dello stato locale per prevenire snap-back
+                // Optimistic update
                 stateRef.current = {
                     ...stateRef.current,
                     position: finalPos,
-                    timestamp: Date.now() // Fake timestamp fresco
+                    timestamp: Date.now()
                 };
                 await player.seek(finalPos);
             }
