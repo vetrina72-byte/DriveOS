@@ -71,22 +71,47 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const rafRef = useRef<number>();
     const lastTickRef = useRef<number>(performance.now());
     const progressBarRef = useRef<HTMLDivElement>(null);
+    const visualPositionRef = useRef(visualPosition);
 
-    // Sync Ref with Props
+    // Sync Ref with state on render to ensure effects have access to latest visual pos
+    visualPositionRef.current = visualPosition;
+
+    // Sync Ref with Props & Handle State Transitions
     useEffect(() => {
         const prevState = stateRef.current;
         const newState = state;
         
-        // Detect Resume (Pause -> Play)
-        if (prevState.paused && !newState.paused) {
-            // Hard sync on resume to prevent "jump forward then back" glitch.
-            // We set the visual position exactly to where the server says we resumed from.
-            setVisualPosition(newState.position);
-        }
-        
-        // Detect Track Change (ID changed)
-        if (prevState.track_window?.current_track?.id !== newState.track_window?.current_track?.id) {
+        const isTrackChange = prevState.track_window?.current_track?.id !== newState.track_window?.current_track?.id;
+
+        if (isTrackChange) {
             setVisualPosition(0);
+        } else {
+            // PLAY -> PAUSE Transition
+            if (!prevState.paused && newState.paused) {
+                // Critical Fix for "Jump Back" on Optimistic Update:
+                // If the new paused state has a position significantly older than our current visual position,
+                // it is likely a stale state from an optimistic update (AuthContext uses old state). 
+                // We ignore the jump back and freeze the bar where it is.
+                const drift = visualPositionRef.current - newState.position;
+                if (drift > 500) { 
+                    // Do not update visualPosition. 
+                    // The loop will see paused=true and stop incrementing, effectively freezing the bar here.
+                } else {
+                    // It's a fresh update or close enough. Snap to it.
+                    setVisualPosition(newState.position);
+                }
+            } 
+            // PAUSE -> PLAY Transition
+            else if (prevState.paused && !newState.paused) {
+                setVisualPosition(newState.position);
+            }
+            // PAUSE -> PAUSE (Seek or external update)
+            else if (prevState.paused && newState.paused) {
+                 // If position changed significantly while remaining paused, update it (e.g. user seeked while paused)
+                 if (Math.abs(prevState.position - newState.position) > 100) {
+                     setVisualPosition(newState.position);
+                 }
+            }
         }
 
         stateRef.current = newState;
@@ -105,13 +130,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
             const currentState = stateRef.current;
 
-            if (currentState.paused) {
-                // When paused, we generally stick to the reported position.
-                // However, we apply the same inertia logic: if the server sends a jittery update
-                // (e.g. 1ms diff) while paused, we can ignore it to prevent vibrating UI.
-                // For simplicity/stability in pause, we just set it (server is truth when static).
-                setVisualPosition(currentState.position);
-            } else {
+            if (!currentState.paused) {
                 // PLAYING: Run Local Interpolation
                 setVisualPosition(prevPos => {
                     // 1. Advance local position by delta time
@@ -121,25 +140,21 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                     if (nextPos > currentState.duration) nextPos = currentState.duration;
 
                     // 3. Drift Correction Check
-                    // What does the SDK say the time is RIGHT NOW?
-                    // SDK timestamp is when the state snapshot was taken.
                     const sdkAge = Date.now() - currentState.timestamp; 
                     const sdkExpectedPos = currentState.position + sdkAge;
-
                     const drift = Math.abs(nextPos - sdkExpectedPos);
 
-                    // THRESHOLD: 1500ms. 
-                    // If local clock is within 1.5s of server, TRUST LOCAL. 
-                    // This smooths over all network jitter and processing delays.
+                    // If local clock drifts too far (>1500ms), snap to server.
+                    // This smooths over network jitter.
                     if (drift > 1500) {
-                        // Large drift detected (Seek? Lag spike?). Snap to server.
                         return sdkExpectedPos;
                     } 
-                    
-                    // Small drift? Ignore server. Keep flying.
                     return nextPos;
                 });
-            }
+            } 
+            // WHEN PAUSED: We do NOTHING in the loop. 
+            // The useEffect([state]) handles snapping position updates when paused.
+            // If we blindly setVisualPosition(currentState.position) here, we cause the "stale state jump" bug.
 
             rafRef.current = requestAnimationFrame(loop);
         };
@@ -150,7 +165,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, []); // Empty dependency array = Loop never restarts, ensuring absolute smoothness
+    }, []); 
 
     // --- INTERACTION ---
     const calculatePos = (clientX: number) => {
