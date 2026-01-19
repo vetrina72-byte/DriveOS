@@ -48,90 +48,116 @@ interface MusicPlayerProps {
 }
 
 /**
- * Deterministic Spotify Progress Bar with Seek Locking.
+ * High-Inertia Spotify Progress Bar.
+ * 
+ * Solves "Micro-Stutter" by decoupling the visual render loop from the specific timing 
+ * of SDK state updates.
+ * 
+ * Logic:
+ * 1. The bar is driven by a local high-precision timer (performance.now()).
+ * 2. When SDK state updates arrive, we calculate the drift.
+ * 3. If drift < 1500ms (typical network/processing jitter), we IGNORE the SDK update 
+ *    and keep the local smooth movement. This acts as a visual flywheel.
+ * 4. If drift > 1500ms (user seek, track change, bad desync), we snap to the SDK value.
+ * 5. On Pause -> Play transition, we hard-sync once to establish a new baseline.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
+    // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
     
-    // --- STATE MACHINE REFS ---
-    // 1. isDragging: User is actively holding the handle. UI is 100% manual.
+    // Refs to hold state across closures without re-triggering effects
+    const stateRef = useRef(state);
     const isDragging = useRef(false);
-    
-    // 2. seekLock: User released handle, waiting for Spotify to catch up.
-    // Contains { targetPos: number, timestamp: number }
-    const seekLock = useRef<{ targetPos: number; timestamp: number } | null>(null);
-    
     const rafRef = useRef<number>();
+    const lastTickRef = useRef<number>(performance.now());
     const progressBarRef = useRef<HTMLDivElement>(null);
 
-    // --- RENDER LOOP ---
+    // Sync Ref with Props
     useEffect(() => {
-        const loop = () => {
-            const now = Date.now();
+        const prevState = stateRef.current;
+        const newState = state;
+        
+        // Detect Resume (Pause -> Play)
+        if (prevState.paused && !newState.paused) {
+            // Hard sync on resume to prevent "jump forward then back" glitch.
+            // We set the visual position exactly to where the server says we resumed from.
+            setVisualPosition(newState.position);
+        }
+        
+        // Detect Track Change (ID changed)
+        if (prevState.track_window?.current_track?.id !== newState.track_window?.current_track?.id) {
+            setVisualPosition(0);
+        }
 
-            // PRIORITY 1: User Interaction (Dragging)
-            // Do nothing here. Visual position is updated via mouse events.
+        stateRef.current = newState;
+    }, [state]);
+
+    // --- ANIMATION LOOP ---
+    useEffect(() => {
+        const loop = (timestamp: number) => {
+            const dt = timestamp - lastTickRef.current;
+            lastTickRef.current = timestamp;
+
             if (isDragging.current) {
                 rafRef.current = requestAnimationFrame(loop);
                 return;
             }
 
-            // PRIORITY 2: Seek Lock (Post-Drag Stabilization)
-            if (seekLock.current) {
-                // If we are in lock mode, we FORCE the visual position to the target.
-                // We ignore the SDK state unless it has "caught up".
-                setVisualPosition(seekLock.current.targetPos);
+            const currentState = stateRef.current;
 
-                // Convergence Check:
-                // Has the SDK reported a position close enough to our target?
-                // Or has enough time passed (safety timeout)?
-                const serverPos = state.position + (now - state.timestamp); // Extrapolated server pos
-                const diff = Math.abs(serverPos - seekLock.current.targetPos);
-                const timeSinceLock = now - seekLock.current.timestamp;
-
-                // Unlock conditions:
-                // 1. We are within 1.5s of the target (success)
-                // 2. It's been > 2.5s (timeout/fail safe)
-                // 3. Track changed ID (context switch)
-                if (diff < 1500 || timeSinceLock > 2500) {
-                    seekLock.current = null; // Release lock
-                }
-                
-                rafRef.current = requestAnimationFrame(loop);
-                return;
-            }
-
-            // PRIORITY 3: Normal Playback (Interpolation)
-            if (!state.paused) {
-                // Sanity Check: If state timestamp is absurdly old (> 60s), ignore interpolation
-                // to prevent massive forward jumps on resume.
-                const timeSinceUpdate = now - state.timestamp;
-                if (timeSinceUpdate > 60000) {
-                    setVisualPosition(state.position);
-                } else {
-                    const interpolated = state.position + timeSinceUpdate;
-                    setVisualPosition(Math.min(interpolated, state.duration));
-                }
+            if (currentState.paused) {
+                // When paused, we generally stick to the reported position.
+                // However, we apply the same inertia logic: if the server sends a jittery update
+                // (e.g. 1ms diff) while paused, we can ignore it to prevent vibrating UI.
+                // For simplicity/stability in pause, we just set it (server is truth when static).
+                setVisualPosition(currentState.position);
             } else {
-                // Paused: Stick to reported position
-                setVisualPosition(state.position);
+                // PLAYING: Run Local Interpolation
+                setVisualPosition(prevPos => {
+                    // 1. Advance local position by delta time
+                    let nextPos = prevPos + dt;
+                    
+                    // 2. Clamp to duration
+                    if (nextPos > currentState.duration) nextPos = currentState.duration;
+
+                    // 3. Drift Correction Check
+                    // What does the SDK say the time is RIGHT NOW?
+                    // SDK timestamp is when the state snapshot was taken.
+                    const sdkAge = Date.now() - currentState.timestamp; 
+                    const sdkExpectedPos = currentState.position + sdkAge;
+
+                    const drift = Math.abs(nextPos - sdkExpectedPos);
+
+                    // THRESHOLD: 1500ms. 
+                    // If local clock is within 1.5s of server, TRUST LOCAL. 
+                    // This smooths over all network jitter and processing delays.
+                    if (drift > 1500) {
+                        // Large drift detected (Seek? Lag spike?). Snap to server.
+                        return sdkExpectedPos;
+                    } 
+                    
+                    // Small drift? Ignore server. Keep flying.
+                    return nextPos;
+                });
             }
 
             rafRef.current = requestAnimationFrame(loop);
         };
 
+        lastTickRef.current = performance.now();
         rafRef.current = requestAnimationFrame(loop);
+
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state]); // Re-bind loop when state (source of truth) updates
+    }, []); // Empty dependency array = Loop never restarts, ensuring absolute smoothness
 
-    // --- INTERACTION HANDLERS ---
+    // --- INTERACTION ---
     const calculatePos = (clientX: number) => {
-        if (!progressBarRef.current || !state.duration) return 0;
+        if (!progressBarRef.current || !stateRef.current.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-        return Math.round(state.duration * ratio);
+        return Math.round(stateRef.current.duration * ratio);
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -146,19 +172,26 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             setVisualPosition(calculatePos(e.clientX));
         };
 
-        const handleMouseUp = (e: MouseEvent) => {
+        const handleMouseUp = async (e: MouseEvent) => {
             if (!isDragging.current) return;
             
             const finalPos = calculatePos(e.clientX);
-            setVisualPosition(finalPos);
-            
-            // ENGAGE SEEK LOCK
-            // This prevents the bar from snapping back to the old server time
-            seekLock.current = { targetPos: finalPos, timestamp: Date.now() };
+            setVisualPosition(finalPos); // Snap visual immediately
             isDragging.current = false;
+            
+            // Reset loop timer to prevent a huge dt jump
+            lastTickRef.current = performance.now();
 
             if (player) {
-                player.seek(finalPos).catch(err => console.error("Seek failed", err));
+                // Optimistically update the state ref to prevent snap-back
+                // until real update arrives
+                const currentState = stateRef.current;
+                stateRef.current = {
+                    ...currentState,
+                    position: finalPos,
+                    timestamp: Date.now() // Fake a fresh timestamp
+                };
+                await player.seek(finalPos);
             }
         };
 
@@ -168,10 +201,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [player, state.duration]);
+    }, [player]);
 
-    const percentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
-    const clampedPercent = Math.min(100, Math.max(0, percentage));
+    const progressPercentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
+    const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
         <div
@@ -180,8 +213,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             onMouseDown={handleMouseDown}
         >
             <div 
-                className="h-full rounded-full bg-[var(--progress-fill)] relative transition-none" // Disable CSS transition for JS anim
-                style={{ width: `${clampedPercent}%` }}
+                className="h-full rounded-full bg-[var(--progress-fill)] relative transition-none"
+                style={{ width: `${visualPercentage}%` }}
             >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
@@ -397,6 +430,25 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
                     </button>
                 </div>
             </div>
+        </div>
+    );
+};
+
+const AutoplayUnlockOverlay = () => {
+    const { unlockAutoplay } = useAuth();
+    
+    return (
+        <div 
+            className="absolute inset-0 z-[2001] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl cursor-pointer"
+            onClick={(e) => {
+                e.stopPropagation();
+                unlockAutoplay();
+            }}
+        >
+            <div className="p-3 bg-white/10 rounded-full mb-2 animate-pulse">
+                <IoPlaySharp className="w-8 h-8 text-white ml-1" />
+            </div>
+            <p className="text-white font-bold text-sm">Tocca per attivare l'audio</p>
         </div>
     );
 };
@@ -696,13 +748,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
 
     const themeClasses = isNight ? 'border-zinc-700/80' : 'border-zinc-300';
-    
-    const AutoplayUnlockOverlay = () => (
-        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 rounded-xl">
-            <p className="text-white font-semibold text-center">L'autoplay è bloccato dal browser.</p>
-            <button onClick={() => unlockAutoplay()} className="bg-[#1DB954] hover:bg-[#1AA34A] text-white font-bold py-3 px-6 rounded-full text-base transition-all transform hover:scale-105">Riprendi musica</button>
-        </div>
-    );
     
     const renderPlayerContent = () => {
         if (source === 'spotify' && !isPlayerActive && activeDevice) return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
