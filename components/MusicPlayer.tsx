@@ -126,19 +126,20 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             } else {
                 // ALREADY PAUSED:
                 
-                // --- FIRST STOP GLITCH FIX ---
+                // --- PASSIVE PAUSE FIX ---
                 // If the server reports '0' (or extremely low) but we are visually far ahead,
-                // it's likely a state sync glitch (optimistic update vs real state).
+                // it's likely a state sync glitch (optimistic update vs real state) or initial buffer.
                 // Ignore it to prevent the bar from snapping to 0 and back.
                 if (state.position === 0 && visualPosition > 2000) {
                     return; 
                 }
 
                 // Only update if there is a significant change (e.g. user scrubbed on another device)
+                // We use a 2000ms threshold to tolerate latency differences between clients.
+                // If the difference is small, we trust our local "frozen" visual position.
                 const diff = Math.abs(state.position - visualPosition);
                 
-                // 500ms threshold allows for small server corrections to be ignored
-                if (diff > 500) {
+                if (diff > 2000) {
                     setVisualPosition(state.position);
                 }
             }
