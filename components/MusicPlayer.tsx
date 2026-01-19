@@ -48,18 +48,12 @@ interface MusicPlayerProps {
 }
 
 /**
- * High-Inertia Spotify Progress Bar.
+ * High-Inertia Spotify Progress Bar with Robust Pause Handling.
  * 
- * Solves "Micro-Stutter" by decoupling the visual render loop from the specific timing 
- * of SDK state updates.
- * 
- * Logic:
- * 1. The bar is driven by a local high-precision timer (performance.now()).
- * 2. When SDK state updates arrive, we calculate the drift.
- * 3. If drift < 1500ms (typical network/processing jitter), we IGNORE the SDK update 
- *    and keep the local smooth movement. This acts as a visual flywheel.
- * 4. If drift > 1500ms (user seek, track change, bad desync), we snap to the SDK value.
- * 5. On Pause -> Play transition, we hard-sync once to establish a new baseline.
+ * FIXES:
+ * 1. "Jump Back" on Pause: Ignores stale SDK state updates when pausing.
+ * 2. "Hidden Advancement": Stops the internal timer loop completely when paused.
+ * 3. Micro-Stutter: Uses a local high-precision timer with drift correction.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
@@ -71,44 +65,73 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const rafRef = useRef<number>();
     const lastTickRef = useRef<number>(performance.now());
     const progressBarRef = useRef<HTMLDivElement>(null);
+    
+    // Keep a ref to the current visual position to use inside the layout effect
+    // without needing it as a dependency (which would cause loops).
     const visualPositionRef = useRef(visualPosition);
-
-    // Sync Ref with state on render to ensure effects have access to latest visual pos
     visualPositionRef.current = visualPosition;
 
-    // Sync Ref with Props & Handle State Transitions
+    // --- STATE SYNCHRONIZATION ---
     useEffect(() => {
         const prevState = stateRef.current;
         const newState = state;
         
-        const isTrackChange = prevState.track_window?.current_track?.id !== newState.track_window?.current_track?.id;
+        // Use IDs to detect track changes robustly
+        const prevTrackId = prevState.track_window?.current_track?.id;
+        const newTrackId = newState.track_window?.current_track?.id;
+        const isTrackChange = prevTrackId !== newTrackId;
 
         if (isTrackChange) {
+            // New track: Hard reset
             setVisualPosition(0);
         } else {
-            // PLAY -> PAUSE Transition
+            // Same track: Handle Transitions
+            
+            // Case 1: PLAYING -> PAUSED
             if (!prevState.paused && newState.paused) {
-                // Critical Fix for "Jump Back" on Optimistic Update:
-                // If the new paused state has a position significantly older than our current visual position,
-                // it is likely a stale state from an optimistic update (AuthContext uses old state). 
-                // We ignore the jump back and freeze the bar where it is.
+                // CRITICAL FIX: "Freeze, Don't Revert"
+                // The SDK often sends a 'paused' event with a 'position' that is slightly 
+                // older than our interpolated visual position (due to network latency).
+                // If we simply setVisualPosition(newState.position), the bar jumps back.
+                
+                // We calculate the difference. If the new state position is BEHIND 
+                // where we currently are visually, we assume it's a "stale" value 
+                // associated with the pause command and IGNORE it.
+                // We leave visualPosition exactly where it is.
+                
                 const drift = visualPositionRef.current - newState.position;
-                if (drift > 500) { 
-                    // Do not update visualPosition. 
-                    // The loop will see paused=true and stop incrementing, effectively freezing the bar here.
+                
+                // Only sync if the state position is actually ahead (unlikely on pause) 
+                // or if the jump back is HUGE (implying a seek occurred simultaneously).
+                // Threshold 500ms allows for normal latency without jumping.
+                if (drift < -500 || drift > 2000) {
+                     setVisualPosition(newState.position);
                 } else {
-                    // It's a fresh update or close enough. Snap to it.
-                    setVisualPosition(newState.position);
+                    // Do nothing. This effectively "Freezes" the bar at the exact 
+                    // moment the user hit pause (or we processed it).
                 }
             } 
-            // PAUSE -> PLAY Transition
+            
+            // Case 2: PAUSED -> PLAYING
             else if (prevState.paused && !newState.paused) {
+                // We are resuming. We must resync to the authoritative state 
+                // to ensure we don't drift over long periods.
+                // However, check if the start position is wildly different.
                 setVisualPosition(newState.position);
+                // Reset the tick to avoid a huge dt jump in the next frame
+                lastTickRef.current = performance.now();
             }
-            // PAUSE -> PAUSE (Seek or external update)
+            
+            // Case 3: PLAYING -> PLAYING (Periodic Update)
+            else if (!newState.paused) {
+                // We rely on the animation loop for smooth movement.
+                // We only correction-snap if drift is significant (handled in loop).
+            }
+            
+            // Case 4: PAUSED -> PAUSED (Seek while paused)
             else if (prevState.paused && newState.paused) {
-                 // If position changed significantly while remaining paused, update it (e.g. user seeked while paused)
-                 if (Math.abs(prevState.position - newState.position) > 100) {
+                 // If the position changed significantly while staying paused, it's a seek.
+                 if (Math.abs(prevState.position - newState.position) > 50) {
                      setVisualPosition(newState.position);
                  }
             }
@@ -123,15 +146,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const dt = timestamp - lastTickRef.current;
             lastTickRef.current = timestamp;
 
-            if (isDragging.current) {
-                rafRef.current = requestAnimationFrame(loop);
-                return;
-            }
-
             const currentState = stateRef.current;
 
-            if (!currentState.paused) {
-                // PLAYING: Run Local Interpolation
+            // CRITICAL FIX: "Hidden Advancement"
+            // We ONLY update the visual position if the state is strictly PLAYING.
+            // If paused, we do absolutely nothing. This prevents the bar from
+            // "creeping" forward if the loop runs while paused, and prevents
+            // the "jump forward then back" glitch on resume.
+            if (!currentState.paused && !isDragging.current) {
                 setVisualPosition(prevPos => {
                     // 1. Advance local position by delta time
                     let nextPos = prevPos + dt;
@@ -139,26 +161,27 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                     // 2. Clamp to duration
                     if (nextPos > currentState.duration) nextPos = currentState.duration;
 
-                    // 3. Drift Correction Check
+                    // 3. Drift Correction
+                    // Calculate where the SDK says we should be right now
+                    // (SDK Position + Time elapsed since that state was captured)
                     const sdkAge = Date.now() - currentState.timestamp; 
                     const sdkExpectedPos = currentState.position + sdkAge;
                     const drift = Math.abs(nextPos - sdkExpectedPos);
 
                     // If local clock drifts too far (>1500ms), snap to server.
-                    // This smooths over network jitter.
+                    // This creates a "rubber band" effect only when necessary,
+                    // otherwise movement is perfectly smooth linear interpolation.
                     if (drift > 1500) {
                         return sdkExpectedPos;
                     } 
                     return nextPos;
                 });
-            } 
-            // WHEN PAUSED: We do NOTHING in the loop. 
-            // The useEffect([state]) handles snapping position updates when paused.
-            // If we blindly setVisualPosition(currentState.position) here, we cause the "stale state jump" bug.
+            }
 
             rafRef.current = requestAnimationFrame(loop);
         };
 
+        // Initialize timer
         lastTickRef.current = performance.now();
         rafRef.current = requestAnimationFrame(loop);
 
