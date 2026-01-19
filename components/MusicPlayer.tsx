@@ -47,6 +47,14 @@ interface MusicPlayerProps {
     spinnerLeft: number | undefined;
 }
 
+const formatTime = (ms: number) => {
+    if (!ms && ms !== 0) return '-:--';
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
 /**
  * Robust Spotify Progress Bar.
  * Features:
@@ -232,19 +240,25 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
-        <div
-            ref={progressRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
-            onMouseDown={handleMouseDown}
-        >
-            <div 
-                className="h-full rounded-full bg-[var(--progress-fill)] relative" 
-                style={{ width: `${visualPercentage}%` }}
+        <div className="w-full flex flex-col gap-1.5">
+            <div
+                ref={progressRef}
+                className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
+                onMouseDown={handleMouseDown}
             >
-                 <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
-                    style={{ transform: 'translateY(-50%)' }} 
-                />
+                <div 
+                    className="h-full rounded-full bg-[var(--progress-fill)] relative" 
+                    style={{ width: `${visualPercentage}%` }}
+                >
+                     <div 
+                        className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
+                        style={{ transform: 'translateY(-50%)' }} 
+                    />
+                </div>
+            </div>
+            <div className="flex justify-between text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+                <span>{formatTime(visualPosition)}</span>
+                <span>{formatTime(state.duration)}</span>
             </div>
         </div>
     );
@@ -308,16 +322,22 @@ const YouTubeProgressBar = ({
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
-        <div
-            ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
-            onMouseDown={handleMouseDown}
-        >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
-                <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
-                    style={{ transform: 'translateY(-50%)' }} 
-                />
+        <div className="w-full flex flex-col gap-1.5">
+            <div
+                ref={progressRef}
+                className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
+                onMouseDown={handleMouseDown}
+            >
+                <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
+                    <div 
+                        className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
+                        style={{ transform: 'translateY(-50%)' }} 
+                    />
+                </div>
+            </div>
+            <div className="flex justify-between text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+                <span>{formatTime(displayPosition * 1000)}</span>
+                <span>{formatTime(progress.duration * 1000)}</span>
             </div>
         </div>
     );
@@ -835,6 +855,30 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleNextTrack = () => {
         if (source === 'spotify') {
+            // Optimistic update for zero-latency feel
+            if (playerState && playerState.track_window.next_tracks.length > 0) {
+                const nextTrack = playerState.track_window.next_tracks[0];
+                const newNextTracks = playerState.track_window.next_tracks.slice(1);
+                
+                setNowPlaying(prev => {
+                    if (!prev.spotifyState) return prev;
+                    return {
+                        ...prev,
+                        spotifyState: {
+                            ...prev.spotifyState,
+                            paused: false,
+                            position: 0,
+                            // Use existing duration as placeholder or 0, avoids flickering
+                            duration: (nextTrack as any).duration_ms || prev.spotifyState?.duration || 0,
+                            track_window: {
+                                ...prev.spotifyState.track_window,
+                                current_track: nextTrack,
+                                next_tracks: newNextTracks,
+                            }
+                        }
+                    };
+                });
+            }
             player?.nextTrack();
         } else if (source === 'radio') {
             onStationChange('next');
@@ -848,9 +892,46 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         }
     };
+    
     const handlePrevTrack = () => {
         if (source === 'spotify') {
-            player?.previousTrack();
+            // Logic to mimic Spotify: < 3s -> Prev song, > 3s -> Restart song
+            if (playerState && playerState.position > 3000) {
+                // Optimistic Restart
+                setNowPlaying(prev => {
+                    if (!prev.spotifyState) return prev;
+                    return {
+                        ...prev,
+                        spotifyState: { ...prev.spotifyState, position: 0 }
+                    };
+                });
+                player?.seek(0);
+            } else if (playerState && playerState.track_window.previous_tracks.length > 0) {
+                // Optimistic Prev
+                const prevTrack = playerState.track_window.previous_tracks[playerState.track_window.previous_tracks.length - 1];
+                const newPrevTracks = playerState.track_window.previous_tracks.slice(0, -1);
+                
+                setNowPlaying(prev => {
+                    if (!prev.spotifyState) return prev;
+                    return {
+                        ...prev,
+                        spotifyState: {
+                            ...prev.spotifyState,
+                            paused: false,
+                            position: 0,
+                            duration: (prevTrack as any).duration_ms || prev.spotifyState?.duration || 0,
+                            track_window: {
+                                ...prev.spotifyState.track_window,
+                                current_track: prevTrack,
+                                previous_tracks: newPrevTracks
+                            }
+                        }
+                    };
+                });
+                player?.previousTrack();
+            } else {
+                player?.previousTrack();
+            }
         } else if (source === 'radio') {
             onStationChange('prev');
         } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
