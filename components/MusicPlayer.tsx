@@ -48,153 +48,129 @@ interface MusicPlayerProps {
 }
 
 /**
- * ROCK-SOLID SPOTIFY PROGRESS BAR (v8 - Projection Algorithm)
+ * SPOTIFY PROGRESS BAR - ENGINE v9 (Local Priority / Anti-Jitter)
  * 
- * Replaced accumulation logic (prev + dt) with Projection logic (Anchor + Elapsed).
- * This prevents the bar from "running ahead" of the music.
+ * Logic:
+ * 1. We maintain a local `progress` value that drives the UI.
+ * 2. While playing, we increment `progress` using the browser's high-res timer (performance.now).
+ * 3. We IGNORE small updates from Spotify to prevent "fighting" (jumping back/forth).
+ * 4. We only sync with Spotify if the difference is huge (seek) or track changes.
+ * 5. Pausing stops the local timer immediately, ignoring the server's reported position.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // The "Anchor" holds the absolute truth received from Spotify
-    const anchorRef = useRef({
-        position: state.position,    // Where Spotify says we are
-        time: performance.now(),     // When we received that info
-        isPlaying: !state.paused,    // Are we playing?
-        trackId: state.track_window?.current_track?.id || null,
-        duration: state.duration
-    });
-
+    // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
-    const progressBarRef = useRef<HTMLDivElement>(null);
-    const isDragging = useRef(false);
+    
+    // Refs to maintain state inside the animation loop without triggering re-renders
+    const progressRef = useRef(state.position);
+    const lastFrameTimeRef = useRef<number | null>(null);
+    const isDraggingRef = useRef(false);
+    const currentTrackIdRef = useRef(state.track_window?.current_track?.id);
     const rafRef = useRef<number>();
 
-    // --- SYNCHRONIZATION LOGIC ---
+    // --- SYNCHRONIZATION (Server -> Local) ---
     useEffect(() => {
-        const now = performance.now();
-        const incomingIsPlaying = !state.paused;
-        const incomingTrackId = state.track_window?.current_track?.id || null;
-        
+        const serverPos = state.position;
+        const isPaused = state.paused;
+        const trackId = state.track_window?.current_track?.id;
+        const localPos = progressRef.current;
+
         // 1. TRACK CHANGE: Hard Reset
-        if (incomingTrackId !== anchorRef.current.trackId) {
-            anchorRef.current = {
-                position: 0,
-                time: now,
-                isPlaying: incomingIsPlaying,
-                trackId: incomingTrackId,
-                duration: state.duration
-            };
+        if (trackId !== currentTrackIdRef.current) {
+            currentTrackIdRef.current = trackId;
+            progressRef.current = 0;
             setVisualPosition(0);
             return;
         }
 
-        // 2. STATE UPDATE (Seek, Pause, Play, or Periodic Sync)
-        const previousAnchor = anchorRef.current;
+        // 2. SEEK DETECTION (Large Jump)
+        // If the server position is drastically different (> 1500ms) from local, 
+        // assume the user scrubbed/seeked or the song looped. Snap immediately.
+        const diff = Math.abs(serverPos - localPos);
+        if (diff > 1500) {
+            progressRef.current = serverPos;
+            setVisualPosition(serverPos);
+        }
         
-        // Calculate where the bar is *visually* right now before we update the anchor
-        const elapsedSinceLastAnchor = now - previousAnchor.time;
-        const currentVisualPos = previousAnchor.isPlaying 
-            ? Math.min(previousAnchor.duration, previousAnchor.position + elapsedSinceLastAnchor)
-            : previousAnchor.position;
+        // 3. PAUSE/PLAY STATE
+        // We don't sync position here for small drifts. We trust the local loop.
+        // We just ensure the loop knows if it should run (handled by dependency on state.paused below).
 
-        let newBasePos = state.position;
+    }, [state]); // Runs on every SDK update
 
-        // 3. SPECIAL HANDLING: PLAY -> PAUSE (The "Jump Back" Fix)
-        // If we were playing, and now we pause, and the server says we are 'behind' where we visually are...
-        // ...we PREFER the visual position to avoid the "jump back".
-        // The user won't notice a 200ms discrepancy, but they HATE a backward jump.
-        if (previousAnchor.isPlaying && !incomingIsPlaying) {
-            const diff = currentVisualPos - state.position;
-            // If the drift is small (latency), keep visual pos. If huge, snap to server (something broke).
-            if (diff > 0 && diff < 800) { 
-                newBasePos = currentVisualPos;
-            }
-        }
-
-        // Update the Anchor
-        anchorRef.current = {
-            position: newBasePos,
-            time: now,
-            isPlaying: incomingIsPlaying,
-            trackId: incomingTrackId,
-            duration: state.duration
-        };
-
-        // Immediate visual update if paused (to lock it) or if drifting too much
-        if (!incomingIsPlaying) {
-            setVisualPosition(newBasePos);
-        } else if (Math.abs(currentVisualPos - newBasePos) > 1000) {
-            // If playing but we are way off (>1s), snap immediately
-            setVisualPosition(newBasePos);
-        }
-
-    }, [state]); // Runs whenever Spotify sends a new state object
-
-    // --- ANIMATION LOOP (Projection) ---
+    // --- ANIMATION LOOP (Local Engine) ---
     useEffect(() => {
-        const loop = () => {
-            if (isDragging.current) {
-                rafRef.current = requestAnimationFrame(loop);
-                return;
+        const loop = (time: number) => {
+            if (!lastFrameTimeRef.current) {
+                lastFrameTimeRef.current = time;
             }
+            const dt = time - lastFrameTimeRef.current;
+            lastFrameTimeRef.current = time;
 
-            const { position, time, isPlaying, duration } = anchorRef.current;
-
-            if (isPlaying) {
-                const now = performance.now();
-                // PROJECTION: We are at Anchor + Time Elapsed
-                const elapsed = now - time;
-                const nextPos = position + elapsed;
+            // Only advance time if:
+            // 1. Not Paused
+            // 2. Not Dragging
+            // 3. Track is loaded
+            if (!state.paused && !isDraggingRef.current && state.duration > 0) {
+                // Increment local progress
+                progressRef.current += dt;
                 
-                // Clamp and Set
-                setVisualPosition(Math.min(duration, nextPos));
-            } else {
-                // If paused, ensure we stick to the anchor (handled in effect, but safety here)
-                // We don't set state here to avoid render trashing when static
+                // Clamp to duration
+                if (progressRef.current > state.duration) {
+                    progressRef.current = state.duration;
+                }
+
+                setVisualPosition(progressRef.current);
             }
 
             rafRef.current = requestAnimationFrame(loop);
         };
 
+        // Reset timer on mount/unmount or play/pause change to prevent huge dt jumps
+        lastFrameTimeRef.current = null;
         rafRef.current = requestAnimationFrame(loop);
+
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, []);
+    }, [state.paused, state.duration]); // Re-bind loop behavior when pause state changes
 
     // --- INTERACTION ---
     const calculatePos = (clientX: number) => {
-        if (!progressBarRef.current || !anchorRef.current.duration) return 0;
+        if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-        return Math.round(anchorRef.current.duration * ratio);
+        return Math.round(state.duration * ratio);
     };
 
+    const progressBarRef = useRef<HTMLDivElement>(null);
+
     const handleMouseDown = (e: React.MouseEvent) => {
-        isDragging.current = true;
+        isDraggingRef.current = true;
         const newPos = calculatePos(e.clientX);
         setVisualPosition(newPos);
+        progressRef.current = newPos; // Update internal ref immediately for UI responsiveness
     };
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isDragging.current) return;
-            setVisualPosition(calculatePos(e.clientX));
+            if (!isDraggingRef.current) return;
+            const newPos = calculatePos(e.clientX);
+            setVisualPosition(newPos);
         };
 
         const handleMouseUp = async (e: MouseEvent) => {
-            if (!isDragging.current) return;
+            if (!isDraggingRef.current) return;
             
             const finalPos = calculatePos(e.clientX);
-            setVisualPosition(finalPos); 
-            isDragging.current = false;
             
-            // Optimistic Update: Update Anchor immediately so loop continues from here
-            anchorRef.current = {
-                ...anchorRef.current,
-                position: finalPos,
-                time: performance.now(),
-                // Keep playing state as is, or assume playing if we seek? Usually seek keeps state.
-            };
+            // Apply seek
+            progressRef.current = finalPos;
+            setVisualPosition(finalPos);
+            isDraggingRef.current = false;
+            
+            // Reset frame timer to avoid jump after long drag
+            lastFrameTimeRef.current = performance.now();
 
             if (player) {
                 await player.seek(finalPos);
@@ -207,9 +183,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [player]);
+    }, [player, state.duration]); // Depend on duration for calculation context
 
-    const progressPercentage = anchorRef.current.duration > 0 ? (visualPosition / anchorRef.current.duration) * 100 : 0;
+    const progressPercentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
