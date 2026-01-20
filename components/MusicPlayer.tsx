@@ -48,7 +48,16 @@ interface MusicPlayerProps {
 }
 
 /**
- * ROCK-SOLID SPOTIFY PROGRESS BAR (v6 - Sticky Pause & Reliable Resume)
+ * ROCK-SOLID SPOTIFY PROGRESS BAR (v5 - Final Fix)
+ * 
+ * Logic Overview:
+ * 1. Pause Logic: When pausing, we IGNORE the position update from Spotify (which is often laggy/old).
+ *    We simply kill the timer. The bar freezes exactly where it is visually. No jumps.
+ * 
+ * 2. Resume Logic: When resuming, we SNAP to the server position immediately to ensure sync,
+ *    and restart the timer.
+ * 
+ * 3. Loop Logic: Simplified. If playing, add delta time. No complex buffering guards that cause freezing.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const [visualPosition, setVisualPosition] = useState(state.position);
@@ -57,75 +66,83 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const stateRef = useRef(state);
     const isDragging = useRef(false);
     const rafRef = useRef<number>();
+    
+    // Timer ref: Null means "timer stopped". number means "timestamp of last frame".
     const lastTickRef = useRef<number | null>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
+    
+    // Track visual position for logic
+    const visualPosRef = useRef(visualPosition);
+    visualPosRef.current = visualPosition;
 
     // --- EFFECT 1: STATE SYNCHRONIZATION & TRANSITION HANDLING ---
-    // This effect handles the logic when Spotify sends us a new state (Pause, Play, Seek, Track Change)
     useEffect(() => {
         const prevState = stateRef.current;
         const newState = state;
         
         const prevTrackId = prevState.track_window?.current_track?.id;
         const newTrackId = newState.track_window?.current_track?.id;
-        
-        // 1. TRACK CHANGE: Always reset to 0
-        if (prevTrackId !== newTrackId) {
+        const isTrackChange = prevTrackId !== newTrackId;
+
+        // SCENARIO 1: TRACK CHANGE
+        if (isTrackChange) {
             setVisualPosition(0);
             lastTickRef.current = null;
         } 
-        // 2. PLAY -> PAUSE (The "Jump" Fix)
-        // When Spotify pauses, it sends a position that is often OLDER than our simulated position.
-        // We MUST ignore the position from the 'paused' event to prevent the bar jumping backward.
-        // We just freeze the visual bar where it is.
-        else if (!prevState.paused && newState.paused) {
-            lastTickRef.current = null; // Kill timer immediately
-            // Do NOT update visualPosition from newState.position
-        } 
-        // 3. PAUSE -> PLAY (The "Stuck" Fix)
-        // When resuming, we sync to the server's resume point and ensure the timer is reset
-        // so the animation loop picks it up as a "fresh start".
-        else if (prevState.paused && !newState.paused) {
-            setVisualPosition(newState.position);
-            lastTickRef.current = null; 
-        }
-        // 4. SEEK / DRIFT (While Playing)
-        // Only snap if the difference is significant (> 1s) to avoid micro-stutters.
-        else if (!newState.paused && Math.abs(newState.position - visualPosition) > 1000) {
-            setVisualPosition(newState.position);
+        else {
+            // SCENARIO 2: PLAY -> PAUSE
+            // FIX: Do NOT update visualPosition from newState.position here.
+            // Spotify sends a "paused" event with a position that is usually ~500ms BEHIND
+            // where our visual bar has advanced to. Updating it causes the "Jump Back".
+            // We just let it stay where it is.
+            if (!prevState.paused && newState.paused) {
+                lastTickRef.current = null; // Just kill the timer. Freeze.
+            } 
+            
+            // SCENARIO 3: PAUSE -> PLAY
+            // We must resync to server time to ensure we aren't drifting, then start the loop.
+            else if (prevState.paused && !newState.paused) {
+                setVisualPosition(newState.position);
+                lastTickRef.current = null; // Will be initialized in the loop
+            }
+            
+            // SCENARIO 4: SEEK or DRIFT (while playing)
+            // Only snap if the difference is huge (> 1.5s), otherwise let the loop handle smooth time.
+            else if (!newState.paused && Math.abs(newState.position - visualPosRef.current) > 1500) {
+                setVisualPosition(newState.position);
+            }
         }
 
-        // Finally, update the ref so the animation loop sees the new state (e.g. paused=true)
         stateRef.current = newState;
-    }, [state]); // Dependency on 'state' ensures this runs on every update from SDK
+    }, [state]);
 
     // --- EFFECT 2: ANIMATION LOOP (The Engine) ---
     useEffect(() => {
         const loop = (timestamp: number) => {
             const currentState = stateRef.current;
 
-            // STOP CONDITION: Paused or Dragging
+            // 1. STOP CONDITION
             if (currentState.paused || isDragging.current) {
                 lastTickRef.current = null; 
                 rafRef.current = requestAnimationFrame(loop);
                 return;
             }
 
-            // INITIALIZATION CONDITION: First frame after resume
+            // 2. START CONDITION
             if (lastTickRef.current === null) {
                 lastTickRef.current = timestamp;
                 rafRef.current = requestAnimationFrame(loop);
                 return;
             }
 
-            // RUNNING CONDITION
+            // 3. UPDATE STEP
             const dt = timestamp - lastTickRef.current;
             lastTickRef.current = timestamp;
 
-            // Safely increment state
+            // 4. CALCULATE
             setVisualPosition(prevPos => {
                 const nextLocalPos = prevPos + dt;
-                // Clamp to duration
+                // Simple clamping
                 if (nextLocalPos > currentState.duration) return currentState.duration;
                 return nextLocalPos;
             });
@@ -167,11 +184,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             setVisualPosition(finalPos); 
             isDragging.current = false;
             
-            // Force reset loop timer to prevent jumps after release
             lastTickRef.current = performance.now();
 
             if (player) {
-                // Optimistically update local state ref
                 stateRef.current = {
                     ...stateRef.current,
                     position: finalPos,
