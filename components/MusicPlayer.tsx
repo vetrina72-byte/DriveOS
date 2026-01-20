@@ -48,7 +48,7 @@ interface MusicPlayerProps {
 }
 
 /**
- * ROCK-SOLID SPOTIFY PROGRESS BAR (v6 - Sticky Pause & Reliable Resume)
+ * ROCK-SOLID SPOTIFY PROGRESS BAR (v7 - Transitions & Track Change Fix)
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const [visualPosition, setVisualPosition] = useState(state.position);
@@ -61,7 +61,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const progressBarRef = useRef<HTMLDivElement>(null);
 
     // --- EFFECT 1: STATE SYNCHRONIZATION & TRANSITION HANDLING ---
-    // This effect handles the logic when Spotify sends us a new state (Pause, Play, Seek, Track Change)
+    // This effect handles the logic when Spotify sends us a new state
     useEffect(() => {
         const prevState = stateRef.current;
         const newState = state;
@@ -69,22 +69,28 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const prevTrackId = prevState.track_window?.current_track?.id;
         const newTrackId = newState.track_window?.current_track?.id;
         
-        // 1. TRACK CHANGE: Always reset to 0
+        // 1. TRACK CHANGE (Critical Fix for skipping backwards)
+        // If the track ID changes, we MUST reset immediately. 
+        // We do not wait for the loop or interpolation.
         if (prevTrackId !== newTrackId) {
             setVisualPosition(0);
-            lastTickRef.current = null;
+            lastTickRef.current = null; // Kill timer to prevent adding old delta to 0
+            stateRef.current = newState; // Update ref immediately
+            return; // Stop processing this update
         } 
-        // 2. PLAY -> PAUSE (The "Jump" Fix)
+        
+        // 2. PLAY -> PAUSE (The "Jump Back" Fix)
         // When Spotify pauses, it sends a position that is often OLDER than our simulated position.
         // We MUST ignore the position from the 'paused' event to prevent the bar jumping backward.
         // We just freeze the visual bar where it is.
-        else if (!prevState.paused && newState.paused) {
+        if (!prevState.paused && newState.paused) {
             lastTickRef.current = null; // Kill timer immediately
-            // Do NOT update visualPosition from newState.position
+            // Do NOT update visualPosition from newState.position. Keep current visual state.
         } 
-        // 3. PAUSE -> PLAY (The "Stuck" Fix)
-        // When resuming, we sync to the server's resume point and ensure the timer is reset
-        // so the animation loop picks it up as a "fresh start".
+        // 3. PAUSE -> PLAY (The "Stuck/Mini-Skip" Fix)
+        // When resuming, we sync to the server's resume point.
+        // Crucially, setting lastTickRef to null forces the loop to treat the next frame as a "start frame",
+        // preventing it from calculating a huge delta based on the time spent paused.
         else if (prevState.paused && !newState.paused) {
             setVisualPosition(newState.position);
             lastTickRef.current = null; 
@@ -95,9 +101,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             setVisualPosition(newState.position);
         }
 
-        // Finally, update the ref so the animation loop sees the new state (e.g. paused=true)
+        // Finally, update the ref so the animation loop sees the new state
         stateRef.current = newState;
-    }, [state]); // Dependency on 'state' ensures this runs on every update from SDK
+    }, [state]); 
 
     // --- EFFECT 2: ANIMATION LOOP (The Engine) ---
     useEffect(() => {
@@ -111,7 +117,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 return;
             }
 
-            // INITIALIZATION CONDITION: First frame after resume
+            // INITIALIZATION CONDITION: First frame after resume or mount
             if (lastTickRef.current === null) {
                 lastTickRef.current = timestamp;
                 rafRef.current = requestAnimationFrame(loop);
@@ -124,6 +130,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
             // Safely increment state
             setVisualPosition(prevPos => {
+                // If track changed during frame, safeguard against overflow
+                if (prevPos > currentState.duration) return 0;
+                
                 const nextLocalPos = prevPos + dt;
                 // Clamp to duration
                 if (nextLocalPos > currentState.duration) return currentState.duration;
@@ -447,7 +456,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     playerControlsSize, 
     playerControlsGap, 
     playerControlsVerticalPosition,
-    spinnerSize,
+    spinnerSize, 
     spinnerShuffleGap,
     debugSpinner,
     widgetBgColor,
