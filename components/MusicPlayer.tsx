@@ -14,7 +14,7 @@ import {
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
-import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
+import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance } from '../lib/spotify-player';
 
@@ -48,96 +48,89 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - ENGINE v13 (Absolute Fusion)
- * Uses timestamp-based calculation instead of local integration.
- * Ensures the bar is mathematically locked to Spotify's server time.
+ * SPOTIFY PROGRESS BAR - ENGINE v2 (Absolute Time Projection)
+ * 
+ * Logic:
+ * 1. The Source of Truth is ALWAYS the `state` prop from the SDK.
+ * 2. If paused, Visual Position = State Position.
+ * 3. If playing, Visual Position = State Position + (Date.now() - State Timestamp).
+ * 4. This ensures that even if the main thread lags, the bar recalculates 
+ *    the correct position relative to the last known server update.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
-    
-    // Interaction state
     const isDraggingRef = useRef(false);
     const progressBarRef = useRef<HTMLDivElement>(null);
     const rafRef = useRef<number>();
 
-    // --- ANIMATION LOOP ---
+    // The Animation Loop
     useEffect(() => {
-        const loop = () => {
-            // If user is dragging, do NOT update from state, let user control
+        const updateVisuals = () => {
             if (isDraggingRef.current) {
-                rafRef.current = requestAnimationFrame(loop);
+                // User is in control, do not update from state
+                rafRef.current = requestAnimationFrame(updateVisuals);
                 return;
             }
 
             if (state.paused) {
-                // STATIC ACCURACY: If paused, the bar must match the server position exactly.
-                // "If one stops at 1.4, the bar must be 1.4".
+                // Precise freeze. No interpolation allowed.
                 setVisualPosition(state.position);
             } else {
-                // DYNAMIC FUSION: If playing, calculate position based on the timestamp of the state.
-                // Position = Reported Position + (Current Time - Time of Report)
+                // Project current time based on last server update
                 const now = Date.now();
-                // Fallback: If timestamp is 0 or invalid, use performance.now delta (unlikely in SDK)
-                const timeSinceUpdate = (state.timestamp > 0) ? (now - state.timestamp) : 0;
+                // If timestamp is 0 or missing, fallback to raw position (rare edge case)
+                const timeDelta = state.timestamp > 0 ? (now - state.timestamp) : 0;
                 
-                let estimatedPosition = state.position + timeSinceUpdate;
+                let projectedPosition = state.position + timeDelta;
 
-                // ANTI-GHOSTING / START FIX:
-                // If Spotify says position is 0, we assume the track hasn't actually started audible playback.
-                // We force 0 to prevent the bar from "running ahead" while buffering.
-                if (state.position === 0) {
-                    estimatedPosition = 0;
-                }
+                // Clamp to duration limits
+                if (projectedPosition > state.duration) projectedPosition = state.duration;
+                if (projectedPosition < 0) projectedPosition = 0;
 
-                // Clamp to duration
-                if (estimatedPosition > state.duration) estimatedPosition = state.duration;
-                
-                setVisualPosition(estimatedPosition);
+                setVisualPosition(projectedPosition);
             }
 
-            rafRef.current = requestAnimationFrame(loop);
+            rafRef.current = requestAnimationFrame(updateVisuals);
         };
 
-        rafRef.current = requestAnimationFrame(loop);
+        rafRef.current = requestAnimationFrame(updateVisuals);
 
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state]); // Re-run whenever state updates (new timestamp/position)
+    }, [state]); // Re-bind loop only when state reference updates (new timestamp/status)
 
-    // --- INTERACTION ---
-    const calculatePos = (clientX: number) => {
+    // Interaction Handlers
+    const calculateSeekPosition = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-        return Math.round(state.duration * ratio);
+        return Math.floor(state.duration * ratio);
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
         isDraggingRef.current = true;
-        const newPos = calculatePos(e.clientX);
+        const newPos = calculateSeekPosition(e.clientX);
         setVisualPosition(newPos);
     };
 
+    // Global listeners for drag consistency
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDraggingRef.current) return;
-            const newPos = calculatePos(e.clientX);
+            const newPos = calculateSeekPosition(e.clientX);
             setVisualPosition(newPos);
         };
 
-        const handleMouseUp = async (e: MouseEvent) => {
+        const handleMouseUp = (e: MouseEvent) => {
             if (!isDraggingRef.current) return;
             
-            const finalPos = calculatePos(e.clientX);
-            
-            // Apply seek
-            setVisualPosition(finalPos);
+            const finalPos = calculateSeekPosition(e.clientX);
+            setVisualPosition(finalPos); // Snap visual
             isDraggingRef.current = false;
 
             if (player) {
-                await player.seek(finalPos);
+                player.seek(finalPos);
             }
         };
 
@@ -150,20 +143,20 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     }, [player, state.duration]); 
 
     const progressPercentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
-    const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
+    const clampedPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
         <div
             ref={progressBarRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible touch-none"
             onMouseDown={handleMouseDown}
         >
             <div 
-                className="h-full rounded-full bg-[var(--progress-fill)] relative transition-none"
-                style={{ width: `${visualPercentage}%` }}
+                className="h-full rounded-full bg-[var(--progress-fill)] relative transition-none" // CSS transition disabled for JS animation
+                style={{ width: `${clampedPercentage}%` }}
             >
                  <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm"
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>
@@ -302,7 +295,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
         if (type === 'tablet') return <FiTablet style={style} />;
         if (type === 'castaudio' || type === 'audio_dongle') return <FiCast style={style} />;
         if (type === 'gameconsole') return <IoGameControllerOutline style={style} />;
-        return <FiBluetooth style={style} />; // Default/Generic
+        return <FiBluetooth style={style} />; 
     };
 
     return (
@@ -329,14 +322,12 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
     );
 };
 
-const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft'>) => {
-    const isReady = false; // Always disabled
+const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: any) => {
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
 
     return (
         <div className="w-full h-full flex flex-col justify-between px-4 py-2">
-            {/* Top part: Track info */}
             <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-3 min-w-0">
                     <div className={`w-12 h-12 rounded-lg shadow-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
@@ -347,31 +338,28 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
                         <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>Scegli qualcosa da ascoltare</div>
                     </div>
                 </div>
-                {/* Shuffle/Repeat etc. */}
                 <div className="flex items-center gap-5">
                      <div className="flex items-center">
-                        <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
+                        <button disabled className="transition" style={{ color: inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
                     </div>
-                    <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
+                    <button disabled className="transition" style={{ color: inactiveButtonColor }}>
                         <PiRepeatBold className="w-5 h-5" />
                     </button>
                 </div>
             </div>
-            {/* Progress bar */}
             <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden" />
-            {/* Controls */}
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
                 <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                    <button disabled className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                    <button disabled className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
+                    <button disabled className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                    <button disabled className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
                 </div>
                 <div className="flex-1 flex justify-end items-center">
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
+                    <button disabled className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
                         <BsList style={{ width: '20px', height: '20px'}} />
                     </button>
                 </div>
@@ -490,6 +478,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, [isAutoQueueEnabled, visibleQueue]);
 
+    // Handle auto-queue popover logic based on progress
     useEffect(() => {
         if (!playerState || playerState.paused || !currentTrackUri) return;
         const { position, duration, disallows } = playerState;
@@ -524,6 +513,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (youtubePlayerRef.current) youtubePlayerRef.current.setVolume(volume * 100);
     }, [volume]);
     
+    // Radio Handling
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
@@ -639,6 +629,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const handleNextTrack = () => {
         if (source === 'spotify') {
             if (playerState && playerState.track_window.next_tracks.length > 0) {
+                // Optimistic update
                 const nextTrack = playerState.track_window.next_tracks[0];
                 setNowPlaying(prev => prev.spotifyState ? ({
                     ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (nextTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: nextTrack, next_tracks: prev.spotifyState.track_window.next_tracks.slice(1) } }
@@ -698,6 +689,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const renderPlayerContent = () => {
         if (source === 'spotify' && !isPlayerActive && activeDevice) return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
         if (source === 'youtube' && youtubeTrack) {
+            // ... (YouTube rendering logic kept essentially same)
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
@@ -728,6 +720,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             );
         }
         if (source === 'radio' && radioStation) {
+            // ... (Radio rendering)
             const { name, favicon, tags } = radioStation;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isFavorite = favoriteStationUUIDs.includes(radioStation.stationuuid);
@@ -765,7 +758,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <button onClick={handleToggleRepeat} className="transition" style={{ color: playerState.repeat_mode > 0 ? buttonActiveColor : inactiveButtonColor }}>{playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5" /> : <PiRepeatBold className="w-5 h-5" />}</button>
                         </div>
                     </div>
+                    
+                    {/* NEW ABSOLUTE TIME BAR */}
                     <SpotifyProgressBar player={player} state={playerState} />
+                    
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                          <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>

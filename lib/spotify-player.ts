@@ -47,7 +47,6 @@ export function initSpotifyPlayerOnce(options: InitOptions) {
             player.addListener('not_ready', (details) => {
                 console.warn('[Spotify SDK] Device ID has gone offline', details.device_id);
                 playerReady = false;
-                // Important: clear the device ID so we know we need to reconnect/transfer later
                 if (spotifyDeviceId === details.device_id) {
                     spotifyDeviceId = null; 
                 }
@@ -158,7 +157,7 @@ async function reconnectAndGetDeviceId(player: SpotifyPlayer): Promise<string | 
         const timeout = setTimeout(() => {
             console.warn('[Spotify SDK] Timeout waiting for device_id after reconnect');
             resolve(null);
-        }, 4000); // 4 second timeout
+        }, 4000); 
 
         const onReady = (details: { device_id: string }) => {
             clearTimeout(timeout);
@@ -168,7 +167,7 @@ async function reconnectAndGetDeviceId(player: SpotifyPlayer): Promise<string | 
         };
 
         player.addListener('ready', onReady);
-        player.disconnect(); // Force disconnect first to ensure clean state
+        player.disconnect(); 
         setTimeout(() => {
             player.connect().catch(e => {
                 console.error("Connect failed", e);
@@ -202,10 +201,15 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
+    // 2. CONSTRUCT REQUEST
+    // Crucial Change: We include deviceId in the payload to force specific device activation.
+    // However, the proxy endpoint expects { deviceId: '...', body: { ... } }
+    // The backend /api/play handles adding device_id to the query param if provided.
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
 
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
         try {
+            console.log('[safePlay] Initiating Play on Device:', spotifyDeviceId);
             const res = await fetch('/api/play', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
@@ -218,16 +222,17 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     };
 
-    // 2. Attempt playback
+    // 3. Attempt playback directly targeting this device
     let result = await doPlay();
 
     if (result.ok) return true;
 
-    // 3. Handle 404 (Device Not Found / Inactive)
+    // 4. Handle 404 (Device Not Found / Inactive) - Retry logic if specific target failed
     if (result.status === 404) {
-        console.log('[safePlay] Device 404 (Inactive). Attempting transfer/wake-up...');
+        console.log('[safePlay] Device 404. Attempting transfer/wake-up...');
         
         try {
+            // Force transfer to this ID explicitly
             const transferRes = await fetch('/api/transfer-player', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -236,21 +241,19 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
 
             if (transferRes.ok) {
                 // Wait a moment for Spotify backend to register the transfer
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 300));
                 console.log('[safePlay] Transfer successful. Retrying play...');
                 result = await doPlay();
                 if (result.ok) return true;
             } else {
+                // ... (Existing reconnection logic as backup)
                 console.error('[safePlay] Transfer failed. Attempting hard reconnect...');
-                
-                // If transfer failed, the device ID might be truly dead/rotated.
                 if (spotifyPlayer) {
                     const newId = await reconnectAndGetDeviceId(spotifyPlayer);
                     if (newId) {
                         spotifyDeviceId = newId;
                         playRequest.deviceId = newId;
                         
-                        // Force transfer to new ID
                         await fetch('/api/transfer-player', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -268,7 +271,7 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
-    // 4. Handle 401 (Token Expired)
+    // 5. Handle 401 (Token Expired)
     if (result.status === 401) {
         console.log('[safePlay] Token expired (401). Refreshing...');
         const refreshed = await attemptRefresh();
