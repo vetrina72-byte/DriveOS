@@ -81,7 +81,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         // A. RILEVAMENTO CAMBIO TRACCIA (Ghosting Fix)
         if (trackId !== lastTrackIdRef.current) {
-            currentLog("Track Change Detected", trackId);
+            // currentLog("Track Change Detected", trackId);
             lastTrackIdRef.current = trackId || null;
             
             // Hard Reset Immediato
@@ -141,11 +141,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         wasPausedRef.current = isPaused;
 
     }, [state]); 
-
-    // Helper per debug (opzionale, rimuovere in prod se vuoi)
-    const currentLog = (msg: string, val: any) => {
-        // console.log(`[SpotifyBar] ${msg}`, val);
-    };
 
     // --- 2. LOOP DI ANIMAZIONE (THE RENDERER) ---
     useEffect(() => {
