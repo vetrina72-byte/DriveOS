@@ -48,9 +48,10 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v8 - OPTIMISTIC START)
- * Fixes: Sticky Zero bug.
- * Logic: Immediately starts counting from 0 on track change, ignoring initial server lag.
+ * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v9 - STALE PACKET REJECTION)
+ * Fixes: Sticky Zero bug / Jitter on track change.
+ * Logic: When track ID changes, we LOCK the sync logic for 500ms to ignore any 
+ * lingering state updates from the previous track that arrive out of order.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -58,13 +59,16 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const isDraggingRef = useRef(false);
 
     // --- DEAD RECKONING STATE ---
-    // These refs maintain the "local truth" independent of server updates.
-    const localBaseTimeRef = useRef<number>(0); // Timestamp (ms) of the last anchor point
-    const localBasePosRef = useRef<number>(0);  // Position (ms) at the last anchor point
+    const localBaseTimeRef = useRef<number>(0); 
+    const localBasePosRef = useRef<number>(0);  
     
-    // Snapshots to detect state changes
+    // Snapshots
     const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
     const wasPausedRef = useRef<boolean>(state?.paused ?? true);
+    
+    // Transition Lock: Prevents "stale" packets (old track pos) from jerking the bar back after we switched.
+    const isChangingTrackRef = useRef(false);
+    const changeTrackTimeoutRef = useRef<number | null>(null);
 
     // --- 1. SYNC LOGIC (THE BRAIN) ---
     useEffect(() => {
@@ -75,54 +79,50 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const isPaused = state.paused;
         const trackId = state.track_window?.current_track?.id;
 
-        // A. TRACK CHANGE DETECTION (Optimistic Start)
+        // A. TRACK CHANGE DETECTION (Transition Lock)
         if (trackId !== lastTrackIdRef.current) {
             lastTrackIdRef.current = trackId || null;
             
-            // OPTIMISTIC RESET:
-            // Force the local position to 0 immediately. 
-            // We set the anchor time to NOW, so the animation loop starts adding 
-            // elapsed time from 0 immediately in the next frame.
+            // LOCK: Ignore server drift updates for 500ms
+            isChangingTrackRef.current = true;
+            if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
+            changeTrackTimeoutRef.current = window.setTimeout(() => {
+                isChangingTrackRef.current = false;
+            }, 500);
+            
+            // OPTIMISTIC RESET
             localBasePosRef.current = 0;
             localBaseTimeRef.current = now;
             wasPausedRef.current = isPaused;
             
-            // Visual reset
-            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+            // IMMEDIATE VISUAL RESET
+            if (progressFillRef.current) {
+                 progressFillRef.current.style.width = '0%';
+            }
             
-            // IMPORTANT: Return early. We don't want to run drift logic on this frame
-            // because the server is likely still reporting the old track or 0.
-            return;
+            return; // EXIT: Do not run drift logic this frame
         }
 
         // B. PLAY/PAUSE HANDLING (Trusted Resume)
         const isPauseChange = isPaused !== wasPausedRef.current;
 
         if (isPauseChange) {
-            // Calculate where the bar visually arrived.
-            // If we were paused, elapsed time is 0.
             const elapsedSinceAnchor = wasPausedRef.current ? 0 : (now - localBaseTimeRef.current);
             const visualPos = localBasePosRef.current + elapsedSinceAnchor;
 
-            // TRUSTED RESUME:
-            // Whether pausing or resuming, we trust the visual position.
-            // We ignore the server position (which lags) to prevent snap-back.
             localBasePosRef.current = visualPos;
             localBaseTimeRef.current = now;
         } 
         else {
             // C. DRIFT CONTROL (Drift Tolerance)
-            // Only if playing.
-            if (!isPaused) {
+            // We only check for drift if we are NOT in the "Changing Track" lock period.
+            if (!isPaused && !isChangingTrackRef.current) {
                 const elapsed = now - localBaseTimeRef.current;
                 const estimatedVisualPos = localBasePosRef.current + elapsed;
                 const drift = Math.abs(estimatedVisualPos - serverPos);
 
-                // TOLERANCE: 1500ms.
-                // Critical for Optimistic Start: Initially we will be at 0.5s, 1s, etc.
-                // while the server reports 0s. This tolerance prevents the bar from being yanked back to 0.
-                // It only syncs if the difference is huge (e.g. user seeked on another device).
-                if (drift > 1500) {
+                // TOLERANCE: 2000ms. Increased to allow more variance without jitter.
+                if (drift > 2000) {
                     localBasePosRef.current = serverPos;
                     localBaseTimeRef.current = now;
                 }
@@ -152,9 +152,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
             let currentPos = localBasePosRef.current;
 
-            // OPTIMISTIC MOVEMENT:
-            // Always advance if not paused. We rely on the Sync Logic (useEffect) 
-            // to correct us if we drift too far, but otherwise we assume the local clock is correct.
             if (!state.paused) {
                 const now = performance.now();
                 currentPos += (now - localBaseTimeRef.current);
@@ -207,9 +204,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             if (player) {
                 player.seek(finalPos).catch(console.error);
                 
-                // Immediate Optimistic Update:
-                // Tell the local logic we are ALREADY there.
-                // This prevents the bar from snapping back while waiting for the server.
+                // Immediate Optimistic Update
                 localBasePosRef.current = finalPos;
                 localBaseTimeRef.current = performance.now();
             }
@@ -232,7 +227,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             <div 
                 ref={progressFillRef}
                 className="h-full rounded-full bg-[var(--progress-fill)] relative"
-                style={{ width: '0%' }}
+                style={{ width: '0%', transition: 'none' }} // Explicitly disable CSS transition for JS control
             >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm"
