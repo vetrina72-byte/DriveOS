@@ -48,102 +48,115 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - ENGINE v3 (Direct DOM Manipulation)
- * 
- * Logic:
- * 1. NO useState for animation frames (too slow). Use refs and direct style manipulation.
- * 2. Source of Truth: `state` prop from SDK.
- * 3. Paused? Kill the loop immediately. Snap to `state.position`.
- * 4. Playing? Run RAF loop. Calculate: `state.position + (Date.now() - state.timestamp)`.
- * 5. Track Change? Explicitly handled by useEffect dependencies.
+ * SPOTIFY PROGRESS BAR - REF-BASED GAME LOOP ENGINE
+ * Solves: Jitter, Ghost Time (Teleport), and Reset bugs.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    const progressBarRef = useRef<HTMLDivElement>(null); // The outer container
-    const progressFillRef = useRef<HTMLDivElement>(null); // The fill bar
-    const rafRef = useRef<number | null>(null);
+    const progressBarRef = useRef<HTMLDivElement>(null);
+    const progressFillRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
+    
+    // 1. Ref-based State: Holds latest state without triggering loop re-creation
+    const stateRef = useRef(state);
 
-    // Function to update the DOM directly based on calculated time
-    const updateProgress = useCallback(() => {
-        if (!progressFillRef.current || isDraggingRef.current) return;
-
-        if (state.paused) {
-            // If paused, just snap to the reported position and stop.
-            const percent = (state.position / state.duration) * 100;
-            progressFillRef.current.style.width = `${Math.min(100, Math.max(0, percent))}%`;
-            return;
-        }
-
-        const now = Date.now();
-        // Time elapsed since the state was captured by Spotify SDK
-        // This projection logic ensures smoothness even if React lags
-        const timeSinceUpdate = now - state.timestamp;
-        const projectedPosition = state.position + timeSinceUpdate;
-        
-        const percent = (projectedPosition / state.duration) * 100;
-        const clampedPercent = Math.min(100, Math.max(0, percent));
-
-        progressFillRef.current.style.width = `${clampedPercent}%`;
-
-        // Continue loop only if playing
-        rafRef.current = requestAnimationFrame(updateProgress);
+    useEffect(() => {
+        stateRef.current = state;
     }, [state]);
 
-    // Effect to handle state changes (Play/Pause/Seek/Track Change)
+    // 2. Stable Game Loop (Mounts once)
     useEffect(() => {
-        // Always clear previous loop first to prevent ghosting
-        if (rafRef.current) {
-            cancelAnimationFrame(rafRef.current);
-            rafRef.current = null;
-        }
+        let animationFrameId: number;
 
-        if (state.paused) {
-            // Update once to snap to correct pause position
-            updateProgress();
-        } else {
-            // Start the loop
-            rafRef.current = requestAnimationFrame(updateProgress);
-        }
+        const update = () => {
+            animationFrameId = requestAnimationFrame(update);
 
-        return () => {
-            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            // Validation & Drag Check
+            if (!progressBarRef.current || !progressFillRef.current || isDraggingRef.current) return;
+
+            const currentState = stateRef.current;
+            if (!currentState) return;
+
+            const { paused, position, duration, timestamp } = currentState;
+
+            // Duration Check
+            if (!duration || duration === 0) {
+                progressFillRef.current.style.width = '0%';
+                return;
+            }
+
+            // Calculate Current Position
+            let currentPos = position;
+
+            if (!paused) {
+                // Projection Logic: Only apply if playing.
+                const now = Date.now();
+                // Fallback for missing timestamp (rare) to avoid NaN
+                const refTime = timestamp || now;
+                const elapsed = now - refTime;
+                
+                // Add elapsed time. Ensure non-negative.
+                currentPos += Math.max(0, elapsed);
+            }
+
+            // Update DOM directly
+            const percent = (currentPos / duration) * 100;
+            const clampedPercent = Math.min(100, Math.max(0, percent));
+            
+            progressFillRef.current.style.width = `${clampedPercent}%`;
         };
-    }, [state, updateProgress]); // Re-run when state changes (new timestamp/position)
 
-    // --- INTERACTION HANDLERS ---
+        animationFrameId = requestAnimationFrame(update);
 
-    const calculateSeekPosition = (clientX: number) => {
-        if (!progressBarRef.current || !state.duration) return 0;
+        return () => cancelAnimationFrame(animationFrameId);
+    }, []); // Empty deps = Stable Loop
+
+    // --- Interaction Handlers ---
+
+    const calculateSeekPosition = useCallback((clientX: number): number => {
+        if (!progressBarRef.current) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-        return Math.floor(state.duration * ratio);
-    };
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        isDraggingRef.current = true;
-        // Disable transition during drag for instant response
-        if (progressFillRef.current) progressFillRef.current.style.transition = 'none';
+        const duration = stateRef.current?.duration || 0;
+        if (duration === 0) return 0;
         
-        const newPos = calculateSeekPosition(e.clientX);
-        const percent = (newPos / state.duration) * 100;
-        if (progressFillRef.current) progressFillRef.current.style.width = `${percent}%`;
-    };
+        const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
+        return Math.floor(duration * ratio);
+    }, []);
 
-    // Global listeners for drag consistency
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        if (!stateRef.current) return;
+        isDraggingRef.current = true;
+        
+        // Disable transition for instant feedback
+        if (progressFillRef.current) {
+            progressFillRef.current.style.transition = 'none';
+        }
+
+        const newPos = calculateSeekPosition(e.clientX);
+        const duration = stateRef.current.duration;
+        const percent = (newPos / duration) * 100;
+        
+        if (progressFillRef.current) {
+            progressFillRef.current.style.width = `${percent}%`;
+        }
+    }, [calculateSeekPosition]);
+
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isDraggingRef.current || !progressFillRef.current) return;
+            if (!isDraggingRef.current || !progressFillRef.current || !stateRef.current) return;
+            
             const newPos = calculateSeekPosition(e.clientX);
-            const percent = (newPos / state.duration) * 100;
+            const duration = stateRef.current.duration;
+            const percent = (newPos / duration) * 100;
+            
             progressFillRef.current.style.width = `${percent}%`;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
             if (!isDraggingRef.current) return;
             
-            const finalPos = calculateSeekPosition(e.clientX);
             isDraggingRef.current = false;
             
+            const finalPos = calculateSeekPosition(e.clientX);
             if (player) {
                 player.seek(finalPos);
             }
@@ -151,11 +164,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
+
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [player, state.duration]); 
+    }, [player, calculateSeekPosition]);
 
     return (
         <div
@@ -166,7 +180,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             <div 
                 ref={progressFillRef}
                 className="h-full rounded-full bg-[var(--progress-fill)] relative"
-                style={{ width: '0%' }} // Initial width, updated by JS
+                style={{ width: '0%', transition: 'none' }} // Explicitly disable CSS transition here
             >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm"
@@ -464,7 +478,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isLiked, setIsLiked] = useState(false);
     const spotifyQueueButtonRef = useRef<HTMLButtonElement>(null);
     const youTubeQueueButtonRef = useRef<HTMLButtonElement>(null);
-    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     const playerState = nowPlaying.spotifyState;
     const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -478,6 +491,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
     const prevPositionRef = useRef(0);
+    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
 
     const player = getPlayerInstance();
     const isPlayerActive = player && playerState && playerState.track_window.current_track;

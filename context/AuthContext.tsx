@@ -473,7 +473,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 timestamp: Date.now()
             } : null;
 
-            const optimisticState = s.spotifyState ? { ...s.spotifyState, paused: false } : fakeState;
+            // FIX: Ensure optimistic state has fresh timestamp to avoid progress bar jumping
+            const optimisticState = s.spotifyState 
+                ? { ...s.spotifyState, paused: false, timestamp: Date.now() } 
+                : fakeState;
 
             return {
                 ...s,
@@ -495,9 +498,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const pauseSpotify = useCallback(async () => {
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
+                // Determine new position to prevent snap-back on pause
+                // Position increases while playing, so we capture the likely current position
+                // based on the previous timestamp.
+                const projectedPosition = s.spotifyState.position + Math.max(0, Date.now() - s.spotifyState.timestamp);
+                
                 return {
                     ...s,
-                    spotifyState: { ...s.spotifyState, paused: true }
+                    spotifyState: { 
+                        ...s.spotifyState, 
+                        paused: true,
+                        position: projectedPosition,
+                        timestamp: Date.now() // Reset timestamp so 'now - timestamp' is 0 in pause logic
+                    }
                 };
             }
             return s;
