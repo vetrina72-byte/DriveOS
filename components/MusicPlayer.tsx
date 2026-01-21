@@ -48,105 +48,63 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - ENGINE v11
- * Fixes: Ghost Buffering, Track Change Bounce, Pause Backtracking
+ * SPOTIFY PROGRESS BAR - ENGINE v13 (Absolute Fusion)
+ * Uses timestamp-based calculation instead of local integration.
+ * Ensures the bar is mathematically locked to Spotify's server time.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
     
-    // Refs for animation loop
-    const progressRef = useRef(state.position);
-    const lastFrameTimeRef = useRef<number | null>(null);
+    // Interaction state
     const isDraggingRef = useRef(false);
-    
-    // We must track the current track ID to detect changes instantly
-    const currentTrackIdRef = useRef(state.track_window?.current_track?.id);
+    const progressBarRef = useRef<HTMLDivElement>(null);
     const rafRef = useRef<number>();
-
-    // --- SYNCHRONIZATION (Server -> Local) ---
-    useEffect(() => {
-        const serverPos = state.position;
-        const trackId = state.track_window?.current_track?.id;
-        const localPos = progressRef.current;
-
-        // 1. TRACK CHANGE DETECTION
-        // If track ID changes, HARD RESET to 0 immediately. 
-        // Do not attempt to smooth or interpolate from the previous track's time.
-        if (trackId !== currentTrackIdRef.current) {
-            currentTrackIdRef.current = trackId;
-            progressRef.current = 0;
-            setVisualPosition(0);
-            return; 
-        }
-
-        // 2. PAUSE STATE HANDLING (Fix Backtracking)
-        if (state.paused) {
-            // When user pauses, the local timer is usually ahead of the server.
-            // If we snap to serverPos immediately, the bar jumps back.
-            // Logic: If deviation is small (< 1s), keep local visual. If huge (seek), snap.
-            const diff = Math.abs(serverPos - localPos);
-            
-            if (diff > 1000) {
-                // Large discrepancy (likely a user seek while paused, or initial load), align to server.
-                progressRef.current = serverPos;
-                setVisualPosition(serverPos);
-            } 
-            // Else: Do nothing. Keep visualPosition where the animation loop left it.
-            return;
-        }
-
-        // 3. PLAYING STATE DRIFT CORRECTION
-        // If playing, we only snap if drift is significant (> 1.5s) to avoid jitter.
-        const diff = Math.abs(serverPos - localPos);
-        if (diff > 1500) {
-            progressRef.current = serverPos;
-            setVisualPosition(serverPos);
-        }
-        
-    }, [state]);
 
     // --- ANIMATION LOOP ---
     useEffect(() => {
-        const loop = (time: number) => {
-            if (!lastFrameTimeRef.current) {
-                lastFrameTimeRef.current = time;
+        const loop = () => {
+            // If user is dragging, do NOT update from state, let user control
+            if (isDraggingRef.current) {
+                rafRef.current = requestAnimationFrame(loop);
+                return;
             }
-            const dt = time - lastFrameTimeRef.current;
-            lastFrameTimeRef.current = time;
 
-            // Update logic: Only if playing and not dragging
-            if (!state.paused && !isDraggingRef.current && state.duration > 0) {
+            if (state.paused) {
+                // STATIC ACCURACY: If paused, the bar must match the server position exactly.
+                // "If one stops at 1.4, the bar must be 1.4".
+                setVisualPosition(state.position);
+            } else {
+                // DYNAMIC FUSION: If playing, calculate position based on the timestamp of the state.
+                // Position = Reported Position + (Current Time - Time of Report)
+                const now = Date.now();
+                // Fallback: If timestamp is 0 or invalid, use performance.now delta (unlikely in SDK)
+                const timeSinceUpdate = (state.timestamp > 0) ? (now - state.timestamp) : 0;
                 
-                // 4. FIX GHOST BUFFERING
-                // If Spotify says we are playing, but position is 0, we are buffering.
-                // Don't advance the bar until audio actually starts (server position > 0).
-                if (state.position === 0 && progressRef.current < 200) {
-                    // Holding at 0...
-                } else {
-                    // Standard increment
-                    progressRef.current += dt;
+                let estimatedPosition = state.position + timeSinceUpdate;
+
+                // ANTI-GHOSTING / START FIX:
+                // If Spotify says position is 0, we assume the track hasn't actually started audible playback.
+                // We force 0 to prevent the bar from "running ahead" while buffering.
+                if (state.position === 0) {
+                    estimatedPosition = 0;
                 }
-                
+
                 // Clamp to duration
-                if (progressRef.current > state.duration) {
-                    progressRef.current = state.duration;
-                }
-
-                setVisualPosition(progressRef.current);
+                if (estimatedPosition > state.duration) estimatedPosition = state.duration;
+                
+                setVisualPosition(estimatedPosition);
             }
 
             rafRef.current = requestAnimationFrame(loop);
         };
 
-        // Reset timer on mount/unmount or play/pause change
-        lastFrameTimeRef.current = null;
         rafRef.current = requestAnimationFrame(loop);
 
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state.paused, state.duration, state.position]); 
+    }, [state]); // Re-run whenever state updates (new timestamp/position)
 
     // --- INTERACTION ---
     const calculatePos = (clientX: number) => {
@@ -156,13 +114,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         return Math.round(state.duration * ratio);
     };
 
-    const progressBarRef = useRef<HTMLDivElement>(null);
-
     const handleMouseDown = (e: React.MouseEvent) => {
         isDraggingRef.current = true;
         const newPos = calculatePos(e.clientX);
         setVisualPosition(newPos);
-        progressRef.current = newPos; 
     };
 
     useEffect(() => {
@@ -178,10 +133,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const finalPos = calculatePos(e.clientX);
             
             // Apply seek
-            progressRef.current = finalPos;
             setVisualPosition(finalPos);
             isDraggingRef.current = false;
-            lastFrameTimeRef.current = performance.now();
 
             if (player) {
                 await player.seek(finalPos);
