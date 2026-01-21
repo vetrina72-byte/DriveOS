@@ -62,7 +62,7 @@ function createAuthServer() {
         }
         res.setHeader('Set-Cookie', cookieString);
 
-        // Store the access token in Redis with a TTL (e.g., 1 hour to match token expiry)
+        // Store the access token in Redis with a TTL (e.g., 24h)
         // This ensures if the app restarts, the frontend can still poll/check this session.
         const sessionData = { 
             status: 'completed', 
@@ -70,7 +70,7 @@ function createAuthServer() {
             expires_at: Date.now() + (expires_in * 1000) 
         };
         
-        await redis.set(`spotify:${sessionId}`, JSON.stringify(sessionData), 'EX', 3600 * 24); // Keep for 24h
+        await redis.set(`spotify:${sessionId}`, JSON.stringify(sessionData), 'EX', 3600 * 24); 
         
         // Send the success page to the user's phone
         res.sendFile(path.join(__dirname, 'callback.html'));
@@ -88,6 +88,7 @@ function createAuthServer() {
     }
     
     try {
+        // Retrieve from Redis
         const rawData = await redis.get(`spotify:${sessionId}`);
         
         if (rawData) {

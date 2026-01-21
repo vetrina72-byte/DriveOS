@@ -48,7 +48,8 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - ENGINE v10 (Anti-Ghosting / Drift Correction)
+ * SPOTIFY PROGRESS BAR - ENGINE v11
+ * Fixes: Ghost Buffering, Track Change Bounce, Pause Backtracking
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
@@ -58,6 +59,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const progressRef = useRef(state.position);
     const lastFrameTimeRef = useRef<number | null>(null);
     const isDraggingRef = useRef(false);
+    
+    // We must track the current track ID to detect changes instantly
     const currentTrackIdRef = useRef(state.track_window?.current_track?.id);
     const rafRef = useRef<number>();
 
@@ -67,27 +70,36 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const trackId = state.track_window?.current_track?.id;
         const localPos = progressRef.current;
 
-        // 1. TRACK CHANGE: Hard Reset
+        // 1. TRACK CHANGE DETECTION
+        // If track ID changes, HARD RESET to 0 immediately. 
+        // Do not attempt to smooth or interpolate from the previous track's time.
         if (trackId !== currentTrackIdRef.current) {
             currentTrackIdRef.current = trackId;
             progressRef.current = 0;
             setVisualPosition(0);
-            return;
+            return; 
         }
 
-        // 2. PAUSE STATE: Sync exactly to server to prevent jump-back
-        // When paused, the server is the absolute truth.
+        // 2. PAUSE STATE HANDLING (Fix Backtracking)
         if (state.paused) {
-            progressRef.current = serverPos;
-            setVisualPosition(serverPos);
+            // When user pauses, the local timer is usually ahead of the server.
+            // If we snap to serverPos immediately, the bar jumps back.
+            // Logic: If deviation is small (< 1s), keep local visual. If huge (seek), snap.
+            const diff = Math.abs(serverPos - localPos);
+            
+            if (diff > 1000) {
+                // Large discrepancy (likely a user seek while paused, or initial load), align to server.
+                progressRef.current = serverPos;
+                setVisualPosition(serverPos);
+            } 
+            // Else: Do nothing. Keep visualPosition where the animation loop left it.
             return;
         }
 
-        // 3. DRIFT CORRECTION (Playing)
-        // If the server position drifts significantly from our local estimation (> 1000ms),
-        // we snap to the server position. Small drifts are ignored to prevent jitter.
+        // 3. PLAYING STATE DRIFT CORRECTION
+        // If playing, we only snap if drift is significant (> 1.5s) to avoid jitter.
         const diff = Math.abs(serverPos - localPos);
-        if (diff > 1000) {
+        if (diff > 1500) {
             progressRef.current = serverPos;
             setVisualPosition(serverPos);
         }
@@ -103,14 +115,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const dt = time - lastFrameTimeRef.current;
             lastFrameTimeRef.current = time;
 
-            // Update logic
+            // Update logic: Only if playing and not dragging
             if (!state.paused && !isDraggingRef.current && state.duration > 0) {
                 
-                // GHOST BAR FIX:
-                // If we are at 0 and the server says 0, it means we are likely buffering.
-                // Do not increment local time until the track actually starts moving.
-                if (state.position === 0 && progressRef.current < 250) {
-                    // Stay at 0 (or very close to it)
+                // 4. FIX GHOST BUFFERING
+                // If Spotify says we are playing, but position is 0, we are buffering.
+                // Don't advance the bar until audio actually starts (server position > 0).
+                if (state.position === 0 && progressRef.current < 200) {
+                    // Holding at 0...
                 } else {
                     // Standard increment
                     progressRef.current += dt;
