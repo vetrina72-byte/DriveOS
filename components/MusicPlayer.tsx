@@ -48,19 +48,18 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - SMOOTHED DEAD RECKONING ENGINE
+ * SPOTIFY PROGRESS BAR - SMOOTHED DEAD RECKONING ENGINE v2
  * 
- * Implements:
- * 1. State Management via Refs (decoupled from React render cycle)
- * 2. Ghosting Prevention (Track ID Guard)
- * 3. Anti-Rubber-banding (1000ms Drift Threshold)
- * 4. Buffering Guard (Force 0% on pos 0)
+ * Improvements:
+ * 1. Optimistic Pause: Freezes bar at visual position on pause (prevents snapback).
+ * 2. Sticky Zero Fix: Removes buffering guard to allow immediate movement on track change.
+ * 3. Drift Compensation: Smoothly handles network latency without jitter.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
     
-    // -- STATE REFS (No useState for animation critical path) --
+    // -- STATE REFS (Decoupled from React render) --
     const localBaseTimeRef = useRef<number>(performance.now());
     const localBasePosRef = useRef<number>(state.position);
     const currentTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
@@ -73,52 +72,50 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const serverPos = state.position;
         const serverTrackId = state.track_window.current_track?.id;
         const isPaused = state.paused;
+        const wasPaused = wasPausedRef.current;
 
-        // 1. GHOSTING PREVENTION: Track Changed?
+        // 1. TRACK CHANGE (Hard Reset)
+        // Reset everything to 0 immediately to prevent "ghost" progress from previous track.
         if (serverTrackId !== currentTrackIdRef.current) {
             currentTrackIdRef.current = serverTrackId || null;
-            // Hard Reset Local State
             localBaseTimeRef.current = now;
-            localBasePosRef.current = 0;
-            // Immediate DOM Reset to prevent visual jump
-            if (progressFillRef.current) {
-                progressFillRef.current.style.width = '0%';
-            }
-            return;
-        }
-
-        // 2. PAUSE STATE CHANGED?
-        // Must sync immediately to avoid inertia or drift accumulation
-        if (isPaused !== wasPausedRef.current) {
+            localBasePosRef.current = 0; 
             wasPausedRef.current = isPaused;
-            localBaseTimeRef.current = now;
-            localBasePosRef.current = serverPos;
+            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
             return;
         }
 
-        // 3. ANTI-RUBBER-BANDING (Drift Check)
-        if (!isPaused) {
-            // Where should we be according to our local clock?
+        // 2. PAUSE TRANSITION (PLAY -> PAUSE) -> OPTIMISTIC FREEZE
+        // Prevents "Snapback". We freeze at the projected local time, NOT the server time (which is lagging).
+        if (isPaused && !wasPaused) {
+            const timeElapsed = now - localBaseTimeRef.current;
+            const visualPos = localBasePosRef.current + timeElapsed;
+            
+            localBasePosRef.current = visualPos; // Lock at visual pos
+            localBaseTimeRef.current = now;
+        }
+        // 3. PLAY TRANSITION (PAUSE -> PLAY) -> SERVER SYNC
+        // When resuming, we trust the server's resume point.
+        else if (!isPaused && wasPaused) {
+            localBasePosRef.current = serverPos;
+            localBaseTimeRef.current = now;
+        }
+        // 4. CONTINUOUS PLAY -> DRIFT CHECK
+        // Only correct if deviation is significant (> 1s) to avoid rubber-banding.
+        else if (!isPaused) {
             const timeElapsed = now - localBaseTimeRef.current;
             const localProjectedPos = localBasePosRef.current + timeElapsed;
-            
-            // Difference between local projection and server truth
             const drift = Math.abs(localProjectedPos - serverPos);
 
-            // THRESHOLD: 1000ms
             if (drift > 1000) {
-                // HARD SYNC: Something big happened (Seek, Lag). Snap to server.
-                localBaseTimeRef.current = now;
+                // Hard sync on large drift (seek or lag)
                 localBasePosRef.current = serverPos;
-            } 
-            // ELSE: Ignore server. Trust local clock for smoothness.
-        } else {
-            // While paused, keep syncing to server position to handle seeking while paused
-            localBaseTimeRef.current = now;
-            localBasePosRef.current = serverPos;
+                localBaseTimeRef.current = now;
+            }
         }
 
-    }, [state]); // Runs on every server update packet
+        wasPausedRef.current = isPaused;
+    }, [state]);
 
     // --- ANIMATION LOOP (The Heart) ---
     useEffect(() => {
@@ -136,31 +133,31 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
             if (duration > 0) {
                 if (isPaused) {
-                    // STATIC MODE: Just show the position (synced in useEffect)
-                    percent = (state.position / duration) * 100;
+                    // STATIC MODE: Use the frozen local ref (Optimistic Pause)
+                    percent = (localBasePosRef.current / duration) * 100;
                 } else {
-                    // BUFFERING GUARD
-                    if (state.position === 0) {
-                        percent = 0;
-                    } else {
-                        // PLAYING MODE: Dead Reckoning
-                        const now = performance.now();
-                        const timeElapsed = now - localBaseTimeRef.current;
-                        const projectedPos = localBasePosRef.current + timeElapsed;
-                        
-                        percent = (projectedPos / duration) * 100;
-                    }
+                    // PLAYING MODE: Dead Reckoning
+                    const now = performance.now();
+                    const timeElapsed = now - localBaseTimeRef.current;
+                    const projectedPos = localBasePosRef.current + timeElapsed;
+                    
+                    // NOTE: "Sticky Zero" fix. We removed the "if pos == 0" check.
+                    // We simply project time forward immediately.
+                    
+                    percent = (projectedPos / duration) * 100;
                 }
             }
 
-            // Direct DOM update for 60fps smoothness
-            progressFillRef.current.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+            // Visual Clamping
+            percent = Math.min(100, Math.max(0, percent));
+            progressFillRef.current.style.width = `${percent}%`;
+
             rafId = requestAnimationFrame(loop);
         };
 
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, [state.duration, state.paused, state.position]); // Minimal dependencies
+    }, [state.duration, state.paused]); // Minimal dependencies
 
     // --- INTERACTION HANDLERS (Drag / Seek) ---
     const calculateSeekPosition = (clientX: number) => {
@@ -194,6 +191,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             
             const finalPos = calculateSeekPosition(e.clientX);
             if (player) {
+                // Optimistic update for seek
+                localBasePosRef.current = finalPos;
+                localBaseTimeRef.current = performance.now();
                 player.seek(finalPos).catch(console.error);
             }
         };
