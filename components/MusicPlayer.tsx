@@ -48,20 +48,13 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - ENGINE v9 (Local Priority / Anti-Jitter)
- * 
- * Logic:
- * 1. We maintain a local `progress` value that drives the UI.
- * 2. While playing, we increment `progress` using the browser's high-res timer (performance.now).
- * 3. We IGNORE small updates from Spotify to prevent "fighting" (jumping back/forth).
- * 4. We only sync with Spotify if the difference is huge (seek) or track changes.
- * 5. Pausing stops the local timer immediately, ignoring the server's reported position.
+ * SPOTIFY PROGRESS BAR - ENGINE v10 (Anti-Ghosting / Drift Correction)
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     // Current visual position in ms
     const [visualPosition, setVisualPosition] = useState(state.position);
     
-    // Refs to maintain state inside the animation loop without triggering re-renders
+    // Refs for animation loop
     const progressRef = useRef(state.position);
     const lastFrameTimeRef = useRef<number | null>(null);
     const isDraggingRef = useRef(false);
@@ -71,7 +64,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     // --- SYNCHRONIZATION (Server -> Local) ---
     useEffect(() => {
         const serverPos = state.position;
-        const isPaused = state.paused;
         const trackId = state.track_window?.current_track?.id;
         const localPos = progressRef.current;
 
@@ -83,22 +75,26 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             return;
         }
 
-        // 2. SEEK DETECTION (Large Jump)
-        // If the server position is drastically different (> 1500ms) from local, 
-        // assume the user scrubbed/seeked or the song looped. Snap immediately.
+        // 2. PAUSE STATE: Sync exactly to server to prevent jump-back
+        // When paused, the server is the absolute truth.
+        if (state.paused) {
+            progressRef.current = serverPos;
+            setVisualPosition(serverPos);
+            return;
+        }
+
+        // 3. DRIFT CORRECTION (Playing)
+        // If the server position drifts significantly from our local estimation (> 1000ms),
+        // we snap to the server position. Small drifts are ignored to prevent jitter.
         const diff = Math.abs(serverPos - localPos);
-        if (diff > 1500) {
+        if (diff > 1000) {
             progressRef.current = serverPos;
             setVisualPosition(serverPos);
         }
         
-        // 3. PAUSE/PLAY STATE
-        // We don't sync position here for small drifts. We trust the local loop.
-        // We just ensure the loop knows if it should run (handled by dependency on state.paused below).
+    }, [state]);
 
-    }, [state]); // Runs on every SDK update
-
-    // --- ANIMATION LOOP (Local Engine) ---
+    // --- ANIMATION LOOP ---
     useEffect(() => {
         const loop = (time: number) => {
             if (!lastFrameTimeRef.current) {
@@ -107,13 +103,18 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const dt = time - lastFrameTimeRef.current;
             lastFrameTimeRef.current = time;
 
-            // Only advance time if:
-            // 1. Not Paused
-            // 2. Not Dragging
-            // 3. Track is loaded
+            // Update logic
             if (!state.paused && !isDraggingRef.current && state.duration > 0) {
-                // Increment local progress
-                progressRef.current += dt;
+                
+                // GHOST BAR FIX:
+                // If we are at 0 and the server says 0, it means we are likely buffering.
+                // Do not increment local time until the track actually starts moving.
+                if (state.position === 0 && progressRef.current < 250) {
+                    // Stay at 0 (or very close to it)
+                } else {
+                    // Standard increment
+                    progressRef.current += dt;
+                }
                 
                 // Clamp to duration
                 if (progressRef.current > state.duration) {
@@ -126,14 +127,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             rafRef.current = requestAnimationFrame(loop);
         };
 
-        // Reset timer on mount/unmount or play/pause change to prevent huge dt jumps
+        // Reset timer on mount/unmount or play/pause change
         lastFrameTimeRef.current = null;
         rafRef.current = requestAnimationFrame(loop);
 
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [state.paused, state.duration]); // Re-bind loop behavior when pause state changes
+    }, [state.paused, state.duration, state.position]); 
 
     // --- INTERACTION ---
     const calculatePos = (clientX: number) => {
@@ -149,7 +150,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         isDraggingRef.current = true;
         const newPos = calculatePos(e.clientX);
         setVisualPosition(newPos);
-        progressRef.current = newPos; // Update internal ref immediately for UI responsiveness
+        progressRef.current = newPos; 
     };
 
     useEffect(() => {
@@ -168,8 +169,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             progressRef.current = finalPos;
             setVisualPosition(finalPos);
             isDraggingRef.current = false;
-            
-            // Reset frame timer to avoid jump after long drag
             lastFrameTimeRef.current = performance.now();
 
             if (player) {
@@ -183,7 +182,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [player, state.duration]); // Depend on duration for calculation context
+    }, [player, state.duration]); 
 
     const progressPercentage = state.duration > 0 ? (visualPosition / state.duration) * 100 : 0;
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));

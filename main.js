@@ -9,6 +9,7 @@ import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
+import { getRedis } from './lib/redis.js';
 
 dotenv.config();
 
@@ -23,15 +24,8 @@ function createAuthServer() {
   server.use(express.json());
   server.use(cookieParser());
 
-  const authStore = new Map();
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of authStore.entries()) {
-      if (now - value.timestamp > 5 * 60 * 1000) { // 5 minute expiry
-        authStore.delete(key);
-      }
-    }
-  }, 60 * 1000);
+  // Use Redis for persistence instead of in-memory Map
+  const redis = getRedis();
 
   server.get('/api/spotify-callback', async (req, res) => {
     const { code, state: sessionId, error } = req.query;
@@ -68,8 +62,15 @@ function createAuthServer() {
         }
         res.setHeader('Set-Cookie', cookieString);
 
-        // Store the access token for the client to fetch via polling
-        authStore.set(sessionId, { status: 'completed', tokens: { access_token, expires_in }, timestamp: Date.now() });
+        // Store the access token in Redis with a TTL (e.g., 1 hour to match token expiry)
+        // This ensures if the app restarts, the frontend can still poll/check this session.
+        const sessionData = { 
+            status: 'completed', 
+            access_token, 
+            expires_at: Date.now() + (expires_in * 1000) 
+        };
+        
+        await redis.set(`spotify:${sessionId}`, JSON.stringify(sessionData), 'EX', 3600 * 24); // Keep for 24h
         
         // Send the success page to the user's phone
         res.sendFile(path.join(__dirname, 'callback.html'));
@@ -80,21 +81,31 @@ function createAuthServer() {
     }
   });
 
-  server.get('/api/check-auth-status', (req, res) => {
+  server.get('/api/check-auth-status', async (req, res) => {
     const { sessionId } = req.query;
     if (!sessionId) {
       return res.status(400).json({ error: 'Session ID is required.' });
     }
-    const sessionData = authStore.get(sessionId);
-
-    if (sessionData && sessionData.status === 'completed') {
-      // DO NOT DELETE THE SESSION HERE
-      // We must keep it alive for subsequent requests if using local store logic, 
-      // or at least let it expire by TTL.
-      // authStore.delete(sessionId); 
-      res.status(200).json({ status: 'completed', tokens: sessionData.tokens });
-    } else {
-      res.status(202).json({ status: 'pending' }); // 202 Accepted means "not ready yet, keep polling"
+    
+    try {
+        const rawData = await redis.get(`spotify:${sessionId}`);
+        
+        if (rawData) {
+            const sessionData = JSON.parse(rawData);
+            if (sessionData.status === 'completed') {
+                res.status(200).json({ 
+                    authenticated: true, 
+                    access_token: sessionData.access_token,
+                    expires_at: sessionData.expires_at
+                });
+                return;
+            }
+        }
+        // If not found or not completed
+        res.status(202).json({ status: 'pending' }); 
+    } catch (e) {
+        console.error("Redis Error", e);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
   });
   
