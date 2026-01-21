@@ -48,76 +48,88 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - SMOOTHED DEAD RECKONING ENGINE v2
- * 
- * Improvements:
- * 1. Optimistic Pause: Freezes bar at visual position on pause (prevents snapback).
- * 2. Sticky Zero Fix: Removes buffering guard to allow immediate movement on track change.
- * 3. Drift Compensation: Smoothly handles network latency without jitter.
+ * SPOTIFY PROGRESS BAR - v6 (Trusted Resume & Immediate Flow)
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
-    
-    // -- STATE REFS (Decoupled from React render) --
-    const localBaseTimeRef = useRef<number>(performance.now());
-    const localBasePosRef = useRef<number>(state.position);
-    const currentTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
     const isDraggingRef = useRef(false);
-    const wasPausedRef = useRef(state.paused);
 
-    // --- SYNC LOGIC (The Brain) ---
+    // --- STATE REFS ---
+    // Manteniamo il tempo locale come unica fonte di verità per l'animazione fluida
+    const localBaseTimeRef = useRef<number>(0); 
+    const localBasePosRef = useRef<number>(0);
+    
+    // Snapshot dello stato precedente per rilevare i cambi
+    const currentTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
+    const wasPausedRef = useRef<boolean>(state.paused);
+
+    // --- 1. SINCRONIZZAZIONE INTELLIGENTE ---
     useEffect(() => {
+        if (!state) return;
+
         const now = performance.now();
         const serverPos = state.position;
-        const serverTrackId = state.track_window.current_track?.id;
+        const newTrackId = state.track_window.current_track.id;
         const isPaused = state.paused;
-        const wasPaused = wasPausedRef.current;
-
-        // 1. TRACK CHANGE (Hard Reset)
-        // Reset everything to 0 immediately to prevent "ghost" progress from previous track.
-        if (serverTrackId !== currentTrackIdRef.current) {
-            currentTrackIdRef.current = serverTrackId || null;
-            localBaseTimeRef.current = now;
+        
+        // A. CAMBIO TRACCIA (IMMEDIATE FLOW)
+        if (newTrackId !== currentTrackIdRef.current) {
+            currentTrackIdRef.current = newTrackId;
+            // Resettiamo a 0, ma impostiamo il tempo base a ADESSO.
+            // Così al prossimo frame (16ms dopo) la barra sarà già a >0.
             localBasePosRef.current = 0; 
+            localBaseTimeRef.current = now; 
             wasPausedRef.current = isPaused;
+            
+            // Reset visivo istantaneo
             if (progressFillRef.current) progressFillRef.current.style.width = '0%';
             return;
         }
 
-        // 2. PAUSE TRANSITION (PLAY -> PAUSE) -> OPTIMISTIC FREEZE
-        // Prevents "Snapback". We freeze at the projected local time, NOT the server time (which is lagging).
-        if (isPaused && !wasPaused) {
-            const timeElapsed = now - localBaseTimeRef.current;
-            const visualPos = localBasePosRef.current + timeElapsed;
-            
-            localBasePosRef.current = visualPos; // Lock at visual pos
-            localBaseTimeRef.current = now;
-        }
-        // 3. PLAY TRANSITION (PAUSE -> PLAY) -> SERVER SYNC
-        // When resuming, we trust the server's resume point.
-        else if (!isPaused && wasPaused) {
-            localBasePosRef.current = serverPos;
-            localBaseTimeRef.current = now;
-        }
-        // 4. CONTINUOUS PLAY -> DRIFT CHECK
-        // Only correct if deviation is significant (> 1s) to avoid rubber-banding.
-        else if (!isPaused) {
-            const timeElapsed = now - localBaseTimeRef.current;
-            const localProjectedPos = localBasePosRef.current + timeElapsed;
-            const drift = Math.abs(localProjectedPos - serverPos);
+        // B. GESTIONE PLAY / PAUSA
+        const isPauseChange = isPaused !== wasPausedRef.current;
 
+        if (isPauseChange) {
+            // Calcoliamo dove siamo arrivati visivamente ORA
+            const timeElapsed = wasPausedRef.current ? 0 : (now - localBaseTimeRef.current);
+            const currentVisualPos = localBasePosRef.current + timeElapsed;
+
+            if (isPaused) {
+                // PAUSA: Congeliamo la barra esattamente dove l'occhio la vede.
+                // Non saltiamo alla posizione del server (che potrebbe essere indietro).
+                localBasePosRef.current = currentVisualPos;
+            } else {
+                // RESUME (FIX SCATTO INDIETRO):
+                // Quando ripartiamo, NON prendiamo la posizione del server (serverPos).
+                // Il server è in ritardo e ci farebbe scattare indietro.
+                // Ripartiamo esattamente da currentVisualPos (dove eravamo fermi).
+                localBasePosRef.current = currentVisualPos;
+            }
+            // Resettiamo il cronometro
+            localBaseTimeRef.current = now;
+        } 
+        else {
+            // C. CONTROLLO DRIFT (SOLO DURANTE IL PLAYBACK NORMALE)
+            // Se non stiamo cambiando stato play/pausa, controlliamo se stiamo sbagliando troppo.
+            const timeElapsed = isPaused ? 0 : (now - localBaseTimeRef.current);
+            const localEstimatedPos = localBasePosRef.current + timeElapsed;
+            const drift = Math.abs(localEstimatedPos - serverPos);
+
+            // HARD SYNC: Accettiamo la correzione del server SOLO se l'errore è enorme (> 1s)
+            // Questo gestisce Seek manuali o lag di rete pesanti.
+            // Se l'errore è piccolo (es. 200ms), lo ignoriamo per fluidità.
             if (drift > 1000) {
-                // Hard sync on large drift (seek or lag)
                 localBasePosRef.current = serverPos;
                 localBaseTimeRef.current = now;
             }
         }
 
         wasPausedRef.current = isPaused;
-    }, [state]);
 
-    // --- ANIMATION LOOP (The Heart) ---
+    }, [state]); 
+
+    // --- 2. LOOP DI ANIMAZIONE (VISUAL RENDERING) ---
     useEffect(() => {
         let rafId: number;
 
@@ -128,38 +140,32 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             }
 
             const duration = state.duration;
-            const isPaused = state.paused;
-            let percent = 0;
-
-            if (duration > 0) {
-                if (isPaused) {
-                    // STATIC MODE: Use the frozen local ref (Optimistic Pause)
-                    percent = (localBasePosRef.current / duration) * 100;
-                } else {
-                    // PLAYING MODE: Dead Reckoning
-                    const now = performance.now();
-                    const timeElapsed = now - localBaseTimeRef.current;
-                    const projectedPos = localBasePosRef.current + timeElapsed;
-                    
-                    // NOTE: "Sticky Zero" fix. We removed the "if pos == 0" check.
-                    // We simply project time forward immediately.
-                    
-                    percent = (projectedPos / duration) * 100;
-                }
+            if (!duration || duration <= 0) {
+                 progressFillRef.current.style.width = '0%';
+                 rafId = requestAnimationFrame(loop);
+                 return;
             }
 
-            // Visual Clamping
-            percent = Math.min(100, Math.max(0, percent));
-            progressFillRef.current.style.width = `${percent}%`;
+            // Calcolo proiezione visuale
+            const now = performance.now();
+            
+            // Se paused, timeElapsed è 0 (la barra sta ferma su localBasePosRef)
+            // Se play, timeElapsed cresce fluidamente da quando abbiamo fatto resume/start
+            const timeElapsed = state.paused ? 0 : (now - localBaseTimeRef.current);
+            const currentPos = localBasePosRef.current + timeElapsed;
+            
+            // Clamping visuale (0% - 100%)
+            const percent = (currentPos / duration) * 100;
+            progressFillRef.current.style.width = `${Math.min(100, Math.max(0, percent))}%`;
 
             rafId = requestAnimationFrame(loop);
         };
 
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, [state.duration, state.paused]); // Minimal dependencies
+    }, [state.duration, state.paused]); 
 
-    // --- INTERACTION HANDLERS (Drag / Seek) ---
+    // --- 3. DRAG HANDLERS ---
     const calculateSeekPosition = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -169,12 +175,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
     const handleMouseDown = (e: React.MouseEvent) => {
         isDraggingRef.current = true;
-        if (progressFillRef.current) {
-            progressFillRef.current.style.transition = 'none';
-            const newPos = calculateSeekPosition(e.clientX);
-            const percent = (newPos / state.duration) * 100;
-            progressFillRef.current.style.width = `${percent}%`;
-        }
+        if (progressFillRef.current) progressFillRef.current.style.transition = 'none';
+        const newPos = calculateSeekPosition(e.clientX);
+        const percent = (newPos / state.duration) * 100;
+        if (progressFillRef.current) progressFillRef.current.style.width = `${percent}%`;
     };
 
     useEffect(() => {
@@ -188,13 +192,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = (e: MouseEvent) => {
             if (!isDraggingRef.current) return;
             isDraggingRef.current = false;
-            
             const finalPos = calculateSeekPosition(e.clientX);
+            
             if (player) {
-                // Optimistic update for seek
+                player.seek(finalPos).catch(console.error);
+                // Aggiorniamo subito i ref locali:
+                // Diciamo alla barra: "Tu ora sei qui, fidati di me, non aspettare il server".
                 localBasePosRef.current = finalPos;
                 localBaseTimeRef.current = performance.now();
-                player.seek(finalPos).catch(console.error);
             }
         };
 
