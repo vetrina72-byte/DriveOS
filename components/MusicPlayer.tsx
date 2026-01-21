@@ -48,10 +48,10 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v9 - STALE PACKET REJECTION)
- * Fixes: Sticky Zero bug / Jitter on track change.
- * Logic: When track ID changes, we LOCK the sync logic for 500ms to ignore any 
- * lingering state updates from the previous track that arrive out of order.
+ * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v10 - VISUAL LOCK)
+ * Fixes: "Bar starts before music" and "Jump back to 0".
+ * Logic: Enforce a visual 0% state during the "Changing Track" phase until
+ * either 500ms passes OR the server confirms playback has genuinely started (>50ms).
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -66,7 +66,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
     const wasPausedRef = useRef<boolean>(state?.paused ?? true);
     
-    // Transition Lock: Prevents "stale" packets (old track pos) from jerking the bar back after we switched.
+    // Transition Lock
     const isChangingTrackRef = useRef(false);
     const changeTrackTimeoutRef = useRef<number | null>(null);
 
@@ -83,24 +83,37 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         if (trackId !== lastTrackIdRef.current) {
             lastTrackIdRef.current = trackId || null;
             
-            // LOCK: Ignore server drift updates for 500ms
+            // LOCK: Enable visual lock
             isChangingTrackRef.current = true;
             if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
             changeTrackTimeoutRef.current = window.setTimeout(() => {
                 isChangingTrackRef.current = false;
             }, 500);
             
-            // OPTIMISTIC RESET
+            // RESET LOCAL STATE
             localBasePosRef.current = 0;
             localBaseTimeRef.current = now;
             wasPausedRef.current = isPaused;
             
-            // IMMEDIATE VISUAL RESET
+            // FORCE VISUAL RESET IMMEDIATELY
             if (progressFillRef.current) {
                  progressFillRef.current.style.width = '0%';
             }
             
-            return; // EXIT: Do not run drift logic this frame
+            return; 
+        }
+
+        // ** EARLY UNLOCK **
+        // If we are locked but the server reports position > 50ms, it means audio has really started.
+        // We unlock immediately to avoid lag.
+        if (isChangingTrackRef.current && serverPos > 50) {
+             isChangingTrackRef.current = false;
+             if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
+             // Resync immediately
+             localBasePosRef.current = serverPos;
+             localBaseTimeRef.current = now;
+             wasPausedRef.current = isPaused;
+             return;
         }
 
         // B. PLAY/PAUSE HANDLING (Trusted Resume)
@@ -114,14 +127,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             localBaseTimeRef.current = now;
         } 
         else {
-            // C. DRIFT CONTROL (Drift Tolerance)
-            // We only check for drift if we are NOT in the "Changing Track" lock period.
+            // C. DRIFT CONTROL
+            // Only correct drift if we are NOT in the lock period.
             if (!isPaused && !isChangingTrackRef.current) {
                 const elapsed = now - localBaseTimeRef.current;
                 const estimatedVisualPos = localBasePosRef.current + elapsed;
                 const drift = Math.abs(estimatedVisualPos - serverPos);
 
-                // TOLERANCE: 2000ms. Increased to allow more variance without jitter.
+                // TOLERANCE: 2000ms.
                 if (drift > 2000) {
                     localBasePosRef.current = serverPos;
                     localBaseTimeRef.current = now;
@@ -139,6 +152,14 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         const loop = () => {
             if (!progressFillRef.current || isDraggingRef.current) {
+                rafId = requestAnimationFrame(loop);
+                return;
+            }
+
+            // ** VISUAL LOCK ENFORCEMENT **
+            // While changing track, strictly render 0% to prevent bar running ahead of buffering audio.
+            if (isChangingTrackRef.current) {
+                progressFillRef.current.style.width = '0%';
                 rafId = requestAnimationFrame(loop);
                 return;
             }
@@ -179,7 +200,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const handleMouseDown = (e: React.MouseEvent) => {
         isDraggingRef.current = true;
         if (progressFillRef.current) {
-            // Disable CSS transitions for instant responsiveness
             progressFillRef.current.style.transition = 'none';
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
