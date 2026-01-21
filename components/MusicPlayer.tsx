@@ -67,7 +67,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     
     // Serve per capire se siamo appena partiti o se è cambiato lo stato "play/pause"
     const wasPausedRef = useRef(state.paused);
-    const currentTrackIdRef = useRef(state.track_window.current_track.id);
+    const currentTrackIdRef = useRef(state.track_window.current_track?.id);
 
     // --- SINCRONIZZAZIONE INTELLIGENTE (IL CUORE DEL FIX) ---
     useEffect(() => {
@@ -82,7 +82,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const drift = Math.abs(estimatedPosition - serverPosition);
 
         // 3. DECISIONE: Sincronizzare o Ignorare?
-        const isTrackChange = state.track_window.current_track.id !== currentTrackIdRef.current;
+        const isTrackChange = state.track_window.current_track?.id !== currentTrackIdRef.current;
         const isPlayPauseChange = state.paused !== wasPausedRef.current;
         const isSeekOrHugeDrift = drift > 1000; // 1 secondo di tolleranza (Soglia Dead Reckoning)
 
@@ -92,7 +92,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             lastSyncTimeRef.current = now;
             
             // Aggiorniamo i ref di controllo
-            currentTrackIdRef.current = state.track_window.current_track.id;
+            currentTrackIdRef.current = state.track_window.current_track?.id;
             wasPausedRef.current = state.paused;
         } 
         // ELSE: Se la differenza è piccola (< 1s), IGNORIAMO Spotify. 
@@ -138,6 +138,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         return () => cancelAnimationFrame(rafId);
     }, [state.duration, state.paused, state.position]); // Dipendenze minime
 
+    // ... (Il resto del codice per il Drag/Seek rimane uguale) ...
     
     // Gestione Drag (Seek)
     const calculateSeekPosition = (clientX: number) => {
