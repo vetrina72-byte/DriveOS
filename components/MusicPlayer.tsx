@@ -52,9 +52,10 @@ interface MusicPlayerProps {
  * 
  * Logic:
  * 1. NO useState for animation frames (too slow). Use refs and direct style manipulation.
- * 2. Source of Truth: `state` prop.
+ * 2. Source of Truth: `state` prop from SDK.
  * 3. Paused? Kill the loop immediately. Snap to `state.position`.
  * 4. Playing? Run RAF loop. Calculate: `state.position + (Date.now() - state.timestamp)`.
+ * 5. Track Change? Explicitly handled by useEffect dependencies.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null); // The outer container
@@ -75,8 +76,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         const now = Date.now();
         // Time elapsed since the state was captured by Spotify SDK
+        // This projection logic ensures smoothness even if React lags
         const timeSinceUpdate = now - state.timestamp;
-        // Projected current position
         const projectedPosition = state.position + timeSinceUpdate;
         
         const percent = (projectedPosition / state.duration) * 100;
@@ -90,7 +91,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
     // Effect to handle state changes (Play/Pause/Seek/Track Change)
     useEffect(() => {
-        // Always clear previous loop first
+        // Always clear previous loop first to prevent ghosting
         if (rafRef.current) {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
@@ -143,9 +144,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const finalPos = calculateSeekPosition(e.clientX);
             isDraggingRef.current = false;
             
-            // Re-enable transition (optional, might look better without for seek)
-            // if (progressFillRef.current) progressFillRef.current.style.transition = '';
-
             if (player) {
                 player.seek(finalPos);
             }
@@ -253,7 +251,21 @@ const YouTubeProgressBar = ({
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height, scale, width, offsetX }: { 
+const QueuePopover = ({ 
+    isNight, 
+    nextTrack, 
+    position, 
+    onClose, 
+    isClosing, 
+    height, 
+    scale, 
+    width, 
+    offsetX,
+    // Add dependencies that affect positioning
+    dockedConfig,
+    floatingConfig,
+    isAnyAppOpen
+}: { 
     isNight: boolean, 
     nextTrack: { name: string, description: string, imageUrl: string } | null, 
     position: { bottom: number, left: number, transform: string }, 
@@ -263,6 +275,9 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
     scale: number,
     width: number,
     offsetX: number,
+    dockedConfig: any,
+    floatingConfig: any,
+    isAnyAppOpen: boolean
 }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -278,7 +293,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
                 height: `${height}px`,
                 width: `${width}px`,
             }}
-            className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
+            className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col transition-all duration-300`} // Added transition
         >
             <p className="text-xs font-bold mb-2 flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
             <div className="flex-grow flex items-center">
@@ -383,7 +398,7 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
     );
 };
 
-const AutoplayUnlockOverlay = () => {
+const AutoplayUnlockOverlay = ({ onUnlock }: { onUnlock: () => void }) => {
     const { unlockAutoplay } = useAuth();
     
     return (
@@ -392,6 +407,7 @@ const AutoplayUnlockOverlay = () => {
             onClick={(e) => {
                 e.stopPropagation();
                 unlockAutoplay();
+                onUnlock(); // Explicitly trigger play
             }}
         >
             <div className="p-3 bg-white/10 rounded-full mb-2 animate-pulse">
@@ -568,7 +584,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
     }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
     
-    useEffect(() => { if (source === 'youtube' && youtubeTrack?.videoId) setCurrentYouTubeVideoId(youtubeTrack.videoId); }, [source, youtubeTrack]);
+    useEffect(() => { 
+        if (source === 'youtube' && youtubeTrack?.videoId) {
+            setCurrentYouTubeVideoId(youtubeTrack.videoId);
+            hasEndedRef.current = false; // Fix for stalled playlist
+        }
+    }, [source, youtubeTrack]);
+
     useEffect(() => { if (youtubePlayerRef.current && typeof youtubePlayerRef.current.pauseVideo === 'function') if (source !== 'youtube') youtubePlayerRef.current.pauseVideo(); }, [source]);
 
     const handleYouTubeEnd = useCallback(() => {
@@ -587,8 +609,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const playerState = player.getPlayerState();
                 const position = player.getCurrentTime();
                 const duration = player.getDuration();
-                if (playerState === 1 && !isYouTubeSeeking && duration > 0) setYouTubeProgress({ position, duration });
-                if ((playerState === 0 || (duration > 0 && position >= duration - 0.6)) && !hasEndedRef.current) { hasEndedRef.current = true; handleYouTubeEnd(); }
+                
+                // Allow updates if playing (1) OR buffering (3), but not when seeking
+                if ((playerState === 1 || playerState === 3) && !isYouTubeSeeking && duration > 0) {
+                    setYouTubeProgress({ position, duration });
+                }
+                
+                if ((playerState === 0 || (duration > 0 && position >= duration - 0.6)) && !hasEndedRef.current) { 
+                    hasEndedRef.current = true; 
+                    handleYouTubeEnd(); 
+                }
             }, 500);
         }
         return () => { if (progressIntervalRef.current) clearInterval(progressIntervalRef.current); };
@@ -601,7 +631,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const buttonRef = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
         if (!visibleQueue || !playerEl || !buttonRef) return;
         let animationFrameId: number;
+        
         const calculatePosition = () => {
+            if (!playerEl) return;
             const playerRect = playerEl.getBoundingClientRect();
             setPopoverPosition({
                 bottom: window.innerHeight - playerRect.top + queuePopoverBottomOffset,
@@ -609,11 +641,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 transform: 'translateX(-50%)',
             });
         };
+        
         const updateLoop = () => { calculatePosition(); animationFrameId = requestAnimationFrame(updateLoop); };
         animationFrameId = requestAnimationFrame(updateLoop);
         window.addEventListener('resize', calculatePosition);
-        return () => { cancelAnimationFrame(animationFrameId); window.removeEventListener('resize', calculatePosition); };
-    }, [visibleQueue, queuePopoverBottomOffset]);
+        
+        return () => { 
+            cancelAnimationFrame(animationFrameId); 
+            window.removeEventListener('resize', calculatePosition); 
+        };
+    }, [visibleQueue, queuePopoverBottomOffset, dockedConfig, floatingConfig, isAnyAppOpen]); // Added layout config dependencies
     
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -695,7 +732,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const playerStyle: React.CSSProperties = useMemo(() => {
         let baseStyle: React.CSSProperties = isAnyAppOpen ? { width: `${dockedConfig.width}px`, height: `${dockedConfig.height}px`, bottom: `${dockedConfig.bottom}px`, left: `${dockedConfig.left}px`, transform: 'none' } : { width: `${floatingConfig.width}px`, height: `${floatingConfig.height}px`, bottom: `${floatingConfig.bottom}px`, left: `calc(50% - ${floatingConfig.otherWidgetWidth / 2}px - 8px - ${floatingConfig.width / 2}px)`, transform: 'none' };
         baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
-        baseStyle.transition = 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+        // Added 'transform' to the transition property for smoother movements
+        baseStyle.transition = 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
         return baseStyle;
     }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
 
@@ -811,13 +849,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             <div ref={playerContainerRef} className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg ${themeClasses}`} style={playerStyle}>
                 <div className="relative w-full h-full">
                     {(nowPlaying.isLoading || debugSpinner) && (<div className="player-spinner-overlay" style={spinnerStyle}><div className="spinner-visual" style={spinnerVisualDivStyle}></div></div>)}
-                    {isAutoplayBlocked && <AutoplayUnlockOverlay />}
+                    {isAutoplayBlocked && <AutoplayUnlockOverlay onUnlock={handleTogglePlay} />}
                     {renderPlayerContent()}
                     <audio ref={audioRef} playsInline crossOrigin="anonymous" />
                     <div style={{ display: 'none' }}><YouTube videoId={currentYouTubeVideoId} opts={{ height: '195', width: '320', playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, playsinline: 1, }, }} onReady={handleYoutubeReady} onStateChange={handleYoutubeStateChange} onEnd={handleYouTubeEnd} /></div>
                 </div>
             </div>
-            {visibleQueue && (<QueuePopover isNight={isNight} nextTrack={nextTrackDetails} position={popoverPosition} onClose={() => setVisibleQueue(null)} isClosing={isQueueClosing} height={queuePopoverHeight} scale={queuePopoverScale} width={queuePopoverWidth} offsetX={queuePopoverOffsetX} />)}
+            {visibleQueue && (<QueuePopover isNight={isNight} nextTrack={nextTrackDetails} position={popoverPosition} onClose={() => setVisibleQueue(null)} isClosing={isQueueClosing} height={queuePopoverHeight} scale={queuePopoverScale} width={queuePopoverWidth} offsetX={queuePopoverOffsetX} dockedConfig={dockedConfig} floatingConfig={floatingConfig} isAnyAppOpen={isAnyAppOpen} />)}
         </>
     );
 };

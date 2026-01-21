@@ -179,7 +179,8 @@ async function reconnectAndGetDeviceId(player: SpotifyPlayer): Promise<string | 
 }
 
 /**
- * Executes a play command safely, handling device activation and token refresh automatically.
+ * Executes a play command safely, ensuring we target the specific active device ID
+ * to prevent latency and 404 errors.
  */
 export async function safePlay(options: PlayOptions, attemptRefresh: () => Promise<boolean>): Promise<boolean> {
     const sessionId = getSessionId();
@@ -203,8 +204,8 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
 
     // 2. CONSTRUCT REQUEST
     // Crucial Change: We include deviceId in the payload to force specific device activation.
-    // However, the proxy endpoint expects { deviceId: '...', body: { ... } }
     // The backend /api/play handles adding device_id to the query param if provided.
+    // This solves the 5-6s delay caused by Spotify searching for an active device.
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
 
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
