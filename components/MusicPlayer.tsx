@@ -48,8 +48,9 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v7)
- * Implementa Audio Latch, Trusted Resume e Drift Tolerance.
+ * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v8 - OPTIMISTIC START)
+ * Fixes: Sticky Zero bug.
+ * Logic: Immediately starts counting from 0 on track change, ignoring initial server lag.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -57,20 +58,15 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const isDraggingRef = useRef(false);
 
     // --- DEAD RECKONING STATE ---
-    // Questi ref mantengono la "verità locale" indipendente dagli aggiornamenti del server.
-    const localBaseTimeRef = useRef<number>(0); // Timestamp (ms) dell'ultimo anchor point
-    const localBasePosRef = useRef<number>(0);  // Posizione (ms) all'ultimo anchor point
+    // These refs maintain the "local truth" independent of server updates.
+    const localBaseTimeRef = useRef<number>(0); // Timestamp (ms) of the last anchor point
+    const localBasePosRef = useRef<number>(0);  // Position (ms) at the last anchor point
     
-    // Snapshot per rilevare i cambiamenti di stato
+    // Snapshots to detect state changes
     const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
     const wasPausedRef = useRef<boolean>(state?.paused ?? true);
 
-    // THE AUDIO LATCH:
-    // Evita il jitter iniziale. È false quando cambia la traccia.
-    // Diventa true SOLO quando riceviamo conferma che l'audio è partito (pos > 0).
-    const hasAudioLatchOpenedRef = useRef<boolean>(false);
-
-    // --- 1. LOGICA DI SINCRONIZZAZIONE (THE BRAIN) ---
+    // --- 1. SYNC LOGIC (THE BRAIN) ---
     useEffect(() => {
         if (!state) return;
 
@@ -79,58 +75,53 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const isPaused = state.paused;
         const trackId = state.track_window?.current_track?.id;
 
-        // A. RILEVAMENTO CAMBIO TRACCIA (Ghosting Fix)
+        // A. TRACK CHANGE DETECTION (Optimistic Start)
         if (trackId !== lastTrackIdRef.current) {
-            // currentLog("Track Change Detected", trackId);
             lastTrackIdRef.current = trackId || null;
             
-            // Hard Reset Immediato
+            // OPTIMISTIC RESET:
+            // Force the local position to 0 immediately. 
+            // We set the anchor time to NOW, so the animation loop starts adding 
+            // elapsed time from 0 immediately in the next frame.
             localBasePosRef.current = 0;
             localBaseTimeRef.current = now;
-            hasAudioLatchOpenedRef.current = false; // Chiudi il latch
             wasPausedRef.current = isPaused;
             
-            // Reset visivo istantaneo
+            // Visual reset
             if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+            
+            // IMPORTANT: Return early. We don't want to run drift logic on this frame
+            // because the server is likely still reporting the old track or 0.
             return;
         }
 
-        // B. GESTIONE LATCH (Jitter Fix)
-        // Se il latch è chiuso e il server dice che siamo > 0, apriamo il latch.
-        // Questo significa che il buffering è finito e l'audio scorre.
-        if (!hasAudioLatchOpenedRef.current && serverPos > 0) {
-            hasAudioLatchOpenedRef.current = true;
-            // Sincronizzazione perfetta all'apertura del latch
-            localBasePosRef.current = serverPos;
-            localBaseTimeRef.current = now;
-        }
-
-        // C. GESTIONE PLAY/PAUSA (Snap-back Fix)
+        // B. PLAY/PAUSE HANDLING (Trusted Resume)
         const isPauseChange = isPaused !== wasPausedRef.current;
 
         if (isPauseChange) {
-            // Calcoliamo dove la barra è VISIVAMENTE arrivata.
-            // Se eravamo in pausa, il tempo trascorso è 0.
+            // Calculate where the bar visually arrived.
+            // If we were paused, elapsed time is 0.
             const elapsedSinceAnchor = wasPausedRef.current ? 0 : (now - localBaseTimeRef.current);
             const visualPos = localBasePosRef.current + elapsedSinceAnchor;
 
             // TRUSTED RESUME:
-            // Che stiamo mettendo in pausa o riprendendo, ci fidiamo della posizione visiva.
-            // Ignoriamo la posizione del server (che è in ritardo) per evitare salti.
+            // Whether pausing or resuming, we trust the visual position.
+            // We ignore the server position (which lags) to prevent snap-back.
             localBasePosRef.current = visualPos;
             localBaseTimeRef.current = now;
         } 
         else {
-            // D. CONTROLLO DERIVA (Drift Tolerance)
-            // Solo se stiamo suonando e il latch è aperto
-            if (!isPaused && hasAudioLatchOpenedRef.current) {
+            // C. DRIFT CONTROL (Drift Tolerance)
+            // Only if playing.
+            if (!isPaused) {
                 const elapsed = now - localBaseTimeRef.current;
                 const estimatedVisualPos = localBasePosRef.current + elapsed;
                 const drift = Math.abs(estimatedVisualPos - serverPos);
 
-                // TOLLERANZA: 1500ms.
-                // Se la differenza è piccola (normale lag di rete), ignoriamo il server.
-                // Se la differenza è enorme (Seek da altro device), facciamo Hard Sync.
+                // TOLERANCE: 1500ms.
+                // Critical for Optimistic Start: Initially we will be at 0.5s, 1s, etc.
+                // while the server reports 0s. This tolerance prevents the bar from being yanked back to 0.
+                // It only syncs if the difference is huge (e.g. user seeked on another device).
                 if (drift > 1500) {
                     localBasePosRef.current = serverPos;
                     localBaseTimeRef.current = now;
@@ -142,7 +133,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
     }, [state]); 
 
-    // --- 2. LOOP DI ANIMAZIONE (THE RENDERER) ---
+    // --- 2. ANIMATION LOOP (THE RENDERER) ---
     useEffect(() => {
         let rafId: number;
 
@@ -161,10 +152,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
             let currentPos = localBasePosRef.current;
 
-            // Avanza SOLO se:
-            // 1. Non è in pausa
-            // 2. Il latch è aperto (abbiamo superato il buffering iniziale)
-            if (!state.paused && hasAudioLatchOpenedRef.current) {
+            // OPTIMISTIC MOVEMENT:
+            // Always advance if not paused. We rely on the Sync Logic (useEffect) 
+            // to correct us if we drift too far, but otherwise we assume the local clock is correct.
+            if (!state.paused) {
                 const now = performance.now();
                 currentPos += (now - localBaseTimeRef.current);
             }
@@ -191,7 +182,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const handleMouseDown = (e: React.MouseEvent) => {
         isDraggingRef.current = true;
         if (progressFillRef.current) {
-            // Disabilita transizioni CSS per reattività immediata
+            // Disable CSS transitions for instant responsiveness
             progressFillRef.current.style.transition = 'none';
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
@@ -216,14 +207,11 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             if (player) {
                 player.seek(finalPos).catch(console.error);
                 
-                // Aggiornamento Ottimistico Immediato:
-                // Diciamo alla logica locale che siamo GIA' lì.
-                // Questo evita che la barra salti indietro mentre aspettiamo il server.
+                // Immediate Optimistic Update:
+                // Tell the local logic we are ALREADY there.
+                // This prevents the bar from snapping back while waiting for the server.
                 localBasePosRef.current = finalPos;
                 localBaseTimeRef.current = performance.now();
-                
-                // Forziamo il latch aperto nel caso stessimo cercando all'inizio
-                hasAudioLatchOpenedRef.current = true;
             }
         };
 
