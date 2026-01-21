@@ -48,59 +48,79 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - DEAD RECKONING ENGINE
+ * SPOTIFY PROGRESS BAR - SMOOTHED DEAD RECKONING ENGINE
  * 
- * Logic:
- * 1. Dead Reckoning: We project the playback position locally using `performance.now()`.
- * 2. Drift Threshold: We only correct our local projection if the server state deviates by > 1000ms.
- *    This prevents "rubber-banding" where small server jitters cause the bar to jump back and forth.
- * 3. Buffering Guard: If server position is 0 and unpaused, we hold at 0 to avoid false starts.
+ * Implements:
+ * 1. State Management via Refs (decoupled from React render cycle)
+ * 2. Ghosting Prevention (Track ID Guard)
+ * 3. Anti-Rubber-banding (1000ms Drift Threshold)
+ * 4. Buffering Guard (Force 0% on pos 0)
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
     
-    // Riferimenti per la logica "Dead Reckoning"
-    const localOffsetRef = useRef(0); // Differenza tra tempo locale e tempo traccia
-    const lastSyncTimeRef = useRef(0); // Ultimo momento in cui abbiamo fatto "Hard Sync"
+    // -- STATE REFS (No useState for animation critical path) --
+    const localBaseTimeRef = useRef<number>(performance.now());
+    const localBasePosRef = useRef<number>(state.position);
+    const currentTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
     const isDraggingRef = useRef(false);
-    
-    // Serve per capire se siamo appena partiti o se è cambiato lo stato "play/pause"
     const wasPausedRef = useRef(state.paused);
-    const currentTrackIdRef = useRef(state.track_window.current_track?.id);
 
-    // --- SINCRONIZZAZIONE INTELLIGENTE (IL CUORE DEL FIX) ---
+    // --- SYNC LOGIC (The Brain) ---
     useEffect(() => {
-        const now = performance.now(); // Più preciso di Date.now()
-        const serverPosition = state.position;
-        
-        // 1. Calcoliamo dove il nostro loop locale pensa di essere
-        const timeSinceLastSync = now - lastSyncTimeRef.current;
-        const estimatedPosition = localOffsetRef.current + timeSinceLastSync;
-        
-        // 2. Calcoliamo la "Deriva" (Drift): quanto stiamo sbagliando rispetto a Spotify?
-        const drift = Math.abs(estimatedPosition - serverPosition);
+        const now = performance.now();
+        const serverPos = state.position;
+        const serverTrackId = state.track_window.current_track?.id;
+        const isPaused = state.paused;
 
-        // 3. DECISIONE: Sincronizzare o Ignorare?
-        const isTrackChange = state.track_window.current_track?.id !== currentTrackIdRef.current;
-        const isPlayPauseChange = state.paused !== wasPausedRef.current;
-        const isSeekOrHugeDrift = drift > 1000; // 1 secondo di tolleranza (Soglia Dead Reckoning)
+        // 1. GHOSTING PREVENTION: Track Changed?
+        if (serverTrackId !== currentTrackIdRef.current) {
+            currentTrackIdRef.current = serverTrackId || null;
+            // Hard Reset Local State
+            localBaseTimeRef.current = now;
+            localBasePosRef.current = 0;
+            // Immediate DOM Reset to prevent visual jump
+            if (progressFillRef.current) {
+                progressFillRef.current.style.width = '0%';
+            }
+            return;
+        }
 
-        if (isTrackChange || isPlayPauseChange || isSeekOrHugeDrift) {
-            // HARD SYNC: Qualcosa di grosso è successo. Riallineiamo tutto.
-            localOffsetRef.current = serverPosition;
-            lastSyncTimeRef.current = now;
+        // 2. PAUSE STATE CHANGED?
+        // Must sync immediately to avoid inertia or drift accumulation
+        if (isPaused !== wasPausedRef.current) {
+            wasPausedRef.current = isPaused;
+            localBaseTimeRef.current = now;
+            localBasePosRef.current = serverPos;
+            return;
+        }
+
+        // 3. ANTI-RUBBER-BANDING (Drift Check)
+        if (!isPaused) {
+            // Where should we be according to our local clock?
+            const timeElapsed = now - localBaseTimeRef.current;
+            const localProjectedPos = localBasePosRef.current + timeElapsed;
             
-            // Aggiorniamo i ref di controllo
-            currentTrackIdRef.current = state.track_window.current_track?.id;
-            wasPausedRef.current = state.paused;
-        } 
-        // ELSE: Se la differenza è piccola (< 1s), IGNORIAMO Spotify. 
-        // Continuiamo col nostro clock locale fluido. Niente effetto "corda".
+            // Difference between local projection and server truth
+            const drift = Math.abs(localProjectedPos - serverPos);
 
-    }, [state]); // Scatta ogni volta che Spotify manda dati
+            // THRESHOLD: 1000ms
+            if (drift > 1000) {
+                // HARD SYNC: Something big happened (Seek, Lag). Snap to server.
+                localBaseTimeRef.current = now;
+                localBasePosRef.current = serverPos;
+            } 
+            // ELSE: Ignore server. Trust local clock for smoothness.
+        } else {
+            // While paused, keep syncing to server position to handle seeking while paused
+            localBaseTimeRef.current = now;
+            localBasePosRef.current = serverPos;
+        }
 
-    // --- LOOP DI ANIMAZIONE (60 FPS FISSI) ---
+    }, [state]); // Runs on every server update packet
+
+    // --- ANIMATION LOOP (The Heart) ---
     useEffect(() => {
         let rafId: number;
 
@@ -110,37 +130,39 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 return;
             }
 
-            // Se è in pausa, mostriamo l'ultima posizione nota (ferma)
-            if (state.paused) {
-                const percent = (state.position / state.duration) * 100;
-                progressFillRef.current.style.width = `${Math.min(100, Math.max(0, percent))}%`;
-            } 
-            else {
-                // BUFFERING GUARD: Se siamo a 0, stiamo fermi.
-                // Evita l'avanti-indietro mentre carica.
-                if (state.position === 0) {
-                     progressFillRef.current.style.width = `0%`;
-                } else {
-                    // CALCOLO FLUIDO
-                    const now = performance.now();
-                    const timeElapsed = now - lastSyncTimeRef.current;
-                    const projectedPosition = localOffsetRef.current + timeElapsed;
+            const duration = state.duration;
+            const isPaused = state.paused;
+            let percent = 0;
 
-                    const percent = (projectedPosition / state.duration) * 100;
-                    progressFillRef.current.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+            if (duration > 0) {
+                if (isPaused) {
+                    // STATIC MODE: Just show the position (synced in useEffect)
+                    percent = (state.position / duration) * 100;
+                } else {
+                    // BUFFERING GUARD
+                    if (state.position === 0) {
+                        percent = 0;
+                    } else {
+                        // PLAYING MODE: Dead Reckoning
+                        const now = performance.now();
+                        const timeElapsed = now - localBaseTimeRef.current;
+                        const projectedPos = localBasePosRef.current + timeElapsed;
+                        
+                        percent = (projectedPos / duration) * 100;
+                    }
                 }
             }
 
+            // Direct DOM update for 60fps smoothness
+            progressFillRef.current.style.width = `${Math.min(100, Math.max(0, percent))}%`;
             rafId = requestAnimationFrame(loop);
         };
 
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, [state.duration, state.paused, state.position]); // Dipendenze minime
+    }, [state.duration, state.paused, state.position]); // Minimal dependencies
 
-    // ... (Il resto del codice per il Drag/Seek rimane uguale) ...
-    
-    // Gestione Drag (Seek)
+    // --- INTERACTION HANDLERS (Drag / Seek) ---
     const calculateSeekPosition = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -150,10 +172,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
     const handleMouseDown = (e: React.MouseEvent) => {
         isDraggingRef.current = true;
-        if (progressFillRef.current) progressFillRef.current.style.transition = 'none';
-        const newPos = calculateSeekPosition(e.clientX);
-        const percent = (newPos / state.duration) * 100;
-        if (progressFillRef.current) progressFillRef.current.style.width = `${percent}%`;
+        if (progressFillRef.current) {
+            progressFillRef.current.style.transition = 'none';
+            const newPos = calculateSeekPosition(e.clientX);
+            const percent = (newPos / state.duration) * 100;
+            progressFillRef.current.style.width = `${percent}%`;
+        }
     };
 
     useEffect(() => {
@@ -167,8 +191,11 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = (e: MouseEvent) => {
             if (!isDraggingRef.current) return;
             isDraggingRef.current = false;
+            
             const finalPos = calculateSeekPosition(e.clientX);
-            if (player) player.seek(finalPos);
+            if (player) {
+                player.seek(finalPos).catch(console.error);
+            }
         };
 
         window.addEventListener('mousemove', handleMouseMove);
