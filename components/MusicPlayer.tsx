@@ -48,10 +48,10 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v10 - VISUAL LOCK)
+ * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v11 - STRICT LOCK)
  * Fixes: "Bar starts before music" and "Jump back to 0".
- * Logic: Enforce a visual 0% state during the "Changing Track" phase until
- * either 500ms passes OR the server confirms playback has genuinely started (>50ms).
+ * Logic: Enforce a strict visual 0% state during the "Changing Track" phase until
+ * the server confirms playback has genuinely started (>0ms).
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -79,16 +79,18 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const isPaused = state.paused;
         const trackId = state.track_window?.current_track?.id;
 
-        // A. TRACK CHANGE DETECTION (Transition Lock)
+        // A. TRACK CHANGE DETECTION (Strict Lock)
         if (trackId !== lastTrackIdRef.current) {
             lastTrackIdRef.current = trackId || null;
             
             // LOCK: Enable visual lock
             isChangingTrackRef.current = true;
             if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
+            
+            // Extended safety timeout (3s) to allow buffering
             changeTrackTimeoutRef.current = window.setTimeout(() => {
                 isChangingTrackRef.current = false;
-            }, 500);
+            }, 3000);
             
             // RESET LOCAL STATE
             localBasePosRef.current = 0;
@@ -103,16 +105,20 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             return; 
         }
 
-        // ** EARLY UNLOCK **
-        // If we are locked but the server reports position > 50ms, it means audio has really started.
-        // We unlock immediately to avoid lag.
-        if (isChangingTrackRef.current && serverPos > 50) {
-             isChangingTrackRef.current = false;
-             if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
-             // Resync immediately
-             localBasePosRef.current = serverPos;
-             localBaseTimeRef.current = now;
-             wasPausedRef.current = isPaused;
+        // ** UNLOCK CHECK **
+        // If locked, we only unlock if we see evidence of playback (position > 0)
+        // or if the safety timeout fired.
+        if (isChangingTrackRef.current) {
+             // Only unlock if we have actually advanced past 0 (real playback started)
+             if (serverPos > 0 && !isPaused) {
+                 isChangingTrackRef.current = false;
+                 if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
+                 // Resync exactly to server now
+                 localBasePosRef.current = serverPos;
+                 localBaseTimeRef.current = now;
+                 wasPausedRef.current = isPaused;
+             }
+             // If still 0, we stay locked. Return here to avoid processing drift logic.
              return;
         }
 
@@ -128,13 +134,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         } 
         else {
             // C. DRIFT CONTROL
-            // Only correct drift if we are NOT in the lock period.
-            if (!isPaused && !isChangingTrackRef.current) {
+            if (!isPaused) {
                 const elapsed = now - localBaseTimeRef.current;
                 const estimatedVisualPos = localBasePosRef.current + elapsed;
                 const drift = Math.abs(estimatedVisualPos - serverPos);
 
-                // TOLERANCE: 2000ms.
+                // Tolerance: 2000ms. If we drift more than this, hard sync.
                 if (drift > 2000) {
                     localBasePosRef.current = serverPos;
                     localBaseTimeRef.current = now;
