@@ -5,7 +5,7 @@ import { getSessionId } from '../lib/sessionId';
 import { SpotifyItem } from '../components/PlaylistItem';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice, NowPlayingState } from '../types';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
-import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalLib, safePlay, getDeviceId } from '../lib/spotify-player';
+import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalLib, safePlay, getDeviceId, seekLocal, activatePlayer } from '../lib/spotify-player';
 
 // Types
 export interface SpotifyUser {
@@ -480,11 +480,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     // The SDK local state is usually instant, so we trust it more than the REST API.
                     // However, we still respect the lock if we initiated a remote command that hasn't propagated yet.
                     if (Date.now() < interactionLockEnd.current) {
-                        // Check if SDK state matches our optimistic expectation. If so, clear lock early?
-                        // For now, let's just let the SDK update pass through as it is "local source of truth"
-                        // UNLESS we are specifically waiting for a remote device update.
-                        
-                        // If playing locally, we trust SDK updates.
+                        // We assume the SDK is correct for local updates
                     }
 
                     setNowPlaying(prev => {
@@ -517,6 +513,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Check if we are taking control locally
         const localId = getDeviceId();
         const isTargetingLocal = !nowPlaying.activeDevice && localId;
+
+        // --- FAST STARTUP OPTIMIZATION ---
+        // If we are targeting local but it's not active, wake it up immediately
+        if (isTargetingLocal) {
+            activatePlayer(); 
+        }
 
         // --- OPTIMISTIC UI UPDATE ---
         setNowPlaying(s => {
@@ -654,10 +656,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         triggerFastPolling();
 
+        // Check if we can use the local player SDK for instant seeking
+        const localId = getDeviceId();
+        const isLocalActive = nowPlaying.activeDevice?.id === localId;
+
         try {
-            await apiClient.put(`/me/player/seek?position_ms=${position_ms}`);
+            if (isLocalActive) {
+                // FAST: Use Web Socket
+                await seekLocal(position_ms);
+            } else {
+                // SLOW: Use REST API
+                await apiClient.put(`/me/player/seek?position_ms=${position_ms}`);
+            }
         } catch (e) { console.error(e); }
-    }, [triggerFastPolling]);
+    }, [triggerFastPolling, nowPlaying.activeDevice]);
 
     const playYouTube = useCallback((track: YouTubeTrackInfo, context?: YouTubeTrackInfo[]) => {
         setNowPlaying(s => ({

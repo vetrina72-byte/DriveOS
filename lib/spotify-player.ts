@@ -108,6 +108,26 @@ export function getDeviceId(): string | null {
     return spotifyDeviceId;
 }
 
+/**
+ * Directly seek using the SDK WebSocket connection.
+ * This is significantly faster than the REST API.
+ */
+export async function seekLocal(position_ms: number): Promise<void> {
+    if (spotifyPlayer) {
+        return spotifyPlayer.seek(position_ms);
+    }
+    return Promise.reject("No local player");
+}
+
+/**
+ * Wakes up the player element (useful for mobile/tablet browsers requiring user gesture)
+ */
+export async function activatePlayer(): Promise<void> {
+    if (spotifyPlayer) {
+        return spotifyPlayer.activateElement().then(() => {});
+    }
+}
+
 function throttle<T extends (...args: any[]) => any>(func: T, wait = 150) {
     let last = 0;
     let timeout: number | null = null;
@@ -211,6 +231,12 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
         try {
             console.log('[safePlay] Initiating Play on Device:', spotifyDeviceId);
+            
+            // Try activating element just in case (browser requirement)
+            if (spotifyPlayer) {
+                spotifyPlayer.activateElement().catch(() => {}); 
+            }
+
             const res = await fetch('/api/play', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
