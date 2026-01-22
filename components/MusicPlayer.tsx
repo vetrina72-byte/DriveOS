@@ -48,13 +48,11 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - HYBRID OPTIMISTIC CLOCK (v15)
+ * SPOTIFY PROGRESS BAR - PRECISE BUFFERING EDITION (v16)
  * 
- * Logic:
- * 1. Visual updates are driven PURELY by requestAnimationFrame + local delta time.
- * 2. Server updates (`state.position`) are only used to "nudge" the local time if drift > 1500ms.
- * 3. Crucially: If state.position is 0 but we are 'paused: false', we IGNORE the 0 and keep predicting.
- *    This solves the "stuck at zero" bug while buffering.
+ * Fixes: 
+ * - Prevents bar from moving if position is 0, even if 'playing' (Buffering state).
+ * - Only enables local interpolation (dt) once actual playback progression is confirmed.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -62,10 +60,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const isDraggingRef = useRef(false);
 
     // VISUAL TRUTH: This ref holds the exact millisecond we are displaying.
-    // It is decoupled from state.position to allow smooth interpolation.
     const currentVisualPosition = useRef<number>(state?.position || 0);
     const lastFrameTime = useRef<number>(performance.now());
     const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
+    
+    // Flag to detect if audio has actually started flowing for the current track
+    const hasPlaybackStartedRef = useRef<boolean>(false);
 
     // --- 1. SYNC WITH SERVER STATE ---
     useEffect(() => {
@@ -79,33 +79,34 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         if (currentTrackId !== lastTrackIdRef.current) {
             lastTrackIdRef.current = currentTrackId || null;
             currentVisualPosition.current = 0;
+            hasPlaybackStartedRef.current = false; // Reset start flag
+            
             // Immediate visual reset
             if (progressFillRef.current) progressFillRef.current.style.width = '0%';
-            // Don't return, let the rest of logic run to start animation if needed
         }
 
-        // B. SYNC CHECK
+        // B. DETECT START OF PLAYBACK
+        // If we receive a position > 0, we know audio is flowing.
+        if (serverPos > 0) {
+            hasPlaybackStartedRef.current = true;
+        }
+
+        // C. SYNC CHECK
         const drift = Math.abs(currentVisualPosition.current - serverPos);
 
         if (isPaused) {
             // If paused, strictly trust the server.
             currentVisualPosition.current = serverPos;
+            hasPlaybackStartedRef.current = serverPos > 0; // Sync flag state
         } else {
             // If playing...
-            
-            // Check for "False Zero" (Buffering): Server says 0, but we are playing.
-            // If we have already advanced locally (e.g. < 5s), ignore the 0 from server.
-            const isFalseZero = serverPos === 0 && currentVisualPosition.current > 0 && currentVisualPosition.current < 5000;
-
-            if (drift > 1500 && !isFalseZero) {
-                // If drift is significant (seek, or heavy lag), snap to server position.
-                // This "rubber bands" only if really necessary.
+            if (drift > 2000) {
+                // Large drift (seek or lag) -> Snap
                 currentVisualPosition.current = serverPos;
             }
-            // If drift is small (< 1.5s), we IGNORE the server update and keep our smooth local time.
-            // This prevents the bar from jumping back/forth due to network latency.
+            // Small drift -> Ignore server, trust local engine
         }
-    }, [state]); // Only re-run when we get a new snapshot from Spotify
+    }, [state]); 
 
     // --- 2. ANIMATION LOOP (THE ENGINE) ---
     useEffect(() => {
@@ -121,8 +122,11 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 return;
             }
 
-            // Only advance time if playing
-            if (!state.paused) {
+            // Only advance time if:
+            // 1. Not paused
+            // 2. We have confirmed playback started (pos > 0 at least once), OR user seeked (handled elsewhere)
+            // This prevents the bar from "running" while buffering at 0:00
+            if (!state.paused && hasPlaybackStartedRef.current) {
                 currentVisualPosition.current += dt;
             }
 
@@ -146,7 +150,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         lastFrameTime.current = performance.now();
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, [state?.paused, state?.duration]); // Re-bind if play state changes to restart loop cleanly
+    }, [state?.paused, state?.duration]);
 
     // --- 3. DRAG HANDLERS ---
     const calculateSeekPosition = (clientX: number) => {
@@ -164,7 +168,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
             
-            // Update local ref immediately so it feels responsive
             currentVisualPosition.current = newPos;
         }
     };
@@ -183,7 +186,10 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             isDraggingRef.current = false;
             
             const finalPos = calculateSeekPosition(e.clientX);
-            currentVisualPosition.current = finalPos; // Commit seek
+            currentVisualPosition.current = finalPos; 
+            
+            // Assume dragging implies immediate playback capability at new position
+            hasPlaybackStartedRef.current = true;
             
             if (player) {
                 player.seek(finalPos).catch(console.error);

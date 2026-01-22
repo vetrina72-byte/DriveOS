@@ -171,6 +171,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const fastPollingIntervalRef = useRef<number | null>(null);
     const fastPollingTimeoutRef = useRef<number | null>(null);
 
+    // --- STALE STATE PROTECTION REFS ---
+    // Used to prevent the UI from flickering back to the old song during the API latency window
+    const lastPlayRequestTime = useRef<number>(0);
+    const expectedTrackId = useRef<string | null>(null);
+
     // Home Content State
     const [homeContentLoading, setHomeContentLoading] = useState(false);
     const [homeContentError, setHomeContentError] = useState<string | null>(null);
@@ -359,6 +364,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { data } = await apiClient.get('/me/player');
             
             if (data && data.item) {
+                // --- STALE STATE CHECK ---
+                // If we recently requested a track change (within 3s), and the API returns a different track ID,
+                // we assume the API is lagging and ignore this update to prevent "flicker" back to old song.
+                if (expectedTrackId.current && (Date.now() - lastPlayRequestTime.current < 3000)) {
+                    if (data.item.id !== expectedTrackId.current) {
+                        console.log('[AuthContext] Ignoring stale state from API (waiting for track change)');
+                        return; // ABORT UPDATE
+                    } else {
+                        // IDs match! We are synced. Clear the lock.
+                        expectedTrackId.current = null;
+                    }
+                }
+
                 const mappedState = mapApiPlaybackToState(data);
                 
                 if (mappedState) {
@@ -441,6 +459,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             onNotReady: () => setIsPlayerReady(false),
             onStateChange: (playerState) => {
                 if (playerState) {
+                    // SDK State updates are usually reliable for current track, but 
+                    // we still apply the filter if we are waiting for a specific track ID 
+                    // from a remote command (less critical here as SDK is local, but good for consistency)
+                    if (expectedTrackId.current && (Date.now() - lastPlayRequestTime.current < 3000)) {
+                         if (playerState.track_window?.current_track?.id !== expectedTrackId.current) {
+                             return;
+                         } else {
+                             expectedTrackId.current = null;
+                         }
+                    }
+
                     setNowPlaying(prev => {
                         const newState = {
                             ...prev,
@@ -465,6 +494,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [state.isAuthenticated, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
+        // --- SETUP STALE PROTECTION ---
+        if (itemForOptimisticUpdate?.id) {
+            lastPlayRequestTime.current = Date.now();
+            expectedTrackId.current = itemForOptimisticUpdate.id;
+        }
+
         // --- OPTIMISTIC UI UPDATE ---
         setNowPlaying(s => {
             const fakeState: SpotifyPlayerState | null = itemForOptimisticUpdate ? {
@@ -490,6 +525,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         },
                         artists: itemForOptimisticUpdate.artists?.map(a => ({ uri: '', name: a.name })) || []
                     },
+                    // CRITICAL FIX: Explicitly clear tracks to prevent "ghost back button" or "oscillation"
                     next_tracks: [],
                     previous_tracks: []
                 },
@@ -498,7 +534,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const currentState = s.spotifyState;
             const optimisticState = currentState 
-                ? { ...currentState, paused: false, timestamp: Date.now() } 
+                ? { 
+                    ...currentState, 
+                    paused: false, 
+                    timestamp: Date.now(),
+                    // If we have a new item, completely replace track_window to avoid state pollution
+                    ...(itemForOptimisticUpdate ? { track_window: fakeState!.track_window } : {})
+                  } 
                 : fakeState;
 
             if (fakeState) {
@@ -529,9 +571,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!nowPlaying.activeDevice) {
             const localId = getDeviceId();
             if (localId) {
-                // Manually inject device_id into API call inside safePlay via options or modify safePlay
-                // But safePlay already does this check. 
-                // The issue is likely that we need to WAIT for transfer.
                 console.log("[AuthContext] Forced local playback target:", localId);
             }
         }
@@ -540,7 +579,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
         } catch (e) {
             console.error("Play failed", e);
+            // Revert state if failed
             setNowPlaying(s => s.spotifyState ? { ...s, spotifyState: { ...s.spotifyState, paused: true } } : s);
+            expectedTrackId.current = null; // Clear lock on failure
         }
     }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice, triggerFastPolling]);
 
