@@ -48,158 +48,165 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - MONOTONIC PROJECTION ENGINE (v22 - The Engineer's Cut)
+ * SPOTIFY PROGRESS BAR - "THE BUTTER ENGINE" v23
  * 
- * Logic:
- * 1. Double Track: Sync Flow (Server) vs Animation Flow (Local).
- * 2. Monotonicity: Never jump back on Pause. Freeze visual state.
- * 3. Fluidity: updates via requestAnimationFrame + CSS Transform (GPU).
+ * Features:
+ * 1. Transition Lock: Ignores server jumps for 1.5s after track change.
+ * 2. Latency Compensation: Adds ~250ms to server timestamps.
+ * 3. Monotonic Pause: Freezes exactly where visually drawn, ignoring stale server data.
+ * 4. Fire-and-Forget Seek: Instant visual update, async API call.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
+    const handleRef = useRef<HTMLDivElement>(null);
     
-    // Internal State Refs (Mutable, no re-renders)
-    const isDragging = useRef(false);
-    
-    // STATE MACHINE for Interpolation
-    const machine = useRef({
+    // THE ENGINE STATE (Mutable, high-performance)
+    const engine = useRef({
+        // Timing & Anchors
         duration: 0,
+        anchorTime: 0,      // performance.now() when we last synced
+        anchorPosition: 0,  // The position at anchorTime
         
-        // The last verified point
-        anchorPosition: 0,
-        anchorTime: 0, // performance.now()
-        
-        // Visual state
+        // Visual State
         visualPosition: 0,
         
-        // Playback state
+        // Logic Flags
         isPlaying: false,
+        isDragging: false,
         
-        // Track ID to detect changes
+        // Transition Lock (The "Zero Moment" Fix)
         trackId: '',
+        lockUntil: 0,       // Timestamp until which we ignore API position updates
     });
 
-    // --- 1. SYNC: Receive Data (The Reference) ---
+    // CONSTANTS
+    const LATENCY_COMPENSATION = 250; // ms to add to server time to match audio
+    const TRANSITION_LOCK_MS = 1500;  // ms to ignore server jitter after track change
+
+    // --- 1. SYNC LOGIC (Server -> Engine) ---
     useEffect(() => {
         if (!state) return;
 
         const now = performance.now();
-        const m = machine.current;
+        const e = engine.current;
         
         const newTrackId = state.track_window?.current_track?.id || '';
-        const isTrackChange = newTrackId !== m.trackId;
+        const isTrackChange = newTrackId !== e.trackId;
         const serverPaused = state.paused;
         const serverPos = state.position;
 
-        m.duration = state.duration;
-        m.trackId = newTrackId;
+        e.duration = state.duration;
 
+        // --- SCENARIO A: TRACK CHANGE (The "Zero Moment") ---
         if (isTrackChange) {
-            // Hard Reset on track change
-            m.anchorPosition = serverPos;
-            m.anchorTime = now;
-            m.visualPosition = serverPos;
-            m.isPlaying = !serverPaused;
-            // Force immediate update to 0 to avoid visual glitch
+            e.trackId = newTrackId;
+            e.visualPosition = 0;
+            e.anchorPosition = 0;
+            e.anchorTime = now;
+            e.lockUntil = now + TRANSITION_LOCK_MS; // ENGAGE LOCK
+            e.isPlaying = !serverPaused;
+            
+            // Hard reset visual immediately
             if (progressFillRef.current) {
                 progressFillRef.current.style.transform = `translateX(-100%)`;
             }
             return;
         }
 
+        // --- SCENARIO B: LOCKED STATE ---
+        if (now < e.lockUntil) {
+            // We are in the transition buffer. 
+            // We TRUST our local loop. We IGNORE the server (unless it says 0).
+            // Just update play state.
+            e.isPlaying = !serverPaused;
+            if (!e.isPlaying) {
+                // If paused during lock, freeze.
+                e.anchorPosition = e.visualPosition;
+                e.anchorTime = now;
+            } else {
+                // If playing, re-anchor relative to visual to keep it smooth
+                e.anchorPosition = e.visualPosition;
+                e.anchorTime = now;
+            }
+            return;
+        }
+
+        // --- SCENARIO C: NORMAL OPERATION ---
+        
         if (serverPaused) {
-            // PAUSE LOGIC: "Anti-Snapback"
-            if (m.isPlaying) {
-                // Transitioning Playing -> Paused
-                // We trust our local visual position MORE than the lagged server position
-                // UNLESS the server says we are way far off (seek)
-                const drift = Math.abs(serverPos - m.visualPosition);
-                
-                if (drift > 2000) {
-                    // It was a seek, jump to server
-                    m.visualPosition = serverPos;
-                } else {
-                    // It was just a pause command. 
-                    // FREEZE at current visual pos. Ignore server "lagged" pos.
-                    // m.visualPosition remains as is.
-                }
+            // PAUSE LOGIC: "The Freeze"
+            if (e.isPlaying) {
+                // We just transitioned from Playing -> Paused.
+                // The server position is likely old (latency). 
+                // IGNORE server position. FREEZE at current visual position.
+                // This prevents the "jump back".
+                e.anchorPosition = e.visualPosition; 
             } else {
-                // Already paused. If server sends update, accept it if it's a seek.
-                // Otherwise ignore small jitter.
-                const drift = Math.abs(serverPos - m.visualPosition);
-                if (drift > 500) {
-                    m.visualPosition = serverPos;
-                }
-            }
-            m.isPlaying = false;
-            m.anchorPosition = m.visualPosition; // Re-anchor to visual
-            m.anchorTime = now;
-        } else {
-            // PLAY LOGIC
-            if (!m.isPlaying) {
-                // Transition Paused -> Playing
-                // Resume from where we are visibly, or server if far?
-                // Usually server is authoritative on resume start
-                const drift = Math.abs(serverPos - m.visualPosition);
+                // We were already paused. If the server sends a wildly different position (seek from another device), take it.
+                // Otherwise, ignore small jitter.
+                const drift = Math.abs(serverPos - e.visualPosition);
                 if (drift > 1000) {
-                    m.visualPosition = serverPos;
+                    e.visualPosition = serverPos;
+                    e.anchorPosition = serverPos;
                 }
-                m.anchorPosition = m.visualPosition;
-                m.anchorTime = now;
-            } else {
-                // Already Playing: Continuous Sync
-                // Calculate drift
-                const expected = m.anchorPosition + (now - m.anchorTime);
-                const actualServer = serverPos; 
-                // Note: Server pos is also stale by RTT.
-                // We generally trust our local projection unless it drifts massively.
-                
-                const drift = Math.abs(actualServer - expected);
-                
-                // Only re-anchor if drift is huge (Seek or Lag spike)
-                // Otherwise, let the smooth local clock run.
-                if (drift > 2000) {
-                    m.anchorPosition = serverPos;
-                    m.anchorTime = now;
-                    m.visualPosition = serverPos; // Hard correction
-                }
-                // Else: Do nothing. Keep projected from old anchor.
             }
-            m.isPlaying = true;
+            e.isPlaying = false;
+            e.anchorTime = now;
+        } else {
+            // PLAY LOGIC: "Linear Interpolation"
+            const adjustedServerPos = serverPos + LATENCY_COMPENSATION;
+
+            if (!e.isPlaying) {
+                // Paused -> Playing. Snap to server (plus latency) to sync up.
+                e.visualPosition = adjustedServerPos;
+                e.anchorPosition = adjustedServerPos;
+                e.anchorTime = now;
+            } else {
+                // Already Playing. Check drift.
+                // Expected position based on our smooth local clock
+                const expected = e.anchorPosition + (now - e.anchorTime);
+                const drift = Math.abs(adjustedServerPos - expected);
+
+                if (drift > 2000) {
+                    // Big jump (seek on other device)? Resync.
+                    e.anchorPosition = adjustedServerPos;
+                    e.anchorTime = now;
+                    e.visualPosition = adjustedServerPos;
+                } 
+                // Small drift? IGNORE. Trust local clock for smoothness.
+            }
+            e.isPlaying = true;
         }
 
     }, [state]);
 
-    // --- 2. ENGINE: Update Loop (The Butter) ---
+    // --- 2. RENDER LOOP (The Heartbeat) ---
     useEffect(() => {
         let rafId: number;
 
         const loop = () => {
             rafId = requestAnimationFrame(loop);
             
-            if (isDragging.current || !progressFillRef.current) return;
+            const e = engine.current;
+            if (e.isDragging || !progressFillRef.current) return;
 
-            const m = machine.current;
             const now = performance.now();
 
-            if (m.isPlaying) {
-                const delta = now - m.anchorTime;
-                m.visualPosition = m.anchorPosition + delta;
+            if (e.isPlaying) {
+                const delta = now - e.anchorTime;
+                e.visualPosition = e.anchorPosition + delta;
             }
-            // If paused, m.visualPosition is static.
-
+            
             // Clamp
-            if (m.visualPosition > m.duration) m.visualPosition = m.duration;
-            if (m.visualPosition < 0) m.visualPosition = 0;
+            if (e.visualPosition > e.duration) e.visualPosition = e.duration;
+            if (e.visualPosition < 0) e.visualPosition = 0;
 
-            // Render transform
-            const percent = m.duration > 0 ? (m.visualPosition / m.duration) * 100 : 0;
-            // Use translateX(-100% ... 0%) for performance
-            // 0% progress = translateX(-100%)
-            // 100% progress = translateX(0%)
+            // Render transform (0% = -100%, 100% = 0%)
+            const percent = e.duration > 0 ? (e.visualPosition / e.duration) * 100 : 0;
             const translateVal = percent - 100;
+            
             progressFillRef.current.style.transform = `translateX(${translateVal}%)`;
         };
 
@@ -207,7 +214,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         return () => cancelAnimationFrame(rafId);
     }, []);
 
-    // --- 3. INPUT: Interaction ---
+    // --- 3. INTERACTION (Fire & Forget) ---
     const calculateSeekPosition = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -216,37 +223,38 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        isDragging.current = true;
-        if (progressFillRef.current) {
-            // Immediate visual feedback without loop lag
-            const newPos = calculateSeekPosition(e.clientX);
-            const percent = (newPos / state.duration) * 100;
-            progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
-        }
+        engine.current.isDragging = true;
+        updateVisualsFromInput(e.clientX);
+    };
+
+    const updateVisualsFromInput = (clientX: number) => {
+        if (!progressFillRef.current) return;
+        const newPos = calculateSeekPosition(clientX);
+        const percent = (newPos / state.duration) * 100;
+        progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
     };
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isDragging.current || !progressFillRef.current) return;
-            const newPos = calculateSeekPosition(e.clientX);
-            const percent = (newPos / state.duration) * 100;
-            progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
+            if (!engine.current.isDragging) return;
+            updateVisualsFromInput(e.clientX);
         };
 
         const handleMouseUp = (e: MouseEvent) => {
-            if (!isDragging.current) return;
-            isDragging.current = false;
+            if (!engine.current.isDragging) return;
             
+            // 1. Commit changes locally FIRST
+            const eState = engine.current;
             const finalPos = calculateSeekPosition(e.clientX);
             
-            // Update Engine State IMMEDIATELY
-            const m = machine.current;
-            m.visualPosition = finalPos;
-            m.anchorPosition = finalPos;
-            m.anchorTime = performance.now();
+            eState.isDragging = false;
+            eState.visualPosition = finalPos;
+            eState.anchorPosition = finalPos;
+            eState.anchorTime = performance.now();
             
-            // Execute Seek
-            seek(finalPos);
+            // 2. Fire and Forget API call
+            // We don't await this. We trust the local engine update we just did.
+            seek(finalPos); 
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -260,22 +268,31 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     return (
         <div
             ref={progressBarRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-hidden touch-none"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] touch-none mt-4 mb-2"
             onMouseDown={handleMouseDown}
-            style={{ transform: 'translateZ(0)' }} // Promote to GPU layer
+            style={{ transform: 'translateZ(0)' }}
         >
             <div 
                 ref={progressFillRef}
-                className="h-full w-full bg-[var(--progress-fill)] relative will-change-transform"
+                className="h-full w-full bg-[var(--progress-fill)] relative rounded-l-full will-change-transform"
                 style={{ 
                     width: '100%',
                     transform: 'translateX(-100%)', 
-                    transition: 'none' // Absolute control via JS
+                    transition: 'none' 
                 }} 
             >
-                 {/* Thumb anchored to the right edge of the filling bar */}
+                 {/* 
+                    The Handle (Pallino)
+                    - Anchored to the right edge of the fill bar.
+                    - Centered vertically via top/translateY.
+                    - Centered horizontally on the tip via translateX(50%).
+                 */}
                  <div 
-                    className="absolute top-1/2 right-0 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm translate-x-1.5 -translate-y-1/2"
+                    ref={handleRef}
+                    className="absolute top-1/2 right-0 w-3.5 h-3.5 rounded-full bg-[var(--progress-fill)] shadow-md transition-transform duration-100 ease-out group-hover:scale-125"
+                    style={{ 
+                        transform: 'translate(50%, -50%)', // Center perfectly on the tip
+                    }}
                 />
             </div>
         </div>
@@ -342,13 +359,13 @@ const YouTubeProgressBar = ({
     return (
         <div
             ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
+            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible mt-4 mb-2"
             onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
+            <div className="h-full rounded-l-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                 <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
-                    style={{ transform: 'translateY(-50%)' }} 
+                    className="absolute top-1/2 right-0 w-3.5 h-3.5 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-md transition-transform duration-100 ease-out group-hover:scale-125"
+                    style={{ transform: 'translate(50%, -50%)' }} 
                 />
             </div>
         </div>
@@ -483,7 +500,9 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
                     </button>
                 </div>
             </div>
-            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden" />
+            
+            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden mt-4 mb-2" />
+            
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
                 <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
@@ -950,7 +969,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <div className="overflow-hidden flex-grow"><div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div></div>
                         </div>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
+                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)] mt-4 mb-2" />
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}><button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button><button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>{isRadioPlaying ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button><button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button><button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} /></button></div>
