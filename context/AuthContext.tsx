@@ -562,7 +562,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 source: 'spotify',
                 isLoading: false, 
                 spotifyState: optimisticState, 
-                activeDevice: optimisticDevice,
+                activeDevice: optimisticDevice, 
                 radioStation: null,
                 youtubeTrack: null
             };
