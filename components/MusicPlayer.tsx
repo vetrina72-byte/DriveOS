@@ -48,12 +48,13 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - THE ENGINEER'S BUFFER (v30)
+ * SPOTIFY PROGRESS BAR - THE "BUTTER SMOOTH" ENGINE
  * 
- * Solves:
- * 1. "Snap Back" on Pause: Freezes visual state immediately on pause command.
- * 2. "Jumps" on Start: Ignores erratic server updates during track transitions.
- * 3. Smoothness: Uses GPU transforms and local high-precision timer.
+ * Features:
+ * 1. Transition Lock: Ignores erratic API data for 1.5s after track change (Zero Moment Bug).
+ * 2. Pause Freeze: Locks visual position instantly on pause, preventing latency snap-back.
+ * 3. Linear Interpolation: 60fps rendering decoupled from API polling.
+ * 4. Fire-and-Forget Seek: Immediate UI update + Lock preventing rubber-banding.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -61,19 +62,23 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const progressFillRef = useRef<HTMLDivElement>(null);
     const thumbRef = useRef<HTMLDivElement>(null);
     
-    // Internal State Refs (Mutable, no re-renders for performance)
+    // Internal State Logic (Mutable Refs for Performance)
     const logic = useRef({
         isDragging: false,
         isPlaying: false,
         trackId: '',
         duration: 0,
         
-        // The "Anchor" is the last verified point in time
+        // The Anchor: The verified point in time we interpolate from
         anchorTime: 0,      // performance.now()
         anchorPosition: 0,  // ms
         
-        // The visual position currently displayed to the user
+        // The Visual Truth: What the user actually sees right now
         visualPosition: 0, 
+        
+        // The Lock: Timestamp until which we ignore API position updates
+        // Used for Track Changes and Seeks to prevent "rubber banding"
+        transitionLockEnd: 0,
     });
 
     // --- 1. SYNC LOGIC (The Brain) ---
@@ -89,20 +94,20 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
 
         l.duration = serverDuration;
 
-        // CASE A: TRACK CHANGE -> HARD RESET
-        // This prevents the "flash" of the old track's progress
+        // CASE A: TRACK CHANGE -> MOMENTO ZERO LOCK
+        // Force reset to 0 and ignore API for 1.5s to prevent jump-back
         if (newTrackId !== l.trackId) {
             l.trackId = newTrackId;
             l.isPlaying = !serverPaused;
             l.anchorTime = now;
-            l.anchorPosition = serverPos;
-            l.visualPosition = serverPos;
+            l.anchorPosition = 0;
+            l.visualPosition = 0;
+            l.transitionLockEnd = now + 1500; // 1.5s Immunity
             
-            // Force immediate visual update to prevent interpolation glitches
+            // Force immediate GPU render
             if (progressFillRef.current && thumbRef.current) {
-                const percent = serverDuration > 0 ? (serverPos / serverDuration) * 100 : 0;
-                progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
-                thumbRef.current.style.transform = `translate3d(${percent}%, -50%, 0)`;
+                progressFillRef.current.style.transform = `translateX(-100%)`;
+                thumbRef.current.style.left = `0%`;
             }
             return;
         }
@@ -110,39 +115,37 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         // CASE B: PAUSE/PLAY TRANSITION
         if (serverPaused !== !l.isPlaying) {
             if (serverPaused) {
-                // CHANGED TO PAUSED
-                // CRITICAL FIX: FREEZE at current visual position. 
-                // Do NOT accept serverPos because it is old (latency) and will cause backward jump.
+                // PAUSE DETECTED: FREEZE
+                // Critical: Do NOT use serverPos. Use l.visualPosition to freeze exactly where the user sees it.
                 l.isPlaying = false;
-                l.anchorPosition = l.visualPosition; // Re-anchor to where we effectively stopped
+                l.anchorPosition = l.visualPosition;
             } else {
-                // CHANGED TO PLAYING
+                // RESUME DETECTED
                 l.isPlaying = true;
                 l.anchorTime = now;
-                // If resuming, usually server is authoritative, but to be safe against jumps,
-                // we can start from visual pos if difference is small.
-                // For now, trust server on resume start.
-                l.anchorPosition = serverPos; 
+                l.anchorPosition = serverPos; // Resync to server on resume
             }
             return;
         }
 
         // CASE C: PLAYING UPDATE (DRIFT CORRECTION)
         if (l.isPlaying) {
-            // Calculate where we should be according to local clock
-            const localProjected = l.anchorPosition + (now - l.anchorTime);
-            
+            // If we are inside a Transition Lock (Just changed track or sought), IGNORE server drift
+            if (now < l.transitionLockEnd) {
+                return;
+            }
+
             // Calculate drift
+            const localProjected = l.anchorPosition + (now - l.anchorTime);
             const drift = Math.abs(serverPos - localProjected);
 
-            // If drift is HUGE (> 1.5s), it's a Seek or Lag Spike -> Hard Sync
+            // If drift is massive (> 1.5s), it's likely an external seek -> Hard Sync
             if (drift > 1500) {
                 l.anchorPosition = serverPos;
                 l.anchorTime = now;
                 l.visualPosition = serverPos;
             } 
-            // If drift is small, IGNORE IT. 
-            // This is the "Buffer". We trust our local smooth clock more than the jittery network packets.
+            // Else: We ignore small drift (jitter) to keep it smooth.
         }
 
     }, [state]);
@@ -161,31 +164,28 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 const delta = now - l.anchorTime;
                 l.visualPosition = l.anchorPosition + delta;
             }
-            // If paused, visualPosition stays static (frozen)
+            // If paused, visualPosition stays frozen at the last calculated value
 
             // Clamp
             const duration = l.duration || 1;
             if (l.visualPosition > duration) l.visualPosition = duration;
             if (l.visualPosition < 0) l.visualPosition = 0;
 
-            // Render GPU Transforms
+            // Render
             const percent = (l.visualPosition / duration) * 100;
-            const translateVal = percent - 100; // -100% (empty) to 0% (full)
+            const clampedPercent = Math.max(0, Math.min(100, percent));
             
-            progressFillRef.current.style.transform = `translateX(${translateVal}%)`;
+            // 1. Move Bar
+            progressFillRef.current.style.transform = `translateX(${clampedPercent - 100}%)`;
             
-            // Move Thumb (Relative to parent width)
-            // Use translate3d for hardware acceleration
-            // NOTE: The parent container width is 100%. We move the thumb 0-100% across it.
-            // We subtract a few pixels in CSS to center it visually if needed, 
-            // but usually percent is enough if parent is relative.
-            thumbRef.current.style.left = `${percent}%`;
+            // 2. Move Thumb
+            thumbRef.current.style.left = `${clampedPercent}%`;
         };
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
     }, [state?.duration]);
 
-    // --- 3. INPUT HANDLING ---
+    // --- 3. INPUT HANDLING ("Fire and Forget") ---
     const calculatePos = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -198,7 +198,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         l.isDragging = true;
         
         if (progressFillRef.current && thumbRef.current) {
-            // Immediate visual feedback
             const newPos = calculatePos(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
@@ -224,13 +223,16 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             const finalPos = calculatePos(e.clientX);
             
-            // Optimistic Update: Set the engine to this position immediately
+            // 1. Fire Command Immediately
+            seek(finalPos);
+            
+            // 2. Optimistic Update (Local Truth)
             l.visualPosition = finalPos;
             l.anchorPosition = finalPos;
             l.anchorTime = performance.now();
             
-            // Execute Seek
-            seek(finalPos);
+            // 3. Engage Lock (Prevent rubber-banding from delayed server response)
+            l.transitionLockEnd = performance.now() + 1000; 
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -255,7 +257,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                     className="h-full w-full bg-[var(--progress-fill)] rounded-full will-change-transform"
                     style={{ 
                         transform: 'translateX(-100%)', 
-                        transition: 'none' 
+                        transition: 'none' // No CSS transition, pure JS interpolation
                     }} 
                 />
             </div>
@@ -263,10 +265,11 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             {/* Drag Handle / Thumb */}
             <div 
                 ref={thumbRef}
-                className="absolute top-1/2 -ml-2 w-4 h-4 bg-white rounded-full shadow-lg border border-black/10 scale-0 group-hover:scale-100 transition-transform duration-100 will-change-transform"
+                className="absolute w-4 h-4 bg-white rounded-full shadow-lg border border-black/10 scale-0 group-hover:scale-100 transition-transform duration-100 will-change-transform"
                 style={{ 
+                    top: '50%',
                     left: '0%', 
-                    marginTop: '-8px' // Half height to center vertically
+                    transform: 'translate(-50%, -50%)' // Perfect center alignment
                 }}
             />
         </div>
