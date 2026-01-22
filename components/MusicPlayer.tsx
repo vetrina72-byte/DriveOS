@@ -48,14 +48,12 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - MONOTONIC PROJECTION ENGINE (v20 - Final)
+ * SPOTIFY PROGRESS BAR - MONOTONIC PROJECTION ENGINE (v22 - The Engineer's Cut)
  * 
- * Engineering Principles:
- * 1. Source of Truth: The SDK state provides an 'Anchor' (position at a specific time).
- * 2. Projection: We calculate (Now - AnchorTime) + AnchorPosition.
- * 3. Monotonicity: We NEVER move the bar backward while playing, even if the server lags.
- *    If the server says we are behind where we drew, we wait for it to catch up.
- * 4. Immediate Interaction: Seek overrides everything instantly.
+ * Logic:
+ * 1. Double Track: Sync Flow (Server) vs Animation Flow (Local).
+ * 2. Monotonicity: Never jump back on Pause. Freeze visual state.
+ * 3. Fluidity: updates via requestAnimationFrame + CSS Transform (GPU).
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -64,107 +62,152 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     
     // Internal State Refs (Mutable, no re-renders)
     const isDragging = useRef(false);
-    const lastRenderedPos = useRef(0);
-    const lastTrackId = useRef<string | null>(null);
     
-    // The "Anchor" - The last verified truth from the server
-    const anchor = useRef({
-        position: 0,
-        time: 0,
-        paused: true
+    // STATE MACHINE for Interpolation
+    const machine = useRef({
+        duration: 0,
+        
+        // The last verified point
+        anchorPosition: 0,
+        anchorTime: 0, // performance.now()
+        
+        // Visual state
+        visualPosition: 0,
+        
+        // Playback state
+        isPlaying: false,
+        
+        // Track ID to detect changes
+        trackId: '',
     });
 
-    // --- 1. STATE SYNCHRONIZATION ---
-    // Runs whenever Spotify sends us a new state update
+    // --- 1. SYNC: Receive Data (The Reference) ---
     useEffect(() => {
         if (!state) return;
 
-        const currentId = state.track_window?.current_track?.id;
         const now = performance.now();
+        const m = machine.current;
+        
+        const newTrackId = state.track_window?.current_track?.id || '';
+        const isTrackChange = newTrackId !== m.trackId;
+        const serverPaused = state.paused;
+        const serverPos = state.position;
 
-        // Detect Track Change: Hard Reset
-        if (currentId !== lastTrackId.current) {
-            lastTrackId.current = currentId || null;
-            lastRenderedPos.current = 0;
-            anchor.current = { position: 0, time: now, paused: state.paused };
-            // Instant visual reset
-            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+        m.duration = state.duration;
+        m.trackId = newTrackId;
+
+        if (isTrackChange) {
+            // Hard Reset on track change
+            m.anchorPosition = serverPos;
+            m.anchorTime = now;
+            m.visualPosition = serverPos;
+            m.isPlaying = !serverPaused;
+            // Force immediate update to 0 to avoid visual glitch
+            if (progressFillRef.current) {
+                progressFillRef.current.style.transform = `translateX(-100%)`;
+            }
             return;
         }
 
-        // Detect Seek: Large Jump Check (> 1000ms difference)
-        // If the new position is wildly different from our projection, it's a user seek.
-        // We allow the jump in this specific case.
-        const projected = anchor.current.paused 
-            ? anchor.current.position 
-            : anchor.current.position + (now - anchor.current.time);
-        
-        const delta = Math.abs(state.position - projected);
-        
-        if (delta > 2000) {
-            // User sought (or massive lag spike) -> Force update anchor and visual
-            anchor.current = { position: state.position, time: now, paused: state.paused };
-            lastRenderedPos.current = state.position; 
+        if (serverPaused) {
+            // PAUSE LOGIC: "Anti-Snapback"
+            if (m.isPlaying) {
+                // Transitioning Playing -> Paused
+                // We trust our local visual position MORE than the lagged server position
+                // UNLESS the server says we are way far off (seek)
+                const drift = Math.abs(serverPos - m.visualPosition);
+                
+                if (drift > 2000) {
+                    // It was a seek, jump to server
+                    m.visualPosition = serverPos;
+                } else {
+                    // It was just a pause command. 
+                    // FREEZE at current visual pos. Ignore server "lagged" pos.
+                    // m.visualPosition remains as is.
+                }
+            } else {
+                // Already paused. If server sends update, accept it if it's a seek.
+                // Otherwise ignore small jitter.
+                const drift = Math.abs(serverPos - m.visualPosition);
+                if (drift > 500) {
+                    m.visualPosition = serverPos;
+                }
+            }
+            m.isPlaying = false;
+            m.anchorPosition = m.visualPosition; // Re-anchor to visual
+            m.anchorTime = now;
         } else {
-            // Regular Update: Update the anchor, but respect visual continuity later
-            // We update the anchor to keep the "slope" accurate, but the loop handles smoothness.
-            anchor.current = { position: state.position, time: now, paused: state.paused };
+            // PLAY LOGIC
+            if (!m.isPlaying) {
+                // Transition Paused -> Playing
+                // Resume from where we are visibly, or server if far?
+                // Usually server is authoritative on resume start
+                const drift = Math.abs(serverPos - m.visualPosition);
+                if (drift > 1000) {
+                    m.visualPosition = serverPos;
+                }
+                m.anchorPosition = m.visualPosition;
+                m.anchorTime = now;
+            } else {
+                // Already Playing: Continuous Sync
+                // Calculate drift
+                const expected = m.anchorPosition + (now - m.anchorTime);
+                const actualServer = serverPos; 
+                // Note: Server pos is also stale by RTT.
+                // We generally trust our local projection unless it drifts massively.
+                
+                const drift = Math.abs(actualServer - expected);
+                
+                // Only re-anchor if drift is huge (Seek or Lag spike)
+                // Otherwise, let the smooth local clock run.
+                if (drift > 2000) {
+                    m.anchorPosition = serverPos;
+                    m.anchorTime = now;
+                    m.visualPosition = serverPos; // Hard correction
+                }
+                // Else: Do nothing. Keep projected from old anchor.
+            }
+            m.isPlaying = true;
         }
 
     }, [state]);
 
-    // --- 2. ANIMATION LOOP ---
-    // Runs at 60fps/120fps independent of React
+    // --- 2. ENGINE: Update Loop (The Butter) ---
     useEffect(() => {
         let rafId: number;
 
         const loop = () => {
-            if (!state || !progressFillRef.current || isDragging.current) {
-                rafId = requestAnimationFrame(loop);
-                return;
-            }
+            rafId = requestAnimationFrame(loop);
+            
+            if (isDragging.current || !progressFillRef.current) return;
 
+            const m = machine.current;
             const now = performance.now();
-            let targetPos = 0;
 
-            if (anchor.current.paused) {
-                // If paused, stay at anchor.
-                targetPos = anchor.current.position;
-            } else {
-                // If playing, extrapolate: Anchor Position + Time Elapsed since Anchor
-                const elapsed = now - anchor.current.time;
-                targetPos = anchor.current.position + elapsed;
+            if (m.isPlaying) {
+                const delta = now - m.anchorTime;
+                m.visualPosition = m.anchorPosition + delta;
             }
-
-            // --- MONOTONICITY GUARD ---
-            // If playing, NEVER go backwards visually unless a seek happened (handled in useEffect).
-            // This absorbs network jitter where the server might report a position slightly behind 
-            // where we animated to.
-            if (!anchor.current.paused) {
-                if (targetPos < lastRenderedPos.current) {
-                    targetPos = lastRenderedPos.current;
-                }
-            }
+            // If paused, m.visualPosition is static.
 
             // Clamp
-            if (targetPos > state.duration) targetPos = state.duration;
-            if (targetPos < 0) targetPos = 0;
+            if (m.visualPosition > m.duration) m.visualPosition = m.duration;
+            if (m.visualPosition < 0) m.visualPosition = 0;
 
-            // Commit
-            lastRenderedPos.current = targetPos;
-
-            // Render
-            const percent = state.duration > 0 ? (targetPos / state.duration) * 100 : 0;
-            progressFillRef.current.style.width = `${percent}%`;
-
-            rafId = requestAnimationFrame(loop);
+            // Render transform
+            const percent = m.duration > 0 ? (m.visualPosition / m.duration) * 100 : 0;
+            // Use translateX(-100% ... 0%) for performance
+            // 0% progress = translateX(-100%)
+            // 100% progress = translateX(0%)
+            const translateVal = percent - 100;
+            progressFillRef.current.style.transform = `translateX(${translateVal}%)`;
         };
 
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, [state?.duration]); // Only recreate loop if duration changes (rare)
+    }, []);
 
-    // --- 3. INTERACTION HANDLERS ---
+    // --- 3. INPUT: Interaction ---
     const calculateSeekPosition = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -175,12 +218,10 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const handleMouseDown = (e: React.MouseEvent) => {
         isDragging.current = true;
         if (progressFillRef.current) {
-            progressFillRef.current.style.transition = 'none';
+            // Immediate visual feedback without loop lag
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
-            progressFillRef.current.style.width = `${percent}%`;
-            // Immediately update our internal trackers so it doesn't jump back on mouse up
-            lastRenderedPos.current = newPos; 
+            progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
         }
     };
 
@@ -189,8 +230,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             if (!isDragging.current || !progressFillRef.current) return;
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
-            progressFillRef.current.style.width = `${percent}%`;
-            lastRenderedPos.current = newPos;
+            progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
@@ -199,14 +239,13 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             const finalPos = calculateSeekPosition(e.clientX);
             
-            // Force the anchor to here immediately to prevent fighting
-            anchor.current = { 
-                position: finalPos, 
-                time: performance.now(), 
-                paused: state?.paused ?? true 
-            };
-            lastRenderedPos.current = finalPos;
-
+            // Update Engine State IMMEDIATELY
+            const m = machine.current;
+            m.visualPosition = finalPos;
+            m.anchorPosition = finalPos;
+            m.anchorTime = performance.now();
+            
+            // Execute Seek
             seek(finalPos);
         };
 
@@ -221,17 +260,22 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     return (
         <div
             ref={progressBarRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible touch-none"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-hidden touch-none"
             onMouseDown={handleMouseDown}
+            style={{ transform: 'translateZ(0)' }} // Promote to GPU layer
         >
             <div 
                 ref={progressFillRef}
-                className="h-full rounded-full bg-[var(--progress-fill)] relative"
-                style={{ width: '0%', transition: 'none' }} // Transition handled by JS loop
+                className="h-full w-full bg-[var(--progress-fill)] relative will-change-transform"
+                style={{ 
+                    width: '100%',
+                    transform: 'translateX(-100%)', 
+                    transition: 'none' // Absolute control via JS
+                }} 
             >
+                 {/* Thumb anchored to the right edge of the filling bar */}
                  <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm"
-                    style={{ transform: 'translateY(-50%)' }} 
+                    className="absolute top-1/2 right-0 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm translate-x-1.5 -translate-y-1/2"
                 />
             </div>
         </div>
