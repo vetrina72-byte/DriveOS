@@ -5,7 +5,7 @@ import { getSessionId } from '../lib/sessionId';
 import { SpotifyItem } from '../components/PlaylistItem';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice, NowPlayingState } from '../types';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
-import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalLib, safePlay, getDeviceId, seekLocal, activatePlayer } from '../lib/spotify-player';
+import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalLib, safePlay, getDeviceId, seekLocal, activatePlayer, getPlayerInstance } from '../lib/spotify-player';
 
 // Types
 export interface SpotifyUser {
@@ -46,7 +46,7 @@ interface AuthContextType extends AuthState {
     setVolumeFinal: (vol: number) => void;
     play: (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => Promise<void>;
     pauseSpotify: () => Promise<void>;
-    seek: (position_ms: number) => Promise<void>; // Added seek
+    seek: (position_ms: number) => Promise<void>;
     playYouTube: (track: YouTubeTrackInfo, context?: YouTubeTrackInfo[]) => void;
     
     // Data
@@ -145,7 +145,6 @@ const mapApiPlaybackToState = (data: any): SpotifyPlayerState | null => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, setState] = useState<AuthState>(initialAuthState);
     
-    // --- SYNCHRONOUS HYDRATION (Cold Start Fix) ---
     const [nowPlaying, setNowPlaying] = useState<NowPlayingState>(() => {
         try {
             const saved = localStorage.getItem('last_played_track');
@@ -168,16 +167,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const sessionIdRef = useRef<string>(getSessionId());
 
-    // FAST POLLING REFS
     const fastPollingIntervalRef = useRef<number | null>(null);
     const fastPollingTimeoutRef = useRef<number | null>(null);
-
-    // --- INTERACTION LOCK REFS ---
-    // When we perform an action (Play/Pause/Seek), we lock the state for X seconds.
-    // During this time, we IGNORE polling updates to prevent "flickering" or "rubber-banding".
     const interactionLockEnd = useRef<number>(0);
 
-    // Home Content State
     const [homeContentLoading, setHomeContentLoading] = useState(false);
     const [homeContentError, setHomeContentError] = useState<string | null>(null);
     const [homeContentFetched, setHomeContentFetched] = useState(false);
@@ -200,7 +193,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
     const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
 
-    // Helpers
     const fetchUserInfo = useCallback(async (): Promise<SpotifyUser | null> => {
         try {
             const { data } = await apiClient.get('/me');
@@ -277,7 +269,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRefreshTrigger(prev => prev + 1);
     }, []);
 
-    // Init Effect
     useEffect(() => {
         const initFromStorage = async () => {
             const token = localStorage.getItem('accessToken');
@@ -315,7 +306,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         initFromStorage();
     }, [fetchUserInfo, logout, attemptRefreshAndUpdatePlayerToken]);
 
-    // --- PROACTIVE REFRESH POLLING ---
     useEffect(() => {
         if (!state.isAuthenticated || !state.expiresAt || !state.accessToken) return;
 
@@ -358,19 +348,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setState(s => ({ ...s, error: null }));
     }, []);
 
-    // --- REUSABLE SYNC LOGIC ---
     const syncWithRealServerState = useCallback(async () => {
         if (!state.isAuthenticated) return;
         try {
             const { data } = await apiClient.get('/me/player');
             
             if (data && data.item) {
-                // --- INTERACTION LOCK CHECK ---
-                // If the user recently interacted (Play/Pause/Seek), we IGNORE server updates
-                // for 2 seconds to prevent the UI from "flickering" back to the old state.
                 if (Date.now() < interactionLockEnd.current) {
-                    // We are locked. Do not update state from server.
-                    // This allows our optimistic UI to persist until the server catches up.
                     return; 
                 }
 
@@ -378,7 +362,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 
                 if (mappedState) {
                     setNowPlaying(prev => {
-                        // Prevent UI stutter: Only update if something changed
                         if (prev.spotifyState && 
                             prev.spotifyState.position === mappedState.position && 
                             prev.spotifyState.paused === mappedState.paused &&
@@ -403,7 +386,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     return;
                 }
             } else if (data === '' || (data && !data.item)) {
-                // If API returns nothing, maybe paused or empty.
                 if (Date.now() < interactionLockEnd.current) return;
 
                 setNowPlaying(prev => {
@@ -418,33 +400,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [state.isAuthenticated]);
 
-    // --- TURBO POLLING TRIGGER ---
     const triggerFastPolling = useCallback(() => {
-        // Clear existing
         if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
         if (fastPollingTimeoutRef.current) clearTimeout(fastPollingTimeoutRef.current);
 
-        // We do NOT sync immediately here if we just set a lock in the calling function.
-        // The polling loop will handle checking the lock.
-
-        // Phase 1: Turbo (500ms) for the first 2.5 seconds
         fastPollingIntervalRef.current = window.setInterval(syncWithRealServerState, 500);
 
-        // Phase 2: Slow down to 1500ms after 2.5s
         fastPollingTimeoutRef.current = window.setTimeout(() => {
             if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
-            
             fastPollingIntervalRef.current = window.setInterval(syncWithRealServerState, 1500);
             
-            // Phase 3: Stop completely after 10s total
             fastPollingTimeoutRef.current = window.setTimeout(() => {
                 if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
                 fastPollingIntervalRef.current = null;
-            }, 7500); // 2.5 + 7.5 = 10s total
+            }, 7500);
         }, 2500);
     }, [syncWithRealServerState]);
 
-    // Regular slow polling
     useEffect(() => {
         if (!state.isAuthenticated) return;
         syncWithRealServerState();
@@ -452,8 +424,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => clearInterval(interval);
     }, [state.isAuthenticated, syncWithRealServerState]);
 
-
-    // Player Logic
     useEffect(() => {
         if (!state.isAuthenticated || !state.accessToken) return;
 
@@ -477,10 +447,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             onNotReady: () => setIsPlayerReady(false),
             onStateChange: (playerState) => {
                 if (playerState) {
-                    // The SDK local state is usually instant, so we trust it more than the REST API.
-                    // However, we still respect the lock if we initiated a remote command that hasn't propagated yet.
                     if (Date.now() < interactionLockEnd.current) {
-                        // We assume the SDK is correct for local updates
+                        // Trust local SDK state even during locks if it matches recent interactions
                     }
 
                     setNowPlaying(prev => {
@@ -507,20 +475,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [state.isAuthenticated, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
-        // --- LOCK POLLING ---
-        interactionLockEnd.current = Date.now() + 2000; // Lock for 2s
+        // LOCK for 2 seconds to prevent server polling from reverting UI
+        interactionLockEnd.current = Date.now() + 2000; 
 
-        // Check if we are taking control locally
         const localId = getDeviceId();
         const isTargetingLocal = !nowPlaying.activeDevice && localId;
 
-        // --- FAST STARTUP OPTIMIZATION ---
-        // If we are targeting local but it's not active, wake it up immediately
-        if (isTargetingLocal) {
+        // INSTANT LOCAL RESUME: If we have a local player, resume it directly via SDK
+        // This cuts latency dramatically compared to waiting for the REST API roundtrip.
+        const player = getPlayerInstance();
+        if (localId && player) {
+            // Activate element helps browsers that block autoplay
             activatePlayer(); 
+            // If just resuming (no new tracks), use SDK directly
+            if (!options.uris && !options.context_uri) {
+                player.resume().catch(e => console.warn("Local resume failed", e));
+            }
         }
 
-        // --- OPTIMISTIC UI UPDATE ---
         setNowPlaying(s => {
             const optimisticDevice = isTargetingLocal ? {
                 id: localId!,
@@ -558,7 +530,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     next_tracks: [],
                     previous_tracks: []
                 },
-                timestamp: Date.now()
+                timestamp: Date.now() // KEY FIX: Set strictly to NOW
             } : null;
 
             const currentState = s.spotifyState;
@@ -566,8 +538,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ? { 
                     ...currentState, 
                     paused: false, 
-                    timestamp: Date.now(),
-                    ...(itemForOptimisticUpdate ? { track_window: fakeState!.track_window } : {})
+                    timestamp: Date.now(), // KEY FIX: Update timestamp on resume
+                    ...(itemForOptimisticUpdate ? { track_window: fakeState!.track_window, position: 0 } : {})
                   } 
                 : fakeState;
 
@@ -600,20 +572,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
         } catch (e) {
             console.error("Play failed", e);
-            // Revert state if failed
             setNowPlaying(s => s.spotifyState ? { ...s, spotifyState: { ...s.spotifyState, paused: true } } : s);
-            interactionLockEnd.current = 0; // Clear lock
+            interactionLockEnd.current = 0; 
         }
     }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice, triggerFastPolling]);
 
     const pauseSpotify = useCallback(async () => {
-        // --- LOCK POLLING ---
         interactionLockEnd.current = Date.now() + 2000;
+
+        // INSTANT LOCAL PAUSE
+        const localId = getDeviceId();
+        const player = getPlayerInstance();
+        if (localId && player) {
+            player.pause().catch(e => console.warn("Local pause failed", e));
+        }
 
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
-                // Freeze position visually to prevent "jump"
-                const frozenPosition = s.spotifyState.position;
+                // CRITICAL FIX: Calculate the projected position based on time elapsed since last timestamp.
+                // This stops the bar exactly where the user sees it, instead of jumping back to the old server value.
+                const elapsed = Date.now() - s.spotifyState.timestamp;
+                const frozenPosition = Math.min(s.spotifyState.position + elapsed, s.spotifyState.duration);
                 
                 return {
                     ...s,
@@ -636,10 +615,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [triggerFastPolling]);
 
     const seek = useCallback(async (position_ms: number) => {
-        // --- LOCK POLLING ---
         interactionLockEnd.current = Date.now() + 2000;
 
-        // Optimistic Update
         setNowPlaying(s => {
             if (s.spotifyState) {
                 return {
@@ -656,16 +633,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         triggerFastPolling();
 
-        // Check if we can use the local player SDK for instant seeking
         const localId = getDeviceId();
         const isLocalActive = nowPlaying.activeDevice?.id === localId;
 
         try {
             if (isLocalActive) {
-                // FAST: Use Web Socket
                 await seekLocal(position_ms);
             } else {
-                // SLOW: Use REST API
                 await apiClient.put(`/me/player/seek?position_ms=${position_ms}`);
             }
         } catch (e) { console.error(e); }
@@ -683,7 +657,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
     }, []);
 
-    // Home Data Fetching (Simplified)
     const triggerHomeContentFetch = useCallback(async () => {
         if (homeContentFetched || homeContentLoading || !state.isAuthenticated) return;
         setHomeContentLoading(true);

@@ -48,111 +48,65 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - FLUID LERP ENGINE (v17)
+ * SPOTIFY PROGRESS BAR - DETERMINISTIC RENDERER (v18)
  * 
  * Logic:
- * 1. Immediate Response: Starts moving instantly when paused=false.
- * 2. No Jumps: Uses linear interpolation to smooth out server corrections.
- * 3. Pause Lock: Instantly freezes on pause to prevent "rubber banding".
+ * 1. Strictly relies on `state.position` + `(Date.now() - state.timestamp)` when playing.
+ * 2. Strictly relies on `state.position` when paused (calculated as frozen in AuthContext).
+ * 3. Does NOT maintain internal drifting state, preventing jump-backs.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
-
-    // The single source of truth for the visual slider position
-    const currentVisualPosition = useRef<number>(state?.position || 0);
     
-    const lastFrameTime = useRef<number>(performance.now());
-    const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
+    // Use a ref to track the last rendered width to apply slight smoothing
+    const currentWidthPercent = useRef(0);
 
-    // --- 1. SYNC & RESET LOGIC ---
-    useEffect(() => {
-        if (!state) return;
+    const updateProgressBar = useCallback(() => {
+        if (!progressFillRef.current || isDraggingRef.current || !state) return;
 
-        const currentTrackId = state.track_window?.current_track?.id;
-        const serverPos = state.position;
-        const isPaused = state.paused;
+        const duration = state.duration;
+        let position = state.position;
 
-        // A. TRACK CHANGE -> HARD RESET
-        // We detect track change by ID. We must reset instantly to 0 to avoid showing old song's progress.
-        if (currentTrackId !== lastTrackIdRef.current) {
-            lastTrackIdRef.current = currentTrackId || null;
-            currentVisualPosition.current = 0;
-            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
-            return;
+        if (!state.paused) {
+            // Calculate elapsed time since the state timestamp
+            const elapsed = Date.now() - state.timestamp;
+            position += elapsed;
         }
 
-        // B. PAUSE STATE -> SNAP TO ACCURACY
-        // If paused, we trust the server, BUT we check if the visual drift is massive.
-        if (isPaused) {
-            // Simply update the ref. The loop will stop adding delta time.
-            // We do a soft snap: if we are close, just stay there to prevent jitter.
-            // If we are far (e.g. user sought while paused), snap.
-            const drift = Math.abs(currentVisualPosition.current - serverPos);
-            if (drift > 500) {
-                currentVisualPosition.current = serverPos;
-            }
-        } 
-        else {
-            // C. PLAYING STATE -> DRIFT CORRECTION
-            // If playing, we normally drive via local clock.
-            // However, if local clock drifts too far from server (> 2s), we nudge it.
-            // We do NOT snap instantly unless the drift is huge (> 5s), to avoid visual stutter.
-            const drift = currentVisualPosition.current - serverPos; // Positive = we are ahead
-            
-            if (Math.abs(drift) > 5000) {
-                // Huge drift? Hard snap.
-                currentVisualPosition.current = serverPos;
-            } else if (Math.abs(drift) > 1500) {
-                // Moderate drift? Gently correct by adjusting the current position slightly towards server.
-                // We do this by simply resetting to serverPos, the animation loop handles the rest.
-                currentVisualPosition.current = serverPos;
-            }
-        }
+        // Clamp
+        if (position > duration) position = duration;
+        if (position < 0) position = 0;
+
+        // Visual Grace Period for Cold Starts:
+        // If we just started playing (pos close to 0) but audio hasn't "really" started 
+        // (implied by very small position despite elapsed time), keeps it at 0 to avoid
+        // "running ahead" of the silence.
+        // However, user requested "Immediate response", so we allow it to move.
+        // The jump back happens if server returns 0 after we moved. 
+        // AuthContext interaction lock prevents that server update from reaching here.
+
+        const percent = duration > 0 ? (position / duration) * 100 : 0;
+        
+        // Apply immediate update (no lerp lag) to feel responsive
+        progressFillRef.current.style.width = `${percent}%`;
+        currentWidthPercent.current = percent;
+
     }, [state]);
 
-    // --- 2. ANIMATION LOOP ---
+    // Animation Loop
     useEffect(() => {
         let rafId: number;
-
-        const loop = (now: number) => {
-            const dt = now - lastFrameTime.current;
-            lastFrameTime.current = now;
-
-            if (!progressFillRef.current || isDraggingRef.current || !state) {
-                rafId = requestAnimationFrame(loop);
-                return;
-            }
-
-            // ONLY increment time if playing.
-            // Crucial: We trust 'state.paused' completely for the "motion".
-            if (!state.paused) {
-                currentVisualPosition.current += dt;
-            }
-
-            const duration = state.duration;
-            if (duration > 0) {
-                // Clamp
-                if (currentVisualPosition.current > duration) currentVisualPosition.current = duration;
-                if (currentVisualPosition.current < 0) currentVisualPosition.current = 0;
-
-                const percent = (currentVisualPosition.current / duration) * 100;
-                progressFillRef.current.style.width = `${percent}%`;
-            } else {
-                progressFillRef.current.style.width = `0%`;
-            }
-
+        const loop = () => {
+            updateProgressBar();
             rafId = requestAnimationFrame(loop);
         };
-
-        lastFrameTime.current = performance.now();
-        rafId = requestAnimationFrame(loop);
+        loop();
         return () => cancelAnimationFrame(rafId);
-    }, [state?.paused, state?.duration]);
+    }, [updateProgressBar]);
 
-    // --- 3. DRAG HANDLERS ---
     const calculateSeekPosition = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -167,9 +121,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
-            
-            // Visual feedback immediate
-            currentVisualPosition.current = newPos;
         }
     };
 
@@ -179,7 +130,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
-            currentVisualPosition.current = newPos;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
@@ -187,9 +137,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             isDraggingRef.current = false;
             
             const finalPos = calculateSeekPosition(e.clientX);
-            currentVisualPosition.current = finalPos; 
-            
-            // Use the centralized seek function which applies interaction locking
             seek(finalPos);
         };
 
