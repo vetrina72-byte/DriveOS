@@ -55,7 +55,8 @@ interface MusicPlayerProps {
  * 2. No Jumps: Uses linear interpolation to smooth out server corrections.
  * 3. Pause Lock: Instantly freezes on pause to prevent "rubber banding".
  */
-const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
+const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
+    const { seek } = useAuth();
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
@@ -188,9 +189,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const finalPos = calculateSeekPosition(e.clientX);
             currentVisualPosition.current = finalPos; 
             
-            if (player) {
-                player.seek(finalPos).catch(console.error);
-            }
+            // Use the centralized seek function which applies interaction locking
+            seek(finalPos);
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -199,7 +199,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [player, state?.duration]);
+    }, [seek, state?.duration]);
 
     return (
         <div
@@ -821,7 +821,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                         
                         {/* NEW ABSOLUTE TIME BAR */}
-                        <SpotifyProgressBar player={player} state={playerState} />
+                        <SpotifyProgressBar state={playerState} />
                         
                         <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                              <div className="flex-1 flex justify-start"></div>
