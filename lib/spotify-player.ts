@@ -236,7 +236,7 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
             // Force transfer to this ID explicitly
             const transferRes = await fetch('/api/transfer-player', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
                 body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
             });
 
@@ -257,7 +257,7 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
                         
                         await fetch('/api/transfer-player', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
                             body: JSON.stringify({ sessionId, device_id: newId })
                         });
                         

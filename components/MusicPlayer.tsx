@@ -15,7 +15,7 @@ import {
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
-import type { RadioStation, YouTubeTrackInfo, SpotifyDevice, NowPlayingState } from '../types';
+import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
@@ -48,114 +48,105 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - PRECISE SYNC EDITION (v14)
- * Fixes: Prevents bar from moving if audio is buffering at 0:00.
- * Eliminates "jump back" effect by strictly clamping extrapolation when near start.
+ * SPOTIFY PROGRESS BAR - HYBRID OPTIMISTIC CLOCK (v15)
+ * 
+ * Logic:
+ * 1. Visual updates are driven PURELY by requestAnimationFrame + local delta time.
+ * 2. Server updates (`state.position`) are only used to "nudge" the local time if drift > 1500ms.
+ * 3. Crucially: If state.position is 0 but we are 'paused: false', we IGNORE the 0 and keep predicting.
+ *    This solves the "stuck at zero" bug while buffering.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
 
-    // --- DEAD RECKONING STATE ---
-    const lastServerPosRef = useRef<number>(0);
-    const lastServerTimeRef = useRef<number>(0);
-    const lastTrackIdRef = useRef<string | null>(null);
-    const isBufferingRef = useRef<boolean>(true); 
+    // VISUAL TRUTH: This ref holds the exact millisecond we are displaying.
+    // It is decoupled from state.position to allow smooth interpolation.
+    const currentVisualPosition = useRef<number>(state?.position || 0);
+    const lastFrameTime = useRef<number>(performance.now());
+    const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
 
-    // --- 1. SYNC LOGIC ---
+    // --- 1. SYNC WITH SERVER STATE ---
     useEffect(() => {
         if (!state) return;
 
-        const now = performance.now();
+        const currentTrackId = state.track_window?.current_track?.id;
         const serverPos = state.position;
-        const trackId = state.track_window?.current_track?.id;
         const isPaused = state.paused;
-        
+
         // A. TRACK CHANGE -> HARD RESET
-        if (trackId !== lastTrackIdRef.current) {
-            lastTrackIdRef.current = trackId || null;
-            lastServerPosRef.current = 0;
-            lastServerTimeRef.current = now;
-            isBufferingRef.current = true; // Lock bar at 0 immediately on track change
-            
-            // Force visual update immediately to 0
+        if (currentTrackId !== lastTrackIdRef.current) {
+            lastTrackIdRef.current = currentTrackId || null;
+            currentVisualPosition.current = 0;
+            // Immediate visual reset
             if (progressFillRef.current) progressFillRef.current.style.width = '0%';
-            return;
+            // Don't return, let the rest of logic run to start animation if needed
         }
 
-        // B. STATE UPDATE
-        // If we receive a position of 0 while playing, we are definitely buffering or just started.
-        // We DO NOT want to extrapolate from 0, or we will jump back when real data comes.
-        if (!isPaused && serverPos === 0) {
-            isBufferingRef.current = true;
-            lastServerPosRef.current = 0;
-            lastServerTimeRef.current = now;
-        } 
-        else if (!isPaused && serverPos > 0) {
-            // We have real progress. Unlock buffering.
-            isBufferingRef.current = false;
+        // B. SYNC CHECK
+        const drift = Math.abs(currentVisualPosition.current - serverPos);
+
+        if (isPaused) {
+            // If paused, strictly trust the server.
+            currentVisualPosition.current = serverPos;
+        } else {
+            // If playing...
             
-            // Calculate expected position based on previous frame
-            // const expectedPos = lastServerPosRef.current + (now - lastServerTimeRef.current);
-            // const drift = Math.abs(expectedPos - serverPos);
+            // Check for "False Zero" (Buffering): Server says 0, but we are playing.
+            // If we have already advanced locally (e.g. < 5s), ignore the 0 from server.
+            const isFalseZero = serverPos === 0 && currentVisualPosition.current > 0 && currentVisualPosition.current < 5000;
 
-            // Always sync on server update to stay accurate, 
-            // but the animation loop handles smoothness between these updates.
-            lastServerPosRef.current = serverPos;
-            lastServerTimeRef.current = now;
-        } 
-        else if (isPaused) {
-            isBufferingRef.current = false;
-            lastServerPosRef.current = serverPos;
-            lastServerTimeRef.current = now;
+            if (drift > 1500 && !isFalseZero) {
+                // If drift is significant (seek, or heavy lag), snap to server position.
+                // This "rubber bands" only if really necessary.
+                currentVisualPosition.current = serverPos;
+            }
+            // If drift is small (< 1.5s), we IGNORE the server update and keep our smooth local time.
+            // This prevents the bar from jumping back/forth due to network latency.
         }
+    }, [state]); // Only re-run when we get a new snapshot from Spotify
 
-    }, [state]); 
-
-    // --- 2. ANIMATION LOOP ---
+    // --- 2. ANIMATION LOOP (THE ENGINE) ---
     useEffect(() => {
         let rafId: number;
 
-        const loop = () => {
+        const loop = (now: number) => {
+            // Calculate delta time since last frame
+            const dt = now - lastFrameTime.current;
+            lastFrameTime.current = now;
+
             if (!progressFillRef.current || isDraggingRef.current || !state) {
                 rafId = requestAnimationFrame(loop);
                 return;
             }
 
+            // Only advance time if playing
+            if (!state.paused) {
+                currentVisualPosition.current += dt;
+            }
+
             const duration = state.duration;
-            if (!duration || duration <= 0) {
-                 progressFillRef.current.style.width = '0%';
-                 rafId = requestAnimationFrame(loop);
-                 return;
+            if (duration > 0) {
+                // Clamp position
+                if (currentVisualPosition.current > duration) currentVisualPosition.current = duration;
+                if (currentVisualPosition.current < 0) currentVisualPosition.current = 0;
+
+                // Render percentage
+                const percent = (currentVisualPosition.current / duration) * 100;
+                progressFillRef.current.style.width = `${percent}%`;
+            } else {
+                progressFillRef.current.style.width = `0%`;
             }
-
-            // CRITICAL FIX: If buffering (pos 0 and playing), FORCE 0 visual state.
-            // Do NOT extrapolate time.
-            if (isBufferingRef.current && !state.paused) {
-                progressFillRef.current.style.width = '0%';
-                rafId = requestAnimationFrame(loop);
-                return;
-            }
-
-            let currentPos = lastServerPosRef.current;
-
-            // Only extrapolate if playing and NOT buffering
-            if (!state.paused && !isBufferingRef.current) {
-                const now = performance.now();
-                currentPos += (now - lastServerTimeRef.current);
-            }
-
-            // Clamping
-            const percent = Math.min(100, Math.max(0, (currentPos / duration) * 100));
-            progressFillRef.current.style.width = `${percent}%`;
 
             rafId = requestAnimationFrame(loop);
         };
 
+        // Reset frame time on mount/update to prevent huge delta jumps
+        lastFrameTime.current = performance.now();
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, [state]); // Re-bind when state object reference changes to ensure freshness
+    }, [state?.paused, state?.duration]); // Re-bind if play state changes to restart loop cleanly
 
     // --- 3. DRAG HANDLERS ---
     const calculateSeekPosition = (clientX: number) => {
@@ -172,6 +163,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
+            
+            // Update local ref immediately so it feels responsive
+            currentVisualPosition.current = newPos;
         }
     };
 
@@ -181,6 +175,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
+            currentVisualPosition.current = newPos;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
@@ -188,13 +183,9 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             isDraggingRef.current = false;
             
             const finalPos = calculateSeekPosition(e.clientX);
+            currentVisualPosition.current = finalPos; // Commit seek
             
             if (player) {
-                // Optimistically unlock buffering on seek so UI moves immediately
-                isBufferingRef.current = false;
-                lastServerPosRef.current = finalPos;
-                lastServerTimeRef.current = performance.now();
-                
                 player.seek(finalPos).catch(console.error);
             }
         };
@@ -529,7 +520,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
 
     const player = getPlayerInstance();
-    const localDeviceId = getDeviceId(); // FIX: Retrieve local device ID
+    const localDeviceId = getDeviceId(); 
 
     // Logic to determine if the local player is truly the one making sound
     // We check if the active device reported by API matches our local device ID.

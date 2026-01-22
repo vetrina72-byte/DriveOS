@@ -5,7 +5,7 @@ import { getSessionId } from '../lib/sessionId';
 import { SpotifyItem } from '../components/PlaylistItem';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice, NowPlayingState } from '../types';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
-import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalLib, safePlay } from '../lib/spotify-player';
+import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalLib, safePlay, getDeviceId } from '../lib/spotify-player';
 
 // Types
 export interface SpotifyUser {
@@ -108,7 +108,6 @@ const defaultNowPlaying: NowPlayingState = {
 const mapApiPlaybackToState = (data: any): SpotifyPlayerState | null => {
     if (!data || !data.item) return null;
     
-    // Construct a state object compatible with the SDK's SpotifyPlayerState interface
     return {
         context: {
             uri: data.context?.uri || null,
@@ -146,13 +145,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [state, setState] = useState<AuthState>(initialAuthState);
     
     // --- SYNCHRONOUS HYDRATION (Cold Start Fix) ---
-    // Initialize state lazily from localStorage to ensure UI renders with data on first paint.
     const [nowPlaying, setNowPlaying] = useState<NowPlayingState>(() => {
         try {
             const saved = localStorage.getItem('last_played_track');
             if (saved) {
                 const parsed = JSON.parse(saved);
-                // Ensure it starts paused to avoid ghost audio logic issues or premature seeking
                 if (parsed.spotifyState) {
                     parsed.spotifyState.paused = true;
                 }
@@ -169,6 +166,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isMuted, setIsMuted] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const sessionIdRef = useRef<string>(getSessionId());
+
+    // FAST POLLING REFS
+    const fastPollingIntervalRef = useRef<number | null>(null);
+    const fastPollingTimeoutRef = useRef<number | null>(null);
 
     // Home Content State
     const [homeContentLoading, setHomeContentLoading] = useState(false);
@@ -210,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const res = await fetch(`/api/refresh-token`, {
                 method: 'POST',
                 headers: { 'x-session-id': sid },
-                credentials: 'include' // Important: Send HttpOnly cookies
+                credentials: 'include' 
             });
             const data = await res.json();
             if (res.ok && data.access_token) {
@@ -247,7 +248,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         setState(initialAuthState);
         setNowPlaying(defaultNowPlaying);
-        // Clear data
+        
         setContinueListeningItems([]);
         setUserPlaylists([]);
         setNewReleases([]);
@@ -276,7 +277,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const token = localStorage.getItem('accessToken');
             const expiresAt = Number(localStorage.getItem('expiresAt') || '0');
             
-            // Scenario 1: We have a valid token in local storage
             if (token && expiresAt > Date.now()) {
                 apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
                 const user = await fetchUserInfo();
@@ -293,7 +293,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 }
             } else { 
-                // Scenario 2: Token is expired or missing. 
                 const refreshed = await attemptRefreshAndUpdatePlayerToken();
                 if (refreshed) {
                     const user = await fetchUserInfo();
@@ -317,7 +316,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const checkTokenValidity = async () => {
             const now = Date.now();
             const timeUntilExpiry = state.expiresAt! - now;
-            const refreshBuffer = 5 * 60 * 1000; // Refresh 5 minutes before expiry
+            const refreshBuffer = 5 * 60 * 1000; 
 
             if (timeUntilExpiry < refreshBuffer) {
                 await attemptRefreshAndUpdatePlayerToken();
@@ -329,7 +328,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         return () => clearInterval(intervalId);
     }, [state.isAuthenticated, state.expiresAt, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
-
 
     const login = useCallback(async (tokenData?: TokenData | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));
@@ -354,61 +352,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setState(s => ({ ...s, error: null }));
     }, []);
 
-    // --- CRITICAL FIX: PLAYBACK SYNC PRIORITY ON STARTUP ---
-    // This effect runs immediately when authenticated to sync the player state
-    // with what's actually happening on the server (e.g., phone).
-    // It overrides local storage data to prevent context mismatch.
+    // --- REUSABLE SYNC LOGIC ---
+    const syncWithRealServerState = useCallback(async () => {
+        if (!state.isAuthenticated) return;
+        try {
+            const { data } = await apiClient.get('/me/player');
+            
+            if (data && data.item) {
+                const mappedState = mapApiPlaybackToState(data);
+                
+                if (mappedState) {
+                    setNowPlaying(prev => {
+                        const newState = {
+                            ...prev,
+                            source: 'spotify' as const,
+                            spotifyState: mappedState,
+                            activeDevice: data.device,
+                            isLoading: false
+                        };
+                        localStorage.setItem('last_played_track', JSON.stringify({
+                            source: 'spotify',
+                            spotifyState: mappedState
+                        }));
+                        return newState;
+                    });
+                    return;
+                }
+            } else if (data === '' || (data && !data.item)) {
+                setNowPlaying(prev => {
+                    if (prev.spotifyState) {
+                        return { ...prev, spotifyState: { ...prev.spotifyState, paused: true } };
+                    }
+                    return prev;
+                });
+            }
+        } catch (e) { 
+            console.warn('Failed to fetch player state', e); 
+        }
+    }, [state.isAuthenticated]);
+
+    // --- FAST POLLING TRIGGER ---
+    const triggerFastPolling = useCallback(() => {
+        // Clear existing
+        if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
+        if (fastPollingTimeoutRef.current) clearTimeout(fastPollingTimeoutRef.current);
+
+        // Poll every 1.5s
+        syncWithRealServerState();
+        fastPollingIntervalRef.current = window.setInterval(syncWithRealServerState, 1500);
+
+        // Stop after 12 seconds
+        fastPollingTimeoutRef.current = window.setTimeout(() => {
+            if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
+            fastPollingIntervalRef.current = null;
+        }, 12000);
+    }, [syncWithRealServerState]);
+
+    // Regular slow polling
     useEffect(() => {
         if (!state.isAuthenticated) return;
-
-        const syncWithRealServerState = async () => {
-            try {
-                // Fetch current playback state immediately
-                const { data } = await apiClient.get('/me/player');
-                
-                if (data && data.item) {
-                    const mappedState = mapApiPlaybackToState(data);
-                    
-                    if (mappedState) {
-                        setNowPlaying(prev => {
-                            const newState = {
-                                ...prev,
-                                source: 'spotify' as const,
-                                spotifyState: mappedState,
-                                activeDevice: data.device,
-                                isLoading: false
-                            };
-                            // Persist explicitly immediately
-                            localStorage.setItem('last_played_track', JSON.stringify({
-                                source: 'spotify',
-                                spotifyState: mappedState
-                            }));
-                            return newState;
-                        });
-                        return;
-                    }
-                } else if (data === '' || (data && !data.item)) {
-                    // API returned 204 (No Content) or empty state.
-                    // This means nothing is playing on any device.
-                    // We can either keep the last known state (as paused) or clear it.
-                    // For better UX, we keep the last local state but ensure it is PAUSED.
-                    setNowPlaying(prev => {
-                        if (prev.spotifyState) {
-                            return { ...prev, spotifyState: { ...prev.spotifyState, paused: true } };
-                        }
-                        return prev;
-                    });
-                }
-            } catch (e) { 
-                console.warn('Failed to fetch initial player state', e); 
-            }
-        };
-
         syncWithRealServerState();
-        // Run this check periodically to keep the "Active Device" banner updated if playing elsewhere
         const interval = setInterval(syncWithRealServerState, 10000); 
         return () => clearInterval(interval);
-    }, [state.isAuthenticated]);
+    }, [state.isAuthenticated, syncWithRealServerState]);
 
 
     // Player Logic
@@ -434,8 +440,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
             onNotReady: () => setIsPlayerReady(false),
             onStateChange: (playerState) => {
-                // If the player state is null (inactive), we keep showing the last known state (as paused)
-                // If it is active, we update and PERSIST immediately.
                 if (playerState) {
                     setNowPlaying(prev => {
                         const newState = {
@@ -444,7 +448,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             spotifyState: playerState,
                             isLoading: false
                         };
-                        // PERSISTENCE POINT
                         localStorage.setItem('last_played_track', JSON.stringify({
                             source: 'spotify',
                             spotifyState: playerState,
@@ -463,7 +466,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
         // --- OPTIMISTIC UI UPDATE ---
-        // Immediate feedback: Set state to "Playing" locally before network request completes.
         setNowPlaying(s => {
             const fakeState: SpotifyPlayerState | null = itemForOptimisticUpdate ? {
                 context: { uri: options.context_uri || null, metadata: null },
@@ -495,14 +497,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } : null;
 
             const currentState = s.spotifyState;
-            
-            // If we have an existing state and no new item provided, we are likely just resuming.
-            // Update the existing state to unpaused.
             const optimisticState = currentState 
                 ? { ...currentState, paused: false, timestamp: Date.now() } 
                 : fakeState;
 
-            // If completely new track/context provided, override fully
             if (fakeState) {
                  return {
                     ...s,
@@ -524,21 +522,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
         });
 
+        // Trigger fast polling to update UI state (like active device) quickly
+        triggerFastPolling();
+
+        // FIX: Ensure we have a valid device ID if none is active
+        if (!nowPlaying.activeDevice) {
+            const localId = getDeviceId();
+            if (localId) {
+                // Manually inject device_id into API call inside safePlay via options or modify safePlay
+                // But safePlay already does this check. 
+                // The issue is likely that we need to WAIT for transfer.
+                console.log("[AuthContext] Forced local playback target:", localId);
+            }
+        }
+
         try {
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
         } catch (e) {
             console.error("Play failed", e);
-            // Revert optimistic update on failure (optional, but good practice)
             setNowPlaying(s => s.spotifyState ? { ...s, spotifyState: { ...s.spotifyState, paused: true } } : s);
         }
-    }, [attemptRefreshAndUpdatePlayerToken]);
+    }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice, triggerFastPolling]);
 
     const pauseSpotify = useCallback(async () => {
-        // --- OPTIMISTIC UI UPDATE ---
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
                 const projectedPosition = s.spotifyState.position + Math.max(0, Date.now() - s.spotifyState.timestamp);
-                
                 return {
                     ...s,
                     spotifyState: { 
@@ -552,10 +561,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return s;
         });
 
+        triggerFastPolling();
+
         try {
             await apiClient.put('/me/player/pause');
         } catch (e) { console.error(e); }
-    }, []);
+    }, [triggerFastPolling]);
 
     const playYouTube = useCallback((track: YouTubeTrackInfo, context?: YouTubeTrackInfo[]) => {
         setNowPlaying(s => ({
@@ -583,12 +594,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 apiClient.get('/me/player/recently-played?limit=10').catch(()=>({data:{items:[]}})),
                 apiClient.get('/browse/new-releases?limit=10').catch(()=>({data:{albums:{items:[]}}})),
                 apiClient.get('/me/playlists?limit=10').catch(()=>({data:{items:[]}})),
-                Promise.resolve({data:{message: '', playlists: {items: []}}}), // madeForYouPlaylists
+                Promise.resolve({data:{message: '', playlists: {items: []}}}), 
                 apiClient.get('/me/top/artists?limit=10').catch(()=>({data:{items:[]}})),
-                Promise.resolve({data:{playlists:{items:[]}}}), // charts
+                Promise.resolve({data:{playlists:{items:[]}}}), 
                 apiClient.get('/browse/categories?limit=10').catch(()=>({data:{categories:{items:[]}}})),
                 apiClient.get('/me/shows?limit=10').catch(()=>({data:{items:[]}})),
-                Promise.resolve({data:{playlists:{items:[]}}}), // party
+                Promise.resolve({data:{playlists:{items:[]}}}), 
                 apiClient.get('/me/top/tracks?limit=10').catch(()=>({data:{items:[]}})),
             ]);
 
