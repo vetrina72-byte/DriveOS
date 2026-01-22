@@ -48,174 +48,145 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - "THE BUTTER ENGINE" v23
+ * SPOTIFY PROGRESS BAR - THE ENGINEER'S BUFFER (v30)
  * 
- * Features:
- * 1. Transition Lock: Ignores server jumps for 1.5s after track change.
- * 2. Latency Compensation: Adds ~250ms to server timestamps.
- * 3. Monotonic Pause: Freezes exactly where visually drawn, ignoring stale server data.
- * 4. Fire-and-Forget Seek: Instant visual update, async API call.
+ * Solves:
+ * 1. "Snap Back" on Pause: Freezes visual state immediately on pause command.
+ * 2. "Jumps" on Start: Ignores erratic server updates during track transitions.
+ * 3. Smoothness: Uses GPU transforms and local high-precision timer.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
-    const handleRef = useRef<HTMLDivElement>(null);
+    const thumbRef = useRef<HTMLDivElement>(null);
     
-    // THE ENGINE STATE (Mutable, high-performance)
-    const engine = useRef({
-        // Timing & Anchors
-        duration: 0,
-        anchorTime: 0,      // performance.now() when we last synced
-        anchorPosition: 0,  // The position at anchorTime
-        
-        // Visual State
-        visualPosition: 0,
-        
-        // Logic Flags
-        isPlaying: false,
+    // Internal State Refs (Mutable, no re-renders for performance)
+    const logic = useRef({
         isDragging: false,
-        
-        // Transition Lock (The "Zero Moment" Fix)
+        isPlaying: false,
         trackId: '',
-        lockUntil: 0,       // Timestamp until which we ignore API position updates
+        duration: 0,
+        
+        // The "Anchor" is the last verified point in time
+        anchorTime: 0,      // performance.now()
+        anchorPosition: 0,  // ms
+        
+        // The visual position currently displayed to the user
+        visualPosition: 0, 
     });
 
-    // CONSTANTS
-    const LATENCY_COMPENSATION = 250; // ms to add to server time to match audio
-    const TRANSITION_LOCK_MS = 1500;  // ms to ignore server jitter after track change
-
-    // --- 1. SYNC LOGIC (Server -> Engine) ---
+    // --- 1. SYNC LOGIC (The Brain) ---
     useEffect(() => {
         if (!state) return;
-
-        const now = performance.now();
-        const e = engine.current;
         
+        const now = performance.now();
+        const l = logic.current;
         const newTrackId = state.track_window?.current_track?.id || '';
-        const isTrackChange = newTrackId !== e.trackId;
         const serverPaused = state.paused;
         const serverPos = state.position;
+        const serverDuration = state.duration;
 
-        e.duration = state.duration;
+        l.duration = serverDuration;
 
-        // --- SCENARIO A: TRACK CHANGE (The "Zero Moment") ---
-        if (isTrackChange) {
-            e.trackId = newTrackId;
-            e.visualPosition = 0;
-            e.anchorPosition = 0;
-            e.anchorTime = now;
-            e.lockUntil = now + TRANSITION_LOCK_MS; // ENGAGE LOCK
-            e.isPlaying = !serverPaused;
+        // CASE A: TRACK CHANGE -> HARD RESET
+        // This prevents the "flash" of the old track's progress
+        if (newTrackId !== l.trackId) {
+            l.trackId = newTrackId;
+            l.isPlaying = !serverPaused;
+            l.anchorTime = now;
+            l.anchorPosition = serverPos;
+            l.visualPosition = serverPos;
             
-            // Hard reset visual immediately
-            if (progressFillRef.current) {
-                progressFillRef.current.style.transform = `translateX(-100%)`;
+            // Force immediate visual update to prevent interpolation glitches
+            if (progressFillRef.current && thumbRef.current) {
+                const percent = serverDuration > 0 ? (serverPos / serverDuration) * 100 : 0;
+                progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
+                thumbRef.current.style.transform = `translate3d(${percent}%, -50%, 0)`;
             }
             return;
         }
 
-        // --- SCENARIO B: LOCKED STATE ---
-        if (now < e.lockUntil) {
-            // We are in the transition buffer. 
-            // We TRUST our local loop. We IGNORE the server (unless it says 0).
-            // Just update play state.
-            e.isPlaying = !serverPaused;
-            if (!e.isPlaying) {
-                // If paused during lock, freeze.
-                e.anchorPosition = e.visualPosition;
-                e.anchorTime = now;
+        // CASE B: PAUSE/PLAY TRANSITION
+        if (serverPaused !== !l.isPlaying) {
+            if (serverPaused) {
+                // CHANGED TO PAUSED
+                // CRITICAL FIX: FREEZE at current visual position. 
+                // Do NOT accept serverPos because it is old (latency) and will cause backward jump.
+                l.isPlaying = false;
+                l.anchorPosition = l.visualPosition; // Re-anchor to where we effectively stopped
             } else {
-                // If playing, re-anchor relative to visual to keep it smooth
-                e.anchorPosition = e.visualPosition;
-                e.anchorTime = now;
+                // CHANGED TO PLAYING
+                l.isPlaying = true;
+                l.anchorTime = now;
+                // If resuming, usually server is authoritative, but to be safe against jumps,
+                // we can start from visual pos if difference is small.
+                // For now, trust server on resume start.
+                l.anchorPosition = serverPos; 
             }
             return;
         }
 
-        // --- SCENARIO C: NORMAL OPERATION ---
-        
-        if (serverPaused) {
-            // PAUSE LOGIC: "The Freeze"
-            if (e.isPlaying) {
-                // We just transitioned from Playing -> Paused.
-                // The server position is likely old (latency). 
-                // IGNORE server position. FREEZE at current visual position.
-                // This prevents the "jump back".
-                e.anchorPosition = e.visualPosition; 
-            } else {
-                // We were already paused. If the server sends a wildly different position (seek from another device), take it.
-                // Otherwise, ignore small jitter.
-                const drift = Math.abs(serverPos - e.visualPosition);
-                if (drift > 1000) {
-                    e.visualPosition = serverPos;
-                    e.anchorPosition = serverPos;
-                }
-            }
-            e.isPlaying = false;
-            e.anchorTime = now;
-        } else {
-            // PLAY LOGIC: "Linear Interpolation"
-            const adjustedServerPos = serverPos + LATENCY_COMPENSATION;
+        // CASE C: PLAYING UPDATE (DRIFT CORRECTION)
+        if (l.isPlaying) {
+            // Calculate where we should be according to local clock
+            const localProjected = l.anchorPosition + (now - l.anchorTime);
+            
+            // Calculate drift
+            const drift = Math.abs(serverPos - localProjected);
 
-            if (!e.isPlaying) {
-                // Paused -> Playing. Snap to server (plus latency) to sync up.
-                e.visualPosition = adjustedServerPos;
-                e.anchorPosition = adjustedServerPos;
-                e.anchorTime = now;
-            } else {
-                // Already Playing. Check drift.
-                // Expected position based on our smooth local clock
-                const expected = e.anchorPosition + (now - e.anchorTime);
-                const drift = Math.abs(adjustedServerPos - expected);
-
-                if (drift > 2000) {
-                    // Big jump (seek on other device)? Resync.
-                    e.anchorPosition = adjustedServerPos;
-                    e.anchorTime = now;
-                    e.visualPosition = adjustedServerPos;
-                } 
-                // Small drift? IGNORE. Trust local clock for smoothness.
-            }
-            e.isPlaying = true;
+            // If drift is HUGE (> 1.5s), it's a Seek or Lag Spike -> Hard Sync
+            if (drift > 1500) {
+                l.anchorPosition = serverPos;
+                l.anchorTime = now;
+                l.visualPosition = serverPos;
+            } 
+            // If drift is small, IGNORE IT. 
+            // This is the "Buffer". We trust our local smooth clock more than the jittery network packets.
         }
 
     }, [state]);
 
-    // --- 2. RENDER LOOP (The Heartbeat) ---
+    // --- 2. RENDER LOOP (The Muscle - 60FPS) ---
     useEffect(() => {
         let rafId: number;
-
         const loop = () => {
             rafId = requestAnimationFrame(loop);
+            const l = logic.current;
             
-            const e = engine.current;
-            if (e.isDragging || !progressFillRef.current) return;
+            if (l.isDragging || !progressFillRef.current || !thumbRef.current) return;
 
-            const now = performance.now();
-
-            if (e.isPlaying) {
-                const delta = now - e.anchorTime;
-                e.visualPosition = e.anchorPosition + delta;
+            if (l.isPlaying) {
+                const now = performance.now();
+                const delta = now - l.anchorTime;
+                l.visualPosition = l.anchorPosition + delta;
             }
-            
-            // Clamp
-            if (e.visualPosition > e.duration) e.visualPosition = e.duration;
-            if (e.visualPosition < 0) e.visualPosition = 0;
+            // If paused, visualPosition stays static (frozen)
 
-            // Render transform (0% = -100%, 100% = 0%)
-            const percent = e.duration > 0 ? (e.visualPosition / e.duration) * 100 : 0;
-            const translateVal = percent - 100;
+            // Clamp
+            const duration = l.duration || 1;
+            if (l.visualPosition > duration) l.visualPosition = duration;
+            if (l.visualPosition < 0) l.visualPosition = 0;
+
+            // Render GPU Transforms
+            const percent = (l.visualPosition / duration) * 100;
+            const translateVal = percent - 100; // -100% (empty) to 0% (full)
             
             progressFillRef.current.style.transform = `translateX(${translateVal}%)`;
+            
+            // Move Thumb (Relative to parent width)
+            // Use translate3d for hardware acceleration
+            // NOTE: The parent container width is 100%. We move the thumb 0-100% across it.
+            // We subtract a few pixels in CSS to center it visually if needed, 
+            // but usually percent is enough if parent is relative.
+            thumbRef.current.style.left = `${percent}%`;
         };
-
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, []);
+    }, [state?.duration]);
 
-    // --- 3. INTERACTION (Fire & Forget) ---
-    const calculateSeekPosition = (clientX: number) => {
+    // --- 3. INPUT HANDLING ---
+    const calculatePos = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
@@ -223,38 +194,43 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        engine.current.isDragging = true;
-        updateVisualsFromInput(e.clientX);
-    };
-
-    const updateVisualsFromInput = (clientX: number) => {
-        if (!progressFillRef.current) return;
-        const newPos = calculateSeekPosition(clientX);
-        const percent = (newPos / state.duration) * 100;
-        progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
+        const l = logic.current;
+        l.isDragging = true;
+        
+        if (progressFillRef.current && thumbRef.current) {
+            // Immediate visual feedback
+            const newPos = calculatePos(e.clientX);
+            const percent = (newPos / state.duration) * 100;
+            progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
+            thumbRef.current.style.left = `${percent}%`;
+        }
     };
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!engine.current.isDragging) return;
-            updateVisualsFromInput(e.clientX);
+            const l = logic.current;
+            if (!l.isDragging || !progressFillRef.current || !thumbRef.current) return;
+            
+            const newPos = calculatePos(e.clientX);
+            const percent = (newPos / state.duration) * 100;
+            progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
+            thumbRef.current.style.left = `${percent}%`;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
-            if (!engine.current.isDragging) return;
+            const l = logic.current;
+            if (!l.isDragging) return;
+            l.isDragging = false;
             
-            // 1. Commit changes locally FIRST
-            const eState = engine.current;
-            const finalPos = calculateSeekPosition(e.clientX);
+            const finalPos = calculatePos(e.clientX);
             
-            eState.isDragging = false;
-            eState.visualPosition = finalPos;
-            eState.anchorPosition = finalPos;
-            eState.anchorTime = performance.now();
+            // Optimistic Update: Set the engine to this position immediately
+            l.visualPosition = finalPos;
+            l.anchorPosition = finalPos;
+            l.anchorTime = performance.now();
             
-            // 2. Fire and Forget API call
-            // We don't await this. We trust the local engine update we just did.
-            seek(finalPos); 
+            // Execute Seek
+            seek(finalPos);
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -268,33 +244,31 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     return (
         <div
             ref={progressBarRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] touch-none mt-4 mb-2"
+            className="group relative w-full h-4 flex items-center cursor-pointer touch-none"
             onMouseDown={handleMouseDown}
-            style={{ transform: 'translateZ(0)' }}
         >
-            <div 
-                ref={progressFillRef}
-                className="h-full w-full bg-[var(--progress-fill)] relative rounded-l-full will-change-transform"
-                style={{ 
-                    width: '100%',
-                    transform: 'translateX(-100%)', 
-                    transition: 'none' 
-                }} 
-            >
-                 {/* 
-                    The Handle (Pallino)
-                    - Anchored to the right edge of the fill bar.
-                    - Centered vertically via top/translateY.
-                    - Centered horizontally on the tip via translateX(50%).
-                 */}
-                 <div 
-                    ref={handleRef}
-                    className="absolute top-1/2 right-0 w-3.5 h-3.5 rounded-full bg-[var(--progress-fill)] shadow-md transition-transform duration-100 ease-out group-hover:scale-125"
+            {/* Track Background */}
+            <div className="absolute left-0 right-0 h-1.5 rounded-full bg-[var(--progress-bg)] overflow-hidden">
+                {/* Fill Bar */}
+                <div 
+                    ref={progressFillRef}
+                    className="h-full w-full bg-[var(--progress-fill)] rounded-full will-change-transform"
                     style={{ 
-                        transform: 'translate(50%, -50%)', // Center perfectly on the tip
-                    }}
+                        transform: 'translateX(-100%)', 
+                        transition: 'none' 
+                    }} 
                 />
             </div>
+
+            {/* Drag Handle / Thumb */}
+            <div 
+                ref={thumbRef}
+                className="absolute top-1/2 -ml-2 w-4 h-4 bg-white rounded-full shadow-lg border border-black/10 scale-0 group-hover:scale-100 transition-transform duration-100 will-change-transform"
+                style={{ 
+                    left: '0%', 
+                    marginTop: '-8px' // Half height to center vertically
+                }}
+            />
         </div>
     );
 };
@@ -359,15 +333,20 @@ const YouTubeProgressBar = ({
     return (
         <div
             ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible mt-4 mb-2"
+            className="group relative w-full h-4 flex items-center cursor-pointer touch-none"
             onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-l-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
+            <div className="absolute left-0 right-0 h-1.5 rounded-full bg-[var(--progress-bg)] overflow-hidden">
                 <div 
-                    className="absolute top-1/2 right-0 w-3.5 h-3.5 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-md transition-transform duration-100 ease-out group-hover:scale-125"
-                    style={{ transform: 'translate(50%, -50%)' }} 
+                    className="h-full bg-[var(--progress-fill)] rounded-full" 
+                    style={{ width: `${visualPercentage}%` }} 
                 />
             </div>
+             {/* Thumb for YouTube */}
+             <div 
+                className="absolute top-1/2 -ml-2 w-4 h-4 bg-white rounded-full shadow-lg border border-black/10 scale-0 group-hover:scale-100 transition-transform duration-100"
+                style={{ left: `${visualPercentage}%`, marginTop: '-8px' }}
+            />
         </div>
     );
 };
@@ -500,9 +479,7 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
                     </button>
                 </div>
             </div>
-            
-            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden mt-4 mb-2" />
-            
+            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden" />
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
                 <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
@@ -969,7 +946,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <div className="overflow-hidden flex-grow"><div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div></div>
                         </div>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)] mt-4 mb-2" />
+                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}><button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button><button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>{isRadioPlaying ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button><button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button><button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} /></button></div>
