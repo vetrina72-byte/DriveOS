@@ -48,6 +48,35 @@ interface MusicPlayerProps {
 }
 
 /**
+ * ATOMIC ALBUM ART COMPONENT
+ * Handles instant replacement of images on track change to prevent flickering.
+ */
+const AlbumArt = React.memo(({ src, alt, trackId, isNight }: { src?: string, alt: string, trackId: string, isNight: boolean }) => {
+    const [isLoaded, setIsLoaded] = useState(false);
+
+    return (
+        <div className={`relative w-12 h-12 flex-shrink-0 rounded-lg shadow-lg overflow-hidden ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+            {/* Placeholder / Skeleton - Visible while loading */}
+            <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isLoaded ? 'opacity-0' : 'opacity-100'}`}>
+                <FiMusic className={`w-6 h-6 ${isNight ? 'text-zinc-600' : 'text-zinc-400'}`} />
+            </div>
+            
+            {/* Actual Image - Keyed by trackId to force DOM replacement on change */}
+            {src && (
+                <img 
+                    key={trackId} // CRITICAL: Forces React to unmount old img immediately
+                    src={src} 
+                    alt={alt} 
+                    className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+                    onLoad={() => setIsLoaded(true)}
+                    loading="eager"
+                />
+            )}
+        </div>
+    );
+});
+
+/**
  * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.0
  * 
  * Logic:
@@ -266,20 +295,22 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         };
     }, [seek, state.duration]);
 
-    // Thumb Visuals
-    const thumbSize = 12; // Discrete size
+    // Style variables - FIXED HEIGHT
+    const thumbSize = 12; 
     const trackHeight = 4;
+    const containerHeight = 20;
 
     return (
         <div
             ref={progressBarRef}
-            className="group relative w-full h-5 flex items-center cursor-pointer touch-none select-none"
+            className="group relative w-full flex items-center cursor-pointer touch-none select-none"
+            style={{ height: `${containerHeight}px` }} // Rigid Container Height
             onMouseDown={handleMouseDown}
         >
             {/* Track Background */}
             <div 
                 className="absolute left-0 right-0 rounded-full bg-[var(--progress-bg)] overflow-hidden pointer-events-none"
-                style={{ height: `${trackHeight}px` }}
+                style={{ height: `${trackHeight}px` }} // Rigid Track Height
             >
                 {/* Fill Bar - width animated via RAF */}
                 <div 
@@ -839,6 +870,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     const handlePrevTrack = () => {
         if (source === 'spotify') {
+            // Enhanced "Previous" logic: always enabled
             if (playerState && playerState.position > 3000) {
                 setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: { ...prev.spotifyState, position: 0 } }) : prev);
                 player?.seek(0);
@@ -848,7 +880,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (prevTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: prevTrack, previous_tracks: prev.spotifyState.track_window.previous_tracks.slice(0, -1) } }
                 }) : prev);
                 player?.previousTrack();
-            } else player?.previousTrack();
+            } else {
+                // Fallback: if no previous track, restart current track
+                player?.seek(0);
+            }
         } else if (source === 'radio') onStationChange('prev');
         else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
              const idx = nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId);
@@ -888,21 +923,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
             }
             if (playerState?.track_window?.current_track) {
-                const { name: trackName, album, artists } = playerState.track_window.current_track;
+                const { id: trackId, name: trackName, album, artists } = playerState.track_window.current_track;
                 const imageUrl = album.images[0]?.url;
                 const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
                 const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
                 
-                // Logic to enable/disable previous button without flickering
-                const hasPrevious = playerState.track_window.previous_tracks.length > 0;
-                const canSeekBack = playerState.position > 3000;
-                const isPrevDisabled = !hasPrevious && !canSeekBack;
-
                 return (
                     <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                         <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-3 min-w-0">
-                                {imageUrl && (<div className="flex-shrink-0"><img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" /></div>)}
+                                {/* Use Atomic AlbumArt component */}
+                                <div className="flex-shrink-0">
+                                    <AlbumArt src={imageUrl} alt={album.name} trackId={trackId || ''} isNight={isNight} />
+                                </div>
                                 <div className="overflow-hidden flex-grow"><div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div></div>
                             </div>
                             <div className="flex items-center gap-5">
@@ -919,8 +952,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
                                 <button 
                                     onClick={handlePrevTrack} 
-                                    disabled={isPrevDisabled} 
-                                    className="transition disabled:opacity-30 disabled:cursor-not-allowed" 
+                                    // Always enabled - handles seek(0) fallback internally
+                                    className="transition" 
                                     style={{ color: buttonActiveColor }}
                                 >
                                     <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
