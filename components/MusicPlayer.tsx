@@ -15,8 +15,8 @@ import {
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
-import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
-import { getPlayerInstance } from '../lib/spotify-player';
+import type { RadioStation, YouTubeTrackInfo, SpotifyDevice, NowPlayingState } from '../types';
+import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -48,10 +48,9 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - BUFFERING AWARE EDITION (v12)
- * Fixes: Prevents bar from "running ahead" while Spotify buffers at 0:00.
- * Logic: We only allow the visual bar to increment if we have confirmed
- * that the track has actually progressed beyond 0ms from the server side.
+ * SPOTIFY PROGRESS BAR - PRECISE SYNC EDITION (v14)
+ * Fixes: Prevents bar from moving if audio is buffering at 0:00.
+ * Eliminates "jump back" effect by strictly clamping extrapolation when near start.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -62,7 +61,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const lastServerPosRef = useRef<number>(0);
     const lastServerTimeRef = useRef<number>(0);
     const lastTrackIdRef = useRef<string | null>(null);
-    const isBufferingRef = useRef<boolean>(true); // Assume buffering on mount/track change
+    const isBufferingRef = useRef<boolean>(true); 
 
     // --- 1. SYNC LOGIC ---
     useEffect(() => {
@@ -71,42 +70,43 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const now = performance.now();
         const serverPos = state.position;
         const trackId = state.track_window?.current_track?.id;
+        const isPaused = state.paused;
         
         // A. TRACK CHANGE -> HARD RESET
         if (trackId !== lastTrackIdRef.current) {
             lastTrackIdRef.current = trackId || null;
             lastServerPosRef.current = 0;
             lastServerTimeRef.current = now;
-            isBufferingRef.current = true; // Lock bar at 0
+            isBufferingRef.current = true; // Lock bar at 0 immediately on track change
             
-            // Force visual update immediately
+            // Force visual update immediately to 0
             if (progressFillRef.current) progressFillRef.current.style.width = '0%';
             return;
         }
 
-        // B. BUFFERING CHECK
-        // If we are playing but position is still 0 (or very close), we are buffering.
-        // We only release the lock when serverPos > 0.
-        if (!state.paused && serverPos === 0 && isBufferingRef.current) {
-            // Still buffering, do nothing (keep lock)
+        // B. STATE UPDATE
+        // If we receive a position of 0 while playing, we are definitely buffering or just started.
+        // We DO NOT want to extrapolate from 0, or we will jump back when real data comes.
+        if (!isPaused && serverPos === 0) {
+            isBufferingRef.current = true;
             lastServerPosRef.current = 0;
             lastServerTimeRef.current = now;
-        } else if (!state.paused && serverPos > 0) {
-            // Playback confirmed! Release lock.
+        } 
+        else if (!isPaused && serverPos > 0) {
+            // We have real progress. Unlock buffering.
             isBufferingRef.current = false;
             
-            // Calculate drift
-            const expectedPos = lastServerPosRef.current + (now - lastServerTimeRef.current);
-            const drift = Math.abs(expectedPos - serverPos);
+            // Calculate expected position based on previous frame
+            // const expectedPos = lastServerPosRef.current + (now - lastServerTimeRef.current);
+            // const drift = Math.abs(expectedPos - serverPos);
 
-            // Sync if drift is significant (> 1s) or if we just came out of buffering
-            if (drift > 1000 || lastServerPosRef.current === 0) {
-                lastServerPosRef.current = serverPos;
-                lastServerTimeRef.current = now;
-            }
-        } else if (state.paused) {
-            // Paused
-            isBufferingRef.current = false; // Not buffering, just stopped
+            // Always sync on server update to stay accurate, 
+            // but the animation loop handles smoothness between these updates.
+            lastServerPosRef.current = serverPos;
+            lastServerTimeRef.current = now;
+        } 
+        else if (isPaused) {
+            isBufferingRef.current = false;
             lastServerPosRef.current = serverPos;
             lastServerTimeRef.current = now;
         }
@@ -118,7 +118,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         let rafId: number;
 
         const loop = () => {
-            if (!progressFillRef.current || isDraggingRef.current) {
+            if (!progressFillRef.current || isDraggingRef.current || !state) {
                 rafId = requestAnimationFrame(loop);
                 return;
             }
@@ -130,7 +130,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                  return;
             }
 
-            // CRITICAL: If buffering, force 0 visual state
+            // CRITICAL FIX: If buffering (pos 0 and playing), FORCE 0 visual state.
+            // Do NOT extrapolate time.
             if (isBufferingRef.current && !state.paused) {
                 progressFillRef.current.style.width = '0%';
                 rafId = requestAnimationFrame(loop);
@@ -154,7 +155,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
 
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
-    }, [state.duration, state.paused]); 
+    }, [state]); // Re-bind when state object reference changes to ensure freshness
 
     // --- 3. DRAG HANDLERS ---
     const calculateSeekPosition = (clientX: number) => {
@@ -204,7 +205,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [player, state.duration]);
+    }, [player, state?.duration]);
 
     return (
         <div
@@ -310,7 +311,6 @@ const QueuePopover = ({
     scale, 
     width, 
     offsetX,
-    // Add dependencies that affect positioning
     dockedConfig,
     floatingConfig,
     isAnyAppOpen
@@ -342,7 +342,7 @@ const QueuePopover = ({
                 height: `${height}px`,
                 width: `${width}px`,
             }}
-            className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col transition-all duration-300`} // Added transition
+            className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col transition-all duration-300`} 
         >
             <p className="text-xs font-bold mb-2 flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
             <div className="flex-grow flex items-center">
@@ -529,7 +529,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
 
     const player = getPlayerInstance();
-    const isPlayerActive = player && playerState && playerState.track_window.current_track;
+    const localDeviceId = getDeviceId(); // FIX: Retrieve local device ID
+
+    // Logic to determine if the local player is truly the one making sound
+    // We check if the active device reported by API matches our local device ID.
+    // If we don't have an active device from API yet, but we have a player state, we assume local (fallback).
+    const isLocalDeviceActive = activeDevice && localDeviceId 
+        ? activeDevice.id === localDeviceId 
+        : (player && playerState && playerState.track_window.current_track); // Fallback
+
     const currentTrack = playerState?.track_window.current_track;
     const currentTrackUri = currentTrack?.uri;
 
@@ -789,7 +797,49 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const themeClasses = isNight ? 'border-zinc-700/80' : 'border-zinc-300';
     
     const renderPlayerContent = () => {
-        if (source === 'spotify' && !isPlayerActive && activeDevice) return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
+        if (source === 'spotify') {
+            // FIX: Explicitly use the isLocalDeviceActive logic to toggle views
+            if (!isLocalDeviceActive && activeDevice) {
+                return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
+            }
+            if (playerState?.track_window?.current_track) {
+                const { name: trackName, album, artists } = playerState.track_window.current_track;
+                const imageUrl = album.images[0]?.url;
+                const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
+                const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
+                return (
+                    <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                        <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center gap-3 min-w-0">
+                                {imageUrl && (<div className="flex-shrink-0"><img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" /></div>)}
+                                <div className="overflow-hidden flex-grow"><div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div></div>
+                            </div>
+                            <div className="flex items-center gap-5">
+                                <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}><button onClick={handleToggleShuffle} className="transition" style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}><PiShuffleBold className="w-5 h-5" /></button></div>
+                                <button onClick={handleToggleRepeat} className="transition" style={{ color: playerState.repeat_mode > 0 ? buttonActiveColor : inactiveButtonColor }}>{playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5" /> : <PiRepeatBold className="w-5 h-5" />}</button>
+                            </div>
+                        </div>
+                        
+                        {/* NEW ABSOLUTE TIME BAR */}
+                        <SpotifyProgressBar player={player} state={playerState} />
+                        
+                        <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                             <div className="flex-1 flex justify-start"></div>
+                            <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                                <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                                <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>{playerState.paused ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button>
+                                <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                                <button onClick={handleToggleLike} className="transition" style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} /></button>
+                            </div>
+                             <div className="flex-1 flex justify-end items-center">
+                                <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}><BsList style={{ width: '20px', height: '20px'}} /></button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+        }
+
         if (source === 'youtube' && youtubeTrack) {
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
@@ -841,42 +891,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 </div>
             );
         }
-        if (source === 'spotify' && isPlayerActive) {
-            const { name: trackName, album, artists } = playerState.track_window.current_track!;
-            const imageUrl = album.images[0]?.url;
-            const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
-            return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
-                    <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 min-w-0">
-                            {imageUrl && (<div className="flex-shrink-0"><img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" /></div>)}
-                            <div className="overflow-hidden flex-grow"><div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div></div>
-                        </div>
-                        <div className="flex items-center gap-5">
-                            <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}><button onClick={handleToggleShuffle} className="transition" style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}><PiShuffleBold className="w-5 h-5" /></button></div>
-                            <button onClick={handleToggleRepeat} className="transition" style={{ color: playerState.repeat_mode > 0 ? buttonActiveColor : inactiveButtonColor }}>{playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5" /> : <PiRepeatBold className="w-5 h-5" />}</button>
-                        </div>
-                    </div>
-                    
-                    {/* NEW ABSOLUTE TIME BAR */}
-                    <SpotifyProgressBar player={player} state={playerState} />
-                    
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
-                         <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>{playerState.paused ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button>
-                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                            <button onClick={handleToggleLike} className="transition" style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} /></button>
-                        </div>
-                         <div className="flex-1 flex justify-end items-center">
-                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}><BsList style={{ width: '20px', height: '20px'}} /></button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
+        
         return <DisabledPlayerView {...{ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }} />;
     };
 
