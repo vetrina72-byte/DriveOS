@@ -48,13 +48,8 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - THE "BUTTER SMOOTH" ENGINE
- * 
- * Features:
- * 1. Transition Lock: Ignores erratic API data for 1.5s after track change (Zero Moment Bug).
- * 2. Pause Freeze: Locks visual position instantly on pause, preventing latency snap-back.
- * 3. Linear Interpolation: 60fps rendering decoupled from API polling.
- * 4. Fire-and-Forget Seek: Immediate UI update + Lock preventing rubber-banding.
+ * SPOTIFY PROGRESS BAR - HIGH PRECISION ENGINE (v31)
+ * Features: Optimistic Drag, Track Change Sync Lock, 60FPS RAF Loop.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -62,23 +57,22 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const progressFillRef = useRef<HTMLDivElement>(null);
     const thumbRef = useRef<HTMLDivElement>(null);
     
-    // Internal State Logic (Mutable Refs for Performance)
+    // Internal State Refs (Mutable source of truth)
     const logic = useRef({
         isDragging: false,
         isPlaying: false,
         trackId: '',
         duration: 0,
         
-        // The Anchor: The verified point in time we interpolate from
+        // The "Anchor" is the last verified point in time
         anchorTime: 0,      // performance.now()
         anchorPosition: 0,  // ms
         
-        // The Visual Truth: What the user actually sees right now
+        // The visual position currently displayed to the user
         visualPosition: 0, 
         
-        // The Lock: Timestamp until which we ignore API position updates
-        // Used for Track Changes and Seeks to prevent "rubber banding"
-        transitionLockEnd: 0,
+        // Sync Lock
+        lastTrackChangeTime: 0,
     });
 
     // --- 1. SYNC LOGIC (The Brain) ---
@@ -94,17 +88,16 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
 
         l.duration = serverDuration;
 
-        // CASE A: TRACK CHANGE -> MOMENTO ZERO LOCK
-        // Force reset to 0 and ignore API for 1.5s to prevent jump-back
+        // CASE A: TRACK CHANGE -> HARD RESET & SYNC LOCK
         if (newTrackId !== l.trackId) {
             l.trackId = newTrackId;
             l.isPlaying = !serverPaused;
             l.anchorTime = now;
-            l.anchorPosition = 0;
+            l.anchorPosition = 0; // Start fresh
             l.visualPosition = 0;
-            l.transitionLockEnd = now + 1500; // 1.5s Immunity
+            l.lastTrackChangeTime = now; // ENABLE SYNC LOCK
             
-            // Force immediate GPU render
+            // Force immediate visual reset
             if (progressFillRef.current && thumbRef.current) {
                 progressFillRef.current.style.transform = `translateX(-100%)`;
                 thumbRef.current.style.left = `0%`;
@@ -112,40 +105,54 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             return;
         }
 
-        // CASE B: PAUSE/PLAY TRANSITION
-        if (serverPaused !== !l.isPlaying) {
-            if (serverPaused) {
-                // PAUSE DETECTED: FREEZE
-                // Critical: Do NOT use serverPos. Use l.visualPosition to freeze exactly where the user sees it.
-                l.isPlaying = false;
-                l.anchorPosition = l.visualPosition;
-            } else {
-                // RESUME DETECTED
-                l.isPlaying = true;
-                l.anchorTime = now;
-                l.anchorPosition = serverPos; // Resync to server on resume
+        // CASE B: SYNC LOCK ACTIVE?
+        // If track changed less than 2 seconds ago, IGNORE server position.
+        // Server often sends "old" position of previous track or weird jumps at start.
+        if (now - l.lastTrackChangeTime < 2000) {
+            // We just update play state, but we KEEP our local anchorPosition calculation
+            // We do NOT overwrite anchorPosition with serverPos
+            if (serverPaused !== !l.isPlaying) {
+                 if (serverPaused) {
+                    l.isPlaying = false;
+                    l.anchorPosition = l.visualPosition;
+                 } else {
+                    l.isPlaying = true;
+                    l.anchorTime = now;
+                    // Keep existing anchorPosition, just resume counting
+                 }
             }
             return;
         }
 
-        // CASE C: PLAYING UPDATE (DRIFT CORRECTION)
-        if (l.isPlaying) {
-            // If we are inside a Transition Lock (Just changed track or sought), IGNORE server drift
-            if (now < l.transitionLockEnd) {
-                return;
+        // CASE C: PAUSE/PLAY TRANSITION
+        if (serverPaused !== !l.isPlaying) {
+            if (serverPaused) {
+                // CHANGED TO PAUSED
+                // FREEZE at current visual position. 
+                l.isPlaying = false;
+                l.anchorPosition = l.visualPosition; 
+            } else {
+                // CHANGED TO PLAYING
+                l.isPlaying = true;
+                l.anchorTime = now;
+                l.anchorPosition = serverPos; 
             }
+            return;
+        }
 
-            // Calculate drift
+        // CASE D: PLAYING UPDATE (DRIFT CORRECTION)
+        if (l.isPlaying) {
+            // Calculate where we should be according to local clock
             const localProjected = l.anchorPosition + (now - l.anchorTime);
             const drift = Math.abs(serverPos - localProjected);
 
-            // If drift is massive (> 1.5s), it's likely an external seek -> Hard Sync
+            // If drift is HUGE (> 1.5s), it's a Seek or Lag Spike -> Hard Sync
+            // Otherwise, trust local clock for smoothness.
             if (drift > 1500) {
                 l.anchorPosition = serverPos;
                 l.anchorTime = now;
                 l.visualPosition = serverPos;
             } 
-            // Else: We ignore small drift (jitter) to keep it smooth.
         }
 
     }, [state]);
@@ -164,28 +171,25 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 const delta = now - l.anchorTime;
                 l.visualPosition = l.anchorPosition + delta;
             }
-            // If paused, visualPosition stays frozen at the last calculated value
+            // If paused, visualPosition stays static
 
-            // Clamp
             const duration = l.duration || 1;
+            // Clamp visual position
             if (l.visualPosition > duration) l.visualPosition = duration;
             if (l.visualPosition < 0) l.visualPosition = 0;
 
             // Render
             const percent = (l.visualPosition / duration) * 100;
-            const clampedPercent = Math.max(0, Math.min(100, percent));
+            const translateVal = percent - 100; // -100% (empty) to 0% (full)
             
-            // 1. Move Bar
-            progressFillRef.current.style.transform = `translateX(${clampedPercent - 100}%)`;
-            
-            // 2. Move Thumb
-            thumbRef.current.style.left = `${clampedPercent}%`;
+            progressFillRef.current.style.transform = `translateX(${translateVal}%)`;
+            thumbRef.current.style.left = `${percent}%`;
         };
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
     }, [state?.duration]);
 
-    // --- 3. INPUT HANDLING ("Fire and Forget") ---
+    // --- 3. INPUT HANDLING (Optimistic Updates) ---
     const calculatePos = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -197,11 +201,15 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         const l = logic.current;
         l.isDragging = true;
         
+        // Immediate visual update (Optimistic Click)
         if (progressFillRef.current && thumbRef.current) {
             const newPos = calculatePos(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
             thumbRef.current.style.left = `${percent}%`;
+            
+            // Update logic state immediately so it doesn't jump back on mouse up
+            l.visualPosition = newPos;
         }
     };
 
@@ -214,6 +222,8 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.transform = `translateX(${percent - 100}%)`;
             thumbRef.current.style.left = `${percent}%`;
+            
+            l.visualPosition = newPos;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
@@ -223,16 +233,13 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             const finalPos = calculatePos(e.clientX);
             
-            // 1. Fire Command Immediately
-            seek(finalPos);
-            
-            // 2. Optimistic Update (Local Truth)
+            // Lock the engine to this new position
             l.visualPosition = finalPos;
             l.anchorPosition = finalPos;
             l.anchorTime = performance.now();
             
-            // 3. Engage Lock (Prevent rubber-banding from delayed server response)
-            l.transitionLockEnd = performance.now() + 1000; 
+            // Send command to Spotify ONLY after UI is set
+            seek(finalPos);
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -243,35 +250,49 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         };
     }, [seek, state?.duration]);
 
+    // Style variables
+    const thumbSize = 12; // Discrete size
+    const trackHeight = 6;
+
     return (
         <div
             ref={progressBarRef}
-            className="group relative w-full h-4 flex items-center cursor-pointer touch-none"
+            className="group relative w-full h-5 flex items-center cursor-pointer touch-none select-none"
             onMouseDown={handleMouseDown}
         >
             {/* Track Background */}
-            <div className="absolute left-0 right-0 h-1.5 rounded-full bg-[var(--progress-bg)] overflow-hidden">
+            <div 
+                className="absolute left-0 right-0 rounded-full bg-[var(--progress-bg)] overflow-hidden pointer-events-none"
+                style={{ height: `${trackHeight}px` }}
+            >
                 {/* Fill Bar */}
                 <div 
                     ref={progressFillRef}
                     className="h-full w-full bg-[var(--progress-fill)] rounded-full will-change-transform"
                     style={{ 
                         transform: 'translateX(-100%)', 
-                        transition: 'none' // No CSS transition, pure JS interpolation
+                        transition: 'none' // Crucial: No CSS transition, pure JS
                     }} 
                 />
             </div>
 
-            {/* Drag Handle / Thumb */}
+            {/* Handle / Thumb (Absolute to Container, aligned with Fill) */}
             <div 
                 ref={thumbRef}
-                className="absolute w-4 h-4 bg-white rounded-full shadow-lg border border-black/10 scale-0 group-hover:scale-100 transition-transform duration-100 will-change-transform"
+                className="absolute top-1/2 bg-white rounded-full shadow-md pointer-events-none will-change-transform"
                 style={{ 
-                    top: '50%',
+                    width: `${thumbSize}px`,
+                    height: `${thumbSize}px`,
+                    marginTop: `-${thumbSize / 2}px`, // Center vertically
+                    marginLeft: `-${thumbSize / 2}px`, // Center horizontally on the tip
                     left: '0%', 
-                    transform: 'translate(-50%, -50%)' // Perfect center alignment
+                    transition: 'transform 0.1s ease', // Subtle scale effect only
+                    transformOrigin: 'center',
                 }}
-            />
+            >
+                {/* Hover scale effect wrapper */}
+                <div className="w-full h-full rounded-full transition-transform duration-200 group-hover:scale-125" />
+            </div>
         </div>
     );
 };
