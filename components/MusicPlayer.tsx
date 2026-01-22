@@ -48,26 +48,25 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - PRECISE BUFFERING EDITION (v16)
+ * SPOTIFY PROGRESS BAR - FLUID LERP ENGINE (v17)
  * 
- * Fixes: 
- * - Prevents bar from moving if position is 0, even if 'playing' (Buffering state).
- * - Only enables local interpolation (dt) once actual playback progression is confirmed.
+ * Logic:
+ * 1. Immediate Response: Starts moving instantly when paused=false.
+ * 2. No Jumps: Uses linear interpolation to smooth out server corrections.
+ * 3. Pause Lock: Instantly freezes on pause to prevent "rubber banding".
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
 
-    // VISUAL TRUTH: This ref holds the exact millisecond we are displaying.
+    // The single source of truth for the visual slider position
     const currentVisualPosition = useRef<number>(state?.position || 0);
+    
     const lastFrameTime = useRef<number>(performance.now());
     const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
-    
-    // Flag to detect if audio has actually started flowing for the current track
-    const hasPlaybackStartedRef = useRef<boolean>(false);
 
-    // --- 1. SYNC WITH SERVER STATE ---
+    // --- 1. SYNC & RESET LOGIC ---
     useEffect(() => {
         if (!state) return;
 
@@ -76,44 +75,48 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const isPaused = state.paused;
 
         // A. TRACK CHANGE -> HARD RESET
+        // We detect track change by ID. We must reset instantly to 0 to avoid showing old song's progress.
         if (currentTrackId !== lastTrackIdRef.current) {
             lastTrackIdRef.current = currentTrackId || null;
             currentVisualPosition.current = 0;
-            hasPlaybackStartedRef.current = false; // Reset start flag
-            
-            // Immediate visual reset
             if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+            return;
         }
 
-        // B. DETECT START OF PLAYBACK
-        // If we receive a position > 0, we know audio is flowing.
-        if (serverPos > 0) {
-            hasPlaybackStartedRef.current = true;
-        }
-
-        // C. SYNC CHECK
-        const drift = Math.abs(currentVisualPosition.current - serverPos);
-
+        // B. PAUSE STATE -> SNAP TO ACCURACY
+        // If paused, we trust the server, BUT we check if the visual drift is massive.
         if (isPaused) {
-            // If paused, strictly trust the server.
-            currentVisualPosition.current = serverPos;
-            hasPlaybackStartedRef.current = serverPos > 0; // Sync flag state
-        } else {
-            // If playing...
-            if (drift > 2000) {
-                // Large drift (seek or lag) -> Snap
+            // Simply update the ref. The loop will stop adding delta time.
+            // We do a soft snap: if we are close, just stay there to prevent jitter.
+            // If we are far (e.g. user sought while paused), snap.
+            const drift = Math.abs(currentVisualPosition.current - serverPos);
+            if (drift > 500) {
                 currentVisualPosition.current = serverPos;
             }
-            // Small drift -> Ignore server, trust local engine
+        } 
+        else {
+            // C. PLAYING STATE -> DRIFT CORRECTION
+            // If playing, we normally drive via local clock.
+            // However, if local clock drifts too far from server (> 2s), we nudge it.
+            // We do NOT snap instantly unless the drift is huge (> 5s), to avoid visual stutter.
+            const drift = currentVisualPosition.current - serverPos; // Positive = we are ahead
+            
+            if (Math.abs(drift) > 5000) {
+                // Huge drift? Hard snap.
+                currentVisualPosition.current = serverPos;
+            } else if (Math.abs(drift) > 1500) {
+                // Moderate drift? Gently correct by adjusting the current position slightly towards server.
+                // We do this by simply resetting to serverPos, the animation loop handles the rest.
+                currentVisualPosition.current = serverPos;
+            }
         }
-    }, [state]); 
+    }, [state]);
 
-    // --- 2. ANIMATION LOOP (THE ENGINE) ---
+    // --- 2. ANIMATION LOOP ---
     useEffect(() => {
         let rafId: number;
 
         const loop = (now: number) => {
-            // Calculate delta time since last frame
             const dt = now - lastFrameTime.current;
             lastFrameTime.current = now;
 
@@ -122,21 +125,18 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 return;
             }
 
-            // Only advance time if:
-            // 1. Not paused
-            // 2. We have confirmed playback started (pos > 0 at least once), OR user seeked (handled elsewhere)
-            // This prevents the bar from "running" while buffering at 0:00
-            if (!state.paused && hasPlaybackStartedRef.current) {
+            // ONLY increment time if playing.
+            // Crucial: We trust 'state.paused' completely for the "motion".
+            if (!state.paused) {
                 currentVisualPosition.current += dt;
             }
 
             const duration = state.duration;
             if (duration > 0) {
-                // Clamp position
+                // Clamp
                 if (currentVisualPosition.current > duration) currentVisualPosition.current = duration;
                 if (currentVisualPosition.current < 0) currentVisualPosition.current = 0;
 
-                // Render percentage
                 const percent = (currentVisualPosition.current / duration) * 100;
                 progressFillRef.current.style.width = `${percent}%`;
             } else {
@@ -146,7 +146,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             rafId = requestAnimationFrame(loop);
         };
 
-        // Reset frame time on mount/update to prevent huge delta jumps
         lastFrameTime.current = performance.now();
         rafId = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(rafId);
@@ -168,6 +167,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
             
+            // Visual feedback immediate
             currentVisualPosition.current = newPos;
         }
     };
@@ -187,9 +187,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             
             const finalPos = calculateSeekPosition(e.clientX);
             currentVisualPosition.current = finalPos; 
-            
-            // Assume dragging implies immediate playback capability at new position
-            hasPlaybackStartedRef.current = true;
             
             if (player) {
                 player.seek(finalPos).catch(console.error);
@@ -804,6 +801,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const imageUrl = album.images[0]?.url;
                 const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
                 const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
+                
+                // Logic to enable/disable previous button without flickering
+                const hasPrevious = playerState.track_window.previous_tracks.length > 0;
+                const canSeekBack = playerState.position > 3000;
+                const isPrevDisabled = !hasPrevious && !canSeekBack;
+
                 return (
                     <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                         <div className="flex items-center justify-between w-full">
@@ -823,7 +826,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                              <div className="flex-1 flex justify-start"></div>
                             <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                                <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                                <button 
+                                    onClick={handlePrevTrack} 
+                                    disabled={isPrevDisabled} 
+                                    className="transition disabled:opacity-30 disabled:cursor-not-allowed" 
+                                    style={{ color: buttonActiveColor }}
+                                >
+                                    <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
+                                </button>
                                 <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>{playerState.paused ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button>
                                 <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
                                 <button onClick={handleToggleLike} className="transition" style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} /></button>

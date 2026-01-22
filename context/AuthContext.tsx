@@ -365,14 +365,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (data && data.item) {
                 // --- STALE STATE CHECK ---
-                // If we recently requested a track change (within 3s), and the API returns a different track ID,
-                // we assume the API is lagging and ignore this update to prevent "flicker" back to old song.
                 if (expectedTrackId.current && (Date.now() - lastPlayRequestTime.current < 3000)) {
                     if (data.item.id !== expectedTrackId.current) {
-                        console.log('[AuthContext] Ignoring stale state from API (waiting for track change)');
-                        return; // ABORT UPDATE
+                        return; // Ignore stale state
                     } else {
-                        // IDs match! We are synced. Clear the lock.
                         expectedTrackId.current = null;
                     }
                 }
@@ -381,6 +377,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 
                 if (mappedState) {
                     setNowPlaying(prev => {
+                        // Prevent UI stutter: Only update if something changed
+                        if (prev.spotifyState && prev.spotifyState.position === mappedState.position && prev.spotifyState.paused === mappedState.paused) {
+                            return prev;
+                        }
+                        
                         const newState = {
                             ...prev,
                             source: 'spotify' as const,
@@ -409,21 +410,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [state.isAuthenticated]);
 
-    // --- FAST POLLING TRIGGER ---
+    // --- TURBO POLLING TRIGGER ---
+    // Aggressive polling to catch device switches instantly
     const triggerFastPolling = useCallback(() => {
         // Clear existing
         if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
         if (fastPollingTimeoutRef.current) clearTimeout(fastPollingTimeoutRef.current);
 
-        // Poll every 1.5s
         syncWithRealServerState();
-        fastPollingIntervalRef.current = window.setInterval(syncWithRealServerState, 1500);
 
-        // Stop after 12 seconds
+        // Phase 1: Turbo (500ms) for the first 2.5 seconds
+        // This is crucial for instant device switching feedback
+        fastPollingIntervalRef.current = window.setInterval(syncWithRealServerState, 500);
+
+        // Phase 2: Slow down to 1500ms after 2.5s
         fastPollingTimeoutRef.current = window.setTimeout(() => {
             if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
-            fastPollingIntervalRef.current = null;
-        }, 12000);
+            
+            fastPollingIntervalRef.current = window.setInterval(syncWithRealServerState, 1500);
+            
+            // Phase 3: Stop completely after 10s total
+            fastPollingTimeoutRef.current = window.setTimeout(() => {
+                if (fastPollingIntervalRef.current) clearInterval(fastPollingIntervalRef.current);
+                fastPollingIntervalRef.current = null;
+            }, 7500); // 2.5 + 7.5 = 10s total
+        }, 2500);
     }, [syncWithRealServerState]);
 
     // Regular slow polling
@@ -459,9 +470,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             onNotReady: () => setIsPlayerReady(false),
             onStateChange: (playerState) => {
                 if (playerState) {
-                    // SDK State updates are usually reliable for current track, but 
-                    // we still apply the filter if we are waiting for a specific track ID 
-                    // from a remote command (less critical here as SDK is local, but good for consistency)
                     if (expectedTrackId.current && (Date.now() - lastPlayRequestTime.current < 3000)) {
                          if (playerState.track_window?.current_track?.id !== expectedTrackId.current) {
                              return;
@@ -500,8 +508,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             expectedTrackId.current = itemForOptimisticUpdate.id;
         }
 
+        // Check if we are taking control locally
+        const localId = getDeviceId();
+        const isTargetingLocal = !nowPlaying.activeDevice && localId;
+
         // --- OPTIMISTIC UI UPDATE ---
         setNowPlaying(s => {
+            // If taking control locally, update activeDevice immediately to show the UI
+            const optimisticDevice = isTargetingLocal ? {
+                id: localId!,
+                is_active: true,
+                is_private_session: false,
+                is_restricted: false,
+                name: 'DriveOS',
+                type: 'Computer',
+                volume_percent: 100
+            } : s.activeDevice;
+
             const fakeState: SpotifyPlayerState | null = itemForOptimisticUpdate ? {
                 context: { uri: options.context_uri || null, metadata: null },
                 disallows: {},
@@ -525,7 +548,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         },
                         artists: itemForOptimisticUpdate.artists?.map(a => ({ uri: '', name: a.name })) || []
                     },
-                    // CRITICAL FIX: Explicitly clear tracks to prevent "ghost back button" or "oscillation"
                     next_tracks: [],
                     previous_tracks: []
                 },
@@ -549,6 +571,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     source: 'spotify',
                     isLoading: false, 
                     spotifyState: fakeState, 
+                    activeDevice: optimisticDevice, // Force active device for UI response
                     radioStation: null,
                     youtubeTrack: null
                 };
@@ -559,21 +582,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 source: 'spotify',
                 isLoading: false, 
                 spotifyState: optimisticState, 
+                activeDevice: optimisticDevice, // Force active device for UI response
                 radioStation: null,
                 youtubeTrack: null
             };
         });
 
-        // Trigger fast polling to update UI state (like active device) quickly
+        // Trigger turbo polling to confirm device switch and state
         triggerFastPolling();
-
-        // FIX: Ensure we have a valid device ID if none is active
-        if (!nowPlaying.activeDevice) {
-            const localId = getDeviceId();
-            if (localId) {
-                console.log("[AuthContext] Forced local playback target:", localId);
-            }
-        }
 
         try {
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
@@ -588,13 +604,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const pauseSpotify = useCallback(async () => {
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
-                const projectedPosition = s.spotifyState.position + Math.max(0, Date.now() - s.spotifyState.timestamp);
+                // DO NOT PROJECT POSITION FORWARD. 
+                // Using current position freezes the UI bar effectively.
+                // The visual bar will handle smoothing.
+                const frozenPosition = s.spotifyState.position;
+                
                 return {
                     ...s,
                     spotifyState: { 
                         ...s.spotifyState, 
                         paused: true,
-                        position: projectedPosition,
+                        position: frozenPosition,
                         timestamp: Date.now() 
                     }
                 };
