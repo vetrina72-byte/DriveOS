@@ -354,13 +354,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setState(s => ({ ...s, error: null }));
     }, []);
 
-    // --- PLAYBACK SYNC & PERSISTENCE ---
+    // --- CRITICAL FIX: PLAYBACK SYNC PRIORITY ON STARTUP ---
+    // This effect runs immediately when authenticated to sync the player state
+    // with what's actually happening on the server (e.g., phone).
+    // It overrides local storage data to prevent context mismatch.
     useEffect(() => {
         if (!state.isAuthenticated) return;
 
-        const fetchCurrentPlayback = async () => {
+        const syncWithRealServerState = async () => {
             try {
-                // 1. Try to get real state from Spotify to sync with other devices
+                // Fetch current playback state immediately
                 const { data } = await apiClient.get('/me/player');
                 
                 if (data && data.item) {
@@ -375,7 +378,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                                 activeDevice: data.device,
                                 isLoading: false
                             };
-                            // Persist explicitly here
+                            // Persist explicitly immediately
                             localStorage.setItem('last_played_track', JSON.stringify({
                                 source: 'spotify',
                                 spotifyState: mappedState
@@ -384,11 +387,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         });
                         return;
                     }
+                } else if (data === '' || (data && !data.item)) {
+                    // API returned 204 (No Content) or empty state.
+                    // This means nothing is playing on any device.
+                    // We can either keep the last known state (as paused) or clear it.
+                    // For better UX, we keep the last local state but ensure it is PAUSED.
+                    setNowPlaying(prev => {
+                        if (prev.spotifyState) {
+                            return { ...prev, spotifyState: { ...prev.spotifyState, paused: true } };
+                        }
+                        return prev;
+                    });
                 }
-            } catch (e) { console.warn('Failed to fetch player state', e); }
+            } catch (e) { 
+                console.warn('Failed to fetch initial player state', e); 
+            }
         };
 
-        fetchCurrentPlayback();
+        syncWithRealServerState();
+        // Run this check periodically to keep the "Active Device" banner updated if playing elsewhere
+        const interval = setInterval(syncWithRealServerState, 10000); 
+        return () => clearInterval(interval);
     }, [state.isAuthenticated]);
 
 
@@ -443,6 +462,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [state.isAuthenticated, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
+        // --- OPTIMISTIC UI UPDATE ---
+        // Immediate feedback: Set state to "Playing" locally before network request completes.
         setNowPlaying(s => {
             const fakeState: SpotifyPlayerState | null = itemForOptimisticUpdate ? {
                 context: { uri: options.context_uri || null, metadata: null },
@@ -473,10 +494,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 timestamp: Date.now()
             } : null;
 
-            // FIX: Ensure optimistic state has fresh timestamp to avoid progress bar jumping
-            const optimisticState = s.spotifyState 
-                ? { ...s.spotifyState, paused: false, timestamp: Date.now() } 
+            const currentState = s.spotifyState;
+            
+            // If we have an existing state and no new item provided, we are likely just resuming.
+            // Update the existing state to unpaused.
+            const optimisticState = currentState 
+                ? { ...currentState, paused: false, timestamp: Date.now() } 
                 : fakeState;
+
+            // If completely new track/context provided, override fully
+            if (fakeState) {
+                 return {
+                    ...s,
+                    source: 'spotify',
+                    isLoading: false, 
+                    spotifyState: fakeState, 
+                    radioStation: null,
+                    youtubeTrack: null
+                };
+            }
 
             return {
                 ...s,
@@ -492,15 +528,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
         } catch (e) {
             console.error("Play failed", e);
+            // Revert optimistic update on failure (optional, but good practice)
+            setNowPlaying(s => s.spotifyState ? { ...s, spotifyState: { ...s.spotifyState, paused: true } } : s);
         }
     }, [attemptRefreshAndUpdatePlayerToken]);
 
     const pauseSpotify = useCallback(async () => {
+        // --- OPTIMISTIC UI UPDATE ---
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
-                // Determine new position to prevent snap-back on pause
-                // Position increases while playing, so we capture the likely current position
-                // based on the previous timestamp.
                 const projectedPosition = s.spotifyState.position + Math.max(0, Date.now() - s.spotifyState.timestamp);
                 
                 return {
@@ -509,7 +545,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         ...s.spotifyState, 
                         paused: true,
                         position: projectedPosition,
-                        timestamp: Date.now() // Reset timestamp so 'now - timestamp' is 0 in pause logic
+                        timestamp: Date.now() 
                     }
                 };
             }
