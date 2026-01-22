@@ -120,7 +120,9 @@ const mapApiPlaybackToState = (data: any): SpotifyPlayerState | null => {
         position: data.progress_ms,
         repeat_mode: data.repeat_state === 'track' ? 2 : data.repeat_state === 'context' ? 1 : 0,
         shuffle: data.shuffle_state,
-        timestamp: data.timestamp,
+        // CRITICAL FIX: Use performance.now() as the local anchor time when we receive data
+        // instead of the server timestamp, to allow accurate local delta calculations.
+        timestamp: 0, 
         track_window: {
             current_track: {
                 id: data.item.id,
@@ -538,7 +540,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ? { 
                     ...currentState, 
                     paused: false, 
-                    timestamp: Date.now(), // KEY FIX: Update timestamp on resume
+                    timestamp: 0, // Reset timestamp so projection starts clean
                     ...(itemForOptimisticUpdate ? { track_window: fakeState!.track_window, position: 0 } : {})
                   } 
                 : fakeState;
@@ -589,18 +591,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
-                // CRITICAL FIX: Calculate the projected position based on time elapsed since last timestamp.
-                // This stops the bar exactly where the user sees it, instead of jumping back to the old server value.
-                const elapsed = Date.now() - s.spotifyState.timestamp;
-                const frozenPosition = Math.min(s.spotifyState.position + elapsed, s.spotifyState.duration);
-                
                 return {
                     ...s,
                     spotifyState: { 
                         ...s.spotifyState, 
                         paused: true,
-                        position: frozenPosition,
-                        timestamp: Date.now() 
+                        // DO NOT try to project position forward here. 
+                        // Just freeze it where the last state said it was.
+                        // The visual bar will stop naturally.
+                        timestamp: 0 
                     }
                 };
             }
@@ -624,7 +623,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     spotifyState: {
                         ...s.spotifyState,
                         position: position_ms,
-                        timestamp: Date.now(),
+                        timestamp: 0, // Invalidate timestamp so projection stops until next update
                     }
                 };
             }

@@ -48,65 +48,123 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - DETERMINISTIC RENDERER (v18)
+ * SPOTIFY PROGRESS BAR - MONOTONIC PROJECTION ENGINE (v20 - Final)
  * 
- * Logic:
- * 1. Strictly relies on `state.position` + `(Date.now() - state.timestamp)` when playing.
- * 2. Strictly relies on `state.position` when paused (calculated as frozen in AuthContext).
- * 3. Does NOT maintain internal drifting state, preventing jump-backs.
+ * Engineering Principles:
+ * 1. Source of Truth: The SDK state provides an 'Anchor' (position at a specific time).
+ * 2. Projection: We calculate (Now - AnchorTime) + AnchorPosition.
+ * 3. Monotonicity: We NEVER move the bar backward while playing, even if the server lags.
+ *    If the server says we are behind where we drew, we wait for it to catch up.
+ * 4. Immediate Interaction: Seek overrides everything instantly.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
     const progressBarRef = useRef<HTMLDivElement>(null);
     const progressFillRef = useRef<HTMLDivElement>(null);
-    const isDraggingRef = useRef(false);
     
-    // Use a ref to track the last rendered width to apply slight smoothing
-    const currentWidthPercent = useRef(0);
+    // Internal State Refs (Mutable, no re-renders)
+    const isDragging = useRef(false);
+    const lastRenderedPos = useRef(0);
+    const lastTrackId = useRef<string | null>(null);
+    
+    // The "Anchor" - The last verified truth from the server
+    const anchor = useRef({
+        position: 0,
+        time: 0,
+        paused: true
+    });
 
-    const updateProgressBar = useCallback(() => {
-        if (!progressFillRef.current || isDraggingRef.current || !state) return;
+    // --- 1. STATE SYNCHRONIZATION ---
+    // Runs whenever Spotify sends us a new state update
+    useEffect(() => {
+        if (!state) return;
 
-        const duration = state.duration;
-        let position = state.position;
+        const currentId = state.track_window?.current_track?.id;
+        const now = performance.now();
 
-        if (!state.paused) {
-            // Calculate elapsed time since the state timestamp
-            const elapsed = Date.now() - state.timestamp;
-            position += elapsed;
+        // Detect Track Change: Hard Reset
+        if (currentId !== lastTrackId.current) {
+            lastTrackId.current = currentId || null;
+            lastRenderedPos.current = 0;
+            anchor.current = { position: 0, time: now, paused: state.paused };
+            // Instant visual reset
+            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+            return;
         }
 
-        // Clamp
-        if (position > duration) position = duration;
-        if (position < 0) position = 0;
-
-        // Visual Grace Period for Cold Starts:
-        // If we just started playing (pos close to 0) but audio hasn't "really" started 
-        // (implied by very small position despite elapsed time), keeps it at 0 to avoid
-        // "running ahead" of the silence.
-        // However, user requested "Immediate response", so we allow it to move.
-        // The jump back happens if server returns 0 after we moved. 
-        // AuthContext interaction lock prevents that server update from reaching here.
-
-        const percent = duration > 0 ? (position / duration) * 100 : 0;
+        // Detect Seek: Large Jump Check (> 1000ms difference)
+        // If the new position is wildly different from our projection, it's a user seek.
+        // We allow the jump in this specific case.
+        const projected = anchor.current.paused 
+            ? anchor.current.position 
+            : anchor.current.position + (now - anchor.current.time);
         
-        // Apply immediate update (no lerp lag) to feel responsive
-        progressFillRef.current.style.width = `${percent}%`;
-        currentWidthPercent.current = percent;
+        const delta = Math.abs(state.position - projected);
+        
+        if (delta > 2000) {
+            // User sought (or massive lag spike) -> Force update anchor and visual
+            anchor.current = { position: state.position, time: now, paused: state.paused };
+            lastRenderedPos.current = state.position; 
+        } else {
+            // Regular Update: Update the anchor, but respect visual continuity later
+            // We update the anchor to keep the "slope" accurate, but the loop handles smoothness.
+            anchor.current = { position: state.position, time: now, paused: state.paused };
+        }
 
     }, [state]);
 
-    // Animation Loop
+    // --- 2. ANIMATION LOOP ---
+    // Runs at 60fps/120fps independent of React
     useEffect(() => {
         let rafId: number;
+
         const loop = () => {
-            updateProgressBar();
+            if (!state || !progressFillRef.current || isDragging.current) {
+                rafId = requestAnimationFrame(loop);
+                return;
+            }
+
+            const now = performance.now();
+            let targetPos = 0;
+
+            if (anchor.current.paused) {
+                // If paused, stay at anchor.
+                targetPos = anchor.current.position;
+            } else {
+                // If playing, extrapolate: Anchor Position + Time Elapsed since Anchor
+                const elapsed = now - anchor.current.time;
+                targetPos = anchor.current.position + elapsed;
+            }
+
+            // --- MONOTONICITY GUARD ---
+            // If playing, NEVER go backwards visually unless a seek happened (handled in useEffect).
+            // This absorbs network jitter where the server might report a position slightly behind 
+            // where we animated to.
+            if (!anchor.current.paused) {
+                if (targetPos < lastRenderedPos.current) {
+                    targetPos = lastRenderedPos.current;
+                }
+            }
+
+            // Clamp
+            if (targetPos > state.duration) targetPos = state.duration;
+            if (targetPos < 0) targetPos = 0;
+
+            // Commit
+            lastRenderedPos.current = targetPos;
+
+            // Render
+            const percent = state.duration > 0 ? (targetPos / state.duration) * 100 : 0;
+            progressFillRef.current.style.width = `${percent}%`;
+
             rafId = requestAnimationFrame(loop);
         };
-        loop();
-        return () => cancelAnimationFrame(rafId);
-    }, [updateProgressBar]);
 
+        rafId = requestAnimationFrame(loop);
+        return () => cancelAnimationFrame(rafId);
+    }, [state?.duration]); // Only recreate loop if duration changes (rare)
+
+    // --- 3. INTERACTION HANDLERS ---
     const calculateSeekPosition = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -115,28 +173,40 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        isDraggingRef.current = true;
+        isDragging.current = true;
         if (progressFillRef.current) {
             progressFillRef.current.style.transition = 'none';
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
+            // Immediately update our internal trackers so it doesn't jump back on mouse up
+            lastRenderedPos.current = newPos; 
         }
     };
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isDraggingRef.current || !progressFillRef.current) return;
+            if (!isDragging.current || !progressFillRef.current) return;
             const newPos = calculateSeekPosition(e.clientX);
             const percent = (newPos / state.duration) * 100;
             progressFillRef.current.style.width = `${percent}%`;
+            lastRenderedPos.current = newPos;
         };
 
         const handleMouseUp = (e: MouseEvent) => {
-            if (!isDraggingRef.current) return;
-            isDraggingRef.current = false;
+            if (!isDragging.current) return;
+            isDragging.current = false;
             
             const finalPos = calculateSeekPosition(e.clientX);
+            
+            // Force the anchor to here immediately to prevent fighting
+            anchor.current = { 
+                position: finalPos, 
+                time: performance.now(), 
+                paused: state?.paused ?? true 
+            };
+            lastRenderedPos.current = finalPos;
+
             seek(finalPos);
         };
 
@@ -146,7 +216,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [seek, state?.duration]);
+    }, [seek, state?.duration]); // Dependencies
 
     return (
         <div
@@ -157,7 +227,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             <div 
                 ref={progressFillRef}
                 className="h-full rounded-full bg-[var(--progress-fill)] relative"
-                style={{ width: '0%', transition: 'none' }} 
+                style={{ width: '0%', transition: 'none' }} // Transition handled by JS loop
             >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm"
