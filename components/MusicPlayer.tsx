@@ -89,12 +89,13 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         const incomingId = state.track_window?.current_track?.id || '';
         const incomingPaused = state.paused;
         const incomingPos = state.position;
-        
-        eng.duration = state.duration;
+        const incomingDuration = state.duration;
 
-        // CHECK 1: TRACK CHANGE -> HARD RESET
+        // CHECK 1: TRACK CHANGE -> NUCLEAR RESET
+        // This solves the "Ghost Teleport". The bar is forced to 0 before we even think about the new song.
         if (incomingId !== eng.currentTrackId) {
             eng.currentTrackId = incomingId;
+            eng.duration = 0; // Force duration to 0 until confirmed next cycle to prevent 100% jumps
             eng.visualPosition = 0;
             eng.anchorPosition = 0;
             eng.anchorTime = now;
@@ -103,17 +104,24 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             // Sync Lock: Ignore "old" packets from previous song for 1 second
             eng.ignoreServerUpdatesUntil = now + 1000; 
             
-            // Immediate Visual Reset
+            // IMMEDIATE VISUAL KILL
             if (progressFillRef.current && thumbRef.current) {
                 progressFillRef.current.style.width = '0%';
                 thumbRef.current.style.left = '0%';
             }
+            // Update duration only if we have a valid one for the NEW track
+            if (incomingDuration > 0) eng.duration = incomingDuration;
+            
             return;
         }
 
+        // Update duration for existing track
+        if (incomingDuration > 0) eng.duration = incomingDuration;
+
         // CHECK 2: SYNC LOCK ACTIVE?
         if (now < eng.ignoreServerUpdatesUntil) {
-            // Just update play state, don't touch position
+            // We trust our local engine more than the server right now (e.g. after a seek or track change)
+            // Just ensure play state is synced if user paused/played
             if (eng.isPlaying !== !incomingPaused) {
                 eng.isPlaying = !incomingPaused;
                 if (eng.isPlaying) {
@@ -124,14 +132,15 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             return;
         }
 
-        // CHECK 3: PLAY/PAUSE STATE CHANGE
+        // CHECK 3: PLAY/PAUSE STATE CHANGE (Cold Start Logic)
         const isNowPlaying = !incomingPaused;
         
         if (eng.isPlaying !== isNowPlaying) {
             eng.isPlaying = isNowPlaying;
             
             if (isNowPlaying) {
-                // RESUMED: Anchor to SERVER position to be safe, or local if we trust it
+                // RESUMED: Optimistic Start.
+                // We use the server position as the anchor, but start the clock NOW.
                 eng.anchorTime = now;
                 eng.anchorPosition = incomingPos;
             } else {
@@ -179,13 +188,17 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 eng.visualPosition = eng.anchorPosition + delta;
             }
 
-            // Clamping
-            const duration = eng.duration || 1;
+            // Clamping & Safety
+            // If duration is 0 (during reset), force 0 to avoid Infinity/NaN
+            const duration = eng.duration > 0 ? eng.duration : 1; 
+            
             if (eng.visualPosition > duration) eng.visualPosition = duration;
             if (eng.visualPosition < 0) eng.visualPosition = 0;
 
             // Render
-            const percent = (eng.visualPosition / duration) * 100;
+            // If duration is effectively 0 (track change), render 0%
+            const percent = eng.duration > 0 ? (eng.visualPosition / duration) * 100 : 0;
+            
             bar.style.width = `${percent}%`;
             thumb.style.left = `${percent}%`;
         };
@@ -240,7 +253,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             eng.visualPosition = finalPos;
             eng.anchorPosition = finalPos;
             eng.anchorTime = performance.now();
-            eng.ignoreServerUpdatesUntil = performance.now() + 1000; // Ignore laggy server response
+            eng.ignoreServerUpdatesUntil = performance.now() + 1500; // Ignore laggy server response for 1.5s
             
             seek(finalPos);
         };
