@@ -5,7 +5,7 @@ import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
+    FiMusic, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiBluetooth
 } from 'react-icons/fi';
 import { 
     IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp, IoGameControllerOutline
@@ -48,10 +48,10 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - DEAD RECKONING EDITION (v11 - STRICT LOCK)
- * Fixes: "Bar starts before music" and "Jump back to 0".
- * Logic: Enforce a strict visual 0% state during the "Changing Track" phase until
- * the server confirms playback has genuinely started (>0ms).
+ * SPOTIFY PROGRESS BAR - BUFFERING AWARE EDITION (v12)
+ * Fixes: Prevents bar from "running ahead" while Spotify buffers at 0:00.
+ * Logic: We only allow the visual bar to increment if we have confirmed
+ * that the track has actually progressed beyond 0ms from the server side.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -59,112 +59,66 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const isDraggingRef = useRef(false);
 
     // --- DEAD RECKONING STATE ---
-    const localBaseTimeRef = useRef<number>(0); 
-    const localBasePosRef = useRef<number>(0);  
-    
-    // Snapshots
-    const lastTrackIdRef = useRef<string | null>(state?.track_window?.current_track?.id || null);
-    const wasPausedRef = useRef<boolean>(state?.paused ?? true);
-    
-    // Transition Lock
-    const isChangingTrackRef = useRef(false);
-    const changeTrackTimeoutRef = useRef<number | null>(null);
+    const lastServerPosRef = useRef<number>(0);
+    const lastServerTimeRef = useRef<number>(0);
+    const lastTrackIdRef = useRef<string | null>(null);
+    const isBufferingRef = useRef<boolean>(true); // Assume buffering on mount/track change
 
-    // --- 1. SYNC LOGIC (THE BRAIN) ---
+    // --- 1. SYNC LOGIC ---
     useEffect(() => {
         if (!state) return;
 
         const now = performance.now();
         const serverPos = state.position;
-        const isPaused = state.paused;
         const trackId = state.track_window?.current_track?.id;
-
-        // A. TRACK CHANGE DETECTION (Strict Lock)
+        
+        // A. TRACK CHANGE -> HARD RESET
         if (trackId !== lastTrackIdRef.current) {
             lastTrackIdRef.current = trackId || null;
+            lastServerPosRef.current = 0;
+            lastServerTimeRef.current = now;
+            isBufferingRef.current = true; // Lock bar at 0
             
-            // LOCK: Enable visual lock
-            isChangingTrackRef.current = true;
-            if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
+            // Force visual update immediately
+            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+            return;
+        }
+
+        // B. BUFFERING CHECK
+        // If we are playing but position is still 0 (or very close), we are buffering.
+        // We only release the lock when serverPos > 0.
+        if (!state.paused && serverPos === 0 && isBufferingRef.current) {
+            // Still buffering, do nothing (keep lock)
+            lastServerPosRef.current = 0;
+            lastServerTimeRef.current = now;
+        } else if (!state.paused && serverPos > 0) {
+            // Playback confirmed! Release lock.
+            isBufferingRef.current = false;
             
-            // Extended safety timeout (3s) to allow buffering
-            changeTrackTimeoutRef.current = window.setTimeout(() => {
-                isChangingTrackRef.current = false;
-            }, 3000);
-            
-            // RESET LOCAL STATE
-            localBasePosRef.current = 0;
-            localBaseTimeRef.current = now;
-            wasPausedRef.current = isPaused;
-            
-            // FORCE VISUAL RESET IMMEDIATELY
-            if (progressFillRef.current) {
-                 progressFillRef.current.style.width = '0%';
+            // Calculate drift
+            const expectedPos = lastServerPosRef.current + (now - lastServerTimeRef.current);
+            const drift = Math.abs(expectedPos - serverPos);
+
+            // Sync if drift is significant (> 1s) or if we just came out of buffering
+            if (drift > 1000 || lastServerPosRef.current === 0) {
+                lastServerPosRef.current = serverPos;
+                lastServerTimeRef.current = now;
             }
-            
-            return; 
+        } else if (state.paused) {
+            // Paused
+            isBufferingRef.current = false; // Not buffering, just stopped
+            lastServerPosRef.current = serverPos;
+            lastServerTimeRef.current = now;
         }
-
-        // ** UNLOCK CHECK **
-        // If locked, we only unlock if we see evidence of playback (position > 0)
-        // or if the safety timeout fired.
-        if (isChangingTrackRef.current) {
-             // Only unlock if we have actually advanced past 0 (real playback started)
-             if (serverPos > 0 && !isPaused) {
-                 isChangingTrackRef.current = false;
-                 if (changeTrackTimeoutRef.current) clearTimeout(changeTrackTimeoutRef.current);
-                 // Resync exactly to server now
-                 localBasePosRef.current = serverPos;
-                 localBaseTimeRef.current = now;
-                 wasPausedRef.current = isPaused;
-             }
-             // If still 0, we stay locked. Return here to avoid processing drift logic.
-             return;
-        }
-
-        // B. PLAY/PAUSE HANDLING (Trusted Resume)
-        const isPauseChange = isPaused !== wasPausedRef.current;
-
-        if (isPauseChange) {
-            const elapsedSinceAnchor = wasPausedRef.current ? 0 : (now - localBaseTimeRef.current);
-            const visualPos = localBasePosRef.current + elapsedSinceAnchor;
-
-            localBasePosRef.current = visualPos;
-            localBaseTimeRef.current = now;
-        } 
-        else {
-            // C. DRIFT CONTROL
-            if (!isPaused) {
-                const elapsed = now - localBaseTimeRef.current;
-                const estimatedVisualPos = localBasePosRef.current + elapsed;
-                const drift = Math.abs(estimatedVisualPos - serverPos);
-
-                // Tolerance: 2000ms. If we drift more than this, hard sync.
-                if (drift > 2000) {
-                    localBasePosRef.current = serverPos;
-                    localBaseTimeRef.current = now;
-                }
-            }
-        }
-
-        wasPausedRef.current = isPaused;
 
     }, [state]); 
 
-    // --- 2. ANIMATION LOOP (THE RENDERER) ---
+    // --- 2. ANIMATION LOOP ---
     useEffect(() => {
         let rafId: number;
 
         const loop = () => {
             if (!progressFillRef.current || isDraggingRef.current) {
-                rafId = requestAnimationFrame(loop);
-                return;
-            }
-
-            // ** VISUAL LOCK ENFORCEMENT **
-            // While changing track, strictly render 0% to prevent bar running ahead of buffering audio.
-            if (isChangingTrackRef.current) {
-                progressFillRef.current.style.width = '0%';
                 rafId = requestAnimationFrame(loop);
                 return;
             }
@@ -176,11 +130,19 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                  return;
             }
 
-            let currentPos = localBasePosRef.current;
+            // CRITICAL: If buffering, force 0 visual state
+            if (isBufferingRef.current && !state.paused) {
+                progressFillRef.current.style.width = '0%';
+                rafId = requestAnimationFrame(loop);
+                return;
+            }
 
-            if (!state.paused) {
+            let currentPos = lastServerPosRef.current;
+
+            // Only extrapolate if playing and NOT buffering
+            if (!state.paused && !isBufferingRef.current) {
                 const now = performance.now();
-                currentPos += (now - localBaseTimeRef.current);
+                currentPos += (now - lastServerTimeRef.current);
             }
 
             // Clamping
@@ -227,11 +189,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const finalPos = calculateSeekPosition(e.clientX);
             
             if (player) {
-                player.seek(finalPos).catch(console.error);
+                // Optimistically unlock buffering on seek so UI moves immediately
+                isBufferingRef.current = false;
+                lastServerPosRef.current = finalPos;
+                lastServerTimeRef.current = performance.now();
                 
-                // Immediate Optimistic Update
-                localBasePosRef.current = finalPos;
-                localBaseTimeRef.current = performance.now();
+                player.seek(finalPos).catch(console.error);
             }
         };
 
@@ -252,7 +215,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             <div 
                 ref={progressFillRef}
                 className="h-full rounded-full bg-[var(--progress-fill)] relative"
-                style={{ width: '0%', transition: 'none' }} // Explicitly disable CSS transition for JS control
+                style={{ width: '0%', transition: 'none' }} 
             >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100 shadow-sm"
@@ -828,7 +791,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const renderPlayerContent = () => {
         if (source === 'spotify' && !isPlayerActive && activeDevice) return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
         if (source === 'youtube' && youtubeTrack) {
-            // ... (YouTube rendering logic kept essentially same)
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
@@ -859,7 +821,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             );
         }
         if (source === 'radio' && radioStation) {
-            // ... (Radio rendering)
             const { name, favicon, tags } = radioStation;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const isFavorite = favoriteStationUUIDs.includes(radioStation.stationuuid);
