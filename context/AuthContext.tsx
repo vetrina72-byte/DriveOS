@@ -120,8 +120,8 @@ const mapApiPlaybackToState = (data: any): SpotifyPlayerState | null => {
         position: data.progress_ms,
         repeat_mode: data.repeat_state === 'track' ? 2 : data.repeat_state === 'context' ? 1 : 0,
         shuffle: data.shuffle_state,
-        // CRITICAL FIX: Use performance.now() as the local anchor time when we receive data
-        // instead of the server timestamp, to allow accurate local delta calculations.
+        // CRITICAL: Set to 0. The UI component will perform local projection using performance.now()
+        // when it receives this state object. Using server timestamps introduces sync issues.
         timestamp: 0, 
         track_window: {
             current_track: {
@@ -532,7 +532,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     next_tracks: [],
                     previous_tracks: []
                 },
-                timestamp: Date.now() // KEY FIX: Set strictly to NOW
+                timestamp: Date.now() 
             } : null;
 
             const currentState = s.spotifyState;

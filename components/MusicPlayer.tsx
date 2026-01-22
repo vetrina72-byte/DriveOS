@@ -216,7 +216,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [seek, state?.duration]); // Dependencies
+    }, [seek, state?.duration]);
 
     return (
         <div
