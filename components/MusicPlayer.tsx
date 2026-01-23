@@ -49,6 +49,7 @@ interface MusicPlayerProps {
 
 /**
  * SPOTIFY PROGRESS BAR - PRECISION ENGINE v5.0 (Command-First Architecture)
+ * DO NOT TOUCH - Critical for Jitter/Sync handling
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -90,7 +91,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             eng.duration = incomingDuration || 0;
 
             // ATOMIC CLEAN SLATE
-            // Force DOM reset immediately to prevent "teleporting"
             eng.visualPosition = 0;
             eng.anchorPosition = 0;
             eng.anchorTime = now;
@@ -112,11 +112,11 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             eng.isPlaying = isNowPlaying;
             
             if (isNowPlaying) {
-                // RESUMED: Set anchor to current visual pos to continue smoothly
+                // RESUMED
                 eng.anchorTime = now;
                 eng.anchorPosition = eng.visualPosition; 
             } else {
-                // PAUSED: Freeze exactly where we are visually
+                // PAUSED
                 eng.anchorPosition = eng.visualPosition;
                 eng.anchorTime = now;
             }
@@ -128,7 +128,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             const localProjection = eng.anchorPosition + (now - eng.anchorTime);
             const drift = Math.abs(incomingPos - localProjection);
             
-            // Only correct if drift is significant (> 1.5s)
             if (drift > 1500) {
                 eng.anchorPosition = incomingPos;
                 eng.anchorTime = now;
@@ -215,11 +214,10 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             const finalPos = calculatePos(e.clientX);
             
-            // Optimistic Update
             eng.visualPosition = finalPos;
             eng.anchorPosition = finalPos;
             eng.anchorTime = performance.now();
-            eng.startupGracePeriodEnd = performance.now() + 2000; // Lock sync for 2s
+            eng.startupGracePeriodEnd = performance.now() + 2000;
             
             seek(finalPos);
         };
@@ -232,7 +230,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         };
     }, [seek, state.duration]);
 
-    // Fixed dimensions for stability
     const thumbSize = 12; 
     const trackHeight = 6;
 
@@ -242,27 +239,23 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             className="group relative w-full h-6 flex items-center cursor-pointer touch-none select-none"
             onMouseDown={handleMouseDown}
         >
-            {/* Track Background */}
             <div 
                 className="absolute left-0 right-0 rounded-full bg-[var(--progress-bg)] overflow-hidden pointer-events-none"
                 style={{ height: `${trackHeight}px` }}
             >
-                {/* Fill Bar - width animated via RAF */}
                 <div 
                     ref={progressFillRef}
                     className="h-full bg-[var(--progress-fill)] rounded-full will-change-transform"
                     style={{ width: '0%' }} 
                 />
             </div>
-
-            {/* Handle / Thumb - ABSOLUTE POSITIONING to prevent layout shifts */}
             <div 
                 ref={thumbRef}
                 className="absolute top-1/2 bg-white rounded-full shadow-md pointer-events-none will-change-transform flex items-center justify-center"
                 style={{ 
                     width: `${thumbSize}px`,
                     height: `${thumbSize}px`,
-                    transform: 'translate(-50%, -50%)', // Perfectly centered
+                    transform: 'translate(-50%, -50%)', 
                     left: '0%', 
                     marginTop: '0px', 
                 }}
@@ -593,9 +586,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleTogglePlay = () => {
         if (source === 'spotify') {
-            // Determine the current VISUAL state
-            // If we have an optimistic override, use it. Otherwise use real state.
-            // If real state is null (cold start), assume NOT playing (so next is Play)
+            // LOGIC: If state is null (Cold Start), assume Paused (false) -> Trigger Play
             const currentVisualState = optimisticIsPlaying !== null 
                 ? optimisticIsPlaying 
                 : (playerState ? !playerState.paused : false);
@@ -610,7 +601,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 clearTimeout(debounceTimerRef.current);
             }
 
-            // 3. Queue network request (Debounce 500ms)
+            // 3. Queue network request (Debounce 150ms - FAST)
             debounceTimerRef.current = window.setTimeout(() => {
                 if (nextState) {
                     play({});
@@ -620,7 +611,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 debounceTimerRef.current = null;
                 // Allow the optimistic state to persist a bit longer to cover network latency
                 setTimeout(() => setOptimisticIsPlaying(null), 1000); 
-            }, 500);
+            }, 150);
 
         } else if (source === 'radio') {
              if (audioRef.current?.paused) {
@@ -917,9 +908,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const isPrevDisabled = false; 
 
                 // Determine visual Play/Pause state based on Optimistic Override or Real State
+                // Default to FALSE (Paused) if state is missing, so button shows PLAY.
                 const visualIsPlaying = optimisticIsPlaying !== null 
                     ? optimisticIsPlaying 
-                    : (!playerState.paused);
+                    : (playerState ? !playerState.paused : false);
 
                 return (
                     <div className="w-full h-full flex flex-col justify-between px-4 py-2">
