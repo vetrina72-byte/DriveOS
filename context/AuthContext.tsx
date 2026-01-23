@@ -173,6 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const fastPollingIntervalRef = useRef<number | null>(null);
     const fastPollingTimeoutRef = useRef<number | null>(null);
     const interactionLockEnd = useRef<number>(0);
+    // NEW: Counter to invalidate old async requests if the user clicks rapidly
+    const commandGenerationRef = useRef<number>(0);
 
     const [homeContentLoading, setHomeContentLoading] = useState(false);
     const [homeContentError, setHomeContentError] = useState<string | null>(null);
@@ -481,6 +483,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [state.isAuthenticated, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
+        // KILL SWITCH: Increment command generation to invalidate previous pending requests
+        const currentCommandId = ++commandGenerationRef.current;
+        
         // LOCK: Create a 2 second silence window for API polling
         interactionLockEnd.current = Date.now() + 2000; 
 
@@ -499,6 +504,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
 
+        // OPTIMISTIC UPDATE: Sync State Immediately
         setNowPlaying(s => {
             const optimisticDevice = isTargetingLocal ? {
                 id: localId!,
@@ -576,7 +582,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         try {
             await safePlay(options, attemptRefreshAndUpdatePlayerToken);
+            
+            // Post-Play check: If user clicked again while we were awaiting, ignore this result
+            if (currentCommandId !== commandGenerationRef.current) return;
+
         } catch (e) {
+            if (currentCommandId !== commandGenerationRef.current) return;
             console.error("Play failed", e);
             setNowPlaying(s => s.spotifyState ? { ...s, spotifyState: { ...s.spotifyState, paused: true } } : s);
             interactionLockEnd.current = 0; 
@@ -584,7 +595,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice, triggerFastPolling]);
 
     const pauseSpotify = useCallback(async () => {
-        // LOCK: Ignore server updates for 2 seconds
+        const currentCommandId = ++commandGenerationRef.current;
         interactionLockEnd.current = Date.now() + 2000;
 
         // INSTANT LOCAL PAUSE
@@ -620,6 +631,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [triggerFastPolling]);
 
     const seek = useCallback(async (position_ms: number) => {
+        const currentCommandId = ++commandGenerationRef.current;
         interactionLockEnd.current = Date.now() + 2000;
 
         setNowPlaying(s => {

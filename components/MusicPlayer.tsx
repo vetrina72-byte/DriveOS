@@ -102,18 +102,18 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 // Grace period: Don't snap/jump for 4 seconds while buffers fill
                 eng.startupGracePeriodEnd = now + 4000;
             } else {
-                // TRACK CHANGE: Nuclear Reset
+                // TRACK CHANGE: Nuclear Reset (ATOMIC CLEAN SLATE)
+                // We wipe everything to 0 immediately to prevent "teleporting"
                 eng.duration = 0; 
                 eng.visualPosition = 0;
                 eng.anchorPosition = 0;
                 eng.anchorTime = now;
-                eng.ignoreServerUpdatesUntil = now + 1000; 
+                eng.ignoreServerUpdatesUntil = now + 500; // Short lock to prevent flicker
                 eng.startupGracePeriodEnd = now + 3000;
                 
-                if (progressFillRef.current && thumbRef.current) {
-                    progressFillRef.current.style.width = '0%';
-                    thumbRef.current.style.left = '0%';
-                }
+                // FORCE DOM UPDATE INSTANTLY (Bypass React Loop)
+                if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+                if (thumbRef.current) thumbRef.current.style.left = '0%';
             }
             return;
         }
@@ -268,8 +268,8 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         };
     }, [seek, state.duration]);
 
-    // Thumb Visuals - Slightly larger as requested
-    const thumbSize = 16; 
+    // Thumb Visuals - Reduced size by ~5% from 16px to 15px
+    const thumbSize = 15; 
     const trackHeight = 6;
 
     return (
