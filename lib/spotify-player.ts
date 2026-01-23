@@ -222,21 +222,43 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
-    // 2. CONSTRUCT REQUEST
-    // Crucial Change: We include deviceId in the payload to force specific device activation.
-    // The backend /api/play handles adding device_id to the query param if provided.
-    // This solves the 5-6s delay caused by Spotify searching for an active device.
+    // 2. FORCE ACTIVATION - This is crucial for "First Play Responsiveness"
+    // Browsers block audio if not triggered by a user gesture. 
+    if (spotifyPlayer) {
+        try {
+            await spotifyPlayer.activateElement();
+        } catch (e) {
+            console.warn("[safePlay] activateElement failed (non-fatal)", e);
+        }
+    }
+
+    // 3. AGGRESSIVE TRANSFER FOR COLD START
+    // If we have a device ID but haven't successfully played yet (cold start),
+    // Force a transfer first. This fixes the "multiple clicks needed" issue.
+    const currentState = await spotifyPlayer?.getCurrentState().catch(() => null);
+    
+    // If local state is null (never played) or we aren't active, assume we need to transfer.
+    if (!currentState) {
+        console.log('[safePlay] Cold start detected. Forcing transfer to local device first...');
+        try {
+            await fetch('/api/transfer-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+                body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
+            });
+            // Small wait to allow the backend to register the device switch
+            await new Promise(r => setTimeout(r, 200)); 
+        } catch (e) {
+            console.error("[safePlay] Pre-transfer failed", e);
+        }
+    }
+
+    // 4. CONSTRUCT REQUEST
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
 
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
         try {
             console.log('[safePlay] Initiating Play on Device:', spotifyDeviceId);
-            
-            // Try activating element just in case (browser requirement)
-            if (spotifyPlayer) {
-                spotifyPlayer.activateElement().catch(() => {}); 
-            }
-
             const res = await fetch('/api/play', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
@@ -249,12 +271,12 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     };
 
-    // 3. Attempt playback directly targeting this device
+    // 5. Attempt playback
     let result = await doPlay();
 
     if (result.ok) return true;
 
-    // 4. Handle 404 (Device Not Found / Inactive) - Retry logic if specific target failed
+    // 6. Handle 404 (Device Not Found / Inactive) - Retry logic
     if (result.status === 404) {
         console.log('[safePlay] Device 404. Attempting transfer/wake-up...');
         
@@ -267,13 +289,11 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
             });
 
             if (transferRes.ok) {
-                // Wait a moment for Spotify backend to register the transfer
                 await new Promise(r => setTimeout(r, 300));
                 console.log('[safePlay] Transfer successful. Retrying play...');
                 result = await doPlay();
                 if (result.ok) return true;
             } else {
-                // ... (Existing reconnection logic as backup)
                 console.error('[safePlay] Transfer failed. Attempting hard reconnect...');
                 if (spotifyPlayer) {
                     const newId = await reconnectAndGetDeviceId(spotifyPlayer);
@@ -298,7 +318,7 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
-    // 5. Handle 401 (Token Expired)
+    // 7. Handle 401 (Token Expired)
     if (result.status === 401) {
         console.log('[safePlay] Token expired (401). Refreshing...');
         const refreshed = await attemptRefresh();

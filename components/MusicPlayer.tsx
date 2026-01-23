@@ -48,13 +48,11 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.1
+ * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.2 (Stabilized)
  * 
- * Logic:
- * 1. Visual updates are decoupled from React renders (Direct DOM manipulation via RAF).
- * 2. "Truth" is calculated locally using performance.now() + Anchor Time.
- * 3. Server updates are only used to correcting large drifts (>1.5s) or setting initial anchors.
- * 4. Track ID changes trigger an immediate hard-reset to 0.
+ * Fixes:
+ * 1. "Jump Back on Pause": Uses visual position as truth when pausing.
+ * 2. "Start-up Jitter": Ignores aggressive drift correction during the first few seconds of playback.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -76,11 +74,11 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         
         // Sync Locks
         lastSyncTime: 0,
-        ignoreServerUpdatesUntil: 0
+        ignoreServerUpdatesUntil: 0,
+        startupGracePeriodEnd: 0 // New: To prevent jitter on start
     });
 
     // --- 1. STATE SYNCHRONIZATION (The Brain) ---
-    // Runs whenever Spotify sends a state update packet (approx every 1s)
     useEffect(() => {
         if (!state) return;
         
@@ -93,34 +91,29 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
 
         // CHECK 1: TRACK CHANGE OR INITIAL LOAD
         if (incomingId !== eng.currentTrackId) {
-            const isFirstLoad = eng.currentTrackId === ''; // Check if this is the component mounting
+            const isFirstLoad = eng.currentTrackId === ''; 
             
             eng.currentTrackId = incomingId;
             eng.isPlaying = !incomingPaused;
             
-            // Update duration immediately
             if (incomingDuration > 0) eng.duration = incomingDuration;
 
             if (isFirstLoad) {
                 // COLD START: Trust the incoming position immediately.
-                // Do NOT reset to 0, or we lose the position on page reload.
                 eng.visualPosition = incomingPos;
                 eng.anchorPosition = incomingPos;
                 eng.anchorTime = now;
-                // We assume the data from localStorage or API on first load is the best we have.
-                // No lock needed, let it sync freely.
+                // Grace period: Don't snap/jump for 4 seconds while buffers fill
+                eng.startupGracePeriodEnd = now + 4000;
             } else {
-                // ACTUAL TRACK CHANGE: Nuclear Reset.
-                // Force bar to 0 to prevent "ghosting" (seeing previous song's bar for a split second).
-                eng.duration = 0; // Force duration to 0 until confirmed next cycle
+                // TRACK CHANGE: Nuclear Reset
+                eng.duration = 0; 
                 eng.visualPosition = 0;
                 eng.anchorPosition = 0;
                 eng.anchorTime = now;
-                
-                // Sync Lock: Ignore "old" packets from previous song for 1 second
                 eng.ignoreServerUpdatesUntil = now + 1000; 
+                eng.startupGracePeriodEnd = now + 3000;
                 
-                // IMMEDIATE VISUAL KILL
                 if (progressFillRef.current && thumbRef.current) {
                     progressFillRef.current.style.width = '0%';
                     thumbRef.current.style.left = '0%';
@@ -129,13 +122,10 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             return;
         }
 
-        // Update duration for existing track
         if (incomingDuration > 0) eng.duration = incomingDuration;
 
         // CHECK 2: SYNC LOCK ACTIVE?
         if (now < eng.ignoreServerUpdatesUntil) {
-            // We trust our local engine more than the server right now (e.g. after a seek or track change)
-            // Just ensure play state is synced if user paused/played
             if (eng.isPlaying !== !incomingPaused) {
                 eng.isPlaying = !incomingPaused;
                 if (eng.isPlaying) {
@@ -146,7 +136,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             return;
         }
 
-        // CHECK 3: PLAY/PAUSE STATE CHANGE (Cold Start Logic)
+        // CHECK 3: PLAY/PAUSE STATE CHANGE
         const isNowPlaying = !incomingPaused;
         
         if (eng.isPlaying !== isNowPlaying) {
@@ -154,13 +144,16 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             if (isNowPlaying) {
                 // RESUMED: Optimistic Start.
-                // We use the server position as the anchor, but start the clock NOW.
                 eng.anchorTime = now;
                 eng.anchorPosition = incomingPos;
+                // Re-enable grace period on resume to avoid jumpiness
+                eng.startupGracePeriodEnd = now + 2000;
             } else {
-                // PAUSED: Freeze exactly where we are visually. 
-                // Do NOT jump to server position (which is likely old/laggy).
+                // PAUSED: Freeze exactly where we are visually (Prevent "Jump Back" Bug)
+                // We IGNORE incomingPos from the server because it's usually lagged.
+                // We set anchor to current visual, so it stops dead.
                 eng.anchorPosition = eng.visualPosition;
+                eng.anchorTime = now;
             }
             return;
         }
@@ -169,16 +162,28 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         if (eng.isPlaying) {
             // Where we think we are based on local clock
             const localProjection = eng.anchorPosition + (now - eng.anchorTime);
-            // Where server says we are
-            const drift = Math.abs(incomingPos - localProjection);
+            
+            // If in start-up grace period, trust local projection over server unless deviation is huge
+            if (now < eng.startupGracePeriodEnd) {
+                // Only snap if we are way off (> 3s), otherwise let it ride smoother
+                if (Math.abs(incomingPos - localProjection) > 3000) {
+                     eng.anchorPosition = incomingPos;
+                     eng.anchorTime = now;
+                     eng.visualPosition = incomingPos;
+                }
+                return; 
+            }
 
-            // If drift is massive (>1.5s), it's a seek or glitch -> Hard Sync
-            if (drift > 1500) {
+            // Standard Drift Correction
+            const drift = Math.abs(incomingPos - localProjection);
+            // Increased threshold to 2000ms to reduce jitter
+            if (drift > 2000) {
                 eng.anchorPosition = incomingPos;
                 eng.anchorTime = now;
-                eng.visualPosition = incomingPos; // Snap visually
+                // Soft correction: don't snap visually immediately, just reset anchor
+                // The visual loop will converge over next frames if we changed anchor
+                eng.visualPosition = incomingPos; 
             }
-            // If drift is small, ignore it. Smoothness > Accuracy.
         }
 
     }, [state]);
@@ -203,14 +208,12 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             }
 
             // Clamping & Safety
-            // If duration is 0 (during reset), force 0 to avoid Infinity/NaN
             const duration = eng.duration > 0 ? eng.duration : 1; 
             
             if (eng.visualPosition > duration) eng.visualPosition = duration;
             if (eng.visualPosition < 0) eng.visualPosition = 0;
 
             // Render
-            // If duration is effectively 0 (track change), render 0%
             const percent = eng.duration > 0 ? (eng.visualPosition / duration) * 100 : 0;
             
             bar.style.width = `${percent}%`;
@@ -233,7 +236,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         const eng = engine.current;
         eng.isDragging = true;
         
-        // Instant visual update
         const newPos = calculatePos(e.clientX);
         const percent = (newPos / state.duration) * 100;
         
@@ -263,11 +265,11 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             const finalPos = calculatePos(e.clientX);
             
-            // "Optimistic Play": Assume we are playing from here immediately
+            // Optimistic Play
             eng.visualPosition = finalPos;
             eng.anchorPosition = finalPos;
             eng.anchorTime = performance.now();
-            eng.ignoreServerUpdatesUntil = performance.now() + 1500; // Ignore laggy server response for 1.5s
+            eng.ignoreServerUpdatesUntil = performance.now() + 2000;
             
             seek(finalPos);
         };
@@ -281,8 +283,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     }, [seek, state.duration]);
 
     // Thumb Visuals
-    const thumbSize = 12; // Discrete size
-    // FIX: Increased trackHeight to 6px (h-1.5) to match Radio/Disabled bars and prevent "thinning"
+    const thumbSize = 12; 
     const trackHeight = 6;
 
     return (
