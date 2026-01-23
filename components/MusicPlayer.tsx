@@ -48,7 +48,7 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.3 (Refined Visuals)
+ * SPOTIFY PROGRESS BAR - PRECISION ENGINE v5.0 (Command-First Architecture)
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -68,9 +68,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         anchorPosition: 0,   // What was the position at anchorTime? (ms)
         visualPosition: 0,   // Currently displayed ms
         
-        // Sync Locks
-        lastSyncTime: 0,
-        ignoreServerUpdatesUntil: 0,
+        // Locks
         startupGracePeriodEnd: 0 
     });
 
@@ -85,87 +83,55 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         const incomingPos = state.position;
         const incomingDuration = state.duration;
 
-        // CHECK 1: TRACK CHANGE OR INITIAL LOAD
+        // CHECK 1: TRACK CHANGE OR INITIAL LOAD (NUCLEAR RESET)
         if (incomingId !== eng.currentTrackId) {
-            const isFirstLoad = eng.currentTrackId === ''; 
-            
             eng.currentTrackId = incomingId;
             eng.isPlaying = !incomingPaused;
-            
-            if (incomingDuration > 0) eng.duration = incomingDuration;
+            eng.duration = incomingDuration || 0;
 
-            if (isFirstLoad) {
-                // COLD START: Trust the incoming position immediately.
-                eng.visualPosition = incomingPos;
-                eng.anchorPosition = incomingPos;
-                eng.anchorTime = now;
-                // Grace period: Don't snap/jump for 4 seconds while buffers fill
-                eng.startupGracePeriodEnd = now + 4000;
-            } else {
-                // TRACK CHANGE: Nuclear Reset (ATOMIC CLEAN SLATE)
-                // We wipe everything to 0 immediately to prevent "teleporting"
-                eng.duration = 0; 
-                eng.visualPosition = 0;
-                eng.anchorPosition = 0;
-                eng.anchorTime = now;
-                eng.ignoreServerUpdatesUntil = now + 500; // Short lock to prevent flicker
-                eng.startupGracePeriodEnd = now + 3000;
-                
-                // FORCE DOM UPDATE INSTANTLY (Bypass React Loop)
-                if (progressFillRef.current) progressFillRef.current.style.width = '0%';
-                if (thumbRef.current) thumbRef.current.style.left = '0%';
-            }
+            // ATOMIC CLEAN SLATE
+            // Force DOM reset immediately to prevent "teleporting"
+            eng.visualPosition = 0;
+            eng.anchorPosition = 0;
+            eng.anchorTime = now;
+            
+            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+            if (thumbRef.current) thumbRef.current.style.left = '0%';
+            
+            // Give buffer time for data to stabilize
+            eng.startupGracePeriodEnd = now + 1500;
             return;
         }
 
         if (incomingDuration > 0) eng.duration = incomingDuration;
 
-        // CHECK 2: SYNC LOCK ACTIVE?
-        if (now < eng.ignoreServerUpdatesUntil) {
-            if (eng.isPlaying !== !incomingPaused) {
-                eng.isPlaying = !incomingPaused;
-                if (eng.isPlaying) {
-                    eng.anchorTime = now;
-                    eng.anchorPosition = eng.visualPosition;
-                }
-            }
-            return;
-        }
-
-        // CHECK 3: PLAY/PAUSE STATE CHANGE
+        // CHECK 2: PLAY/PAUSE STATE CHANGE
         const isNowPlaying = !incomingPaused;
         
         if (eng.isPlaying !== isNowPlaying) {
             eng.isPlaying = isNowPlaying;
             
             if (isNowPlaying) {
-                // RESUMED: Optimistic Start.
+                // RESUMED: Set anchor to current visual pos to continue smoothly
                 eng.anchorTime = now;
-                eng.anchorPosition = incomingPos;
-                eng.startupGracePeriodEnd = now + 2000;
+                eng.anchorPosition = eng.visualPosition; 
             } else {
                 // PAUSED: Freeze exactly where we are visually
                 eng.anchorPosition = eng.visualPosition;
                 eng.anchorTime = now;
+                // Important: Update server view to match visual to avoid jump on resume
+                // (Optional: send exact pause pos to server if critical)
             }
             return;
         }
 
-        // CHECK 4: DRIFT CORRECTION (Only if playing)
-        if (eng.isPlaying) {
+        // CHECK 3: DRIFT CORRECTION (Soft Pursuit)
+        if (eng.isPlaying && now > eng.startupGracePeriodEnd) {
             const localProjection = eng.anchorPosition + (now - eng.anchorTime);
-            
-            if (now < eng.startupGracePeriodEnd) {
-                if (Math.abs(incomingPos - localProjection) > 3000) {
-                     eng.anchorPosition = incomingPos;
-                     eng.anchorTime = now;
-                     eng.visualPosition = incomingPos;
-                }
-                return; 
-            }
-
             const drift = Math.abs(incomingPos - localProjection);
-            if (drift > 2000) {
+            
+            // Only correct if drift is significant (> 1.5s)
+            if (drift > 1500) {
                 eng.anchorPosition = incomingPos;
                 eng.anchorTime = now;
                 eng.visualPosition = incomingPos; 
@@ -210,7 +176,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         return () => cancelAnimationFrame(rafId);
     }, []);
 
-    // --- 3. INPUT HANDLING (Optimistic) ---
+    // --- 3. INPUT HANDLING ---
     const calculatePos = (clientX: number) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -251,11 +217,11 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             const finalPos = calculatePos(e.clientX);
             
-            // Optimistic Play
+            // Optimistic Update
             eng.visualPosition = finalPos;
             eng.anchorPosition = finalPos;
             eng.anchorTime = performance.now();
-            eng.ignoreServerUpdatesUntil = performance.now() + 2000;
+            eng.startupGracePeriodEnd = performance.now() + 2000; // Lock sync for 2s
             
             seek(finalPos);
         };
@@ -268,14 +234,14 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         };
     }, [seek, state.duration]);
 
-    // Thumb Visuals - Reduced size by ~5% from 16px to 15px
-    const thumbSize = 15; 
+    // Fixed dimensions for stability
+    const thumbSize = 12; 
     const trackHeight = 6;
 
     return (
         <div
             ref={progressBarRef}
-            className="group relative w-full h-5 flex items-center cursor-pointer touch-none select-none"
+            className="group relative w-full h-6 flex items-center cursor-pointer touch-none select-none"
             onMouseDown={handleMouseDown}
         >
             {/* Track Background */}
@@ -291,23 +257,18 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 />
             </div>
 
-            {/* Handle / Thumb - Centered correctly */}
+            {/* Handle / Thumb - ABSOLUTE POSITIONING to prevent layout shifts */}
             <div 
                 ref={thumbRef}
                 className="absolute top-1/2 bg-white rounded-full shadow-md pointer-events-none will-change-transform flex items-center justify-center"
                 style={{ 
                     width: `${thumbSize}px`,
                     height: `${thumbSize}px`,
-                    // We need to counteract the track offset to center vertically perfectly
-                    marginTop: '0px', 
-                    transform: 'translate(-50%, -50%)',
+                    transform: 'translate(-50%, -50%)', // Perfectly centered
                     left: '0%', 
-                    transition: 'transform 0.1s ease', 
+                    marginTop: '0px', 
                 }}
-            >
-                {/* Inner decorative dot or just plain white circle */}
-                <div className="w-full h-full rounded-full transition-transform duration-200 group-hover:scale-110" />
-            </div>
+            />
         </div>
     );
 };
@@ -381,7 +342,6 @@ const YouTubeProgressBar = ({
                     style={{ width: `${visualPercentage}%` }} 
                 />
             </div>
-             {/* Thumb for YouTube */}
              <div 
                 className="absolute top-1/2 -ml-2 w-4 h-4 bg-white rounded-full shadow-lg border border-black/10 scale-0 group-hover:scale-100 transition-transform duration-100"
                 style={{ left: `${visualPercentage}%`, marginTop: '-8px' }}
@@ -593,6 +553,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       playYouTube, 
       play, 
       pauseSpotify, 
+      seek,
       isAutoplayBlocked,
       unlockAutoplay
   } = useAuth();
@@ -794,7 +755,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             cancelAnimationFrame(animationFrameId); 
             window.removeEventListener('resize', calculatePosition); 
         };
-    }, [visibleQueue, queuePopoverBottomOffset, dockedConfig, floatingConfig, isAnyAppOpen]); // Added layout config dependencies
+    }, [visibleQueue, queuePopoverBottomOffset, dockedConfig, floatingConfig, isAnyAppOpen]); 
     
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -825,7 +786,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const handleNextTrack = () => {
         if (source === 'spotify') {
             if (playerState && playerState.track_window.next_tracks.length > 0) {
-                // Optimistic update
                 const nextTrack = playerState.track_window.next_tracks[0];
                 setNowPlaying(prev => prev.spotifyState ? ({
                     ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (nextTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: nextTrack, next_tracks: prev.spotifyState.track_window.next_tracks.slice(1) } }
@@ -841,16 +801,20 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     const handlePrevTrack = () => {
         if (source === 'spotify') {
+            // Se la posizione è oltre 3 secondi, riavvia (Seek 0)
             if (playerState && playerState.position > 3000) {
                 setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: { ...prev.spotifyState, position: 0 } }) : prev);
-                player?.seek(0);
-            } else if (playerState && playerState.track_window.previous_tracks.length > 0) {
-                const prevTrack = playerState.track_window.previous_tracks[playerState.track_window.previous_tracks.length - 1];
-                setNowPlaying(prev => prev.spotifyState ? ({
-                    ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (prevTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: prevTrack, previous_tracks: prev.spotifyState.track_window.previous_tracks.slice(0, -1) } }
-                }) : prev);
+                seek(0);
+            } else {
+                // Altrimenti, Previous Track
+                if (playerState && playerState.track_window.previous_tracks.length > 0) {
+                    const prevTrack = playerState.track_window.previous_tracks[playerState.track_window.previous_tracks.length - 1];
+                    setNowPlaying(prev => prev.spotifyState ? ({
+                        ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (prevTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: prevTrack, previous_tracks: prev.spotifyState.track_window.previous_tracks.slice(0, -1) } }
+                    }) : prev);
+                }
                 player?.previousTrack();
-            } else player?.previousTrack();
+            }
         } else if (source === 'radio') onStationChange('prev');
         else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
              const idx = nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId);
@@ -876,7 +840,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const playerStyle: React.CSSProperties = useMemo(() => {
         let baseStyle: React.CSSProperties = isAnyAppOpen ? { width: `${dockedConfig.width}px`, height: `${dockedConfig.height}px`, bottom: `${dockedConfig.bottom}px`, left: `${dockedConfig.left}px`, transform: 'none' } : { width: `${floatingConfig.width}px`, height: `${floatingConfig.height}px`, bottom: `${floatingConfig.bottom}px`, left: `calc(50% - ${floatingConfig.otherWidgetWidth / 2}px - 8px - ${floatingConfig.width / 2}px)`, transform: 'none' };
         baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
-        // Added 'transform' to the transition property for smoother movements
         baseStyle.transition = 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
         return baseStyle;
     }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
@@ -885,7 +848,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     const renderPlayerContent = () => {
         if (source === 'spotify') {
-            // FIX: Explicitly use the isLocalDeviceActive logic to toggle views
             if (!isLocalDeviceActive && activeDevice) {
                 return <RemotePlayerView device={activeDevice} isNight={isNight} onTakeControl={() => play({})} />;
             }
@@ -895,10 +857,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
                 const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
                 
-                // Logic to enable/disable previous button without flickering
-                const hasPrevious = playerState.track_window.previous_tracks.length > 0;
+                // Allow "Previous" button if we can seek back OR go to prev track
+                // Effectively makes it always active during playback
                 const canSeekBack = playerState.position > 3000;
-                const isPrevDisabled = !hasPrevious && !canSeekBack;
+                // We keep button enabled to allow seek-to-0 behavior
+                const isPrevDisabled = false; 
 
                 return (
                     <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -913,7 +876,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                         
-                        {/* NEW ABSOLUTE TIME BAR */}
                         <SpotifyProgressBar state={playerState} />
                         
                         <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
