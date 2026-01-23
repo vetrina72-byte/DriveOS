@@ -88,9 +88,56 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         lastVolume: 1,
     });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [nowPlaying, setNowPlaying] = useState<NowPlayingState>({
-        source: null, spotifyState: null, radioStation: null, radioContext: [], youtubeTrack: null, isLoading: false, activeDevice: null
+    
+    // HYDRATION LOGIC: Initialize state from LocalStorage to show the previous track instantly
+    const [nowPlaying, setNowPlaying] = useState<NowPlayingState>(() => {
+        let initialData: NowPlayingState = {
+            source: null, 
+            spotifyState: null, 
+            radioStation: null, 
+            radioContext: [], 
+            youtubeTrack: null, 
+            isLoading: false, 
+            activeDevice: null
+        };
+
+        if (typeof window !== 'undefined') {
+            try {
+                const cachedTrackJson = localStorage.getItem('cached_track_data');
+                const lastProgress = Number(localStorage.getItem('last_progress_ms') || '0');
+                
+                if (cachedTrackJson) {
+                    const cachedTrack = JSON.parse(cachedTrackJson);
+                    // Construct a partial/mock SpotifyPlayerState for immediate display
+                    const mockState: any = {
+                        paused: true, // Always start paused visually until confirmed otherwise
+                        position: lastProgress,
+                        duration: cachedTrack.duration_ms || 0,
+                        track_window: {
+                            current_track: cachedTrack,
+                            next_tracks: [],
+                            previous_tracks: []
+                        },
+                        context: { uri: null, metadata: null },
+                        disallows: {},
+                        shuffle: false,
+                        repeat_mode: 0,
+                        timestamp: Date.now()
+                    };
+                    
+                    initialData = {
+                        ...initialData,
+                        source: 'spotify',
+                        spotifyState: mockState
+                    };
+                }
+            } catch (e) {
+                console.warn('Failed to hydrate player state', e);
+            }
+        }
+        return initialData;
     });
+
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
     const [isAutoplayBlocked, setAutoplayBlocked] = useState(false);
     const [isPlayerSdkReady, setIsPlayerSdkReady] = useState(false);
@@ -177,6 +224,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.removeItem('last_track_uri');
         localStorage.removeItem('last_progress_ms');
         localStorage.removeItem('last_is_playing');
+        localStorage.removeItem('cached_track_data'); // Clear cached track on logout
         localStorage.removeItem('continueListeningItems');
         localStorage.removeItem('last_optimistic_item');
         latestOptimisticItem.current = null;
@@ -185,6 +233,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             accessToken: null, expiresAt: null, user: null, isAuthenticated: false, isLoading: false,
             error: null, volume: 1, isMuted: false, lastVolume: 1,
         });
+        setNowPlaying(prev => ({ ...prev, source: null, spotifyState: null }));
     }, []);
     
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
@@ -303,6 +352,11 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         });
         
         if (newState) {
+            // Persist the essential track metadata for next session instant-load
+            if (newState.track_window.current_track) {
+                localStorage.setItem("cached_track_data", JSON.stringify(newState.track_window.current_track));
+            }
+            
             localStorage.setItem("last_is_playing", String(!newState.paused));
             localStorage.setItem("last_progress_ms", String(newState.position));
             if (newState.track_window.current_track) localStorage.setItem("last_track_uri", newState.track_window.current_track.uri);

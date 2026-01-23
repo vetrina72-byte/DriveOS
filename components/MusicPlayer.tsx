@@ -504,7 +504,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const player = getPlayerInstance();
     // Check if we are active LOCALLY
-    const isPlayerActive = player && playerState && playerState.track_window.current_track;
+    // FIX: Relaxed checking. We allow playerState to exist even if 'player' instance (SDK) isn't fully ready yet.
+    // This supports the optimistic UI state hydrated from localStorage in AuthContext.
+    const isPlayerActive = playerState && playerState.track_window.current_track;
+    
     const currentTrack = playerState?.track_window.current_track;
     const currentTrackUri = currentTrack?.uri;
 
