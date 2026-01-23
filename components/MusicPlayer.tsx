@@ -48,69 +48,76 @@ interface MusicPlayerProps {
 }
 
 /**
- * SpotifyProgressBar - High Precision Version
+ * SpotifyProgressBar - Visual Dictatorship Version
  * 
- * LOGIC:
- * 1. Visual Priority: We trust our local RequestAnimationFrame loop above all else for smoothness.
- * 2. Drift Tolerance: We only accept a position update from Spotify if it differs by > 1000ms (Seeks, Track Changes).
- *    Small drifts (network latency) are ignored to prevent "rubber-banding".
- * 3. Pause Freeze: When paused, we stop updating. We DO NOT snap to the server's pause position, avoiding the "jump back".
+ * Logic:
+ * 1. The Visual Position (visualPosRef) is the source of truth for the UI.
+ * 2. When PAUSED: We FREEZE the visual position. We IGNORE server updates (which often lag behind).
+ * 3. When RESUMED: We start animating FROM the frozen visual position. We do NOT snap to server time.
+ * 4. We only snap to server time if:
+ *    a) The track ID changes.
+ *    b) The difference is HUGE (> 1500ms), implying a manual Seek by the user.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const barFillRef = useRef<HTMLDivElement>(null);
     const progressContainerRef = useRef<HTMLDivElement>(null);
     const [isSeeking, setIsSeeking] = useState(false);
 
-    // The "God Value" - The absolute truth of what is currently rendered on screen
+    // The absolute truth of what is currently rendered on screen
     const visualPosRef = useRef<number>(state.position);
     
-    // Track previous state to detect track changes vs simple time updates
+    // State tracking
     const lastTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
+    const prevPausedRef = useRef<boolean>(state.paused);
     
-    // Performance timer for delta calculations
+    // Performance timer
     const lastFrameTimeRef = useRef<number>(0);
 
-    // --- EFFECT 1: State Synchronization ---
-    // Handle Track Changes and Seeks (Large Jumps)
+    // --- SYNC LOGIC (The Brain) ---
     useEffect(() => {
         const currentTrackId = state.track_window.current_track?.id || null;
         const trackChanged = currentTrackId !== lastTrackIdRef.current;
-        
-        // Calculate where the server thinks we are right now
-        // Note: state.position is where we were at state.timestamp.
-        // If paused, we are exactly at state.position.
-        // If playing, we are at position + (now - timestamp).
-        const timeSinceUpdate = Date.now() - state.timestamp;
-        const estimatedServerPos = state.paused ? state.position : state.position + timeSinceUpdate;
+        const isPaused = state.paused;
+        const wasPaused = prevPausedRef.current;
 
+        // Calculate where the server thinks we are
+        const timeSinceUpdate = Date.now() - state.timestamp;
+        const estimatedServerPos = isPaused ? state.position : state.position + timeSinceUpdate;
         const diff = Math.abs(estimatedServerPos - visualPosRef.current);
 
-        // SYNC LOGIC:
-        // 1. Track Changed? -> Hard Reset to 0 (or state.position)
-        // 2. Huge Diff (>1000ms)? -> Seek detected or massive lag. Hard Sync.
-        // 3. Small Diff? -> IGNORE. Keep smoothing locally.
-        
+        // 1. TRACK CHANGE: Hard Reset
         if (trackChanged) {
             visualPosRef.current = state.position;
             lastTrackIdRef.current = currentTrackId;
-        } else if (diff > 1000) {
-            // This catches Seeks (user jumps to 2:00)
+            // Force immediate render update
+            if (barFillRef.current) {
+                const duration = state.duration || 1;
+                const percent = Math.max(0, Math.min(100, (visualPosRef.current / duration) * 100));
+                barFillRef.current.style.width = `${percent}%`;
+            }
+        } 
+        // 2. PAUSE TRANSITION (Playing -> Paused)
+        else if (isPaused && !wasPaused) {
+            // STOP! Freeze visualPosRef exactly where it is.
+            // Do NOT update from server. Server is usually 200-500ms BEHIND the visual loop.
+            // Updating here causes the "Jump Back". We ignore it.
+        }
+        // 3. RESUME TRANSITION (Paused -> Playing)
+        else if (!isPaused && wasPaused) {
+            // GO! We will start extrapolating from the current visualPosRef in the animation loop.
+            // Do NOT snap to server.
+        }
+        // 4. SEEK / DRIFT CORRECTION
+        // Only if the difference is massive (Seek) do we override the visual smoothness.
+        else if (diff > 1500) {
             visualPosRef.current = estimatedServerPos;
         }
-        // Else: We ignore the update. This prevents the "Start of Track Jitter" 
-        // where server sends 0, 0, 0 while we have already animated to 100ms, 200ms.
 
-        // Force a render update immediately if paused, to ensure UI is correct
-        if (state.paused && barFillRef.current) {
-             const duration = state.duration || 1;
-             const percent = Math.max(0, Math.min(100, (visualPosRef.current / duration) * 100));
-             barFillRef.current.style.width = `${percent}%`;
-        }
+        prevPausedRef.current = isPaused;
 
     }, [state.position, state.paused, state.duration, state.timestamp, state.track_window.current_track?.id]);
 
-    // --- EFFECT 2: Animation Loop ---
-    // Handles smooth interpolation when playing
+    // --- ANIMATION LOOP (The Heart) ---
     useEffect(() => {
         let animationFrameId: number;
 
@@ -124,13 +131,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             const dt = now - lastFrameTimeRef.current;
             lastFrameTimeRef.current = now;
 
-            // Pure local extrapolation
+            // Advance visual position locally
             visualPosRef.current += dt;
 
-            // Render
+            // Render to DOM
             if (barFillRef.current) {
                 const duration = state.duration || 1;
-                // Clamp visual position to duration (prevent flying off end)
                 if (visualPosRef.current > duration) visualPosRef.current = duration;
                 
                 const percent = (visualPosRef.current / duration) * 100;
@@ -141,15 +147,15 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         };
 
         if (!state.paused) {
-            // Reset frame timer so we don't have a huge 'dt' jump from previous pause
-            lastFrameTimeRef.current = 0; 
+            // Reset timer so we don't jump by the duration of the pause
+            lastFrameTimeRef.current = 0;
             animationFrameId = requestAnimationFrame(loop);
         }
 
         return () => cancelAnimationFrame(animationFrameId);
     }, [state.paused, state.duration, isSeeking]);
 
-    // Handle user dragging
+    // --- USER INTERACTION ---
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressContainerRef.current || !state.duration) return;
         setIsSeeking(true);
@@ -162,9 +168,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
         const percent = ratio * 100;
         
-        // Direct update for responsiveness
         barFillRef.current.style.width = `${percent}%`;
-        // Update logic ref so resume happens from here
         visualPosRef.current = Math.round(state.duration * ratio);
     };
 
@@ -179,6 +183,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = (e: MouseEvent) => {
             setIsSeeking(false);
             if (player && state.duration) {
+                // Reset frame timer to prevent jumps after seek
+                lastFrameTimeRef.current = 0; 
                 player.seek(visualPosRef.current).catch(() => {});
             }
         };
@@ -200,7 +206,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             <div 
                 ref={barFillRef}
                 className="h-full rounded-full bg-[var(--progress-fill)] relative" 
-                style={{ width: `0%` }} // Initial value, controlled by RAF
+                // Initial render width
+                style={{ width: `${Math.max(0, Math.min(100, (visualPosRef.current / (state.duration || 1)) * 100))}%` }} 
             >
                  <div 
                     className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
