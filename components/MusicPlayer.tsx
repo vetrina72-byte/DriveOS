@@ -48,7 +48,9 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.3 (Refined Visuals)
+ * SPOTIFY PROGRESS BAR - DRIFT CONTROLLER v5.0 (No Jumping Back)
+ * Uses asymptotic correction to slow down the bar if it's ahead of the server,
+ * rather than snapping it back.
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -64,14 +66,12 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         duration: 0,
         
         // Time Tracking
-        anchorTime: 0,       // When did we last sync? (performance.now())
-        anchorPosition: 0,   // What was the position at anchorTime? (ms)
-        visualPosition: 0,   // Currently displayed ms
+        lastFrameTime: 0,
+        visualPosition: 0,   // Where the bar ACTUALLY is visually (ms)
         
-        // Sync Locks
-        lastSyncTime: 0,
-        ignoreServerUpdatesUntil: 0,
-        startupGracePeriodEnd: 0 
+        // Drift Control
+        serverPosition: 0,   // Last reported server position
+        serverUpdateTimestamp: 0, // When we received the last server update
     });
 
     // --- 1. STATE SYNCHRONIZATION (The Brain) ---
@@ -85,90 +85,32 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         const incomingPos = state.position;
         const incomingDuration = state.duration;
 
-        // CHECK 1: TRACK CHANGE OR INITIAL LOAD
+        // TRACK CHANGE: Instant Reset
         if (incomingId !== eng.currentTrackId) {
-            const isFirstLoad = eng.currentTrackId === ''; 
-            
             eng.currentTrackId = incomingId;
+            eng.duration = incomingDuration || 0;
+            eng.visualPosition = 0; 
+            eng.serverPosition = 0;
+            eng.serverUpdateTimestamp = now;
             eng.isPlaying = !incomingPaused;
             
-            if (incomingDuration > 0) eng.duration = incomingDuration;
-
-            if (isFirstLoad) {
-                // COLD START: Trust the incoming position immediately.
-                eng.visualPosition = incomingPos;
-                eng.anchorPosition = incomingPos;
-                eng.anchorTime = now;
-                // Grace period: Don't snap/jump for 4 seconds while buffers fill
-                eng.startupGracePeriodEnd = now + 4000;
-            } else {
-                // TRACK CHANGE: Nuclear Reset (ATOMIC CLEAN SLATE)
-                // We wipe everything to 0 immediately to prevent "teleporting"
-                eng.duration = 0; 
-                eng.visualPosition = 0;
-                eng.anchorPosition = 0;
-                eng.anchorTime = now;
-                eng.ignoreServerUpdatesUntil = now + 500; // Short lock to prevent flicker
-                eng.startupGracePeriodEnd = now + 3000;
-                
-                // FORCE DOM UPDATE INSTANTLY (Bypass React Loop)
-                if (progressFillRef.current) progressFillRef.current.style.width = '0%';
-                if (thumbRef.current) thumbRef.current.style.left = '0%';
-            }
+            // Force DOM update immediately to prevent ghosting
+            if (progressFillRef.current) progressFillRef.current.style.width = '0%';
+            if (thumbRef.current) thumbRef.current.style.left = '0%';
             return;
         }
 
-        if (incomingDuration > 0) eng.duration = incomingDuration;
-
-        // CHECK 2: SYNC LOCK ACTIVE?
-        if (now < eng.ignoreServerUpdatesUntil) {
-            if (eng.isPlaying !== !incomingPaused) {
-                eng.isPlaying = !incomingPaused;
-                if (eng.isPlaying) {
-                    eng.anchorTime = now;
-                    eng.anchorPosition = eng.visualPosition;
-                }
-            }
-            return;
-        }
-
-        // CHECK 3: PLAY/PAUSE STATE CHANGE
-        const isNowPlaying = !incomingPaused;
+        // UPDATE STATE
+        eng.duration = incomingDuration || eng.duration;
+        eng.serverPosition = incomingPos;
+        eng.serverUpdateTimestamp = now;
         
-        if (eng.isPlaying !== isNowPlaying) {
-            eng.isPlaying = isNowPlaying;
-            
-            if (isNowPlaying) {
-                // RESUMED: Optimistic Start.
-                eng.anchorTime = now;
-                eng.anchorPosition = incomingPos;
-                eng.startupGracePeriodEnd = now + 2000;
-            } else {
-                // PAUSED: Freeze exactly where we are visually
-                eng.anchorPosition = eng.visualPosition;
-                eng.anchorTime = now;
-            }
-            return;
-        }
-
-        // CHECK 4: DRIFT CORRECTION (Only if playing)
-        if (eng.isPlaying) {
-            const localProjection = eng.anchorPosition + (now - eng.anchorTime);
-            
-            if (now < eng.startupGracePeriodEnd) {
-                if (Math.abs(incomingPos - localProjection) > 3000) {
-                     eng.anchorPosition = incomingPos;
-                     eng.anchorTime = now;
-                     eng.visualPosition = incomingPos;
-                }
-                return; 
-            }
-
-            const drift = Math.abs(incomingPos - localProjection);
-            if (drift > 2000) {
-                eng.anchorPosition = incomingPos;
-                eng.anchorTime = now;
-                eng.visualPosition = incomingPos; 
+        // If state changed to playing, ensure engine knows
+        if (eng.isPlaying !== !incomingPaused) {
+            eng.isPlaying = !incomingPaused;
+            // If we just resumed, snap visual to server to avoid "launching" from 0 if unconnected
+            if (eng.isPlaying && Math.abs(eng.visualPosition - incomingPos) > 5000) {
+                eng.visualPosition = incomingPos;
             }
         }
 
@@ -178,29 +120,64 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     useEffect(() => {
         let rafId: number;
         
-        const loop = () => {
+        const loop = (timestamp: number) => {
             rafId = requestAnimationFrame(loop);
+            
             const eng = engine.current;
+            if (!eng.lastFrameTime) eng.lastFrameTime = timestamp;
+            const delta = timestamp - eng.lastFrameTime;
+            eng.lastFrameTime = timestamp;
+
             const bar = progressFillRef.current;
             const thumb = thumbRef.current;
 
             if (!bar || !thumb || eng.isDragging) return;
 
-            // Calculate Physics
+            // --- DRIFT LOGIC ---
+            // Calculate where the audio SHOULD be right now based on server data + elapsed time
+            const serverProjectedPos = eng.isPlaying 
+                ? eng.serverPosition + (performance.now() - eng.serverUpdateTimestamp)
+                : eng.serverPosition;
+
+            let playbackSpeed = 1.0;
+
             if (eng.isPlaying) {
-                const now = performance.now();
-                const delta = now - eng.anchorTime;
-                eng.visualPosition = eng.anchorPosition + delta;
+                const drift = eng.visualPosition - serverProjectedPos;
+
+                if (drift > 2000) {
+                    // We are WAY ahead (>2s). STOP (or crawl very slowly) until server catches up.
+                    // This fixes the "start song -> silence -> bar moves -> sound starts -> bar jumps back" bug.
+                    // Instead of jumping back, we just wait for the sound.
+                    playbackSpeed = 0.1; 
+                } else if (drift > 500) {
+                    // Slightly ahead, slow down a bit to let server converge
+                    playbackSpeed = 0.8;
+                } else if (drift < -2000) {
+                    // We are WAY behind. Jump or speed up significantly.
+                    playbackSpeed = 2.0; 
+                } else if (drift < -500) {
+                    // Slightly behind, speed up
+                    playbackSpeed = 1.1;
+                }
+                
+                // Apply time
+                eng.visualPosition += delta * playbackSpeed;
+            } else {
+                // Not playing? Sync to server position smoothly
+                // Simple lerp to settle
+                const diff = eng.serverPosition - eng.visualPosition;
+                if (Math.abs(diff) > 100) {
+                    eng.visualPosition += diff * 0.1;
+                }
             }
 
-            // Clamping & Safety
+            // Clamping
             const duration = eng.duration > 0 ? eng.duration : 1; 
-            
             if (eng.visualPosition > duration) eng.visualPosition = duration;
             if (eng.visualPosition < 0) eng.visualPosition = 0;
 
             // Render
-            const percent = eng.duration > 0 ? (eng.visualPosition / duration) * 100 : 0;
+            const percent = (eng.visualPosition / duration) * 100;
             
             bar.style.width = `${percent}%`;
             thumb.style.left = `${percent}%`;
@@ -223,7 +200,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         eng.isDragging = true;
         
         const newPos = calculatePos(e.clientX);
-        const percent = (newPos / state.duration) * 100;
+        const percent = (newPos / (state.duration || 1)) * 100;
         
         if (progressFillRef.current && thumbRef.current) {
             progressFillRef.current.style.width = `${percent}%`;
@@ -237,7 +214,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             if (!eng.isDragging || !progressFillRef.current || !thumbRef.current) return;
             
             const newPos = calculatePos(e.clientX);
-            const percent = (newPos / state.duration) * 100;
+            const percent = (newPos / (state.duration || 1)) * 100;
             
             progressFillRef.current.style.width = `${percent}%`;
             thumbRef.current.style.left = `${percent}%`;
@@ -251,11 +228,10 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
             
             const finalPos = calculatePos(e.clientX);
             
-            // Optimistic Play
+            // Optimistic Update
             eng.visualPosition = finalPos;
-            eng.anchorPosition = finalPos;
-            eng.anchorTime = performance.now();
-            eng.ignoreServerUpdatesUntil = performance.now() + 2000;
+            eng.serverPosition = finalPos; // Assume server will ack this
+            eng.serverUpdateTimestamp = performance.now();
             
             seek(finalPos);
         };
@@ -268,14 +244,14 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         };
     }, [seek, state.duration]);
 
-    // Thumb Visuals - Reduced size by ~5% from 16px to 15px
-    const thumbSize = 15; 
-    const trackHeight = 6;
+    // Visual Styling - Strict Fixed Heights
+    const thumbSize = 14; 
+    const trackHeight = 6; // Fixed 6px (h-1.5)
 
     return (
         <div
             ref={progressBarRef}
-            className="group relative w-full h-5 flex items-center cursor-pointer touch-none select-none"
+            className="group relative w-full h-6 flex items-center cursor-pointer touch-none select-none"
             onMouseDown={handleMouseDown}
         >
             {/* Track Background */}
@@ -283,7 +259,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 className="absolute left-0 right-0 rounded-full bg-[var(--progress-bg)] overflow-hidden pointer-events-none"
                 style={{ height: `${trackHeight}px` }}
             >
-                {/* Fill Bar - width animated via RAF */}
+                {/* Fill Bar */}
                 <div 
                     ref={progressFillRef}
                     className="h-full bg-[var(--progress-fill)] rounded-full will-change-transform"
@@ -291,21 +267,18 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 />
             </div>
 
-            {/* Handle / Thumb - Centered correctly */}
+            {/* Handle / Thumb - Centered Absolute */}
             <div 
                 ref={thumbRef}
-                className="absolute top-1/2 bg-white rounded-full shadow-md pointer-events-none will-change-transform flex items-center justify-center"
+                className="absolute bg-white rounded-full shadow-md pointer-events-none will-change-transform flex items-center justify-center top-1/2"
                 style={{ 
                     width: `${thumbSize}px`,
                     height: `${thumbSize}px`,
-                    // We need to counteract the track offset to center vertically perfectly
-                    marginTop: '0px', 
                     transform: 'translate(-50%, -50%)',
                     left: '0%', 
-                    transition: 'transform 0.1s ease', 
                 }}
             >
-                {/* Inner decorative dot or just plain white circle */}
+                {/* Optional inner dot for style */}
                 <div className="w-full h-full rounded-full transition-transform duration-200 group-hover:scale-110" />
             </div>
         </div>
@@ -372,7 +345,7 @@ const YouTubeProgressBar = ({
     return (
         <div
             ref={progressRef}
-            className="group relative w-full h-4 flex items-center cursor-pointer touch-none"
+            className="group relative w-full h-6 flex items-center cursor-pointer touch-none"
             onMouseDown={handleMouseDown}
         >
             <div className="absolute left-0 right-0 h-1.5 rounded-full bg-[var(--progress-bg)] overflow-hidden">
@@ -841,16 +814,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     const handlePrevTrack = () => {
         if (source === 'spotify') {
-            if (playerState && playerState.position > 3000) {
+            // FIX: If playback is > 3s, seek to 0. Else, try previous track. If no prev track, seek to 0.
+            const position = playerState?.position || 0;
+            const hasPrevious = playerState?.track_window.previous_tracks.length > 0;
+
+            if (position > 3000 || !hasPrevious) {
+                // Seek to start
                 setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: { ...prev.spotifyState, position: 0 } }) : prev);
                 player?.seek(0);
-            } else if (playerState && playerState.track_window.previous_tracks.length > 0) {
+            } else {
+                // Go to previous
                 const prevTrack = playerState.track_window.previous_tracks[playerState.track_window.previous_tracks.length - 1];
                 setNowPlaying(prev => prev.spotifyState ? ({
                     ...prev, spotifyState: { ...prev.spotifyState, paused: false, position: 0, duration: (prevTrack as any).duration_ms || prev.spotifyState.duration || 0, track_window: { ...prev.spotifyState.track_window, current_track: prevTrack, previous_tracks: prev.spotifyState.track_window.previous_tracks.slice(0, -1) } }
                 }) : prev);
                 player?.previousTrack();
-            } else player?.previousTrack();
+            }
         } else if (source === 'radio') onStationChange('prev');
         else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
              const idx = nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId);
@@ -891,20 +870,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
             if (playerState?.track_window?.current_track) {
                 const { name: trackName, album, artists } = playerState.track_window.current_track;
-                const imageUrl = album.images[0]?.url;
+                // FIX: Reset image if ID changes to prevent stale image showing
+                const imageUrl = album.images[0]?.url; 
                 const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
                 const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
                 
-                // Logic to enable/disable previous button without flickering
-                const hasPrevious = playerState.track_window.previous_tracks.length > 0;
-                const canSeekBack = playerState.position > 3000;
-                const isPrevDisabled = !hasPrevious && !canSeekBack;
-
                 return (
                     <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                         <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-3 min-w-0">
-                                {imageUrl && (<div className="flex-shrink-0"><img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" /></div>)}
+                                {imageUrl && (<div className="flex-shrink-0"><img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" key={playerState.track_window.current_track.id} /></div>)}
                                 <div className="overflow-hidden flex-grow"><div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div><div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div></div>
                             </div>
                             <div className="flex items-center gap-5">
@@ -913,7 +888,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                         
-                        {/* NEW ABSOLUTE TIME BAR */}
+                        {/* NEW DRIFT-CORRECTED TIME BAR */}
                         <SpotifyProgressBar state={playerState} />
                         
                         <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
@@ -921,8 +896,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
                                 <button 
                                     onClick={handlePrevTrack} 
-                                    disabled={isPrevDisabled} 
-                                    className="transition disabled:opacity-30 disabled:cursor-not-allowed" 
+                                    className="transition" 
                                     style={{ color: buttonActiveColor }}
                                 >
                                     <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />

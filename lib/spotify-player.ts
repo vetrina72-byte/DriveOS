@@ -232,28 +232,7 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
-    // 3. AGGRESSIVE TRANSFER FOR COLD START
-    // If we have a device ID but haven't successfully played yet (cold start),
-    // Force a transfer first. This fixes the "multiple clicks needed" issue.
-    const currentState = await spotifyPlayer?.getCurrentState().catch(() => null);
-    
-    // If local state is null (never played) or we aren't active, assume we need to transfer.
-    if (!currentState) {
-        console.log('[safePlay] Cold start detected. Forcing transfer to local device first...');
-        try {
-            await fetch('/api/transfer-player', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
-                body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
-            });
-            // Small wait to allow the backend to register the device switch
-            await new Promise(r => setTimeout(r, 200)); 
-        } catch (e) {
-            console.error("[safePlay] Pre-transfer failed", e);
-        }
-    }
-
-    // 4. CONSTRUCT REQUEST
+    // 3. CONSTRUCT REQUEST with explicit device ID
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
 
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
@@ -271,12 +250,12 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     };
 
-    // 5. Attempt playback
+    // 4. Attempt playback
     let result = await doPlay();
 
     if (result.ok) return true;
 
-    // 6. Handle 404 (Device Not Found / Inactive) - Retry logic
+    // 5. Handle 404 (Device Not Found / Inactive) - AGGRESSIVE RETRY
     if (result.status === 404) {
         console.log('[safePlay] Device 404. Attempting transfer/wake-up...');
         
@@ -289,36 +268,19 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
             });
 
             if (transferRes.ok) {
-                await new Promise(r => setTimeout(r, 300));
+                await new Promise(r => setTimeout(r, 200)); // Small buffer for backend prop
                 console.log('[safePlay] Transfer successful. Retrying play...');
                 result = await doPlay();
                 if (result.ok) return true;
             } else {
-                console.error('[safePlay] Transfer failed. Attempting hard reconnect...');
-                if (spotifyPlayer) {
-                    const newId = await reconnectAndGetDeviceId(spotifyPlayer);
-                    if (newId) {
-                        spotifyDeviceId = newId;
-                        playRequest.deviceId = newId;
-                        
-                        await fetch('/api/transfer-player', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
-                            body: JSON.stringify({ sessionId, device_id: newId })
-                        });
-                        
-                        await new Promise(r => setTimeout(r, 300));
-                        result = await doPlay();
-                        if (result.ok) return true;
-                    }
-                }
+                console.error('[safePlay] Transfer failed.');
             }
         } catch (e) {
             console.error('[safePlay] Error during transfer/reconnect:', e);
         }
     }
 
-    // 7. Handle 401 (Token Expired)
+    // 6. Handle 401 (Token Expired)
     if (result.status === 401) {
         console.log('[safePlay] Token expired (401). Refreshing...');
         const refreshed = await attemptRefresh();
