@@ -90,7 +90,6 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     
     // HYDRATION LOGIC: Initialize state from LocalStorage to show the previous track instantly
-    // AND calculate the correct position based on elapsed time to prevent jumps on reload.
     const [nowPlaying, setNowPlaying] = useState<NowPlayingState>(() => {
         let initialData: NowPlayingState = {
             source: null, 
@@ -105,35 +104,15 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         if (typeof window !== 'undefined') {
             try {
                 const cachedTrackJson = localStorage.getItem('cached_track_data');
-                
-                // Read the last known state
                 const lastProgress = Number(localStorage.getItem('last_progress_ms') || '0');
-                const lastTimestamp = Number(localStorage.getItem('last_state_timestamp') || Date.now());
-                const wasPlaying = localStorage.getItem('last_is_playing') === 'true';
                 
                 if (cachedTrackJson) {
                     const cachedTrack = JSON.parse(cachedTrackJson);
-                    const duration = cachedTrack.duration_ms || 0;
-                    
-                    // CALCULATE REAL-TIME POSITION
-                    // If we were playing, add the time passed since reload to the position
-                    let estimatedPosition = lastProgress;
-                    if (wasPlaying) {
-                        const timePassed = Date.now() - lastTimestamp;
-                        // Only add time if it hasn't been days (e.g. limit to 2 hours of drift)
-                        if (timePassed < 7200000) { 
-                            estimatedPosition += timePassed;
-                        }
-                    }
-                    
-                    // Clamp to duration
-                    if (estimatedPosition > duration) estimatedPosition = duration;
-
-                    // Construct a Mock SpotifyPlayerState
+                    // Construct a partial/mock SpotifyPlayerState for immediate display
                     const mockState: any = {
-                        paused: !wasPlaying, // Start paused visually to avoid jitters until SDK takes over, or respect last state
-                        position: estimatedPosition,
-                        duration: duration,
+                        paused: true, // Always start paused visually until confirmed otherwise
+                        position: lastProgress,
+                        duration: cachedTrack.duration_ms || 0,
                         track_window: {
                             current_track: cachedTrack,
                             next_tracks: [],
@@ -143,7 +122,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                         disallows: {},
                         shuffle: false,
                         repeat_mode: 0,
-                        timestamp: Date.now() // Important: Update timestamp to NOW so the progress bar hook calculates correctly
+                        timestamp: Date.now()
                     };
                     
                     initialData = {
@@ -164,8 +143,12 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const [isPlayerSdkReady, setIsPlayerSdkReady] = useState(false);
     const [lastPlayInitiated, setLastPlayInitiated] = useState(0);
     
+    // Lock mechanism to prevent double playback requests
     const isSwitchingTrack = useRef(false);
+    
+    // Lock mechanism to prevent UI flickering during device transfer
     const isTransferring = useRef(false);
+    
     const latestOptimisticItem = useRef<MediaItem | null>(null);
 
     const [homeContentLoading, setHomeContentLoading] = useState(false);
@@ -241,8 +224,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.removeItem('last_track_uri');
         localStorage.removeItem('last_progress_ms');
         localStorage.removeItem('last_is_playing');
-        localStorage.removeItem('cached_track_data'); 
-        localStorage.removeItem('last_state_timestamp');
+        localStorage.removeItem('cached_track_data'); // Clear cached track on logout
         localStorage.removeItem('continueListeningItems');
         localStorage.removeItem('last_optimistic_item');
         latestOptimisticItem.current = null;
@@ -295,27 +277,34 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         return () => { if (refreshTimeoutId.current) clearTimeout(refreshTimeoutId.current); }
     }, [state.isAuthenticated, state.expiresAt, scheduleRefresh]);
 
+    // NUOVO: Funzione per controllare lo stato del player remoto (API Polling)
     const checkRemotePlayerState = useCallback(async () => {
         if (!state.accessToken) return;
+        // CRITICAL: Skip polling if we are actively transferring to local device
+        // This prevents the UI from momentarily flickering back to "Remote View" due to stale API data
         if (isTransferring.current) return;
 
         try {
+            // Chiede a Spotify chi sta suonando
             const response = await apiClient.get('/me/player');
             
             if (response.status === 200 && response.data) {
                 const { device, item, is_playing } = response.data;
                 const localDeviceId = getDeviceId();
                 
+                // Se il dispositivo attivo NON è quello locale, aggiorniamo lo stato per mostrare la UI remota
                 if (device && device.id !== localDeviceId) {
                     setNowPlaying(prev => ({
                         ...prev,
                         source: 'spotify', 
-                        activeDevice: device, 
+                        activeDevice: device, // Memorizza info dispositivo remoto
                     }));
                 } else if (!is_playing && nowPlaying.source === 'spotify' && !nowPlaying.spotifyState) {
+                    // Nessuno sta suonando
                     setNowPlaying(prev => ({ ...prev, activeDevice: null }));
                 }
             } else if (response.status === 204) {
+                // 204 No Content = nulla in riproduzione
                 setNowPlaying(prev => ({ ...prev, activeDevice: null }));
             }
         } catch (e) {
@@ -324,6 +313,8 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [state.accessToken, nowPlaying.source, nowPlaying.spotifyState]);
 
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
+        // If we get a valid state update from the SDK, we know the local player is active.
+        // We can safely unlock the transfer flag.
         if (newState) {
             isTransferring.current = false;
         }
@@ -333,12 +324,17 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             
             const isLoading = isSwitchingTrack.current; 
             
+            // Se lo stato locale è null (disconnesso/trasferito), controlliamo chi ha preso il controllo
             if (newState === null) {
+                // Controllo immediato
                 checkRemotePlayerState();
+                
+                // Avvia polling per tenere aggiornato lo stato remoto - 1.5s FAST POLLING
                 if (!remotePollIntervalRef.current) {
                     remotePollIntervalRef.current = window.setInterval(checkRemotePlayerState, 1500);
                 }
             } else {
+                // Se lo stato locale è attivo, fermiamo il polling remoto
                 if (remotePollIntervalRef.current) {
                     clearInterval(remotePollIntervalRef.current);
                     remotePollIntervalRef.current = null;
@@ -350,27 +346,26 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 spotifyState: newState, 
                 isLoading: isLoading ? s.isLoading : false, 
                 source: 'spotify',
+                // Se newState esiste, siamo noi il dispositivo attivo (di solito), quindi puliamo activeDevice
                 activeDevice: newState ? null : s.activeDevice 
             };
         });
         
         if (newState) {
-            // CACHE DATA FOR INSTANT RELOAD & SYNC
+            // Persist the essential track metadata for next session instant-load
             if (newState.track_window.current_track) {
                 localStorage.setItem("cached_track_data", JSON.stringify(newState.track_window.current_track));
             }
             
-            // Critical for reload sync: Save WHEN we paused/played and WHERE we were
             localStorage.setItem("last_is_playing", String(!newState.paused));
             localStorage.setItem("last_progress_ms", String(newState.position));
-            localStorage.setItem("last_state_timestamp", String(Date.now())); // Save "Real" timestamp of this update
-
             if (newState.track_window.current_track) localStorage.setItem("last_track_uri", newState.track_window.current_track.uri);
             if (newState.context && newState.context.uri) localStorage.setItem("last_context_uri", newState.context.uri);
             else localStorage.removeItem("last_context_uri");
         }
     }, [setNowPlaying, checkRemotePlayerState]);
     
+    // Cleanup polling all'unmount
     useEffect(() => {
         return () => {
             if (remotePollIntervalRef.current) {
@@ -421,6 +416,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         return unifiedList.slice(0, 10);
     }, []);
 
+    // Standalone fetch for recently played (still used by play effect)
     const fetchRecentlyPlayed = useCallback(async () => {
         if (!state.user) return;
         try {
@@ -453,6 +449,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 apiClient.get('/me/top/tracks?limit=20&time_range=long_term'),
                 apiClient.get('/me/albums?limit=10'),
                 apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'),
+                // Added recently played call here for unified loading
                 apiClient.get('/me/player/recently-played?limit=50'),
             ];
             const results = await Promise.allSettled(promises);
@@ -470,6 +467,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (topTr.status === 'fulfilled') setTopTracks(topTr.value.data.items);
             if (savedAlbs.status === 'fulfilled') setSavedAlbums(savedAlbs.value.data.items.map((i: any) => i.album).filter(Boolean));
             
+            // Process recent plays directly here
             if (recents.status === 'fulfilled') {
                 const processedItemsFromApi = await processRecentPlays(recents.value.data.items);
                 setContinueListeningItems(currentItems => {
@@ -487,6 +485,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
     const triggerHomeContentFetch = useCallback(() => {
         if (state.user) { 
+            // Only call fetchData, which now includes recently played
             fetchData(); 
         }
     }, [state.user, fetchData]);
@@ -530,7 +529,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         } catch (err) { logout(); setState(s => ({...s, error: 'Login failed.', isLoading: false})); }
     }, [fetchUserInfo, logout]);
     
-    // --- INTELLIGENT PLAY LOGIC ---
+    // Updated robust play function
     const play = useCallback(async (options: PlayOptions, itemForOptimisticUpdate?: MediaItem) => {
         if (isSwitchingTrack.current) {
             console.log('Skipping play request: already switching');
@@ -539,6 +538,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         
         isSwitchingTrack.current = true;
 
+        // Optimistic UI updates
         if (itemForOptimisticUpdate) {
             latestOptimisticItem.current = itemForOptimisticUpdate;
             try { localStorage.setItem('last_optimistic_item', JSON.stringify(itemForOptimisticUpdate)); } catch (e) {}
@@ -546,114 +546,99 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
         if (options.context_uri) localStorage.setItem("last_context_uri", options.context_uri);
         else if (options.uris?.[0]) { localStorage.setItem("last_track_uri", options.uris[0]); localStorage.removeItem("last_context_uri"); }
-        
         localStorage.setItem("last_progress_ms", "0");
         localStorage.setItem("last_is_playing", "true");
-        localStorage.setItem("last_state_timestamp", String(Date.now()));
-        
         setLastPlayInitiated(Date.now());
+        
+        // --- SPECIAL HANDLER FOR "LISTEN HERE" (TRANSFER) ---
+        // If we are currently showing a remote device (activeDevice is set),
+        // we assume the user wants to bring playback HERE.
         
         const isResume = Object.keys(options).length === 0 && !options.context_uri && !options.uris;
         const isTransfer = !!nowPlaying.activeDevice;
+        // Only show spinner if transferring or loading a new track/context.
+        // If simply resuming, keep existing loading state (likely false) to avoid spinner flash.
         const shouldShowSpinner = isTransfer || !isResume;
 
+        // IMMEDIATELY update state to remove remote UI and show spinner.
         setNowPlaying(prev => {
+            // OPTIMISTIC UPDATE: If resuming locally, force paused=false immediately
+            // This updates the UI (Play icon becomes Pause icon) instantly.
             let nextSpotifyState = prev.spotifyState;
             if (isResume && !prev.activeDevice && prev.spotifyState) {
                 nextSpotifyState = {
                     ...prev.spotifyState,
                     paused: false,
+                    // FIX: Update timestamp to now. This is crucial for correct position calculation.
+                    // The position property in `spotifyState` holds the position at the time of `timestamp`.
+                    // When pausing, we stopped at position X. When resuming optimistically, position is still X,
+                    // but we must reset `timestamp` to `Date.now()` so that `Date.now() - timestamp` equals 0 at start.
+                    // Without this, `timestamp` remains old, causing `elapsed` to be huge (e.g. 10s),
+                    // effectively jumping the progress bar forward by 10s instantly.
                     timestamp: Date.now()
                 };
             }
 
             return { 
                 ...prev, 
-                spotifyState: nextSpotifyState, 
+                spotifyState: nextSpotifyState, // Apply optimistic state
                 source: 'spotify', 
                 radioStation: null, 
                 youtubeTrack: null, 
-                isLoading: shouldShowSpinner, 
-                activeDevice: null 
+                isLoading: shouldShowSpinner, // Conditionally show spinner based on action type
+                activeDevice: null // Optimistically clear remote device UI
             };
         });
 
-        // --- INTELLIGENT RESUME (Fix for startup latency/jump) ---
-        // If it's a resume action AND we don't have a live active device (e.g. after refresh),
-        // we check the cache. If we have a last track, we convert this generic "resume"
-        // into a specific "Play this track at this timestamp" command.
-        // This is much faster/reliable than telling Spotify to "resume session" on a new device.
-        let finalOptions = options;
+        // --- FAST PATH: LOCAL RESUME ---
+        // If it's a resume action, and we are NOT casting/remote, use the local SDK directly.
         if (isResume && !nowPlaying.activeDevice) {
-            const cachedTrackJson = localStorage.getItem('cached_track_data');
-            const lastProgress = Number(localStorage.getItem('last_progress_ms') || '0');
-            const lastTimestamp = Number(localStorage.getItem('last_state_timestamp') || Date.now());
-            
-            if (cachedTrackJson) {
-                try {
-                    const cachedTrack = JSON.parse(cachedTrackJson);
-                    // Calculate real elapsed time so we don't jump back
-                    const timePassed = Date.now() - lastTimestamp;
-                    let resumePosition = lastProgress;
-                    if (timePassed < 7200000) { // Limit drift compensation to 2 hours
-                        resumePosition += timePassed;
-                    }
-                    if (resumePosition > (cachedTrack.duration_ms || Infinity)) resumePosition = 0;
-
-                    // OVERRIDE options to be specific
-                    finalOptions = {
-                        uris: [cachedTrack.uri],
-                        position_ms: Math.floor(resumePosition)
-                    };
-                    console.log('🚀 [Smart Resume] Converting resume to specific play:', finalOptions);
-                } catch(e) {
-                    console.error('Error parsing cached track for resume', e);
-                }
-            }
-        }
-
-        // Only try local resume if it's a standard resume AND we didn't upgrade it to a specific track play
-        const isStandardResume = Object.keys(finalOptions).length === 0;
-
-        if (isStandardResume && !nowPlaying.activeDevice) {
              const player = getPlayerInstance();
              if (player) {
                  try {
                      await player.resume();
                      isSwitchingTrack.current = false;
+                     // Ensure we fetch recent plays after a bit
                      setLastPlayInitiated(Date.now()); 
-                     return; 
+                     return; // Success, skip the API call
                  } catch (e) {
                      console.warn("Local resume failed, falling back to API", e);
+                     // If fail, proceed to API call below
                  }
              }
         }
 
         if (nowPlaying.activeDevice) {
             console.log('[AuthContext] Taking control from remote device...');
-            isTransferring.current = true; 
+            isTransferring.current = true; // Block polling updates to prevent UI flickering back
             
+            // Safety timeout to reset the transfer lock if something goes wrong
             setTimeout(() => {
                 isTransferring.current = false;
             }, 8000);
 
             try {
+                // 1. Force pause on the current remote device (if playing)
                 if (nowPlaying.activeDevice.is_active) {
                     await apiClient.put('/me/player/pause').catch(() => {});
+                    // Wait a bit longer to ensure the backend processes the pause before we ask to play elsewhere
                     await new Promise(r => setTimeout(r, 500)); 
                 }
+                // 2. Proceed to safePlay which will wake up the local device.
             } catch (e) {
                 console.error("Error taking control:", e);
+                // Even if remote pause fails, we proceed to try and play locally
             }
         }
 
         try {
-            // Use the potentially upgraded options
-            const success = await safePlay(finalOptions, attemptRefreshAndUpdatePlayerToken);
+            const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
             if (!success) {
+                // Only reset loading if it failed. If it succeeded, we wait for SDK state change to clear loading.
                 setNowPlaying(prev => ({ ...prev, isLoading: false }));
                 console.error("Playback failed or timed out.");
             } else {
+                // Safety timeout: if state doesn't change in 3s, clear loading manually to avoid infinite spinner
                 setTimeout(() => {
                     setNowPlaying(prev => prev.isLoading ? ({ ...prev, isLoading: false }) : prev);
                 }, 3000);
@@ -677,6 +662,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         const expiresAt = Number(localStorage.getItem('expiresAt') || '0');
         if (expiresAt > Date.now() + 60000) return localStorage.getItem('accessToken') || '';
         const refreshed = await attemptRefreshAndUpdatePlayerToken();
+        // Return from localStorage as it's the source of truth after refresh
         return localStorage.getItem('accessToken') || '';
     }, [attemptRefreshAndUpdatePlayerToken]);
 
@@ -694,6 +680,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
     }, [isPlayerSdkReady]);
 
+    // NEW: Volume Sync Effect
     useEffect(() => {
         if (!isPlayerSdkReady) return;
 
@@ -704,6 +691,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             try {
                 const currentSdkVolume = await player.getVolume();
                 setState(prev => {
+                    // Update only if significant difference to avoid UI jitter or conflict with local drag
                     if (Math.abs(prev.volume - currentSdkVolume) > 0.02) {
                         return { 
                             ...prev, 
@@ -714,7 +702,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                     }
                     return prev;
                 });
-            } catch (e) {}
+            } catch (e) {
+                // Silent catch for volume retrieval errors
+            }
         }, 2000);
 
         return () => clearInterval(interval);
@@ -760,6 +750,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [state.isMuted, state.lastVolume, setVolumeFinal]);
 
     const pauseSpotify = useCallback(async () => { 
+        // Optimistic UI update: Immediately show paused state to improve responsiveness
         setNowPlaying(prev => {
             if (prev.spotifyState) {
                 return {

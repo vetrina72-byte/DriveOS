@@ -202,24 +202,6 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
-    // --- FAST PATH FOR RESUME ---
-    // If we are just resuming (empty options) AND the player object is alive,
-    // try to activate effectively locally first.
-    // Note: The AuthContext now often passes a specific `position_ms` even for resume,
-    // so we check if `options` is empty OR if it's a specific play command.
-    // However, if we have specific URIs, we usually want to use the API to ensure the queue is reset correctly.
-    const isPureResume = Object.keys(options).length === 0;
-    
-    if (isPureResume && spotifyPlayer) {
-        try {
-            await spotifyPlayer.activateElement();
-            await spotifyPlayer.resume();
-            return true;
-        } catch (e) {
-            console.warn("[safePlay] Local resume failed, falling back to API.", e);
-        }
-    }
-
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
 
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
