@@ -48,7 +48,7 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.0
+ * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.1
  * 
  * Logic:
  * 1. Visual updates are decoupled from React renders (Direct DOM manipulation via RAF).
@@ -91,27 +91,41 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         const incomingPos = state.position;
         const incomingDuration = state.duration;
 
-        // CHECK 1: TRACK CHANGE -> NUCLEAR RESET
-        // This solves the "Ghost Teleport". The bar is forced to 0 before we even think about the new song.
+        // CHECK 1: TRACK CHANGE OR INITIAL LOAD
         if (incomingId !== eng.currentTrackId) {
+            const isFirstLoad = eng.currentTrackId === ''; // Check if this is the component mounting
+            
             eng.currentTrackId = incomingId;
-            eng.duration = 0; // Force duration to 0 until confirmed next cycle to prevent 100% jumps
-            eng.visualPosition = 0;
-            eng.anchorPosition = 0;
-            eng.anchorTime = now;
             eng.isPlaying = !incomingPaused;
             
-            // Sync Lock: Ignore "old" packets from previous song for 1 second
-            eng.ignoreServerUpdatesUntil = now + 1000; 
-            
-            // IMMEDIATE VISUAL KILL
-            if (progressFillRef.current && thumbRef.current) {
-                progressFillRef.current.style.width = '0%';
-                thumbRef.current.style.left = '0%';
-            }
-            // Update duration only if we have a valid one for the NEW track
+            // Update duration immediately
             if (incomingDuration > 0) eng.duration = incomingDuration;
-            
+
+            if (isFirstLoad) {
+                // COLD START: Trust the incoming position immediately.
+                // Do NOT reset to 0, or we lose the position on page reload.
+                eng.visualPosition = incomingPos;
+                eng.anchorPosition = incomingPos;
+                eng.anchorTime = now;
+                // We assume the data from localStorage or API on first load is the best we have.
+                // No lock needed, let it sync freely.
+            } else {
+                // ACTUAL TRACK CHANGE: Nuclear Reset.
+                // Force bar to 0 to prevent "ghosting" (seeing previous song's bar for a split second).
+                eng.duration = 0; // Force duration to 0 until confirmed next cycle
+                eng.visualPosition = 0;
+                eng.anchorPosition = 0;
+                eng.anchorTime = now;
+                
+                // Sync Lock: Ignore "old" packets from previous song for 1 second
+                eng.ignoreServerUpdatesUntil = now + 1000; 
+                
+                // IMMEDIATE VISUAL KILL
+                if (progressFillRef.current && thumbRef.current) {
+                    progressFillRef.current.style.width = '0%';
+                    thumbRef.current.style.left = '0%';
+                }
+            }
             return;
         }
 
@@ -268,7 +282,8 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
 
     // Thumb Visuals
     const thumbSize = 12; // Discrete size
-    const trackHeight = 4;
+    // FIX: Increased trackHeight to 6px (h-1.5) to match Radio/Disabled bars and prevent "thinning"
+    const trackHeight = 6;
 
     return (
         <div
