@@ -48,11 +48,7 @@ interface MusicPlayerProps {
 }
 
 /**
- * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.2 (Stabilized)
- * 
- * Fixes:
- * 1. "Jump Back on Pause": Uses visual position as truth when pausing.
- * 2. "Start-up Jitter": Ignores aggressive drift correction during the first few seconds of playback.
+ * SPOTIFY PROGRESS BAR - PRECISION ENGINE v4.3 (Refined Visuals)
  */
 const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
     const { seek } = useAuth();
@@ -75,7 +71,7 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         // Sync Locks
         lastSyncTime: 0,
         ignoreServerUpdatesUntil: 0,
-        startupGracePeriodEnd: 0 // New: To prevent jitter on start
+        startupGracePeriodEnd: 0 
     });
 
     // --- 1. STATE SYNCHRONIZATION (The Brain) ---
@@ -146,12 +142,9 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 // RESUMED: Optimistic Start.
                 eng.anchorTime = now;
                 eng.anchorPosition = incomingPos;
-                // Re-enable grace period on resume to avoid jumpiness
                 eng.startupGracePeriodEnd = now + 2000;
             } else {
-                // PAUSED: Freeze exactly where we are visually (Prevent "Jump Back" Bug)
-                // We IGNORE incomingPos from the server because it's usually lagged.
-                // We set anchor to current visual, so it stops dead.
+                // PAUSED: Freeze exactly where we are visually
                 eng.anchorPosition = eng.visualPosition;
                 eng.anchorTime = now;
             }
@@ -160,12 +153,9 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
 
         // CHECK 4: DRIFT CORRECTION (Only if playing)
         if (eng.isPlaying) {
-            // Where we think we are based on local clock
             const localProjection = eng.anchorPosition + (now - eng.anchorTime);
             
-            // If in start-up grace period, trust local projection over server unless deviation is huge
             if (now < eng.startupGracePeriodEnd) {
-                // Only snap if we are way off (> 3s), otherwise let it ride smoother
                 if (Math.abs(incomingPos - localProjection) > 3000) {
                      eng.anchorPosition = incomingPos;
                      eng.anchorTime = now;
@@ -174,14 +164,10 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 return; 
             }
 
-            // Standard Drift Correction
             const drift = Math.abs(incomingPos - localProjection);
-            // Increased threshold to 2000ms to reduce jitter
             if (drift > 2000) {
                 eng.anchorPosition = incomingPos;
                 eng.anchorTime = now;
-                // Soft correction: don't snap visually immediately, just reset anchor
-                // The visual loop will converge over next frames if we changed anchor
                 eng.visualPosition = incomingPos; 
             }
         }
@@ -282,8 +268,8 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
         };
     }, [seek, state.duration]);
 
-    // Thumb Visuals
-    const thumbSize = 12; 
+    // Thumb Visuals - Slightly larger as requested
+    const thumbSize = 16; 
     const trackHeight = 6;
 
     return (
@@ -305,19 +291,22 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 />
             </div>
 
-            {/* Handle / Thumb */}
+            {/* Handle / Thumb - Centered correctly */}
             <div 
                 ref={thumbRef}
                 className="absolute top-1/2 bg-white rounded-full shadow-md pointer-events-none will-change-transform flex items-center justify-center"
                 style={{ 
                     width: `${thumbSize}px`,
                     height: `${thumbSize}px`,
+                    // We need to counteract the track offset to center vertically perfectly
+                    marginTop: '0px', 
                     transform: 'translate(-50%, -50%)',
                     left: '0%', 
                     transition: 'transform 0.1s ease', 
                 }}
             >
-                <div className="w-full h-full rounded-full transition-transform duration-200 group-hover:scale-125" />
+                {/* Inner decorative dot or just plain white circle */}
+                <div className="w-full h-full rounded-full transition-transform duration-200 group-hover:scale-110" />
             </div>
         </div>
     );
@@ -632,9 +621,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const player = getPlayerInstance();
     const localDeviceId = getDeviceId(); 
 
-    // Logic to determine if the local player is truly the one making sound
-    // We check if the active device reported by API matches our local device ID.
-    // If we don't have an active device from API yet, but we have a player state, we assume local (fallback).
     const isLocalDeviceActive = activeDevice && localDeviceId 
         ? activeDevice.id === localDeviceId 
         : (player && playerState && playerState.track_window.current_track); // Fallback

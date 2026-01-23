@@ -153,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (saved) {
                 const parsed = JSON.parse(saved);
                 if (parsed.spotifyState) {
+                    // Force paused on boot to avoid UI thinking it's playing before we confirm
                     parsed.spotifyState.paused = true;
                 }
                 return { ...defaultNowPlaying, ...parsed, isLoading: false };
@@ -356,6 +357,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { data } = await apiClient.get('/me/player');
             
             if (data && data.item) {
+                // LOCK CHECK: If user interacted recently, IGNORE this update
                 if (Date.now() < interactionLockEnd.current) {
                     return; 
                 }
@@ -449,6 +451,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             onNotReady: () => setIsPlayerReady(false),
             onStateChange: (playerState) => {
                 if (playerState) {
+                    // SDK EVENTS ARE TRUSTED MORE THAN REST API
+                    // Even if lock is active, if the event comes from the SDK (local change), we update.
                     if (Date.now() < interactionLockEnd.current) {
                         // Trust local SDK state even during locks if it matches recent interactions
                     }
@@ -477,7 +481,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [state.isAuthenticated, state.accessToken, attemptRefreshAndUpdatePlayerToken]);
 
     const play = useCallback(async (options: { uris?: string[], context_uri?: string, offset?: any }, itemForOptimisticUpdate?: SpotifyItem) => {
-        // LOCK for 2 seconds to prevent server polling from reverting UI
+        // LOCK: Create a 2 second silence window for API polling
         interactionLockEnd.current = Date.now() + 2000; 
 
         const localId = getDeviceId();
@@ -580,6 +584,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice, triggerFastPolling]);
 
     const pauseSpotify = useCallback(async () => {
+        // LOCK: Ignore server updates for 2 seconds
         interactionLockEnd.current = Date.now() + 2000;
 
         // INSTANT LOCAL PAUSE
@@ -589,6 +594,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             player.pause().catch(e => console.warn("Local pause failed", e));
         }
 
+        // OPTIMISTIC UPDATE
         setNowPlaying(s => {
             if (s.spotifyState && !s.spotifyState.paused) {
                 return {
