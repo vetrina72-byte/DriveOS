@@ -48,117 +48,118 @@ interface MusicPlayerProps {
 }
 
 /**
- * A seekable progress bar for the Spotify player with smooth, real-time updates.
- * This component uses `requestAnimationFrame` to interpolate the track's progress between
- * official state updates from the Spotify SDK, providing a fluid user experience. It also
- * handles user seeking (clicking and dragging) with optimistic UI updates to prevent flickering.
+ * A direct, non-interpolated progress bar for the Spotify player.
+ * Uses local override to prevent "rubber-banding" after seeking.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
-    const [displayPosition, setDisplayPosition] = useState(state.position);
+    // Helper to calculate live position for initialization
+    const getLivePosition = () => {
+        if (state.paused) return state.position;
+        const elapsed = Date.now() - state.timestamp;
+        return Math.min(state.duration, state.position + elapsed);
+    };
+
+    const [displayPosition, setDisplayPosition] = useState(getLivePosition);
     const [isSeeking, setIsSeeking] = useState(false);
     const progressRef = useRef<HTMLDivElement>(null);
-    const animationFrameRef = useRef(0);
-    const lastStatePositionRef = useRef(state.position);
-    const lastStateUpdateTimestampRef = useRef(performance.now());
-    const visualPositionRef = useRef(state.position);
     
-    // Ref to ignore incoming state updates for a short period after seeking
-    // This prevents the bar from "bouncing" back to the old position before the server catches up
-    const ignoreRemoteUpdatesUntil = useRef(0);
+    // Store the last rendered position to prevent backward jumps on pause
+    const lastRenderedPosRef = useRef<number>(state.position);
+    // Store track ID to reset logic when song changes
+    const lastTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
+    
+    // SEEK OVERRIDE: Stores the local simulation state after a seek
+    const seekOverrideRef = useRef<{ pos: number, time: number } | null>(null);
 
-    // Sync state when props change
+    // Main Update Loop
     useEffect(() => {
-        if (!isSeeking) {
-            // Critical check: ignore stale updates right after a seek
-            if (Date.now() < ignoreRemoteUpdatesUntil.current) return;
+        const currentTrackId = state.track_window.current_track?.id;
 
-            // Jitter reduction:
-            // Calculate projected position based on last sync
-            const timeSinceLastSync = performance.now() - lastStateUpdateTimestampRef.current;
-            const projectedPos = lastStatePositionRef.current + timeSinceLastSync;
-            const drift = Math.abs(state.position - projectedPos);
+        // RESET IF TRACK CHANGED
+        if (currentTrackId !== lastTrackIdRef.current) {
+            lastTrackIdRef.current = currentTrackId || null;
+            lastRenderedPosRef.current = 0;
+            seekOverrideRef.current = null;
+        }
 
-            // If drift is minor (< 250ms) and we are playing, ignore this update to maintain smoothness
-            // We ensure playhead > 1s to avoid ignoring initial start
-            if (drift < 250 && !state.paused && state.position > 1000) {
-                return;
-            }
+        // CASE 1: Seeking (User dragging) - Handled by mouse events
+        if (isSeeking) return;
 
-            // FIX: Prevent backward jump on pause
-            // When pausing, the SDK often reports a position slightly behind where our smooth animation reached.
-            // If the difference is small (< 800ms), we prefer the visual continuity (freeze where it is)
-            // rather than snapping back.
-            if (state.paused) {
-                const visualDiff = visualPositionRef.current - state.position;
-                if (visualDiff > 0 && visualDiff < 800) {
-                     // Update internal anchors to be correct, but SKIP visual update
-                     lastStatePositionRef.current = state.position;
-                     lastStateUpdateTimestampRef.current = performance.now();
-                     return;
+        let animationFrameId: number;
+
+        const update = () => {
+            const now = Date.now();
+            let effectivePosition = 0;
+
+            // 1. Calculate SDK authoritative position
+            const sdkElapsed = now - state.timestamp;
+            // Basic position from SDK
+            let sdkPosition = state.paused 
+                ? state.position 
+                : Math.max(0, Math.min(state.duration, state.position + sdkElapsed));
+
+            // BUG FIX: ANTI-ROLLBACK ON PAUSE
+            // If we are paused, and the SDK reports a position significantly OLDER than 
+            // what we last displayed, ignore it. This happens when 'paused' event fires 
+            // with a stale timestamp before the final update.
+            if (state.paused && !seekOverrideRef.current) {
+                // If the drop is significant (> 500ms) and we are on the same track, clamp it.
+                if (lastRenderedPosRef.current - sdkPosition > 500) {
+                    sdkPosition = lastRenderedPosRef.current;
                 }
             }
 
-            visualPositionRef.current = state.position;
-            setDisplayPosition(state.position);
-            lastStatePositionRef.current = state.position;
-            lastStateUpdateTimestampRef.current = performance.now();
-        }
-    }, [state.position, isSeeking, state.paused]);
+            // 2. Check for Seek Override (Local Truth)
+            if (seekOverrideRef.current) {
+                const { pos: seekPos, time: seekTime } = seekOverrideRef.current;
+                const overrideElapsed = now - seekTime;
+                
+                const localPosition = state.paused 
+                    ? seekPos 
+                    : Math.max(0, Math.min(state.duration, seekPos + overrideElapsed));
 
-    // Reset timestamp when resuming playback to prevent jumps (The "balzi strani" fix)
-    useEffect(() => {
-        if (!state.paused) {
-            // RESUME EVENT: Reset anchors to prevent jumping from accumulated delta time while paused
-            lastStateUpdateTimestampRef.current = performance.now();
-            lastStatePositionRef.current = state.position;
+                const diff = Math.abs(sdkPosition - localPosition);
+                const timeSinceSeek = now - seekTime;
+
+                if ((timeSinceSeek > 500 && diff < 1000) || timeSinceSeek > 3000) {
+                    seekOverrideRef.current = null; 
+                    effectivePosition = sdkPosition;
+                } else {
+                    effectivePosition = localPosition;
+                }
+            } else {
+                effectivePosition = sdkPosition;
+            }
+
+            // Update refs and state
+            lastRenderedPosRef.current = effectivePosition;
+            setDisplayPosition(effectivePosition);
             
-            // Also force update display to current known state to ensure visual sync start
-            visualPositionRef.current = state.position;
-            setDisplayPosition(state.position);
-        }
-    }, [state.paused]); // Removed state.position dependency here to avoid double-reset fighting
-
-    // Handle tab visibility change to prevent "jumps" when returning to the tab
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (!document.hidden && !isSeeking) {
-                // When tab becomes visible, force sync to the last known state immediately
-                // to avoid interpolation jumps from stale performance.now() deltas
-                setDisplayPosition(state.position);
-                visualPositionRef.current = state.position;
-                lastStatePositionRef.current = state.position;
-                lastStateUpdateTimestampRef.current = performance.now();
+            // Only continue loop if playing. If paused, we update once (to apply clamp) and stop.
+            if (!state.paused) {
+                animationFrameId = requestAnimationFrame(update);
             }
         };
-
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    }, [state.position, isSeeking]);
-
-    useEffect(() => {
-        if (state.paused || isSeeking) {
-            cancelAnimationFrame(animationFrameRef.current);
-            return;
-        }
-        const animate = () => {
-            const timeSinceLastUpdate = performance.now() - lastStateUpdateTimestampRef.current;
-            const newAnimatedPosition = lastStatePositionRef.current + timeSinceLastUpdate;
-            
-            // Clamp to duration to prevent overflow
-            const clampedPosition = Math.min(newAnimatedPosition, state.duration);
-            
-            visualPositionRef.current = clampedPosition;
-            setDisplayPosition(clampedPosition);
-            animationFrameRef.current = requestAnimationFrame(animate);
+        
+        // Run update at least once to handle the state change immediately
+        update();
+        
+        return () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
-        animationFrameRef.current = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(animationFrameRef.current);
-    }, [state.paused, state.duration, isSeeking]);
+    }, [state.paused, state.duration, state.position, state.timestamp, isSeeking, state.track_window.current_track?.id]); 
     
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (!progressRef.current || !player || !state.duration) return;
-        cancelAnimationFrame(animationFrameRef.current);
         setIsSeeking(true);
+        
+        const rect = progressRef.current.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+        const newPos = Math.round(state.duration * ratio);
+        
+        // Update visuals immediately
+        setDisplayPosition(newPos);
+        lastRenderedPosRef.current = newPos;
     }, [player, state.duration]);
 
     useEffect(() => {
@@ -172,22 +173,24 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         };
 
         const handleMouseMove = (e: MouseEvent) => {
-            setDisplayPosition(getSeekPosition(e.clientX));
+            const pos = getSeekPosition(e.clientX);
+            setDisplayPosition(pos);
         };
 
         const handleMouseUp = (e: MouseEvent) => {
             const finalPosition = getSeekPosition(e.clientX);
+            
+            // 1. Commit seek to Player
             player?.seek(finalPosition).catch(err => console.error("Seek failed", err));
             
-            // Optimistically update local state so animation continues smoothly from here
-            lastStatePositionRef.current = finalPosition;
-            lastStateUpdateTimestampRef.current = performance.now();
-            visualPositionRef.current = finalPosition;
+            // 2. Set Local Override
+            seekOverrideRef.current = { pos: finalPosition, time: Date.now() };
+            
+            // 3. Update visual immediately
             setDisplayPosition(finalPosition);
+            lastRenderedPosRef.current = finalPosition;
             
-            // Ignore external state updates for 1.5 seconds to allow Spotify backend to sync
-            ignoreRemoteUpdatesUntil.current = Date.now() + 1500;
-            
+            // 4. End seeking state
             setIsSeeking(false);
         };
 
@@ -201,7 +204,6 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     }, [isSeeking, player, state.duration]);
     
     const progressPercentage = state.duration > 0 ? (displayPosition / state.duration) * 100 : 0;
-    // Clamp visual percentage to 100% just in case
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
     
     return (
@@ -434,7 +436,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     isNight, 
     dockedConfig, 
     floatingConfig, 
-    playerControlsSize,
+    playerControlsSize, 
     playerControlsGap, 
     playerControlsVerticalPosition,
     spinnerSize,

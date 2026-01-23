@@ -599,10 +599,40 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
     }, [isPlayerSdkReady]);
 
+    // NEW: Volume Sync Effect
+    useEffect(() => {
+        if (!isPlayerSdkReady) return;
+
+        const interval = setInterval(async () => {
+            const player = getPlayerInstance();
+            if (!player) return;
+            
+            try {
+                const currentSdkVolume = await player.getVolume();
+                setState(prev => {
+                    // Update only if significant difference to avoid UI jitter or conflict with local drag
+                    if (Math.abs(prev.volume - currentSdkVolume) > 0.02) {
+                        return { 
+                            ...prev, 
+                            volume: currentSdkVolume, 
+                            isMuted: currentSdkVolume === 0,
+                            lastVolume: currentSdkVolume > 0 ? currentSdkVolume : prev.lastVolume 
+                        };
+                    }
+                    return prev;
+                });
+            } catch (e) {
+                // Silent catch for volume retrieval errors
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [isPlayerSdkReady]);
+
     useEffect(() => {
         if (!state.isAuthenticated || !state.accessToken) { getPlayerInstance()?.disconnect(); return; }
         initSpotifyPlayerOnce({
-            name: 'Drive OS',
+            name: 'DriveOS',
             getAccessToken: getAccessTokenForPlayer,
             onReady: () => setIsPlayerSdkReady(true),
             onNotReady: () => setIsPlayerSdkReady(false),
