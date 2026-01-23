@@ -76,10 +76,15 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const currentTrackId = state.track_window.current_track?.id;
 
         // RESET IF TRACK CHANGED
-        if (currentTrackId !== lastTrackIdRef.current) {
-            lastTrackIdRef.current = currentTrackId || null;
+        // Critical Fix: Only reset if we have a valid currentTrackId that is DIFFERENT from the last one.
+        // If currentTrackId is null/undefined (temporary SDK glitch), we do NOT reset.
+        if (currentTrackId && lastTrackIdRef.current && currentTrackId !== lastTrackIdRef.current) {
+            lastTrackIdRef.current = currentTrackId;
             lastRenderedPosRef.current = 0;
             seekOverrideRef.current = null;
+        } else if (!lastTrackIdRef.current && currentTrackId) {
+             // First initialization
+             lastTrackIdRef.current = currentTrackId;
         }
 
         // CASE 1: Seeking (User dragging) - Handled by mouse events
@@ -101,10 +106,25 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // BUG FIX: ANTI-ROLLBACK ON PAUSE
             // If we are paused, and the SDK reports a position significantly OLDER than 
             // what we last displayed, ignore it. This happens when 'paused' event fires 
-            // with a stale timestamp before the final update.
+            // with a stale timestamp or 0 before the final update.
             if (state.paused && !seekOverrideRef.current) {
-                // If the drop is significant (> 500ms) and we are on the same track, clamp it.
+                // If the drop is significant (> 500ms) we clamp it to the last known visual position.
+                // This prevents the visual "jump back" when stopping.
                 if (lastRenderedPosRef.current - sdkPosition > 500) {
+                    sdkPosition = lastRenderedPosRef.current;
+                }
+            }
+
+            // BUG FIX: 0-GLITCH PROTECTION ON PLAY
+            // When resuming, SDK sometimes briefly reports position 0 before correcting to current time.
+            // If we were well into the track (>5s), and suddenly we get 0 (or near 0), ignore it temporarily.
+            if (!state.paused && !seekOverrideRef.current) {
+                if (lastRenderedPosRef.current > 5000 && sdkPosition < 1000) {
+                    // Suspicious drop to 0 while playing. Stick to last render to avoid glitch.
+                    // We assume user didn't restart the song manually via seek (checked by seekOverrideRef).
+                    // If user used "Prev" button, this might delay the UI update by a split second until 
+                    // the SDK sends a real 0 state consistently or track changes. 
+                    // But track change is handled above.
                     sdkPosition = lastRenderedPosRef.current;
                 }
             }
@@ -121,6 +141,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
                 const diff = Math.abs(sdkPosition - localPosition);
                 const timeSinceSeek = now - seekTime;
 
+                // Sync Condition: Release override if SDK catches up OR timeout (3s) passes
                 if ((timeSinceSeek > 500 && diff < 1000) || timeSinceSeek > 3000) {
                     seekOverrideRef.current = null; 
                     effectivePosition = sdkPosition;
@@ -132,7 +153,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             }
 
             // Update refs and state
-            lastRenderedPosRef.current = effectivePosition;
+            // Only update lastRenderedPosRef if the new position is plausible (not 0 if we were at 50s)
+            // unless it's a new track (handled by the reset logic above)
+            if (effectivePosition > 0 || lastRenderedPosRef.current < 1000) {
+                 lastRenderedPosRef.current = effectivePosition;
+            }
+            
             setDisplayPosition(effectivePosition);
             
             // Only continue loop if playing. If paused, we update once (to apply clamp) and stop.

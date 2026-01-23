@@ -494,7 +494,14 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (isResume && !prev.activeDevice && prev.spotifyState) {
                 nextSpotifyState = {
                     ...prev.spotifyState,
-                    paused: false
+                    paused: false,
+                    // FIX: Update timestamp to now. This is crucial for correct position calculation.
+                    // The position property in `spotifyState` holds the position at the time of `timestamp`.
+                    // When pausing, we stopped at position X. When resuming optimistically, position is still X,
+                    // but we must reset `timestamp` to `Date.now()` so that `Date.now() - timestamp` equals 0 at start.
+                    // Without this, `timestamp` remains old, causing `elapsed` to be huge (e.g. 10s),
+                    // effectively jumping the progress bar forward by 10s instantly.
+                    timestamp: Date.now()
                 };
             }
 
