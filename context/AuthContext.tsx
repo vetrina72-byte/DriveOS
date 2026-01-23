@@ -89,7 +89,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [nowPlaying, setNowPlaying] = useState<NowPlayingState>({
-        source: null, spotifyState: null, radioStation: null, radioContext: [], youtubeTrack: null, isLoading: false,
+        source: null, spotifyState: null, radioStation: null, radioContext: [], youtubeTrack: null, isLoading: false, activeDevice: null
     });
     const [youTubeFavorites, setYouTubeFavorites] = useState<string[]>([]);
     const [isAutoplayBlocked, setAutoplayBlocked] = useState(false);
@@ -98,6 +98,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     
     // Lock mechanism to prevent double playback requests
     const isSwitchingTrack = useRef(false);
+    
+    // Lock mechanism to prevent UI flickering during device transfer
+    const isTransferring = useRef(false);
     
     const latestOptimisticItem = useRef<MediaItem | null>(null);
 
@@ -142,6 +145,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
+    const remotePollIntervalRef = useRef<number | null>(null);
 
     const triggerDataRefresh = useCallback(() => setRefreshTrigger(p => p + 1), []);
 
@@ -224,20 +228,77 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         return () => { if (refreshTimeoutId.current) clearTimeout(refreshTimeoutId.current); }
     }, [state.isAuthenticated, state.expiresAt, scheduleRefresh]);
 
+    // NUOVO: Funzione per controllare lo stato del player remoto (API Polling)
+    const checkRemotePlayerState = useCallback(async () => {
+        if (!state.accessToken) return;
+        // CRITICAL: Skip polling if we are actively transferring to local device
+        // This prevents the UI from momentarily flickering back to "Remote View" due to stale API data
+        if (isTransferring.current) return;
+
+        try {
+            // Chiede a Spotify chi sta suonando
+            const response = await apiClient.get('/me/player');
+            
+            if (response.status === 200 && response.data) {
+                const { device, item, is_playing } = response.data;
+                const localDeviceId = getDeviceId();
+                
+                // Se il dispositivo attivo NON è quello locale, aggiorniamo lo stato per mostrare la UI remota
+                if (device && device.id !== localDeviceId) {
+                    setNowPlaying(prev => ({
+                        ...prev,
+                        source: 'spotify', 
+                        activeDevice: device, // Memorizza info dispositivo remoto
+                    }));
+                } else if (!is_playing && nowPlaying.source === 'spotify' && !nowPlaying.spotifyState) {
+                    // Nessuno sta suonando
+                    setNowPlaying(prev => ({ ...prev, activeDevice: null }));
+                }
+            } else if (response.status === 204) {
+                // 204 No Content = nulla in riproduzione
+                setNowPlaying(prev => ({ ...prev, activeDevice: null }));
+            }
+        } catch (e) {
+            console.error("Error checking remote player state", e);
+        }
+    }, [state.accessToken, nowPlaying.source, nowPlaying.spotifyState]);
+
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
+        // If we get a valid state update from the SDK, we know the local player is active.
+        // We can safely unlock the transfer flag.
+        if (newState) {
+            isTransferring.current = false;
+        }
+
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
             
-            // Critical fix: If we receive a new state, stop loading.
-            // Check if track matches what we tried to play? Not strictly necessary if we trust the flow.
-            // If track is missing, it might mean "not ready", but generally state update means "something happened".
             const isLoading = isSwitchingTrack.current; 
             
+            // Se lo stato locale è null (disconnesso/trasferito), controlliamo chi ha preso il controllo
+            if (newState === null) {
+                // Controllo immediato
+                checkRemotePlayerState();
+                
+                // Avvia polling per tenere aggiornato lo stato remoto - 1.5s FAST POLLING
+                if (!remotePollIntervalRef.current) {
+                    remotePollIntervalRef.current = window.setInterval(checkRemotePlayerState, 1500);
+                }
+            } else {
+                // Se lo stato locale è attivo, fermiamo il polling remoto
+                if (remotePollIntervalRef.current) {
+                    clearInterval(remotePollIntervalRef.current);
+                    remotePollIntervalRef.current = null;
+                }
+            }
+
             return { 
                 ...s, 
                 spotifyState: newState, 
-                isLoading: isLoading ? s.isLoading : false, // Only clear loading if not currently switching
-                source: newState ? 'spotify' : null 
+                isLoading: isLoading ? s.isLoading : false, 
+                source: 'spotify',
+                // Se newState esiste, siamo noi il dispositivo attivo (di solito), quindi puliamo activeDevice
+                activeDevice: newState ? null : s.activeDevice 
             };
         });
         
@@ -248,8 +309,17 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (newState.context && newState.context.uri) localStorage.setItem("last_context_uri", newState.context.uri);
             else localStorage.removeItem("last_context_uri");
         }
-    }, [setNowPlaying]);
+    }, [setNowPlaying, checkRemotePlayerState]);
     
+    // Cleanup polling all'unmount
+    useEffect(() => {
+        return () => {
+            if (remotePollIntervalRef.current) {
+                clearInterval(remotePollIntervalRef.current);
+            }
+        };
+    }, []);
+
     const fetchUserInfo = useCallback(async () => {
         try { const { data } = await apiClient.get('/me'); return data; } catch (err) { return null; }
     }, []);
@@ -406,21 +476,91 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.setItem("last_is_playing", "true");
         setLastPlayInitiated(Date.now());
         
-        // Indicate loading
-        setNowPlaying(prev => ({ 
-            ...prev, 
-            source: 'spotify', 
-            radioStation: null, 
-            youtubeTrack: null, 
-            isLoading: true 
-        }));
+        // --- SPECIAL HANDLER FOR "LISTEN HERE" (TRANSFER) ---
+        // If we are currently showing a remote device (activeDevice is set),
+        // we assume the user wants to bring playback HERE.
+        
+        const isResume = Object.keys(options).length === 0 && !options.context_uri && !options.uris;
+        const isTransfer = !!nowPlaying.activeDevice;
+        // Only show spinner if transferring or loading a new track/context.
+        // If simply resuming, keep existing loading state (likely false) to avoid spinner flash.
+        const shouldShowSpinner = isTransfer || !isResume;
+
+        // IMMEDIATELY update state to remove remote UI and show spinner.
+        setNowPlaying(prev => {
+            // OPTIMISTIC UPDATE: If resuming locally, force paused=false immediately
+            // This updates the UI (Play icon becomes Pause icon) instantly.
+            let nextSpotifyState = prev.spotifyState;
+            if (isResume && !prev.activeDevice && prev.spotifyState) {
+                nextSpotifyState = {
+                    ...prev.spotifyState,
+                    paused: false
+                };
+            }
+
+            return { 
+                ...prev, 
+                spotifyState: nextSpotifyState, // Apply optimistic state
+                source: 'spotify', 
+                radioStation: null, 
+                youtubeTrack: null, 
+                isLoading: shouldShowSpinner, // Conditionally show spinner based on action type
+                activeDevice: null // Optimistically clear remote device UI
+            };
+        });
+
+        // --- FAST PATH: LOCAL RESUME ---
+        // If it's a resume action, and we are NOT casting/remote, use the local SDK directly.
+        if (isResume && !nowPlaying.activeDevice) {
+             const player = getPlayerInstance();
+             if (player) {
+                 try {
+                     await player.resume();
+                     isSwitchingTrack.current = false;
+                     // Ensure we fetch recent plays after a bit
+                     setLastPlayInitiated(Date.now()); 
+                     return; // Success, skip the API call
+                 } catch (e) {
+                     console.warn("Local resume failed, falling back to API", e);
+                     // If fail, proceed to API call below
+                 }
+             }
+        }
+
+        if (nowPlaying.activeDevice) {
+            console.log('[AuthContext] Taking control from remote device...');
+            isTransferring.current = true; // Block polling updates to prevent UI flickering back
+            
+            // Safety timeout to reset the transfer lock if something goes wrong
+            setTimeout(() => {
+                isTransferring.current = false;
+            }, 8000);
+
+            try {
+                // 1. Force pause on the current remote device (if playing)
+                if (nowPlaying.activeDevice.is_active) {
+                    await apiClient.put('/me/player/pause').catch(() => {});
+                    // Wait a bit longer to ensure the backend processes the pause before we ask to play elsewhere
+                    await new Promise(r => setTimeout(r, 500)); 
+                }
+                // 2. Proceed to safePlay which will wake up the local device.
+            } catch (e) {
+                console.error("Error taking control:", e);
+                // Even if remote pause fails, we proceed to try and play locally
+            }
+        }
 
         try {
             const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
             if (!success) {
-                // If failed, stop loading indicator so user isn't stuck
+                // Only reset loading if it failed. If it succeeded, we wait for SDK state change to clear loading.
                 setNowPlaying(prev => ({ ...prev, isLoading: false }));
                 console.error("Playback failed or timed out.");
+            } else {
+                // Safety timeout: if state doesn't change in 3s, clear loading manually to avoid infinite spinner
+                setTimeout(() => {
+                    setNowPlaying(prev => prev.isLoading ? ({ ...prev, isLoading: false }) : prev);
+                }, 3000);
             }
         } catch (error) {
             console.error("Exception during play:", error);
@@ -428,7 +568,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         } finally {
             isSwitchingTrack.current = false;
         }
-    }, [attemptRefreshAndUpdatePlayerToken]);
+    }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice]);
     
     useEffect(() => {
         if (lastPlayInitiated > 0) {
@@ -462,7 +602,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     useEffect(() => {
         if (!state.isAuthenticated || !state.accessToken) { getPlayerInstance()?.disconnect(); return; }
         initSpotifyPlayerOnce({
-            name: 'Mio Infotainment',
+            name: 'Drive OS',
             getAccessToken: getAccessTokenForPlayer,
             onReady: () => setIsPlayerSdkReady(true),
             onNotReady: () => setIsPlayerSdkReady(false),
@@ -498,7 +638,21 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         setVolumeFinal(state.isMuted ? (state.lastVolume > 0 ? state.lastVolume : 0.5) : 0);
     }, [state.isMuted, state.lastVolume, setVolumeFinal]);
 
-    const pauseSpotify = useCallback(async () => { getPlayerInstance()?.pause(); }, []);
+    const pauseSpotify = useCallback(async () => { 
+        // Optimistic UI update: Immediately show paused state to improve responsiveness
+        setNowPlaying(prev => {
+            if (prev.spotifyState) {
+                return {
+                    ...prev,
+                    spotifyState: { ...prev.spotifyState, paused: true }
+                };
+            }
+            return prev;
+        });
+        
+        getPlayerInstance()?.pause(); 
+    }, []);
+
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => { pauseSpotify(); setNowPlaying(prev => ({ ...prev, source: 'youtube', youtubeTrack: track, youtubePlaylist: playlist, radioStation: null, isLoading: prev.source !== 'youtube' })); }, [pauseSpotify]);
     const clearError = useCallback(() => { setState(s => ({...s, error: null})); }, []);
     const unlockAutoplay = useCallback(() => { getPlayerInstance()?.resume().then(() => setAutoplayBlocked(false)).catch(() => {}); }, []);

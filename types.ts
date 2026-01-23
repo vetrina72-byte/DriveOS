@@ -1,3 +1,4 @@
+
 import type { Dispatch } from 'react';
 import type { SpotifyPlayerState } from '@/globals';
 
@@ -101,6 +102,16 @@ export interface YouTubeTrackInfo {
   playlistId?: string;
 }
 
+export interface SpotifyDevice {
+    id: string;
+    is_active: boolean;
+    is_private_session: boolean;
+    is_restricted: boolean;
+    name: string;
+    type: string; // "Computer", "Smartphone", "Speaker", etc.
+    volume_percent: number;
+}
+
 export interface NowPlayingState {
   source: 'spotify' | 'radio' | 'youtube' | null;
   spotifyState: SpotifyPlayerState | null;
@@ -109,6 +120,7 @@ export interface NowPlayingState {
   youtubeTrack: YouTubeTrackInfo | null;
   youtubePlaylist?: YouTubeTrackInfo[];
   isLoading?: boolean;
+  activeDevice?: SpotifyDevice | null; // Nuovo campo per tracciare dispositivi remoti
 }
 
 // Export PlayOptions to be used by the spotify-player utility

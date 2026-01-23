@@ -5,17 +5,17 @@ import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio
+    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
 } from 'react-icons/fi';
 import { 
-    IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp
+    IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp, IoGameControllerOutline
 } from 'react-icons/io5';
 import { 
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
-import type { RadioStation, YouTubeTrackInfo } from '../types';
+import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
@@ -60,20 +60,79 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     const animationFrameRef = useRef(0);
     const lastStatePositionRef = useRef(state.position);
     const lastStateUpdateTimestampRef = useRef(performance.now());
+    const visualPositionRef = useRef(state.position);
     
     // Ref to ignore incoming state updates for a short period after seeking
     // This prevents the bar from "bouncing" back to the old position before the server catches up
     const ignoreRemoteUpdatesUntil = useRef(0);
 
+    // Sync state when props change
     useEffect(() => {
         if (!isSeeking) {
             // Critical check: ignore stale updates right after a seek
             if (Date.now() < ignoreRemoteUpdatesUntil.current) return;
 
+            // Jitter reduction:
+            // Calculate projected position based on last sync
+            const timeSinceLastSync = performance.now() - lastStateUpdateTimestampRef.current;
+            const projectedPos = lastStatePositionRef.current + timeSinceLastSync;
+            const drift = Math.abs(state.position - projectedPos);
+
+            // If drift is minor (< 250ms) and we are playing, ignore this update to maintain smoothness
+            // We ensure playhead > 1s to avoid ignoring initial start
+            if (drift < 250 && !state.paused && state.position > 1000) {
+                return;
+            }
+
+            // FIX: Prevent backward jump on pause
+            // When pausing, the SDK often reports a position slightly behind where our smooth animation reached.
+            // If the difference is small (< 800ms), we prefer the visual continuity (freeze where it is)
+            // rather than snapping back.
+            if (state.paused) {
+                const visualDiff = visualPositionRef.current - state.position;
+                if (visualDiff > 0 && visualDiff < 800) {
+                     // Update internal anchors to be correct, but SKIP visual update
+                     lastStatePositionRef.current = state.position;
+                     lastStateUpdateTimestampRef.current = performance.now();
+                     return;
+                }
+            }
+
+            visualPositionRef.current = state.position;
             setDisplayPosition(state.position);
             lastStatePositionRef.current = state.position;
             lastStateUpdateTimestampRef.current = performance.now();
         }
+    }, [state.position, isSeeking, state.paused]);
+
+    // Reset timestamp when resuming playback to prevent jumps (The "balzi strani" fix)
+    useEffect(() => {
+        if (!state.paused) {
+            // RESUME EVENT: Reset anchors to prevent jumping from accumulated delta time while paused
+            lastStateUpdateTimestampRef.current = performance.now();
+            lastStatePositionRef.current = state.position;
+            
+            // Also force update display to current known state to ensure visual sync start
+            visualPositionRef.current = state.position;
+            setDisplayPosition(state.position);
+        }
+    }, [state.paused]); // Removed state.position dependency here to avoid double-reset fighting
+
+    // Handle tab visibility change to prevent "jumps" when returning to the tab
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (!document.hidden && !isSeeking) {
+                // When tab becomes visible, force sync to the last known state immediately
+                // to avoid interpolation jumps from stale performance.now() deltas
+                setDisplayPosition(state.position);
+                visualPositionRef.current = state.position;
+                lastStatePositionRef.current = state.position;
+                lastStateUpdateTimestampRef.current = performance.now();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
     }, [state.position, isSeeking]);
 
     useEffect(() => {
@@ -84,7 +143,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const animate = () => {
             const timeSinceLastUpdate = performance.now() - lastStateUpdateTimestampRef.current;
             const newAnimatedPosition = lastStatePositionRef.current + timeSinceLastUpdate;
-            setDisplayPosition(Math.min(newAnimatedPosition, state.duration));
+            
+            // Clamp to duration to prevent overflow
+            const clampedPosition = Math.min(newAnimatedPosition, state.duration);
+            
+            visualPositionRef.current = clampedPosition;
+            setDisplayPosition(clampedPosition);
             animationFrameRef.current = requestAnimationFrame(animate);
         };
         animationFrameRef.current = requestAnimationFrame(animate);
@@ -118,6 +182,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
             // Optimistically update local state so animation continues smoothly from here
             lastStatePositionRef.current = finalPosition;
             lastStateUpdateTimestampRef.current = performance.now();
+            visualPositionRef.current = finalPosition;
             setDisplayPosition(finalPosition);
             
             // Ignore external state updates for 1.5 seconds to allow Spotify backend to sync
@@ -136,16 +201,18 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     }, [isSeeking, player, state.duration]);
     
     const progressPercentage = state.duration > 0 ? (displayPosition / state.duration) * 100 : 0;
+    // Clamp visual percentage to 100% just in case
+    const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
     
     return (
         <div
             ref={progressRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)]"
+            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
             onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
+            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                  <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>
@@ -208,16 +275,17 @@ const YouTubeProgressBar = ({
 
     const displayPosition = isSeeking ? localPosition : progress.position;
     const progressPercentage = progress.duration > 0 ? (displayPosition / progress.duration) * 100 : 0;
+    const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
         <div
             ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)]"
+            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
             onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${progressPercentage}%` }}>
+            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
                 <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)]"
+                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
                     style={{ transform: 'translateY(-50%)' }} 
                 />
             </div>
@@ -272,6 +340,44 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
     );
 };
 
+const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyDevice, isNight: boolean, onTakeControl: () => void }) => {
+    const DeviceIcon = () => {
+        const type = device.type.toLowerCase();
+        const style = { width: '22px', height: '22px' };
+        if (type === 'smartphone' || type === 'phone') return <FiSmartphone style={style} />;
+        if (type === 'computer' || type === 'desktop' || type === 'laptop') return <FiMonitor style={style} />;
+        if (type === 'speaker') return <FiSpeaker style={style} />;
+        if (type === 'tv' || type === 'castvideo') return <FiTv style={style} />;
+        if (type === 'tablet') return <FiTablet style={style} />;
+        if (type === 'castaudio' || type === 'audio_dongle') return <FiCast style={style} />;
+        if (type === 'gameconsole') return <IoGameControllerOutline style={style} />;
+        return <FiBluetooth style={style} />; // Default/Generic
+    };
+
+    return (
+        <div className="w-full h-full flex flex-row items-center justify-between px-6 py-2 bg-black/40 backdrop-blur-md rounded-xl overflow-hidden">
+            <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className={`p-3 rounded-full flex-shrink-0 ${isNight ? 'bg-zinc-800 text-green-500' : 'bg-white text-green-600'}`}>
+                    <DeviceIcon />
+                </div>
+                <div className="flex flex-col justify-center overflow-hidden">
+                    <p className={`text-[10px] font-bold uppercase tracking-wider ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>In riproduzione su</p>
+                    <h3 className={`text-base font-bold truncate ${isNight ? 'text-white' : 'text-zinc-800'}`}>
+                        {device.name}
+                    </h3>
+                </div>
+            </div>
+            
+            <button 
+                onClick={onTakeControl}
+                className="flex-shrink-0 ml-4 px-5 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-full text-sm transition-transform active:scale-95 shadow-lg whitespace-nowrap"
+            >
+                Ascolta qui
+            </button>
+        </div>
+    );
+};
+
 const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft'>) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
@@ -303,7 +409,7 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
                 </div>
             </div>
             {/* Progress bar */}
-            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)]" />
+            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden" />
             {/* Controls */}
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
@@ -329,7 +435,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     dockedConfig, 
     floatingConfig, 
     playerControlsSize,
-    playerControlsGap,
+    playerControlsGap, 
     playerControlsVerticalPosition,
     spinnerSize,
     spinnerShuffleGap,
@@ -357,6 +463,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setNowPlaying, 
       volume, 
       playYouTube, 
+      play, // Imported play from AuthContext
+      pauseSpotify, // Imported pauseSpotify
       isAutoplayBlocked,
       unlockAutoplay
   } = useAuth();
@@ -373,7 +481,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
     
     const playerState = nowPlaying.spotifyState;
-    const { radioStation, youtubeTrack, youtubePlaylist, source } = nowPlaying;
+    const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
 
     const audioRef = useRef<HTMLAudioElement>(null);
     const hlsRef = useRef<any>(null);
@@ -397,6 +505,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [nowPlaying.isLoading, debugSpinner]);
 
     const player = getPlayerInstance();
+    // Check if we are active LOCALLY
     const isPlayerActive = player && playerState && playerState.track_window.current_track;
     const currentTrack = playerState?.track_window.current_track;
     const currentTrackUri = currentTrack?.uri;
@@ -668,7 +777,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleTogglePlay = () => {
         if (source === 'spotify') {
-            player?.togglePlay();
+            if (playerState?.paused) {
+                // Resume
+                play({});
+            } else {
+                // Pause
+                pauseSpotify();
+            }
         } else if (source === 'radio') {
             const audio = audioRef.current;
             if (audio) {
@@ -811,7 +926,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     );
     
     const renderPlayerContent = () => {
-        const showSpinner = nowPlaying.isLoading ?? false;
+        // --- NEW: REMOTE DEVICE VIEW ---
+        // If Spotify source is active, but local player is NOT active, and we have a remote device:
+        if (source === 'spotify' && !isPlayerActive && activeDevice) {
+            return (
+                <RemotePlayerView 
+                    device={activeDevice} 
+                    isNight={isNight} 
+                    onTakeControl={() => play({})} 
+                />
+            );
+        }
 
         if (source === 'youtube' && youtubeTrack) {
             const { title, channelTitle, thumbnail } = youtubeTrack;
