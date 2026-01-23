@@ -119,8 +119,6 @@ const SpotifyProgressBar = ({ state }: { state: SpotifyPlayerState }) => {
                 // PAUSED: Freeze exactly where we are visually
                 eng.anchorPosition = eng.visualPosition;
                 eng.anchorTime = now;
-                // Important: Update server view to match visual to avoid jump on resume
-                // (Optional: send exact pause pos to server if critical)
             }
             return;
         }
@@ -360,10 +358,10 @@ const QueuePopover = ({
     height, 
     scale, 
     width, 
-    offsetX,
-    dockedConfig,
-    floatingConfig,
-    isAnyAppOpen
+    offsetX, 
+    dockedConfig, 
+    floatingConfig, 
+    isAnyAppOpen 
 }: { 
     isNight: boolean, 
     nextTrack: { name: string, description: string, imageUrl: string } | null, 
@@ -579,6 +577,67 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const prevPositionRef = useRef(0);
     const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
 
+    // --- DEBOUNCE & OPTIMISTIC UI LOGIC ---
+    const [optimisticIsPlaying, setOptimisticIsPlaying] = useState<boolean | null>(null);
+    const debounceTimerRef = useRef<number | null>(null);
+
+    // Sync optimistic state with real state when real state changes (and we aren't debouncing)
+    useEffect(() => {
+        if (playerState) {
+             // Only sync if we are not currently "holding" a debounce action
+             if (!debounceTimerRef.current) {
+                 setOptimisticIsPlaying(null);
+             }
+        }
+    }, [playerState?.paused, playerState?.track_window?.current_track?.id]);
+
+    const handleTogglePlay = () => {
+        if (source === 'spotify') {
+            // Determine the current VISUAL state
+            // If we have an optimistic override, use it. Otherwise use real state.
+            // If real state is null (cold start), assume NOT playing (so next is Play)
+            const currentVisualState = optimisticIsPlaying !== null 
+                ? optimisticIsPlaying 
+                : (playerState ? !playerState.paused : false);
+            
+            const nextState = !currentVisualState;
+
+            // 1. Immediate Visual Update
+            setOptimisticIsPlaying(nextState);
+
+            // 2. Clear pending network request
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+
+            // 3. Queue network request (Debounce 500ms)
+            debounceTimerRef.current = window.setTimeout(() => {
+                if (nextState) {
+                    play({});
+                } else {
+                    pauseSpotify();
+                }
+                debounceTimerRef.current = null;
+                // Allow the optimistic state to persist a bit longer to cover network latency
+                setTimeout(() => setOptimisticIsPlaying(null), 1000); 
+            }, 500);
+
+        } else if (source === 'radio') {
+             if (audioRef.current?.paused) {
+                 audioRef.current.play().catch(console.error);
+             } else {
+                 audioRef.current?.pause();
+             }
+        } else if (source === 'youtube' && youtubePlayerRef.current) {
+             const playerState = youtubePlayerRef.current.getPlayerState();
+             if (playerState === 1) {
+                 youtubePlayerRef.current.pauseVideo();
+             } else {
+                 youtubePlayerRef.current.playVideo();
+             }
+        }
+    };
+
     const player = getPlayerInstance();
     const localDeviceId = getDeviceId(); 
 
@@ -777,12 +836,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (playerIsPlaying) { hasEndedRef.current = false; setNowPlaying(s => ({ ...s, isLoading: false })); }
     };
 
-    const handleTogglePlay = () => {
-        if (source === 'spotify') playerState?.paused ? play({}) : pauseSpotify();
-        else if (source === 'radio') audioRef.current?.paused ? audioRef.current.play().catch(console.error) : audioRef.current?.pause();
-        else if (source === 'youtube' && youtubePlayerRef.current) youtubePlayerRef.current.getPlayerState() === 1 ? youtubePlayerRef.current.pauseVideo() : youtubePlayerRef.current.playVideo();
-    };
-
     const handleNextTrack = () => {
         if (source === 'spotify') {
             if (playerState && playerState.track_window.next_tracks.length > 0) {
@@ -863,6 +916,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // We keep button enabled to allow seek-to-0 behavior
                 const isPrevDisabled = false; 
 
+                // Determine visual Play/Pause state based on Optimistic Override or Real State
+                const visualIsPlaying = optimisticIsPlaying !== null 
+                    ? optimisticIsPlaying 
+                    : (!playerState.paused);
+
                 return (
                     <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                         <div className="flex items-center justify-between w-full">
@@ -889,7 +947,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 >
                                     <IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} />
                                 </button>
-                                <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>{playerState.paused ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}</button>
+                                <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
+                                    {visualIsPlaying ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />}
+                                </button>
                                 <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
                                 <button onClick={handleToggleLike} className="transition" style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} /></button>
                             </div>
