@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api';
 import { FiPlay, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
@@ -42,7 +41,6 @@ interface Track {
     uri: string;
     album: { name: string; images: { url: string }[] };
     track_number?: number;
-    type?: string; // Add type for consistency
 }
 
 interface PlaylistDetails extends SpotifyItem {
@@ -105,8 +103,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                 if (isLikedSongs) {
                     const response = await apiClient.get('/me/tracks?limit=50');
                     const likedTracks = response.data.items
-                        .map((item: SavedTrackObject) => ({...item.track, type: 'track'})) // Ensure 'type' is set
-                        .filter((track: Track | null) => track && track.album); 
+                        .map((item: SavedTrackObject) => item.track)
+                        .filter((track: Track | null) => track && track.album); // Ensure track and its album info exist
                     setTracks(likedTracks);
                     
                     setDetails({
@@ -121,8 +119,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     setDetails(response.data);
                     
                     const trackItems = (itemType === 'playlist'
-                        ? response.data.tracks.items.map((item: any) => item.track ? ({...item.track, type: 'track'}) : null)
-                        : response.data.tracks.items.map((item: any) => ({...item, type: 'track'})))
+                        ? response.data.tracks.items.map((item: any) => item.track)
+                        : response.data.tracks.items)
                         .filter(Boolean); // Filter out any null/undefined tracks
 
                     setTracks(trackItems);
@@ -203,23 +201,18 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const handlePlay = () => {
         if (!isPlayerReady) return;
         if (isLikedSongs) {
-            // For liked songs, pass the first track as optimistic update to prevent playlist name flash
-            onPlay({ uris: tracks.map(t => t.uri) }, tracks[0] as SpotifyItem);
+            onPlay({ uris: tracks.map(t => t.uri) }, details);
         } else if (details?.uri) {
-            // For general playlist play, grab the first track for context
-            onPlay({ context_uri: details.uri }, tracks[0] as SpotifyItem);
+            onPlay({ context_uri: details.uri }, details);
         }
     };
     
-    const handleTrackPlay = (track: Track, index: number) => {
+    const handleTrackPlay = (trackUri: string, index: number) => {
         if (!isPlayerReady) return;
-        // Cast Track to SpotifyItem - we ensured 'type' is set in fetch
-        const itemForOptimistic = track as unknown as SpotifyItem;
-
         if (isLikedSongs) {
-            onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } }, itemForOptimistic);
+            onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } }, details);
         } else if (details?.uri) {
-            onPlay({ context_uri: details.uri, offset: { uri: track.uri } }, itemForOptimistic);
+            onPlay({ context_uri: details.uri, offset: { uri: trackUri } }, details);
         }
     };
 
@@ -299,7 +292,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                         <motion.div
                             key={`${track.id}-${index}`}
                             variants={itemVariants}
-                            onClick={() => handleTrackPlay(track, index)}
+                            onClick={() => handleTrackPlay(track.uri, index)}
                             className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                         >
                             <div className="text-center">

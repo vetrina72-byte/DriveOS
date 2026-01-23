@@ -47,6 +47,7 @@ export function initSpotifyPlayerOnce(options: InitOptions) {
             player.addListener('not_ready', (details) => {
                 console.warn('[Spotify SDK] Device ID has gone offline', details.device_id);
                 playerReady = false;
+                // Important: clear the device ID so we know we need to reconnect/transfer later
                 if (spotifyDeviceId === details.device_id) {
                     spotifyDeviceId = null; 
                 }
@@ -108,26 +109,6 @@ export function getDeviceId(): string | null {
     return spotifyDeviceId;
 }
 
-/**
- * Directly seek using the SDK WebSocket connection.
- * Faster than REST API.
- */
-export async function seekLocal(position_ms: number): Promise<void> {
-    if (spotifyPlayer) {
-        return spotifyPlayer.seek(position_ms);
-    }
-    return Promise.reject("No local player");
-}
-
-/**
- * Wakes up the player element (critical for first-click on browsers)
- */
-export async function activatePlayer(): Promise<void> {
-    if (spotifyPlayer) {
-        return spotifyPlayer.activateElement().then(() => {});
-    }
-}
-
 function throttle<T extends (...args: any[]) => any>(func: T, wait = 150) {
     let last = 0;
     let timeout: number | null = null;
@@ -171,77 +152,19 @@ export async function setVolumeFinal(volume: number) {
   return await setVolumeSafe(volume);
 }
 
-// Helper to reconnect and wait for a new Device ID
-async function reconnectAndGetDeviceId(player: SpotifyPlayer): Promise<string | null> {
-    return new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-            console.warn('[Spotify SDK] Timeout waiting for device_id after reconnect');
-            resolve(null);
-        }, 4000); 
-
-        const onReady = (details: { device_id: string }) => {
-            clearTimeout(timeout);
-            player.removeListener('ready', onReady);
-            console.log('[Spotify SDK] Reconnected successfully, new ID:', details.device_id);
-            resolve(details.device_id);
-        };
-
-        player.addListener('ready', onReady);
-        player.disconnect(); 
-        setTimeout(() => {
-            player.connect().catch(e => {
-                console.error("Connect failed", e);
-                clearTimeout(timeout);
-                resolve(null);
-            });
-        }, 100);
-    });
-}
-
 /**
- * Executes a play command safely, prioritizing the local SDK for speed
- * and handling device activation.
+ * Executes a play command safely, handling device activation and token refresh automatically.
  */
 export async function safePlay(options: PlayOptions, attemptRefresh: () => Promise<boolean>): Promise<boolean> {
     const sessionId = getSessionId();
     
-    // 1. Force Activation - Crucial for "First Play"
-    if (spotifyPlayer) {
-        try {
-            await spotifyPlayer.activateElement();
-        } catch (e) {
-            console.warn("[safePlay] activateElement failed (non-fatal)", e);
-        }
-    }
-
-    // 2. Check Device ID
+    // 1. Check if we have a device ID from the SDK.
     if (!spotifyDeviceId) {
-        console.warn('[safePlay] No local device ID. Attempting wake up...');
-        if (spotifyPlayer) {
-            const newId = await reconnectAndGetDeviceId(spotifyPlayer);
-            if (newId) spotifyDeviceId = newId;
-            else return false;
-        } else {
-            return false;
-        }
+        console.warn('[safePlay] No local device ID found. SDK might not be ready.');
+        // We can't play if we don't know our own device ID.
+        return false;
     }
 
-    // 3. Cold Start Transfer
-    const currentState = await spotifyPlayer?.getCurrentState().catch(() => null);
-    if (!currentState) {
-        try {
-            await fetch('/api/transfer-player', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
-                body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
-            });
-            await new Promise(r => setTimeout(r, 200)); 
-        } catch (e) {
-            console.error("[safePlay] Pre-transfer failed", e);
-        }
-    }
-
-    // 4. Execute Play
     const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
 
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
@@ -253,16 +176,54 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
             });
             return { ok: res.ok, status: res.status };
         } catch (e) {
+            console.error('[safePlay] Network error during play:', e);
             return { ok: false, status: 500 };
         }
     };
 
+    // 2. Attempt playback
     let result = await doPlay();
 
     if (result.ok) return true;
 
-    // Retry logic for 404/401 omitted for brevity but should remain if needed
-    // ...
+    // 3. Handle 404 (Device Not Found / Inactive)
+    if (result.status === 404) {
+        console.log('[safePlay] Device 404 (Inactive). Attempting transfer/wake-up...');
+        
+        try {
+            const transferRes = await fetch('/api/transfer-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
+            });
 
+            if (transferRes.ok) {
+                // Wait a moment for Spotify backend to register the transfer
+                await new Promise(r => setTimeout(r, 500));
+                console.log('[safePlay] Transfer successful. Retrying play...');
+                result = await doPlay();
+                if (result.ok) return true;
+            } else {
+                console.error('[safePlay] Transfer failed.');
+            }
+        } catch (e) {
+            console.error('[safePlay] Error during transfer:', e);
+        }
+    }
+
+    // 4. Handle 401 (Token Expired)
+    if (result.status === 401) {
+        console.log('[safePlay] Token expired (401). Refreshing...');
+        const refreshed = await attemptRefresh();
+        if (refreshed) {
+            // Retry once with new token (handled implicitly by backend/session manager, 
+            // but we need to ensure the proxy uses the fresh data, which it pulls from Redis/Session)
+            await new Promise(r => setTimeout(r, 200)); // Small grace period
+            result = await doPlay();
+            if (result.ok) return true;
+        }
+    }
+
+    console.error(`[safePlay] Final failure. Status: ${result.status}`);
     return false;
 }
