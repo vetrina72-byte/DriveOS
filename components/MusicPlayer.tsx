@@ -48,104 +48,106 @@ interface MusicPlayerProps {
 }
 
 /**
- * A direct, non-interpolated progress bar for the Spotify player.
- * Uses local override to prevent "rubber-banding" after seeking.
+ * SpotifyProgressBar - High Precision Version
+ * 
+ * LOGIC:
+ * 1. Visual Priority: We trust our local RequestAnimationFrame loop above all else for smoothness.
+ * 2. Drift Tolerance: We only accept a position update from Spotify if it differs by > 1000ms (Seeks, Track Changes).
+ *    Small drifts (network latency) are ignored to prevent "rubber-banding".
+ * 3. Pause Freeze: When paused, we stop updating. We DO NOT snap to the server's pause position, avoiding the "jump back".
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const barFillRef = useRef<HTMLDivElement>(null);
     const progressContainerRef = useRef<HTMLDivElement>(null);
     const [isSeeking, setIsSeeking] = useState(false);
 
-    // -- REFS FOR ANIMATION LOOP (NO STATE) --
-    // The visual position currently displayed (ms)
-    const currentVisualPos = useRef<number>(state.position);
-    // The timestamp (performance.now()) of the last frame update
-    const lastFrameTime = useRef<number>(0);
-    // Tracks if we are currently playing according to SDK
-    const wasPaused = useRef<boolean>(state.paused);
-    // Tracks current track ID to detect song changes
-    const lastTrackId = useRef<string | null>(state.track_window.current_track?.id || null);
+    // The "God Value" - The absolute truth of what is currently rendered on screen
+    const visualPosRef = useRef<number>(state.position);
     
-    // -- SOFT SYNC LOGIC --
-    // Determine target position from SDK
-    const getSdkTargetPosition = () => {
-        if (state.paused) return state.position;
-        // How much time passed since the SDK took the snapshot
-        const latencyFix = Date.now() - state.timestamp;
-        return state.position + latencyFix;
-    };
+    // Track previous state to detect track changes vs simple time updates
+    const lastTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
+    
+    // Performance timer for delta calculations
+    const lastFrameTimeRef = useRef<number>(0);
 
-    // Main Animation Loop
+    // --- EFFECT 1: State Synchronization ---
+    // Handle Track Changes and Seeks (Large Jumps)
+    useEffect(() => {
+        const currentTrackId = state.track_window.current_track?.id || null;
+        const trackChanged = currentTrackId !== lastTrackIdRef.current;
+        
+        // Calculate where the server thinks we are right now
+        // Note: state.position is where we were at state.timestamp.
+        // If paused, we are exactly at state.position.
+        // If playing, we are at position + (now - timestamp).
+        const timeSinceUpdate = Date.now() - state.timestamp;
+        const estimatedServerPos = state.paused ? state.position : state.position + timeSinceUpdate;
+
+        const diff = Math.abs(estimatedServerPos - visualPosRef.current);
+
+        // SYNC LOGIC:
+        // 1. Track Changed? -> Hard Reset to 0 (or state.position)
+        // 2. Huge Diff (>1000ms)? -> Seek detected or massive lag. Hard Sync.
+        // 3. Small Diff? -> IGNORE. Keep smoothing locally.
+        
+        if (trackChanged) {
+            visualPosRef.current = state.position;
+            lastTrackIdRef.current = currentTrackId;
+        } else if (diff > 1000) {
+            // This catches Seeks (user jumps to 2:00)
+            visualPosRef.current = estimatedServerPos;
+        }
+        // Else: We ignore the update. This prevents the "Start of Track Jitter" 
+        // where server sends 0, 0, 0 while we have already animated to 100ms, 200ms.
+
+        // Force a render update immediately if paused, to ensure UI is correct
+        if (state.paused && barFillRef.current) {
+             const duration = state.duration || 1;
+             const percent = Math.max(0, Math.min(100, (visualPosRef.current / duration) * 100));
+             barFillRef.current.style.width = `${percent}%`;
+        }
+
+    }, [state.position, state.paused, state.duration, state.timestamp, state.track_window.current_track?.id]);
+
+    // --- EFFECT 2: Animation Loop ---
+    // Handles smooth interpolation when playing
     useEffect(() => {
         let animationFrameId: number;
 
         const loop = (now: number) => {
-            if (isSeeking || !barFillRef.current) return;
+            if (state.paused || isSeeking) return;
 
-            // 1. Calculate Delta time
-            if (lastFrameTime.current === 0) lastFrameTime.current = now;
-            const dt = now - lastFrameTime.current;
-            lastFrameTime.current = now;
+            if (lastFrameTimeRef.current === 0) {
+                lastFrameTimeRef.current = now;
+            }
+            
+            const dt = now - lastFrameTimeRef.current;
+            lastFrameTimeRef.current = now;
 
-            // 2. Extrapolate Local Position if playing
-            if (!state.paused) {
-                currentVisualPos.current += dt;
+            // Pure local extrapolation
+            visualPosRef.current += dt;
+
+            // Render
+            if (barFillRef.current) {
+                const duration = state.duration || 1;
+                // Clamp visual position to duration (prevent flying off end)
+                if (visualPosRef.current > duration) visualPosRef.current = duration;
+                
+                const percent = (visualPosRef.current / duration) * 100;
+                barFillRef.current.style.width = `${Math.max(0, Math.min(100, percent))}%`;
             }
 
-            // 3. Sync Check (Soft Sync)
-            const sdkTarget = getSdkTargetPosition();
-            const drift = Math.abs(currentVisualPos.current - sdkTarget);
-
-            // FIX 1: If track changed, Hard Sync immediately
-            const currentId = state.track_window.current_track?.id;
-            if (currentId !== lastTrackId.current) {
-                currentVisualPos.current = sdkTarget;
-                lastTrackId.current = currentId || null;
-            }
-            // FIX 2: Resume Jitter Fix. 
-            // If we just unpaused, use the visual pos as the new anchor, don't jump to SDK immediately 
-            // unless the drift is massive.
-            else if (wasPaused.current && !state.paused) {
-                // We just resumed. 
-                // If drift is huge (>1s), hard sync. Else keep currentVisualPos as base.
-                if (drift > 1000) {
-                    currentVisualPos.current = sdkTarget;
-                }
-                // Else: do nothing, let extrapolation continue from current visual pos
-            }
-            // FIX 3: General Drift Correction (Rubber banding fix)
-            // If drift is > 200ms (threshold), hard sync. Otherwise ignore SDK jitter.
-            else if (drift > 200) {
-                // If we are significantly off, snap.
-                // We add a check: if paused, always snap to SDK (it's the truth).
-                if (state.paused) {
-                    currentVisualPos.current = state.position; 
-                } else {
-                    // While playing, snap only if drift is real
-                    currentVisualPos.current = sdkTarget;
-                }
-            }
-
-            wasPaused.current = state.paused;
-
-            // 4. Render directly to DOM
-            const duration = state.duration || 1;
-            const percent = Math.max(0, Math.min(100, (currentVisualPos.current / duration) * 100));
-            barFillRef.current.style.width = `${percent}%`;
-
-            if (!state.paused) {
-                animationFrameId = requestAnimationFrame(loop);
-            }
+            animationFrameId = requestAnimationFrame(loop);
         };
 
-        // Reset frame timer on state updates to avoid huge dt jumps
-        lastFrameTime.current = performance.now();
-        
-        // Start Loop
-        animationFrameId = requestAnimationFrame(loop);
+        if (!state.paused) {
+            // Reset frame timer so we don't have a huge 'dt' jump from previous pause
+            lastFrameTimeRef.current = 0; 
+            animationFrameId = requestAnimationFrame(loop);
+        }
 
         return () => cancelAnimationFrame(animationFrameId);
-    }, [state, isSeeking]);
+    }, [state.paused, state.duration, isSeeking]);
 
     // Handle user dragging
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -163,7 +165,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         // Direct update for responsiveness
         barFillRef.current.style.width = `${percent}%`;
         // Update logic ref so resume happens from here
-        currentVisualPos.current = Math.round(state.duration * ratio);
+        visualPosRef.current = Math.round(state.duration * ratio);
     };
 
     useEffect(() => {
@@ -177,7 +179,7 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         const handleMouseUp = (e: MouseEvent) => {
             setIsSeeking(false);
             if (player && state.duration) {
-                player.seek(currentVisualPos.current).catch(() => {});
+                player.seek(visualPosRef.current).catch(() => {});
             }
         };
 
