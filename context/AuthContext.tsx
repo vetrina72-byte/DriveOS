@@ -362,6 +362,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         return unifiedList.slice(0, 10);
     }, []);
 
+    // Standalone fetch for recently played (still used by play effect)
     const fetchRecentlyPlayed = useCallback(async () => {
         if (!state.user) return;
         try {
@@ -394,9 +395,12 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 apiClient.get('/me/top/tracks?limit=20&time_range=long_term'),
                 apiClient.get('/me/albums?limit=10'),
                 apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'),
+                // Added recently played call here for unified loading
+                apiClient.get('/me/player/recently-played?limit=50'),
             ];
             const results = await Promise.allSettled(promises);
-            const [playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew] = results;
+            const [playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew, recents] = results;
+            
             if (playlists.status === 'fulfilled') setUserPlaylists(playlists.value.data.items);
             if (artists.status === 'fulfilled') setTopArtists(artists.value.data.items);
             if (madeForYouPl.status === 'fulfilled') setMadeForYouPlaylists(madeForYouPl.value.data.playlists.items);
@@ -408,13 +412,29 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (shows.status === 'fulfilled') setRecommendedShows(shows.value.data.shows.items);
             if (topTr.status === 'fulfilled') setTopTracks(topTr.value.data.items);
             if (savedAlbs.status === 'fulfilled') setSavedAlbums(savedAlbs.value.data.items.map((i: any) => i.album).filter(Boolean));
+            
+            // Process recent plays directly here
+            if (recents.status === 'fulfilled') {
+                const processedItemsFromApi = await processRecentPlays(recents.value.data.items);
+                setContinueListeningItems(currentItems => {
+                    const optimisticItem = latestOptimisticItem.current || (currentItems.length > 0 ? currentItems[0] : null);
+                    if (!optimisticItem) return processedItemsFromApi;
+                    const combinedList = [optimisticItem, ...processedItemsFromApi.filter(item => item.uri !== optimisticItem.uri)];
+                    const uniqueUris = new Set<string>();
+                    return combinedList.filter(item => { if (!item?.uri || uniqueUris.has(item.uri)) return false; uniqueUris.add(item.uri); return true; }).slice(0, 10);
+                });
+            }
+
             setHasFetchedHomeContent(true);
         } catch (err) { setHomeContentError("Could not load content."); } finally { setHomeContentLoading(false); }
-    }, [state.user, hasFetchedHomeContent]);
+    }, [state.user, hasFetchedHomeContent, processRecentPlays]);
 
     const triggerHomeContentFetch = useCallback(() => {
-        if (state.user) { fetchRecentlyPlayed(); fetchData(); }
-    }, [state.user, fetchRecentlyPlayed, fetchData]);
+        if (state.user) { 
+            // Only call fetchData, which now includes recently played
+            fetchData(); 
+        }
+    }, [state.user, fetchData]);
 
     const resetHomeContent = useCallback(() => {
         setHasFetchedHomeContent(false); setNewReleases([]); setUserPlaylists([]); setMadeForYouPlaylists([]);
