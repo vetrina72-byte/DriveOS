@@ -490,16 +490,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         interactionLockEnd.current = Date.now() + 2000; 
 
         const localId = getDeviceId();
-        const isTargetingLocal = !nowPlaying.activeDevice && localId;
+        // Check if we are already playing on the local device or if no device is active (implies we should use local)
+        const isTargetingLocal = (!nowPlaying.activeDevice || nowPlaying.activeDevice.id === localId) && localId;
 
         // INSTANT LOCAL RESUME: If we have a local player, resume it directly via SDK
         // This cuts latency dramatically compared to waiting for the REST API roundtrip.
         const player = getPlayerInstance();
-        if (localId && player) {
+        if (localId && player && isTargetingLocal) {
             // Activate element helps browsers that block autoplay
-            activatePlayer(); 
+            await activatePlayer(); 
+            
             // If just resuming (no new tracks), use SDK directly
             if (!options.uris && !options.context_uri) {
+                // Resume is purely local and nearly instant
                 player.resume().catch(e => console.warn("Local resume failed", e));
             }
         }
@@ -601,6 +604,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // INSTANT LOCAL PAUSE
         const localId = getDeviceId();
         const player = getPlayerInstance();
+        
+        // If local device is active or if we have one, use SDK for instant pause
         if (localId && player) {
             player.pause().catch(e => console.warn("Local pause failed", e));
         }
@@ -651,7 +656,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         triggerFastPolling();
 
         const localId = getDeviceId();
-        const isLocalActive = nowPlaying.activeDevice?.id === localId;
+        const isLocalActive = nowPlaying.activeDevice?.id === localId || (!nowPlaying.activeDevice && localId);
 
         try {
             if (isLocalActive) {
