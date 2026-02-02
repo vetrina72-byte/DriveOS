@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
@@ -48,6 +49,7 @@ const SpotifyPlayer = ({
     spotifyPlayerTop,
     spotifyPlayerBottom,
     isMapsLayered,
+    onDragProgress,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
@@ -55,6 +57,7 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
     isMapsLayered?: boolean;
+    onDragProgress?: (progress: number | null) => void;
 }) => {
     const { 
         isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, 
@@ -86,6 +89,7 @@ const SpotifyPlayer = ({
         currentPercent: 100, // 0 = open, 100 = closed
         targetPercent: 100,
         isDragging: false,
+        isInteracting: false, // NEW: Tracks if user interaction sequence is active (drag + settle)
         dragStart: 0,        // Pixel value (X or Y depending on mode)
         dragStartPercent: 0, // Percent value at start of drag
         panelDimension: 0,   // Width or Height in pixels
@@ -117,9 +121,25 @@ const SpotifyPlayer = ({
                 }
             }
 
-            // 2. Render
+            // 2. Report Progress to 3D Scene (Seamless Handoff Logic)
+            if (state.isInteracting) {
+                // Determine visual progress (clamped for 3D scene safety)
+                let visualProgress = state.currentPercent / 100;
+                visualProgress = Math.max(0, Math.min(1, visualProgress));
+                
+                onDragProgress?.(visualProgress);
+
+                // Check if settled (animation finished)
+                // We use a threshold of 0.5% to consider it "done" for the 3D scene handoff
+                if (!state.isDragging && Math.abs(state.targetPercent - state.currentPercent) < 0.5) {
+                    state.isInteracting = false;
+                    onDragProgress?.(null); // Release control to auto-animation
+                }
+            }
+
+            // 3. Render
             if (panel) {
-                // Clamp visual output
+                // Clamp visual output for CSS
                 let visualPercent = state.currentPercent;
                 if (!state.isDragging) {
                     if (visualPercent < 0.01) visualPercent = 0;
@@ -140,7 +160,7 @@ const SpotifyPlayer = ({
 
         physics.current.animationId = requestAnimationFrame(update);
         return () => cancelAnimationFrame(physics.current.animationId);
-    }, []); 
+    }, [onDragProgress]); 
 
     // --- SYNC REACT PROP TO PHYSICS TARGET ---
     useEffect(() => {
@@ -172,6 +192,7 @@ const SpotifyPlayer = ({
         
         const state = physics.current;
         state.isDragging = true;
+        state.isInteracting = true; // Start interacting sequence
         
         // Use the latched renderLayered state to decide axis interaction
         if (renderLayered) {
@@ -211,6 +232,8 @@ const SpotifyPlayer = ({
         
         const state = physics.current;
         state.isDragging = false;
+        // DO NOT call onDragProgress(null) here. 
+        // The loop will handle it once the animation settles.
 
         // Decision Logic
         if (state.currentPercent > CLOSE_THRESHOLD_PERCENT) {
@@ -299,14 +322,23 @@ const SpotifyPlayer = ({
         ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-110 ${handleColorClass}` // Horizontal Pill
         : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`; // Vertical Pill
 
-    return (
+    // --- PORTAL LOGIC ---
+    // If we are layered, we try to find the anchor container inside Maps.
+    // If found, we render via Portal. If not, we render normally (fallback).
+    const portalTarget = renderLayered ? document.getElementById('maps-anchored-container') : null;
+
+    const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel w-2/3 flex shadow-2xl`}
+            className={`spotify-app-panel shadow-2xl flex ${renderLayered ? 'absolute w-full right-0 pointer-events-auto' : 'fixed w-2/3'}`}
             style={{
                 top: `${spotifyPlayerTop}px`,
-                bottom: `${spotifyPlayerBottom}px`,
-                // Transform managed directly by ref in animation loop
+                // FIX: When layered inside Maps, bottom must be 0 to fill the Maps container fully.
+                // Maps container already has a bottom offset (e.g. 80px), so setting bottom:0 here
+                // ensures Spotify ends exactly where Maps ends, avoiding the double-gap issue.
+                bottom: renderLayered ? 0 : `${spotifyPlayerBottom}px`,
+                // Note: When portaled, transform is relative to the Maps panel (which is already moving X).
+                // So the transform here is ONLY for the vertical open/close animation.
             }}
             aria-hidden={!isOpen}
             role="dialog"
@@ -338,6 +370,12 @@ const SpotifyPlayer = ({
             </div>
         </div>
     );
+
+    if (renderLayered && portalTarget) {
+        return ReactDOM.createPortal(mainContent, portalTarget);
+    }
+
+    return mainContent;
 };
 
 export default React.memo(SpotifyPlayer);

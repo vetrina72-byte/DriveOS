@@ -1,3 +1,4 @@
+
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
@@ -171,22 +172,33 @@ function CameraController() {
 
 
 function SceneController({
-  isAppOpen, activeConfig, modelRef,
-  frontLightTarget, onInteractionChange
+  isAppOpen, activeConfig, homeConfig, appOpenConfig, modelRef,
+  frontLightTarget, onInteractionChange, dragProgress
 }: {
   isAppOpen: boolean;
-  activeConfig: SceneConfig;
+  activeConfig: SceneConfig; // This is primarily used when NO drag is happening (auto mode)
+  homeConfig: SceneConfig;
+  appOpenConfig: SceneConfig;
   modelRef: React.RefObject<THREE.Group>;
   frontLightTarget: THREE.Object3D;
   onInteractionChange?: (isInteracting: boolean) => void;
+  dragProgress: React.MutableRefObject<number | null>;
 }) {
   const { camera, controls } = useThree();
   const [interacting, setInteracting] = useState(false);
   const interactTimeout = useRef<number | null>(null);
 
-  // Velocità di animazione fisse (Accelerated)
-  const openingCameraSpeed = 5.5; 
-  const closingCameraSpeed = 6.5; 
+  // Velocità di animazione fisse (Accelerated for snappy anti-collision effect)
+  const openingCameraSpeed = 10.0; 
+  const closingCameraSpeed = 8.0; 
+
+  // Helper vectors for interpolation
+  const vec3A = useMemo(() => new THREE.Vector3(), []);
+  const vec3B = useMemo(() => new THREE.Vector3(), []);
+  const quatA = useMemo(() => new THREE.Quaternion(), []);
+  const quatB = useMemo(() => new THREE.Quaternion(), []);
+  const eulerA = useMemo(() => new THREE.Euler(), []);
+  const eulerB = useMemo(() => new THREE.Euler(), []);
 
   // Gestione interazione orbit controls
   useEffect(() => {
@@ -221,77 +233,127 @@ function SceneController({
 
   // Animazione camera e modello
   useFrame((_, delta) => {
-    const speed = isAppOpen ? openingCameraSpeed : closingCameraSpeed;
-    const damp = 1 - Math.exp(-speed * delta);
-
-    if (!interacting && controls) {
-      const ctrl = controls as any;
-      const tgt = new THREE.Vector3(
-        activeConfig.cameraTarget.x,
-        activeConfig.cameraTarget.y,
-        activeConfig.cameraTarget.z
-      );
-      ctrl.target.lerp(tgt, damp);
-
-      // --- Unified Spherical Lerp for camera animation ---
-      const targetPosition = new THREE.Vector3(
-        activeConfig.cameraPos.x,
-        activeConfig.cameraPos.y,
-        activeConfig.cameraPos.z
-      );
-      const offset = new THREE.Vector3().subVectors(targetPosition, tgt);
-
-      const targetRadius = offset.length();
-      const targetPhi = Math.acos(offset.y / targetRadius);
-      const targetTheta = Math.atan2(offset.x, offset.z);
-
-      const currentRadius = ctrl.getDistance();
-      const currentPhi = ctrl.getPolarAngle();
-      const currentTheta = ctrl.getAzimuthalAngle();
-      
-      const newRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, damp);
-      const newPhi = THREE.MathUtils.lerp(currentPhi, targetPhi, damp);
-      
-      let deltaTheta = targetTheta - currentTheta;
-      if (deltaTheta > Math.PI) deltaTheta -= 2 * Math.PI;
-      if (deltaTheta < -Math.PI) deltaTheta += 2 * Math.PI;
-      const newTheta = currentTheta + deltaTheta * damp;
-      
-      const newPosition = new THREE.Vector3()
-        .setFromSphericalCoords(newRadius, newPhi, newTheta)
-        .add(ctrl.target);
-
-      camera.position.copy(newPosition);
+    if (interacting) {
+        if (controls) (controls as any).update();
+        return;
     }
 
-    if (modelRef.current) {
-      modelRef.current.position.lerp(
-        new THREE.Vector3(
-          activeConfig.modelPos.x,
-          activeConfig.modelPos.y,
-          activeConfig.modelPos.z
-        ),
-        damp
-      );
-      modelRef.current.scale.lerp(
-        new THREE.Vector3(
-          activeConfig.modelScale,
-          activeConfig.modelScale,
-          activeConfig.modelScale
-        ),
-        damp
-      );
-      const q = new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(
-          activeConfig.modelRot.x,
-          activeConfig.modelRot.y,
-          activeConfig.modelRot.z
-        )
-      );
-      modelRef.current.quaternion.slerp(q, damp);
-      frontLightTarget
-        .position.copy(modelRef.current.position)
-        .add(new THREE.Vector3(0, 0.5, 0));
+    const currentProgress = dragProgress.current;
+
+    // --- MANUAL DRAG INTERPOLATION ---
+    if (currentProgress !== null) {
+        const ctrl = controls as any;
+        const p = Math.max(0, Math.min(1, currentProgress)); // 0 = App Open, 1 = Home
+
+        // 1. Camera Target Interpolation
+        // AppOpen Target -> Home Target
+        vec3A.set(appOpenConfig.cameraTarget.x, appOpenConfig.cameraTarget.y, appOpenConfig.cameraTarget.z);
+        vec3B.set(homeConfig.cameraTarget.x, homeConfig.cameraTarget.y, homeConfig.cameraTarget.z);
+        ctrl.target.lerpVectors(vec3A, vec3B, p);
+
+        // 2. Camera Position Interpolation
+        vec3A.set(appOpenConfig.cameraPos.x, appOpenConfig.cameraPos.y, appOpenConfig.cameraPos.z);
+        vec3B.set(homeConfig.cameraPos.x, homeConfig.cameraPos.y, homeConfig.cameraPos.z);
+        camera.position.lerpVectors(vec3A, vec3B, p);
+
+        // 3. Model Position
+        if (modelRef.current) {
+            vec3A.set(appOpenConfig.modelPos.x, appOpenConfig.modelPos.y, appOpenConfig.modelPos.z);
+            vec3B.set(homeConfig.modelPos.x, homeConfig.modelPos.y, homeConfig.modelPos.z);
+            modelRef.current.position.lerpVectors(vec3A, vec3B, p);
+
+            // 4. Model Scale
+            const currentScale = THREE.MathUtils.lerp(appOpenConfig.modelScale, homeConfig.modelScale, p);
+            modelRef.current.scale.set(currentScale, currentScale, currentScale);
+
+            // 5. Model Rotation
+            eulerA.set(appOpenConfig.modelRot.x, appOpenConfig.modelRot.y, appOpenConfig.modelRot.z);
+            quatA.setFromEuler(eulerA);
+            
+            eulerB.set(homeConfig.modelRot.x, homeConfig.modelRot.y, homeConfig.modelRot.z);
+            quatB.setFromEuler(eulerB);
+
+            modelRef.current.quaternion.slerpQuaternions(quatA, quatB, p);
+
+            frontLightTarget
+                .position.copy(modelRef.current.position)
+                .add(new THREE.Vector3(0, 0.5, 0));
+        }
+    } 
+    // --- AUTOMATIC ANIMATION (Existing Logic) ---
+    else {
+        const speed = isAppOpen ? openingCameraSpeed : closingCameraSpeed;
+        const damp = 1 - Math.exp(-speed * delta);
+
+        if (controls) {
+            const ctrl = controls as any;
+            const tgt = new THREE.Vector3(
+                activeConfig.cameraTarget.x,
+                activeConfig.cameraTarget.y,
+                activeConfig.cameraTarget.z
+            );
+            ctrl.target.lerp(tgt, damp);
+
+            // --- Unified Spherical Lerp for camera animation ---
+            const targetPosition = new THREE.Vector3(
+                activeConfig.cameraPos.x,
+                activeConfig.cameraPos.y,
+                activeConfig.cameraPos.z
+            );
+            const offset = new THREE.Vector3().subVectors(targetPosition, tgt);
+
+            const targetRadius = offset.length();
+            const targetPhi = Math.acos(offset.y / targetRadius);
+            const targetTheta = Math.atan2(offset.x, offset.z);
+
+            const currentRadius = ctrl.getDistance();
+            const currentPhi = ctrl.getPolarAngle();
+            const currentTheta = ctrl.getAzimuthalAngle();
+            
+            const newRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, damp);
+            const newPhi = THREE.MathUtils.lerp(currentPhi, targetPhi, damp);
+            
+            let deltaTheta = targetTheta - currentTheta;
+            if (deltaTheta > Math.PI) deltaTheta -= 2 * Math.PI;
+            if (deltaTheta < -Math.PI) deltaTheta += 2 * Math.PI;
+            const newTheta = currentTheta + deltaTheta * damp;
+            
+            const newPosition = new THREE.Vector3()
+                .setFromSphericalCoords(newRadius, newPhi, newTheta)
+                .add(ctrl.target);
+
+            camera.position.copy(newPosition);
+        }
+
+        if (modelRef.current) {
+            modelRef.current.position.lerp(
+                new THREE.Vector3(
+                activeConfig.modelPos.x,
+                activeConfig.modelPos.y,
+                activeConfig.modelPos.z
+                ),
+                damp
+            );
+            modelRef.current.scale.lerp(
+                new THREE.Vector3(
+                activeConfig.modelScale,
+                activeConfig.modelScale,
+                activeConfig.modelScale
+                ),
+                damp
+            );
+            const q = new THREE.Quaternion().setFromEuler(
+                new THREE.Euler(
+                activeConfig.modelRot.x,
+                activeConfig.modelRot.y,
+                activeConfig.modelRot.z
+                )
+            );
+            modelRef.current.quaternion.slerp(q, damp);
+            frontLightTarget
+                .position.copy(modelRef.current.position)
+                .add(new THREE.Vector3(0, 0.5, 0));
+        }
     }
 
     if (controls) (controls as any).update();
@@ -468,6 +530,7 @@ interface VehicleCanvasProps {
   targetWeatherParams: WeatherParams;
   uiScale: number;
   headlightConfig: HeadlightConfig;
+  dragProgress: React.MutableRefObject<number | null>;
 }
 
 export default function VehicleCanvas({
@@ -488,6 +551,7 @@ export default function VehicleCanvas({
   targetWeatherParams,
   uiScale,
   headlightConfig,
+  dragProgress,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -650,7 +714,7 @@ export default function VehicleCanvas({
             minDistance={minOrbitDistance}
             maxDistance={maxOrbitDistance}
             enableZoom={true}
-            enableRotate={!isAppOpen} 
+            enableRotate={!isAppOpen && dragProgress.current === null} 
         />
 
         {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
@@ -714,9 +778,12 @@ export default function VehicleCanvas({
         <SceneController 
             isAppOpen={isAppOpen} 
             activeConfig={activeConfig}
+            homeConfig={initialConfig}
+            appOpenConfig={runtimeAppOpenConfig}
             modelRef={modelRef}
             frontLightTarget={frontLightTarget}
             onInteractionChange={onInteractionChange}
+            dragProgress={dragProgress}
         />
       </Canvas>
     </>

@@ -1358,7 +1358,8 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 `
 
-export default function MapsContainer({ 
+// WRAP IN REACT.MEMO: CRITICAL FOR PERFORMANCE
+const MapsContainer = React.memo(({ 
     isOpen, 
     onClose,
     isNight,
@@ -1369,6 +1370,8 @@ export default function MapsContainer({
     spotifyPlayerBottom,
     satelliteLabelBrightness,
     satelliteLabelOutlineWidth,
+    onDragProgress,
+    onInteractionStart, // New prop
 }: { 
     isOpen: boolean; 
     onClose: () => void;
@@ -1380,7 +1383,9 @@ export default function MapsContainer({
     spotifyPlayerBottom: number;
     satelliteLabelBrightness: number;
     satelliteLabelOutlineWidth: number;
-}) {
+    onDragProgress?: (progress: number | null) => void;
+    onInteractionStart?: () => void; // New prop type definition
+}) => {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isIframeReady, setIsIframeReady] = useState(false);
@@ -1391,6 +1396,7 @@ export default function MapsContainer({
       currentX: 100, // 0 = open, 100 = closed
       targetX: 100,
       isDragging: false,
+      isInteracting: false, // NEW: Tracks interaction sequence
       dragStartX: 0,
       dragStartCurrentX: 0,
       panelWidth: 0,
@@ -1475,7 +1481,21 @@ export default function MapsContainer({
             }
         }
 
-        // 2. Render
+        // 2. Report Progress to 3D Scene (Seamless Handoff)
+        if (state.isInteracting) {
+            let visualProgress = state.currentX / 100;
+            visualProgress = Math.max(0, Math.min(1, visualProgress));
+            
+            onDragProgress?.(visualProgress);
+
+            // Check if settled
+            if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
+                state.isInteracting = false;
+                onDragProgress?.(null);
+            }
+        }
+
+        // 3. Render Panel
         if (panel) {
             let visualX = state.currentX;
             if (!state.isDragging) {
@@ -1490,7 +1510,7 @@ export default function MapsContainer({
 
     physics.current.animationId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(physics.current.animationId);
-  }, []);
+  }, [onDragProgress]);
 
   // --- SYNC REACT PROP TO PHYSICS TARGET ---
   useEffect(() => {
@@ -1506,8 +1526,14 @@ export default function MapsContainer({
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     
+    // --- TRIGGER INTERACTION START IMMEDIATELY ---
+    // This allows the parent (App.tsx) to close layered apps (Spotify)
+    // the moment the user starts interacting with the Maps handle.
+    onInteractionStart?.();
+
     const state = physics.current;
     state.isDragging = true;
+    state.isInteracting = true; // Start interaction sequence
     state.dragStartX = e.clientX;
     state.dragStartCurrentX = state.currentX;
     state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
@@ -1533,6 +1559,7 @@ export default function MapsContainer({
     
     const state = physics.current;
     state.isDragging = false;
+    // DO NOT call onDragProgress(null) here. Let loop handle settling.
 
     if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
         state.targetX = 100;
@@ -1576,6 +1603,11 @@ export default function MapsContainer({
 
             <h1 id="maps-player-title" className="sr-only">Maps Player</h1>
             
+            {/* --- ANCHOR POINT FOR LAYERED APPS (e.g. Spotify) --- */}
+            {/* This div is inside the transform hierarchy, so children move rigidly with the map. */}
+            <div id="maps-anchored-container" className="absolute inset-0 z-30 pointer-events-none"></div>
+            {/* --------------------------------------------------- */}
+
             <iframe
                 ref={iframeRef}
                 title="Tesla Navigation"
@@ -1586,4 +1618,6 @@ export default function MapsContainer({
         </div>
     </div>
   );
-}
+});
+
+export default MapsContainer;

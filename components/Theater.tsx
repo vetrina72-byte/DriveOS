@@ -142,11 +142,13 @@ const Theater = ({
     isNight,
     spotifyPlayerTop,
     spotifyPlayerBottom,
+    onDragProgress,
 }: {
     onClose: () => void;
     isNight: boolean;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    onDragProgress?: (progress: number | null) => void;
 }) => {
     const panelRef = useRef<HTMLDivElement>(null);
 
@@ -155,6 +157,7 @@ const Theater = ({
         currentX: 100, // 0 = open, 100 = closed
         targetX: 100,
         isDragging: false,
+        isInteracting: false, // NEW: Interaction sequence tracking
         dragStartX: 0,
         dragStartCurrentX: 0,
         panelWidth: 0,
@@ -180,7 +183,21 @@ const Theater = ({
                 }
             }
 
-            // 2. Render
+            // 2. Report Progress to 3D Scene (Seamless Handoff)
+            if (state.isInteracting) {
+                let visualProgress = state.currentX / 100;
+                visualProgress = Math.max(0, Math.min(1, visualProgress));
+                
+                onDragProgress?.(visualProgress);
+
+                // Check if settled
+                if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
+                    state.isInteracting = false;
+                    onDragProgress?.(null);
+                }
+            }
+
+            // 3. Render
             if (panel) {
                 let visualX = state.currentX;
                 if (!state.isDragging) {
@@ -195,7 +212,7 @@ const Theater = ({
 
         physics.current.animationId = requestAnimationFrame(update);
         return () => cancelAnimationFrame(physics.current.animationId);
-    }, []);
+    }, [onDragProgress]);
 
     // --- SYNC ON MOUNT ---
     useEffect(() => {
@@ -214,6 +231,7 @@ const Theater = ({
         
         const state = physics.current;
         state.isDragging = true;
+        state.isInteracting = true; // Start interaction sequence
         state.dragStartX = e.clientX;
         state.dragStartCurrentX = state.currentX;
         state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
@@ -239,6 +257,7 @@ const Theater = ({
         
         const state = physics.current;
         state.isDragging = false;
+        // DO NOT call onDragProgress(null) here.
 
         if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
             state.targetX = 100;

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -745,6 +744,87 @@ function AppContent() {
   const [virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight] = useState(600);
   const [webAppUrl, setWebAppUrl] = useState<string | null>(null);
 
+  // --- MOVED UP ---
+  const [activeApp, setActiveApp] = useState<string | null>(null);
+  const [isMapsLayered, setIsMapsLayered] = useState(false);
+
+  // --- DRAG INTERPOLATION STATE AS REF ---
+  // Using a ref avoids re-rendering the entire App component on every drag frame.
+  const dragProgressRef = useRef<number | null>(null);
+
+  // --- REF FOR NAVIGATE TOOL ANIMATION ---
+  const navigateToolRef = useRef<HTMLDivElement>(null);
+  const navigateToolVisualState = useRef(activeApp !== null ? 0 : 1); // 0 = Hidden/Open App, 1 = Visible/Home
+
+  // Stable callback to update the ref
+  const handleDragProgress = useCallback((val: number | null) => {
+    dragProgressRef.current = val;
+  }, []);
+
+  const handleSpotifyDrag = useCallback((progress: number | null) => {
+    if (isMapsLayered && progress !== null) {
+        return; 
+    }
+    dragProgressRef.current = progress;
+  }, [isMapsLayered]);
+
+  // --- NAVIGATE TOOL ANIMATION LOOP ---
+  useEffect(() => {
+    let animationFrameId: number;
+
+    const loop = () => {
+        // Target is 0 if app is open, 1 if home
+        let target = activeApp !== null ? 0 : 1;
+        
+        // Override with drag progress if active
+        // dragProgress: 0 (Open) -> 1 (Closed/Home)
+        if (dragProgressRef.current !== null) {
+            navigateToolVisualState.current = dragProgressRef.current;
+        } else {
+            // Lerp towards target
+            const diff = target - navigateToolVisualState.current;
+            if (Math.abs(diff) > 0.001) {
+                navigateToolVisualState.current += diff * 0.25; // Speed up auto-animation
+            } else {
+                navigateToolVisualState.current = target;
+            }
+        }
+
+        const current = Math.max(0, Math.min(1, navigateToolVisualState.current));
+        
+        if (navigateToolRef.current) {
+            // THRESHOLD LOGIC: 
+            // User requested "arrive before the player".
+            // Player closes at 1.0. We want full visibility by 0.85.
+            // Range [0.25, 0.85] -> Fades in and slides from Right to Left.
+            
+            const threshold = 0.25;
+            const endPoint = 0.85; // Reach full visibility/position earlier
+            
+            let visibility = 0;
+            
+            if (current > threshold) {
+                // Map [0.25, 0.85] to [0, 1]
+                visibility = (current - threshold) / (endPoint - threshold);
+                // Clamp to max 1.0 (so it stays fully visible from 0.85 to 1.0)
+                visibility = Math.min(1, Math.max(0, visibility));
+            }
+            
+            // Translate X: 0 (at visibility=1) to 50px (at visibility=0)
+            const translateX = (1 - visibility) * 50; 
+            
+            navigateToolRef.current.style.opacity = `${visibility}`;
+            navigateToolRef.current.style.transform = `translateX(${translateX}px)`;
+            navigateToolRef.current.style.pointerEvents = visibility > 0.9 ? 'auto' : 'none';
+        }
+
+        animationFrameId = requestAnimationFrame(loop);
+    };
+
+    loop();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [activeApp]); // Dependency on activeApp determines the resting target
+
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
@@ -821,8 +901,6 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const [activeApp, setActiveApp] = useState<string | null>(null);
-  const [isMapsLayered, setIsMapsLayered] = useState(false);
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [isWeatherModalOpen, setWeatherModalOpen] = useState(false);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
@@ -927,7 +1005,20 @@ function AppContent() {
     return () => window.removeEventListener('message', handleMessage);
   }, [handleCancelNavigation]);
 
-  const handleCloseMaps = () => toggleApp('maps');
+  // --- CASCADING CLOSE LOGIC ---
+  const handleCloseMaps = useCallback(() => {
+    setActiveApp(null);
+    setIsMapsLayered(false);
+  }, []);
+
+  // --- IMMEDIATE LAYERED APP CLOSE ON DRAG START ---
+  const handleMapsInteractionStart = useCallback(() => {
+    if (isMapsLayered) {
+        setIsMapsLayered(false);
+        setActiveApp('maps'); // Revert active app to Maps so it stays visible while being dragged
+    }
+  }, [isMapsLayered]);
+
   useEffect(() => { const intervalId = setInterval(() => setCurrentTime(new Date()), 60000); return () => clearInterval(intervalId); }, []);
 
   useEffect(() => {
@@ -1051,35 +1142,45 @@ function AppContent() {
   const toggleLauncher = (e: React.MouseEvent) => { e.stopPropagation(); const newLauncherState = !isAppLauncherOpen; setIsAppLauncherOpen(newLauncherState); if (!newLauncherState) setIsCustomizing(false); };
   const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
   
+    // Refactored logic to handle animation in JS
     const navigateToolStyle = useMemo(() => {
-        const baseStyle: React.CSSProperties = { transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)', position: 'fixed', zIndex: 1000, bottom: `${playerFloatingBottom}px`, transform: 'none' };
+        const baseStyle: React.CSSProperties = { 
+            position: 'fixed', 
+            zIndex: 1000, 
+            bottom: `${playerFloatingBottom}px`, 
+            // Removed transitions/transform/opacity from here to avoid fighting the animation loop
+        };
         const homeLeft = `calc(50% + (${playerFloatingWidth}px / 2) + 8px - (${navigateToolWidth}px / 2))`;
         const launcherOpenLeft = `calc(100% - ${playerDockedLeft + 90}px - ${navigateToolWidth}px)`;
-        if (isAppLauncherOpen) return { ...baseStyle, opacity: 1, pointerEvents: 'auto' as const, left: launcherOpenLeft };
-        else if (activeApp !== null) return { ...baseStyle, opacity: 0, pointerEvents: 'none' as const, left: homeLeft };
-        else return { ...baseStyle, opacity: 1, pointerEvents: 'auto' as const, left: homeLeft };
-    }, [isAppLauncherOpen, activeApp, playerFloatingBottom, playerDockedLeft, playerFloatingWidth, navigateToolWidth]);
+        
+        if (isAppLauncherOpen) return { ...baseStyle, left: launcherOpenLeft };
+        // Default home position for normal/app closed states
+        return { ...baseStyle, left: homeLeft };
+    }, [isAppLauncherOpen, playerFloatingBottom, playerDockedLeft, playerFloatingWidth, navigateToolWidth]);
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
   return (
     <div className="relative w-screen h-screen bg-black select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
-      <VehicleCanvas isAppOpen={activeApp !== null} isNight={isNight} minOrbitDistance={minOrbitDistance} maxOrbitDistance={maxOrbitDistance} appOpenConfig={appOpenConfig} homeConfig={homeConfig} sceneColors={sceneColors} nightAmbientIntensity={nightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} onInteractionChange={setIsCanvasInteracting} effectiveWeatherCondition={effectiveWeatherCondition} dayFogNear={dayFogNear} dayFogFar={dayFogFar} targetWeatherParams={targetWeatherParams} uiScale={uiScale ?? 1.0} headlightConfig={headlightConfig}/>
+      <VehicleCanvas isAppOpen={activeApp !== null} isNight={isNight} minOrbitDistance={minOrbitDistance} maxOrbitDistance={maxOrbitDistance} appOpenConfig={appOpenConfig} homeConfig={homeConfig} sceneColors={sceneColors} nightAmbientIntensity={nightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} onInteractionChange={setIsCanvasInteracting} effectiveWeatherCondition={effectiveWeatherCondition} dayFogNear={dayFogNear} dayFogFar={dayFogFar} targetWeatherParams={targetWeatherParams} uiScale={uiScale ?? 1.0} headlightConfig={headlightConfig} dragProgress={dragProgressRef}/>
       <TopStatusBar isNight={useDarkTheme} onWeatherClick={handleWeatherClick} weatherData={weatherData} weatherCondition={effectiveWeatherCondition} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} isHot={isHot} isCold={isCold} tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} mapStyle={mapStyle} isMapVisible={activeApp === 'maps' || isMapsLayered}/>
       <WeatherModal isOpen={isWeatherModalOpen} onClose={() => setWeatherModalOpen(false)} isNight={useDarkTheme} status={weatherStatus} data={weatherData} error={weatherError} effectiveTime={effectiveTime} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} tempUnit={tempUnit}/>
       <MiniMap isVisible={activeApp === null && !isCanvasInteracting} position={currentPosition} bearing={bearing} isNight={isNight} useDarkTheme={useDarkTheme} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
-        <MapsContainer isOpen={activeApp === 'maps' || isMapsLayered} onClose={() => toggleApp('maps')} isNight={useDarkTheme} searchPanelWidth={mapsSearchPanelWidth} searchPanelTop={mapsSearchPanelTop} navigationTarget={navigationTarget} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} satelliteLabelBrightness={satelliteLabelBrightness} satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}/>
-        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={() => toggleApp('spotify')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered}/>
+        <MapsContainer isOpen={activeApp === 'maps' || isMapsLayered} onClose={handleCloseMaps} onInteractionStart={handleMapsInteractionStart} isNight={useDarkTheme} searchPanelWidth={mapsSearchPanelWidth} searchPanelTop={mapsSearchPanelTop} navigationTarget={navigationTarget} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} satelliteLabelBrightness={satelliteLabelBrightness} satelliteLabelOutlineWidth={satelliteLabelOutlineWidth} onDragProgress={handleDragProgress}/>
+        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={() => toggleApp('spotify')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered} onDragProgress={handleSpotifyDrag} />
         <AnimatePresence>
-          {activeApp === 'theater' && <TheaterApp onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom}/>}
-          {activeApp === 'radio' && <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs}/>}
-          {activeApp === 'youtube-music' && <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError}/>}
+          {activeApp === 'theater' && <TheaterApp onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleDragProgress}/>}
+          {activeApp === 'radio' && <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleDragProgress}/>}
+          {activeApp === 'youtube-music' && <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleDragProgress}/>}
         </AnimatePresence>
         <AnimatePresence>{arrivalMessage && <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.9 }} className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10">{arrivalMessage}</motion.div>}</AnimatePresence>
-        <div className="flex items-end" style={navigateToolStyle}>{navigationTarget ? <NavigationStatus target={navigationTarget} currentPosition={throttledPosition} isNight={useDarkTheme} onCancel={handleCancelNavigation} tripInfo={tripInfo} simulatedRemainingDistance={simulatedRemainingDistance} width={navigateToolWidth} widgetBgColor={widgetBgColor}/> : <NavigateTool isNight={useDarkTheme} onSelectDestination={handleSelectDestination} currentPosition={currentPosition} width={navigateToolWidth} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} homeLocation={homeLocation} workLocation={workLocation} darkNavigateInputBg={darkNavigateInputBg}/>}</div>
-        <MusicPlayer activeApp={activeApp} onStationChange={handleStationChange} isAnyAppOpen={isHomeScreenDocked} isNight={useDarkTheme} dockedConfig={{ width: playerDockedWidth, bottom: playerFloatingBottom, left: playerDockedLeft, height: playerDockedHeight }} floatingConfig={{ width: playerFloatingWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: navigateToolWidth }} playerControlsSize={playerControlsSize} playerControlsGap={playerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} spinnerSize={spinnerSize} spinnerShuffleGap={spinnerShuffleGap} debugSpinner={debugSpinner} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} favoriteStationUUIDs={favoriteStationUUIDs} onToggleFavorite={handleToggleFavorite} queuePopoverHeight={queuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} queuePopoverWidth={queuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} spinnerTop={spinnerTop} spinnerRight={spinnerRight} spinnerBottom={spinnerBottom} spinnerLeft={spinnerLeft}/>
+        {/* NAVIGATE TOOL CONTAINER */}
+        <div ref={navigateToolRef} className="flex items-end" style={navigateToolStyle}>
+            {navigationTarget ? <NavigationStatus target={navigationTarget} currentPosition={throttledPosition} isNight={useDarkTheme} onCancel={handleCancelNavigation} tripInfo={tripInfo} simulatedRemainingDistance={simulatedRemainingDistance} width={navigateToolWidth} widgetBgColor={widgetBgColor}/> : <NavigateTool isNight={useDarkTheme} onSelectDestination={handleSelectDestination} currentPosition={currentPosition} width={navigateToolWidth} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} homeLocation={homeLocation} workLocation={workLocation} darkNavigateInputBg={darkNavigateInputBg}/>}
+        </div>
+        <MusicPlayer activeApp={activeApp} onStationChange={handleStationChange} isAnyAppOpen={isHomeScreenDocked} isNight={useDarkTheme} dockedConfig={{ width: playerDockedWidth, bottom: playerFloatingBottom, left: playerDockedLeft, height: playerDockedHeight }} floatingConfig={{ width: playerFloatingWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: navigateToolWidth }} playerControlsSize={playerControlsSize} playerControlsGap={playerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} spinnerSize={spinnerSize} spinnerShuffleGap={spinnerShuffleGap} debugSpinner={debugSpinner} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} favoriteStationUUIDs={favoriteStationUUIDs} onToggleFavorite={handleToggleFavorite} queuePopoverHeight={queuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} queuePopoverWidth={queuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} spinnerTop={spinnerTop} spinnerRight={spinnerRight} spinnerBottom={spinnerBottom} spinnerLeft={spinnerLeft} dragProgress={dragProgressRef} />
         <AppLauncher isOpen={isAppLauncherOpen} width={appLauncherWidth} height={appLauncherHeight} apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)} isCustomizing={isCustomizing} onCustomizeClick={moveAppToDock} onAppLaunch={toggleApp} isNight={useDarkTheme}/>
         {isAppLauncherOpen && <button onClick={(e) => { e.stopPropagation(); setIsCustomizing(prev => !prev); }} className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'} ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} style={{ bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)` }}>{isCustomizing ? 'Fine' : 'Personalizza'}</button>}
         <AnimatePresence>{isKeyboardVisible && <VirtualKeyboard isVisible={isKeyboardVisible} targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null} onClose={handleKeyboardClose} isNight={useDarkTheme} virtualKeyboardKeySize={virtualKeyboardKeySize} virtualKeyboardHeight={virtualKeyboardHeight} virtualKeyboardPaddingX={virtualKeyboardPaddingX} virtualKeyboardKeyGapX={virtualKeyboardKeyGapX} virtualKeyboardKeyGapY={virtualKeyboardKeyGapY} virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}/>}</AnimatePresence>
@@ -1096,7 +1197,6 @@ function AppContent() {
         </footer>
       </div>
        {webAppUrl && <WebAppViewer url={webAppUrl} onClose={() => setWebAppUrl(null)} />}
-      {/* Fix: Passed setQueuePopoverWidth function instead of queuePopoverWidth value */}
       {isDebugOpen && <DebugControls isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} timeOverride={timeOverride} setTimeOverride={setTimeOverride} sunsetArrowYPosition={sunsetArrowYPosition} setSunsetArrowYPosition={setSunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} setSunriseArrowYPosition={setSunriseArrowYPosition} weatherConditionOverride={weatherConditionOverride} setWeatherConditionOverride={setWeatherConditionOverride} effectiveWeatherCondition={effectiveWeatherCondition} isNight={isNight} isHot={isHot} isCold={isCold} topBarScale={topBarScale} setTopBarScale={setTopBarScale} topBarOffsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} mapsSearchPanelWidth={mapsSearchPanelWidth} setMapsSearchPanelWidth={setMapsSearchPanelWidth} mapsSearchPanelTop={mapsSearchPanelTop} setMapsSearchPanelTop={setMapsSearchPanelTop} miniMapTop={miniMapTop} setMiniMapTop={setMiniMapTop} miniMapRight={miniMapRight} setMiniMapRight={setMiniMapRight} miniMapSize={miniMapSize} setMiniMapSize={setMiniMapSize} miniMapZoom={miniMapZoom} setMiniMapZoom={setMiniMapZoom} miniMapFadeStart={miniMapFadeStart} setMiniMapFadeStart={setMiniMapFadeStart} miniMapFadeEnd={miniMapFadeEnd} setMiniMapFadeEnd={setMiniMapFadeEnd} minOrbitDistance={minOrbitDistance} setMinOrbitDistance={setMinOrbitDistance} maxOrbitDistance={maxOrbitDistance} setMaxOrbitDistance={setMaxOrbitDistance} appOpenConfig={appOpenConfig} setAppOpenConfig={setAppOpenConfig} homeConfig={homeConfig} setHomeConfig={setHomeConfig} sceneColors={sceneColors} setSceneColors={setSceneColors} spotifyPlayerTop={spotifyPlayerTop} setSpotifyPlayerTop={setSpotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} setSpotifyPlayerBottom={setSpotifyPlayerBottom} playerDockedWidth={playerDockedWidth} setPlayerDockedWidth={setPlayerDockedWidth} playerDockedLeft={playerDockedLeft} setPlayerDockedLeft={setPlayerDockedLeft} playerDockedHeight={playerDockedHeight} setPlayerDockedHeight={setPlayerDockedHeight} playerFloatingWidth={playerFloatingWidth} setPlayerFloatingWidth={setPlayerFloatingWidth} playerFloatingBottom={playerFloatingBottom} setPlayerFloatingBottom={setPlayerFloatingBottom} playerFloatingHeight={playerFloatingHeight} setPlayerFloatingHeight={setPlayerFloatingHeight} nightAmbientIntensity={nightAmbientIntensity} setNightAmbientIntensity={setNightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} setNightFrontLightIntensity={setNightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} setNightEnvironmentIntensity={setNightEnvironmentIntensity} tripInfo={tripInfo} startTripSimulation={startTripSimulation} stopTripSimulation={stopTripSimulation} isSimulating={!!simulationIntervalRef.current} navigateToolWidth={navigateToolWidth} setNavigateToolWidth={setNavigateToolWidth} playerControlsSize={playerControlsSize} setPlayerControlsSize={setPlayerControlsSize} playerControlsGap={playerControlsGap} setPlayerControlsGap={setPlayerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} setPlayerControlsVerticalPosition={setPlayerControlsVerticalPosition} dayPlayerButtonColor={dayPlayerButtonColor} setDayPlayerButtonColor={setDayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} setNightPlayerButtonColor={setNightPlayerButtonColor} widgetBgHex={widgetBgHex} setWidgetBgHex={setWidgetBgHex} volumeIconSize={volumeIconSize} setVolumeIconSize={setVolumeIconSize} volumeSliderOffsetY={volumeSliderOffsetY} setVolumeSliderOffsetY={setVolumeSliderOffsetY} volumeSliderOffsetX={volumeSliderOffsetX} setVolumeSliderOffsetX={setVolumeSliderOffsetX} volumeControlMarginRight={volumeControlMarginRight} setVolumeControlMarginRight={setVolumeControlMarginRight} volumeSliderWidth={volumeSliderWidth} setVolumeSliderWidth={setVolumeSliderWidth} volumeSliderThickness={volumeSliderThickness} setVolumeSliderThickness={setVolumeSliderThickness} volumeSliderThumbOffsetY={volumeSliderThumbOffsetY} setVolumeSliderThumbOffsetY={setVolumeSliderThumbOffsetY} volumeSliderPopupWidth={volumeSliderPopupWidth} setVolumeSliderPopupWidth={setVolumeSliderPopupWidth} volumeSliderPopupHeight={volumeSliderPopupHeight} setVolumeSliderPopupHeight={setVolumeSliderPopupHeight} volumeControlZIndex={volumeControlZIndex} setVolumeControlZIndex={setVolumeControlZIndex} appLauncherWidth={appLauncherWidth} setAppLauncherWidth={setAppLauncherWidth} appLauncherHeight={appLauncherHeight} setAppLauncherHeight={setAppLauncherHeight} dayFogNear={dayFogNear} setDayFogNear={setDayFogNear} dayFogFar={dayFogFar} setDayFogFar={setDayFogFar} virtualKeyboardKeySize={virtualKeyboardKeySize} setVirtualKeyboardKeySize={setVirtualKeyboardKeySize} virtualKeyboardHeight={virtualKeyboardHeight} setVirtualKeyboardHeight={setVirtualKeyboardHeight} virtualKeyboardPaddingX={virtualKeyboardPaddingX} setVirtualKeyboardPaddingX={setVirtualKeyboardPaddingX} virtualKeyboardKeyGapX={virtualKeyboardKeyGapX} setVirtualKeyboardKeyGapX={setVirtualKeyboardKeyGapX} virtualKeyboardKeyGapY={virtualKeyboardKeyGapY} setVirtualKeyboardKeyGapY={setVirtualKeyboardKeyGapY} virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight} setVirtualKeyboardKeyFontWeight={setVirtualKeyboardKeyFontWeight} uiScale={uiScale} setUiScale={setUiScale} appBarWidth={appBarWidth} setAppBarWidth={setAppBarWidth} darkVolumeTrackBg={darkVolumeTrackBg} setDarkVolumeTrackBg={setDarkVolumeTrackBg} darkVolumeThumbBg={darkVolumeThumbBg} setDarkVolumeThumbBg={setDarkVolumeThumbBg} darkVolumeFillBg={darkVolumeFillBg} setDarkVolumeFillBg={setDarkVolumeFillBg} darkPlayerBg={darkPlayerBg} setDarkPlayerBg={setDarkPlayerBg} darkNavigateInputBg={darkNavigateInputBg} setDarkNavigateInputBg={setDarkNavigateInputBg} queuePopoverHeight={queuePopoverHeight} setQueuePopoverHeight={setQueuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} setQueuePopoverBottomOffset={setQueuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} setQueuePopoverScale={setQueuePopoverScale} queuePopoverWidth={queuePopoverWidth} setQueuePopoverWidth={setQueuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} setQueuePopoverOffsetX={setQueuePopoverOffsetX} spinnerSize={spinnerSize} setSpinnerSize={setSpinnerSize} spinnerShuffleGap={spinnerShuffleGap} setSpinnerShuffleGap={setSpinnerShuffleGap} debugSpinner={debugSpinner} setDebugSpinner={setDebugSpinner} spinnerTop={spinnerTop} setSpinnerTop={setSpinnerTop} spinnerRight={spinnerRight} setSpinnerRight={setSpinnerRight} spinnerBottom={spinnerBottom} setSpinnerBottom={setSpinnerBottom} spinnerLeft={spinnerLeft} setSpinnerLeft={setSpinnerLeft} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} satelliteLabelBrightness={satelliteLabelBrightness} setSatelliteLabelBrightness={setSatelliteLabelBrightness} satelliteLabelOutlineWidth={satelliteLabelOutlineWidth} setSatelliteLabelOutlineWidth={setSatelliteLabelOutlineWidth} headlightConfig={headlightConfig} setHeadlightConfig={setHeadlightConfig} />}
     </div>
   );

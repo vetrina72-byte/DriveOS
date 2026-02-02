@@ -45,18 +45,11 @@ interface MusicPlayerProps {
     spinnerRight: number | undefined;
     spinnerBottom: number | undefined;
     spinnerLeft: number | undefined;
+    dragProgress: React.MutableRefObject<number | null>;
 }
 
 /**
  * SpotifyProgressBar - Visual Dictatorship Version
- * 
- * Logic:
- * 1. The Visual Position (visualPosRef) is the source of truth for the UI.
- * 2. When PAUSED: We FREEZE the visual position. We IGNORE server updates (which often lag behind).
- * 3. When RESUMED: We start animating FROM the frozen visual position. We do NOT snap to server time.
- * 4. We only snap to server time if:
- *    a) The track ID changes.
- *    b) The difference is HUGE (> 1500ms), implying a manual Seek by the user.
  */
 const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
     const barFillRef = useRef<HTMLDivElement>(null);
@@ -99,16 +92,12 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
         // 2. PAUSE TRANSITION (Playing -> Paused)
         else if (isPaused && !wasPaused) {
             // STOP! Freeze visualPosRef exactly where it is.
-            // Do NOT update from server. Server is usually 200-500ms BEHIND the visual loop.
-            // Updating here causes the "Jump Back". We ignore it.
         }
         // 3. RESUME TRANSITION (Paused -> Playing)
         else if (!isPaused && wasPaused) {
             // GO! We will start extrapolating from the current visualPosRef in the animation loop.
-            // Do NOT snap to server.
         }
         // 4. SEEK / DRIFT CORRECTION
-        // Only if the difference is massive (Seek) do we override the visual smoothness.
         else if (diff > 1500) {
             visualPosRef.current = estimatedServerPos;
         }
@@ -376,7 +365,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
     );
 };
 
-const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft'>) => {
+const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft' | 'dragProgress'>) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
@@ -454,6 +443,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     spinnerRight,
     spinnerBottom,
     spinnerLeft,
+    dragProgress
 }) => {
   const { 
       isAuthenticated, 
@@ -492,6 +482,60 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
     const prevPositionRef = useRef(0);
+
+    // --- ANIMATION LOGIC FOR PLAYER SIZE/POSITION ---
+    const visualState = useRef(isAnyAppOpen ? 0 : 1); // 0 = Docked (App Open), 1 = Floating (App Closed)
+
+    useEffect(() => {
+        let animationFrameId: number;
+
+        const loop = () => {
+            let targetT = isAnyAppOpen ? 0 : 1; // Default target based on app state
+
+            // If user is actively dragging (dragProgress is not null), override the target
+            if (dragProgress.current !== null) {
+                // DIRECT SYNC: Force visual state to match drag progress
+                visualState.current = dragProgress.current;
+            } else {
+                // If not dragging, animate smoothly to the target state
+                const diff = targetT - visualState.current;
+                if (Math.abs(diff) > 0.001) {
+                    visualState.current += diff * 0.15; // Smooth interpolation factor
+                } else {
+                    visualState.current = targetT;
+                }
+            }
+
+            // Clamp value
+            const t = Math.max(0, Math.min(1, visualState.current));
+
+            if (playerContainerRef.current) {
+                // Interpolate properties
+                // Docked (t=0) -> Floating (t=1)
+                
+                // Calculate Floating Left dynamically (centered horizontally minus half width)
+                // Floating Left: calc(50% - otherWidgetWidth/2 - 8 - width/2)
+                const floatingLeftPx = (window.innerWidth / 2) - (floatingConfig.otherWidgetWidth / 2) - 8 - (floatingConfig.width / 2);
+                
+                const currentWidth = dockedConfig.width + (floatingConfig.width - dockedConfig.width) * t;
+                const currentHeight = dockedConfig.height + (floatingConfig.height - dockedConfig.height) * t;
+                const currentBottom = dockedConfig.bottom + (floatingConfig.bottom - dockedConfig.bottom) * t;
+                const currentLeft = dockedConfig.left + (floatingLeftPx - dockedConfig.left) * t;
+
+                playerContainerRef.current.style.width = `${currentWidth}px`;
+                playerContainerRef.current.style.height = `${currentHeight}px`;
+                playerContainerRef.current.style.bottom = `${currentBottom}px`;
+                playerContainerRef.current.style.left = `${currentLeft}px`;
+                playerContainerRef.current.style.transform = 'none'; // Ensure no transform interferes
+            }
+
+            animationFrameId = requestAnimationFrame(loop);
+        };
+
+        loop();
+
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [isAnyAppOpen, dockedConfig, floatingConfig, dragProgress]);
 
     useEffect(() => {
         const show = nowPlaying.isLoading || debugSpinner;
@@ -883,33 +927,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, []);
 
-    const playerStyle: React.CSSProperties = useMemo(() => {
-        let baseStyle: React.CSSProperties;
-    
-        if (isAnyAppOpen) {
-            baseStyle = {
-                width: `${dockedConfig.width}px`,
-                height: `${dockedConfig.height}px`,
-                bottom: `${dockedConfig.bottom}px`,
-                left: `${dockedConfig.left}px`,
-                transform: 'none',
-            };
-        } else {
-            const { width, bottom, height, otherWidgetWidth } = floatingConfig;
-            baseStyle = {
-                width: `${width}px`,
-                height: `${height}px`,
-                bottom: `${bottom}px`,
-                left: `calc(50% - ${otherWidgetWidth / 2}px - 8px - ${width / 2}px)`,
-                transform: 'none',
-            };
-        }
-        baseStyle.background = !isNight ? widgetBgColor : 'var(--player-bg)';
-        // Use a more specific transition property to avoid animating background-color
-        baseStyle.transition = 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1), left 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
-        return baseStyle;
-    }, [isAnyAppOpen, dockedConfig, floatingConfig, widgetBgColor, isNight]);
-
     const themeClasses = isNight 
         ? 'border-zinc-700/80' 
         : 'border-zinc-300';
@@ -1147,7 +1164,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             <div 
                 ref={playerContainerRef}
                 className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg ${themeClasses}`}
-                style={playerStyle}
+                style={{
+                    // Style is now handled directly by the animation loop in useEffect
+                    background: !isNight ? widgetBgColor : 'var(--player-bg)',
+                    // Initial styles before JS takes over
+                    width: isAnyAppOpen ? `${dockedConfig.width}px` : `${floatingConfig.width}px`,
+                    height: isAnyAppOpen ? `${dockedConfig.height}px` : `${floatingConfig.height}px`,
+                    bottom: isAnyAppOpen ? `${dockedConfig.bottom}px` : `${floatingConfig.bottom}px`,
+                    left: isAnyAppOpen ? `${dockedConfig.left}px` : `calc(50% - ${floatingConfig.otherWidgetWidth / 2}px - 8px - ${floatingConfig.width / 2}px)`,
+                }}
             >
                 <div className="relative w-full h-full">
                     {(nowPlaying.isLoading || debugSpinner) && (

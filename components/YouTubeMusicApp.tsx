@@ -20,6 +20,7 @@ interface YouTubeMusicAppProps {
     homeDataQuotaExceeded: boolean;
     onRetry: () => void;
     onQuotaError: () => void;
+    onDragProgress?: (progress: number | null) => void;
 }
 
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
@@ -74,6 +75,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     homeDataQuotaExceeded,
     onRetry,
     onQuotaError,
+    onDragProgress,
 }) => {
     const { playYouTube } = useAuth();
     const panelRef = useRef<HTMLDivElement>(null);
@@ -83,6 +85,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         currentX: 100, // 0 = open, 100 = closed
         targetX: 100,
         isDragging: false,
+        isInteracting: false, // NEW: Interaction sequence tracking
         dragStartX: 0,
         dragStartCurrentX: 0,
         panelWidth: 0,
@@ -116,7 +119,21 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 }
             }
 
-            // 2. Render
+            // 2. Report Progress to 3D Scene (Seamless Handoff)
+            if (state.isInteracting) {
+                let visualProgress = state.currentX / 100;
+                visualProgress = Math.max(0, Math.min(1, visualProgress));
+                
+                onDragProgress?.(visualProgress);
+
+                // Check if settled
+                if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
+                    state.isInteracting = false;
+                    onDragProgress?.(null);
+                }
+            }
+
+            // 3. Render
             if (panel) {
                 let visualX = state.currentX;
                 if (!state.isDragging) {
@@ -130,8 +147,15 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         };
 
         physics.current.animationId = requestAnimationFrame(update);
-        return () => cancelAnimationFrame(physics.current.animationId);
-    }, []);
+        return () => {
+            cancelAnimationFrame(physics.current.animationId);
+            // CRITICAL FIX: Ensure we release the 3D scene if unmounted while interacting
+            // This prevents the "Zombie State" where the car freezes in the middle.
+            if (physics.current.isInteracting) {
+                onDragProgress?.(null);
+            }
+        };
+    }, [onDragProgress]);
 
     // --- SYNC REACT PROP TO PHYSICS TARGET ---
     useEffect(() => {
@@ -149,6 +173,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         
         const state = physics.current;
         state.isDragging = true;
+        state.isInteracting = true; // Start interaction sequence
         state.dragStartX = e.clientX;
         state.dragStartCurrentX = state.currentX;
         state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
@@ -173,7 +198,12 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         e.currentTarget.releasePointerCapture(e.pointerId);
         
         const state = physics.current;
+        // CRITICAL FIX: Only process drop logic if we were actually dragging.
+        // Prevents premature close trigger on startup/mount.
+        if (!state.isDragging) return;
+
         state.isDragging = false;
+        // DO NOT call onDragProgress(null) here. The loop handles it.
 
         if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
             state.targetX = 100;
