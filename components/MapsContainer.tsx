@@ -152,7 +152,28 @@ z-index: 1001;
 display: flex;
 flex-direction: column;
 gap: 12px;
+pointer-events: none; /* Allows clicks to pass through the container area */
 }
+.map-controls > * {
+pointer-events: auto; /* Re-enable clicks for direct children */
+}
+
+/* New wrapper for buttons that should fade out */
+.dynamic-controls {
+display: flex;
+flex-direction: column;
+gap: 12px;
+opacity: 0;
+transform: translateX(10px);
+transition: opacity 0.3s ease, transform 0.3s ease;
+pointer-events: none; /* Initially hidden and unclickable */
+}
+.dynamic-controls.visible {
+opacity: 1;
+transform: translateX(0);
+pointer-events: auto;
+}
+
 .search-panel {
 position: absolute;
 top: var(--maps-search-panel-top, 20px);
@@ -353,17 +374,20 @@ box-shadow: 0 0 5px rgba(0,0,0,0.5);
                 </div>
             </div>
         </button>
-        <button id="recenter-btn" class="control-button" title="Centra Posizione">
-            <i data-lucide="crosshair" class="w-6 h-6"></i>
-        </button>
-        <div class="w-full h-px bg-white/20 my-1"></div>
-        <div class="flex flex-col gap-3">
-            <button id="map-mode-toggle-btn" class="control-button" title="Vista Satellitare/Standard">
-                <i data-lucide="earth" class="w-6 h-6"></i>
+        
+        <div id="dynamic-controls" class="dynamic-controls">
+            <button id="recenter-btn" class="control-button" title="Centra Posizione">
+                <i data-lucide="crosshair" class="w-6 h-6"></i>
             </button>
-            <button id="weather-toggle-btn" class="control-button" title="Radar Meteo">
-                <i data-lucide="cloud-rain" class="w-6 h-6"></i>
-            </button>
+            <div class="w-full h-px bg-white/20 my-1"></div>
+            <div class="flex flex-col gap-3">
+                <button id="map-mode-toggle-btn" class="control-button" title="Vista Satellitare/Standard">
+                    <i data-lucide="earth" class="w-6 h-6"></i>
+                </button>
+                <button id="weather-toggle-btn" class="control-button" title="Radar Meteo">
+                    <i data-lucide="cloud-rain" class="w-6 h-6"></i>
+                </button>
+            </div>
         </div>
     </div>
     <div id="info-toast" class="info-toast">
@@ -469,6 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.timelapseLabel = document.getElementById('timelapse-label');
             this.currentStreetContainer = document.getElementById('current-street-container');
             this.streetNameText = document.getElementById('street-name-text');
+            this.dynamicControls = document.getElementById('dynamic-controls');
 
             this.imageCache = {};
             this.weatherImageCache = {};
@@ -547,6 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.pendingDestination = null;
             this.lastReverseGeocodeTime = 0;
             this.REVERSE_GEOCODE_INTERVAL = 10000; // 10 seconds
+            this.controlsTimeout = null;
 
             this.init();
         }
@@ -705,7 +731,50 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        initEventListeners() { this.mapModeToggleBtn.addEventListener('click', () => this.setMapMode(this.userSelectedMapMode === 'auto' ? 'satellite' : 'auto')); this.weatherToggleBtn.addEventListener('click', () => this.toggleWeatherLayer()); this.timelapsePlayPauseBtn.addEventListener('click', () => this.playPauseTimelapse()); this.timelapseSlider.addEventListener('input', (e) => { this.stopTimelapse(); this.setTimelapseFrame(parseInt(e.target.value)); this.preloadWeatherFrames(5); }); document.getElementById('compass-btn').addEventListener('click', () => this.toggleCompassMode()); this.recenterBtn.addEventListener('click', () => this.manualRecenter()); this.startTripBtn.addEventListener('click', () => this.startNavigation()); this.cancelTripBtn.addEventListener('click', () => this.clearRouteAndNotify()); document.getElementById('end-trip-btn').addEventListener('click', () => this.clearRouteAndNotify()); this.searchInput.addEventListener('input', (e) => { const query = e.target.value.trim(); this.clearSearchBtn.style.display = query ? 'flex' : 'none'; if (this.searchDebounce) clearTimeout(this.searchDebounce); if (query.length < 3) { this.hideSearchResults(); this._clearRouteInternals(); return; } this.searchDebounce = setTimeout(() => this.searchLocations(query), 300); }); this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.clearSearchBtn.style.display = 'none'; this.hideSearchResults(); this._clearRouteInternals(); }); this.mapContainer.addEventListener('mousedown', this.handleMouseDown.bind(this)); this.mapContainer.addEventListener('mousemove', this.handleMouseMove.bind(this)); this.mapContainer.addEventListener('mouseup', this.handleMouseUp.bind(this)); this.mapContainer.addEventListener('mouseleave', this.handleMouseUp.bind(this)); this.mapContainer.addEventListener('wheel', this.handleWheel.bind(this), { passive: false }); this.mapContainer.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false }); this.mapContainer.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false }); this.mapContainer.addEventListener('touchend', this.handleTouchEnd.bind(this)); }
+        initEventListeners() { 
+            this.mapModeToggleBtn.addEventListener('click', () => this.setMapMode(this.userSelectedMapMode === 'auto' ? 'satellite' : 'auto')); 
+            this.weatherToggleBtn.addEventListener('click', () => this.toggleWeatherLayer()); 
+            this.timelapsePlayPauseBtn.addEventListener('click', () => this.playPauseTimelapse()); 
+            this.timelapseSlider.addEventListener('input', (e) => { this.stopTimelapse(); this.setTimelapseFrame(parseInt(e.target.value)); this.preloadWeatherFrames(5); }); 
+            document.getElementById('compass-btn').addEventListener('click', () => this.toggleCompassMode()); 
+            this.recenterBtn.addEventListener('click', () => this.manualRecenter()); 
+            this.startTripBtn.addEventListener('click', () => this.startNavigation()); 
+            this.cancelTripBtn.addEventListener('click', () => this.clearRouteAndNotify()); 
+            document.getElementById('end-trip-btn').addEventListener('click', () => this.clearRouteAndNotify()); 
+            this.searchInput.addEventListener('input', (e) => { const query = e.target.value.trim(); this.clearSearchBtn.style.display = query ? 'flex' : 'none'; if (this.searchDebounce) clearTimeout(this.searchDebounce); if (query.length < 3) { this.hideSearchResults(); this._clearRouteInternals(); return; } this.searchDebounce = setTimeout(() => this.searchLocations(query), 300); }); 
+            this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.clearSearchBtn.style.display = 'none'; this.hideSearchResults(); this._clearRouteInternals(); }); 
+            
+            // --- Control Visibility Logic ---
+            const showControls = () => {
+                if (this.dynamicControls) {
+                    this.dynamicControls.classList.add('visible');
+                    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+                }
+            };
+            
+            const scheduleHideControls = () => {
+                if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+                this.controlsTimeout = setTimeout(() => {
+                    if (this.dynamicControls) this.dynamicControls.classList.remove('visible');
+                }, 4000);
+            };
+
+            this.mapContainer.addEventListener('mousedown', (e) => { this.handleMouseDown(e); showControls(); });
+            this.mapContainer.addEventListener('mousemove', (e) => { this.handleMouseMove(e); });
+            this.mapContainer.addEventListener('mouseup', (e) => { this.handleMouseUp(e); scheduleHideControls(); });
+            this.mapContainer.addEventListener('mouseleave', (e) => { this.handleMouseUp(e); scheduleHideControls(); });
+            this.mapContainer.addEventListener('wheel', (e) => { this.handleWheel(e); showControls(); scheduleHideControls(); }, { passive: false });
+            this.mapContainer.addEventListener('touchstart', (e) => { this.handleTouchStart(e); showControls(); }, { passive: false });
+            this.mapContainer.addEventListener('touchmove', (e) => { this.handleTouchMove(e); }, { passive: false });
+            this.mapContainer.addEventListener('touchend', (e) => { this.handleTouchEnd(e); scheduleHideControls(); });
+
+            // Keep controls visible when hovering/touching them
+            if (this.dynamicControls) {
+                this.dynamicControls.addEventListener('mouseenter', showControls);
+                this.dynamicControls.addEventListener('mouseleave', scheduleHideControls);
+                this.dynamicControls.addEventListener('touchstart', showControls, {passive: true});
+            }
+        }
         
         requestRedraw() { if (!this.redrawRequested) { this.redrawRequested = true; requestAnimationFrame(() => { this.weatherNeedsRedraw = true; this.redrawRequested = false; }); } }
         
@@ -1084,7 +1153,29 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 300000);
         }
         
-        startInteraction() { this.isFollowingUser = false; this.isUserInteracting = true; this.frozenBearing = this.vehicleOrientationBearing; if (this.animation) this.animation = null; if (this.compassMode === 'heading-up') { this.wasInHeadingUpMode = true; this.setCompassMode('north-up'); this.showInfoToast('Modalità North Up (automatica)', 'compass'); } this.requestRedraw(); if (this.isWeatherLayerVisible) { this.startWeatherRecenterTimer(); } else { this.startAutoRecenterTimer(); } }
+        startInteraction() { 
+            this.isFollowingUser = false; 
+            this.isUserInteracting = true; 
+            this.frozenBearing = this.vehicleOrientationBearing; 
+            if (this.animation) this.animation = null; 
+            if (this.compassMode === 'heading-up') { 
+                this.wasInHeadingUpMode = true; 
+                this.setCompassMode('north-up'); 
+                this.showInfoToast('Modalità North Up (automatica)', 'compass'); 
+            } 
+            this.requestRedraw(); 
+            if (this.isWeatherLayerVisible) { 
+                this.startWeatherRecenterTimer(); 
+            } else { 
+                this.startAutoRecenterTimer(); 
+            }
+            
+            // Show controls immediately on interaction
+            if (this.dynamicControls) {
+                this.dynamicControls.classList.add('visible');
+                if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+            }
+        }
         
         handleMouseDown(e) { this.startInteraction(); this.isDragging = true; this.dragStart = { x: e.clientX, y: e.clientY }; this.centerOnDragStart = { ...this.center }; this.mapContainer.classList.add('dragging'); }
         
