@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import NavigateTool from './NavigateTool';
 
 const mapHtmlContent = `
 <!DOCTYPE html>
@@ -174,29 +175,6 @@ transform: translateX(0);
 pointer-events: auto;
 }
 
-.search-panel {
-position: absolute;
-top: var(--maps-search-panel-top, 20px);
-left: 20px;
-z-index: 1001;
-width: var(--maps-search-panel-width, 420px);
-max-width: calc(100vw - 40px);
-}
-#search-input {
-background: rgba(0, 0, 0, 0.6);
-border: 2px solid rgba(255, 255, 255, 0.25);
-border-radius: 16px;
-padding: 14px 14px 14px 48px;
-font-size: 16px;
-transition: all 0.3s ease;
-color: white;
-}
-#search-input:focus {
-background: rgba(0, 0, 0, 0.8);
-border-color: #3B82F6;
-box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
-outline: none;
-}
 .info-toast {
 position: fixed;
 bottom: -100px;
@@ -231,16 +209,6 @@ transition: opacity 0.3s ease, bottom 0.4s ease-out;
 .compass-heading-up .letter-s { bottom: 2px; left: 50%; transform: translateX(-50%); }
 .compass-heading-up .letter-w { top: 50%; left: 2px; transform: translateY(-50%); }
 .compass-button.active { background: rgba(59, 130, 246, 0.2); }
-
-.search-results { max-height: 400px; overflow-y: auto; }
-.search-results::-webkit-scrollbar { width: 6px; }
-.search-results::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
-.search-results::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 3px; }
-#search-results-container .search-result-item { padding: 12px 16px; cursor: pointer; transition: background 0.2s; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-#search-results-container .search-result-item:hover { background: rgba(255, 255, 255, 0.1); }
-#search-results-container .search-result-item:last-child { border-bottom: none; }
-.search-result-name { font-weight: 500; color: white; }
-.search-result-address { font-size: 13px; color: #aaa; margin-top: 4px; }
 
 #trip-info-panel { position: absolute; bottom: 20px; left: 20px; transform: translateY(200%); z-index: 1002; width: 420px; max-width: calc(100vw - 40px); transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
 #trip-info-panel.visible { transform: translateY(0); }
@@ -321,24 +289,6 @@ box-shadow: 0 0 5px rgba(0,0,0,0.5);
 </head>
 <body>
 <div id="app">
-    <div id="search-panel" class="search-panel">
-        <div class="glass-effect rounded-2xl p-5">
-            <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                    <i data-lucide="search" class="h-6 w-6 text-gray-300"></i>
-                </div>
-                <input type="text" id="search-input" placeholder="Dove vuoi andare?" class="w-full text-white placeholder-gray-400 focus:outline-none">
-                <button id="clear-search" class="absolute inset-y-0 right-0 pr-5 flex items-center hidden">
-                    <i data-lucide="x" class="h-6 w-6 text-gray-300 hover:text-white transition-colors"></i>
-                </button>
-            </div>
-            <div id="search-results-container" class="hidden mt-4 rounded-xl overflow-hidden">
-                <div id="search-results" class="search-results"></div>
-                <div id="search-loading" class="hidden p-4 text-center text-gray-400">Ricerca...</div>
-                <div id="no-results" class="hidden p-4 text-center text-gray-400">Nessun risultato trovato</div>
-            </div>
-        </div>
-    </div>
     <div id="end-trip-container" class="hidden">
         <button id="end-trip-btn">
             <i data-lucide="x-circle"></i>
@@ -425,19 +375,15 @@ box-shadow: 0 0 5px rgba(0,0,0,0.5);
 </div>
 
 <script>
-// Robust message queuing system
 window.pendingNavMessage = null;
-window.teslaNav = null; // Flag to indicate if the main class is instantiated
+window.teslaNav = null; 
 
 window.addEventListener('message', (event) => {
-    // ORIGIN CHECK REMOVED
     if (event.data && event.data.type === 'SET_DESTINATION') {
         if (window.teslaNav) {
-            // If nav is ready, process immediately
             const { lat, lng, name } = event.data.payload;
             window.teslaNav.setDestination({ lat, lng }, name, true);
         } else {
-            // If nav is not ready, queue the message
             window.pendingNavMessage = event.data;
         }
     }
@@ -451,33 +397,19 @@ document.addEventListener('DOMContentLoaded', () => {
             this.maptilerApiKey = 'T3ITqSa4x2w9qQOiIENK';
             
             this.mapContainer = document.getElementById('map-container');
-            
-            // Main canvas for map tiles
             this.canvas = document.getElementById('map-canvas');
             this.ctx = this.canvas.getContext('2d');
-            
-            // Secondary canvas for labels (with heavy filters in CSS)
             this.labelsCanvas = document.getElementById('labels-canvas');
             this.labelsCtx = this.labelsCanvas.getContext('2d');
-
-            // Offscreen buffers
             this.tileCanvas = document.createElement('canvas');
             this.tileCtx = this.tileCanvas.getContext('2d');
-            
             this.labelTileCanvas = document.createElement('canvas');
             this.labelTileCtx = this.labelTileCanvas.getContext('2d');
-
             this.weatherCanvas = document.createElement('canvas');
             this.weatherCtx = this.weatherCanvas.getContext('2d');
             
             this.vehicleMarkerEl = document.getElementById('vehicle-marker');
             this.markerOverlay = document.getElementById('marker-overlay');
-            this.searchInput = document.getElementById('search-input');
-            this.clearSearchBtn = document.getElementById('clear-search');
-            this.searchResultsContainer = document.getElementById('search-results-container');
-            this.searchResults = document.getElementById('search-results');
-            this.searchLoading = document.getElementById('search-loading');
-            this.noResults = document.getElementById('no-results');
             this.recenterBtn = document.getElementById('recenter-btn');
             this.tripInfoPanel = document.getElementById('trip-info-panel');
             this.tripDurationEl = document.getElementById('trip-info-duration');
@@ -499,20 +431,15 @@ document.addEventListener('DOMContentLoaded', () => {
             this.weatherImageCache = {};
             this.failedTiles = {};
             this.redrawRequested = false;
-
             this.tileQueue = [];
-            this.weatherTileQueue = []; // Separate queue for weather
+            this.weatherTileQueue = [];
             this.loadingTiles = new Set();
-            
             this.activeMapLoads = 0;
-            this.MAX_CONCURRENT_LOADS = 12; // Increased concurrency for base map
-            
+            this.MAX_CONCURRENT_LOADS = 12;
             this.activeWeatherLoads = 0;
-            this.MAX_WEATHER_CONCURRENT_LOADS = 16; // High concurrency for weather
-            
+            this.MAX_WEATHER_CONCURRENT_LOADS = 16;
             this.TILE_RETRY_DELAY = 15000;
             this.weatherNeedsRedraw = false;
-            
             this.TILE_SIZE = 256;
             this.MIN_ZOOM = 3;
             this.MAX_ZOOM = 19;
@@ -527,7 +454,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 satelliteLabels: 'https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
             };
             this.currentTileProvider = 'dark';
-
             this.userSelectedMapMode = 'auto';
             this.timeCheckInterval = null;
             this.zoom = 13;
@@ -571,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.externalTheme = null;
             this.pendingDestination = null;
             this.lastReverseGeocodeTime = 0;
-            this.REVERSE_GEOCODE_INTERVAL = 10000; // 10 seconds
+            this.REVERSE_GEOCODE_INTERVAL = 10000;
             this.controlsTimeout = null;
 
             this.init();
@@ -609,7 +535,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             this._clearRouteInternals();
             this.destination = coords;
-            this.searchInput.value = name;
+            // No search input to update
             this.destinationMarker = document.createElement('div');
             this.destinationMarker.className = 'destination-marker';
             this.markerOverlay.appendChild(this.destinationMarker);
@@ -686,7 +612,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
             });
             
-            // Ensure transforms are set on the visible canvases too
             this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             this.labelsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -741,10 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.startTripBtn.addEventListener('click', () => this.startNavigation()); 
             this.cancelTripBtn.addEventListener('click', () => this.clearRouteAndNotify()); 
             document.getElementById('end-trip-btn').addEventListener('click', () => this.clearRouteAndNotify()); 
-            this.searchInput.addEventListener('input', (e) => { const query = e.target.value.trim(); this.clearSearchBtn.style.display = query ? 'flex' : 'none'; if (this.searchDebounce) clearTimeout(this.searchDebounce); if (query.length < 3) { this.hideSearchResults(); this._clearRouteInternals(); return; } this.searchDebounce = setTimeout(() => this.searchLocations(query), 300); }); 
-            this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.clearSearchBtn.style.display = 'none'; this.hideSearchResults(); this._clearRouteInternals(); }); 
             
-            // --- Control Visibility Logic ---
             const showControls = () => {
                 if (this.dynamicControls) {
                     this.dynamicControls.classList.add('visible');
@@ -768,7 +690,6 @@ document.addEventListener('DOMContentLoaded', () => {
             this.mapContainer.addEventListener('touchmove', (e) => { this.handleTouchMove(e); }, { passive: false });
             this.mapContainer.addEventListener('touchend', (e) => { this.handleTouchEnd(e); scheduleHideControls(); });
 
-            // Keep controls visible when hovering/touching them
             if (this.dynamicControls) {
                 this.dynamicControls.addEventListener('mouseenter', showControls);
                 this.dynamicControls.addEventListener('mouseleave', scheduleHideControls);
@@ -795,16 +716,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.weatherNeedsRedraw = false; 
                 } 
                 
-                // Clear the main visible canvas
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); 
-                
-                // Clear the label visible canvas (new)
                 this.labelsCtx.clearRect(0, 0, this.labelsCanvas.width, this.labelsCanvas.height);
 
-                // Draw the base map buffer to the main canvas
                 this.ctx.drawImage(this.tileCanvas, 0, 0); 
-                
-                // Draw the label buffer to the separate label canvas (the CSS filter does the magic here)
                 this.labelsCtx.drawImage(this.labelTileCanvas, 0, 0);
 
                 if (this.isWeatherLayerVisible) { 
@@ -830,10 +745,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         drawMapToBuffer() { 
             const ctx = this.tileCtx; 
-            const lCtx = this.labelTileCtx; // New context for labels
+            const lCtx = this.labelTileCtx; 
             const { offsetWidth: width, offsetHeight: height } = this.mapContainer; 
             
-            // Setup transforms for Base Map
             ctx.save(); 
             ctx.clearRect(0, 0, width, height); 
             if (Math.abs(this.currentRotation) > 0.001) { 
@@ -842,7 +756,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.translate(-width / 2, -height / 2); 
             } 
 
-            // Setup transforms for Labels
             lCtx.save();
             lCtx.clearRect(0, 0, width, height);
             if (Math.abs(this.currentRotation) > 0.001) { 
@@ -856,14 +769,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const scaledTileSize = this.TILE_SIZE * scale; 
             const centerTileX = this.lon2tile(this.center.lng, tileZ); 
             const centerTileY = this.lat2tile(this.center.lat, tileZ); 
-            // Increased buffer to +3
             const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 3; 
             const newTileQueue = []; 
             
             for (let i = Math.floor(centerTileX - tilesToLoad); i < Math.ceil(centerTileX + tilesToLoad); i++) { 
                 for (let j = Math.floor(centerTileY - tilesToLoad); j < Math.ceil(centerTileY + tilesToLoad); j++) { 
-                    
-                    // Queue base map tile
                     const url = this.getTileUrl(i, j, tileZ); 
                     if (url && !this.imageCache[url] && !this.loadingTiles.has(url) && !this.failedTiles[url]) { 
                         const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2); 
@@ -872,7 +782,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         newTileQueue.push({ url, distance }); 
                     } 
                     
-                    // Queue label tile (only for satellite)
                     if (this.currentTileProvider === 'satellite') { 
                         const labelUrl = this.getTileUrl(i, j, tileZ, 'satelliteLabels'); 
                         if (labelUrl && !this.imageCache[labelUrl] && !this.loadingTiles.has(labelUrl) && !this.failedTiles[labelUrl]) { 
@@ -894,11 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let j = Math.floor(centerTileY - tilesToLoad); j < Math.ceil(centerTileY + tilesToLoad); j++) { 
                         const tileScreenX = Math.round((i - centerTileX) * scaledTileSize + width / 2); 
                         const tileScreenY = Math.round((j - centerTileY) * scaledTileSize + height / 2); 
-                        
-                        // Draw base tile to base canvas
                         this.drawTile(ctx, i, j, tileZ, tileScreenX, tileScreenY, scaledTileSize); 
-                        
-                        // Draw label tile to SEPARATE label canvas
                         if (this.currentTileProvider === 'satellite') { 
                             this.drawTile(lCtx, i, j, tileZ, tileScreenX, tileScreenY, scaledTileSize, 'satelliteLabels'); 
                         } 
@@ -908,8 +813,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const worldWidthInPixels = Math.pow(2, this.zoom) * this.TILE_SIZE; 
             drawWorld(); 
-            
-            // Handle world wrapping
             ctx.translate(-worldWidthInPixels, 0); lCtx.translate(-worldWidthInPixels, 0);
             drawWorld(); 
             ctx.translate(2 * worldWidthInPixels, 0); lCtx.translate(2 * worldWidthInPixels, 0);
@@ -933,7 +836,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadWeatherTile(url, cache, onLoadCallback = null) {
             if (!url || this.loadingTiles.has(url) || cache[url]) return;
             this.loadingTiles.add(url);
-            this.activeWeatherLoads++; // Increment specifically for weather
+            this.activeWeatherLoads++; 
             const img = new Image();
             img.crossOrigin = "Anonymous";
             img.onload = () => {
@@ -943,7 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete this.failedTiles[url];
                 this.loadingTiles.delete(url);
                 this.activeWeatherLoads--; 
-                this.processWeatherTileQueue(); // Process next in weather queue
+                this.processWeatherTileQueue(); 
                 if (onLoadCallback) onLoadCallback();
                 this.requestRedraw();
             };
@@ -957,7 +860,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         drawTile(ctx, x, y, z, canvasX, canvasY, size, providerKey = this.currentTileProvider) { 
-            // DO NOT draw placeholders on the label layer, keep it transparent!
             if (providerKey !== 'satelliteLabels') { 
                 ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--tile-placeholder-color'); 
                 ctx.fillRect(canvasX, canvasY, size + 1, size + 1); 
@@ -976,11 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const elapsed = performance.now() - (idealImage.loadTime || 0); 
                 const opacity = Math.min(1, elapsed / this.FADE_DURATION); 
                 if (opacity < 1) ctx.globalAlpha = opacity; 
-                
-                // CRITICAL FIX: Enable image smoothing for better text rendering
                 ctx.imageSmoothingEnabled = true; 
                 ctx.imageSmoothingQuality = 'high';
-                
                 ctx.drawImage(idealImage, canvasX, canvasY, size + 1, size + 1); 
                 if (opacity < 1) ctx.globalAlpha = 1; 
             }  
@@ -1000,7 +899,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.translate(-width / 2, -height / 2); 
             } 
 
-            // Allow lower zoom levels (down to 0) for better coverage when zoomed out
             const weatherZoom = Math.max(0, Math.min(this.MAX_WEATHER_TILE_ZOOM, Math.floor(this.zoom) - 1));
 
             const getWeatherTileUrl = (framePath, x, y, z) => {
@@ -1013,7 +911,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const scaledTileSize = this.TILE_SIZE * Math.pow(2, this.zoom - weatherZoom);
             const centerTileX = this.lon2tile(this.center.lng, weatherZoom);
             const centerTileY = this.lat2tile(this.center.lat, weatherZoom);
-            // Increased buffer to +3 to ensure clouds are loaded just outside viewport
             const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 3;
 
             const newWeatherQueue = [];
@@ -1036,11 +933,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         ctx.imageSmoothingQuality = 'high';
                         ctx.drawImage(image, tileScreenX, tileScreenY, scaledTileSize + 1, scaledTileSize + 1);
                     } else {
-                        // Queue for loading
                         const distance = Math.hypot(tileScreenX - width / 2, tileScreenY - height / 2);
                         newWeatherQueue.push({ url: idealUrl, distance });
-
-                        // PARENT TILE FALLBACK: Search up to z=0 to find ANY coverage to stretch
                         const fallback = this.findLoadedTile(i, j, weatherZoom - 1, this.weatherImageCache, (px, py, pz) => getWeatherTileUrl(idealFrame.path, px, py, pz));
                         if (fallback) {
                              this.drawParentTile(ctx, fallback, i, j, weatherZoom, tileScreenX, tileScreenY, scaledTileSize);
@@ -1048,12 +942,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
-            
-            // Sort by distance from center and process queue
             newWeatherQueue.sort((a, b) => a.distance - b.distance);
             this.weatherTileQueue = newWeatherQueue.map(item => item.url);
             this.processWeatherTileQueue();
-
             ctx.restore();
         }
 
@@ -1061,7 +952,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         findLoadedTile(x, y, z, cache, urlBuilder) { 
             let z_ = z; 
-            // Allow searching all the way up to z=0 for max fallback coverage
             while (z_ >= 0) { 
                 const pX = x >> (z - z_); 
                 const pY = y >> (z - z_); 
@@ -1107,7 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mode === 'satellite') {
                 newProvider = 'satellite';
                 this.mapModeToggleBtn.classList.add('active');
-            } else { // Handles 'auto', 'light', 'dark'
+            } else {
                 this.mapModeToggleBtn.classList.remove('active');
                 if (this.externalTheme) {
                     newProvider = this.externalTheme;
@@ -1129,12 +1019,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('teslaNavMapMode', this.userSelectedMapMode);
             }
             
-            // Communicate style change to parent
             try {
                 window.parent.postMessage({ type: 'MAP_STYLE_CHANGED', payload: { style: newProvider } }, '*');
             } catch (e) { console.error("Map communication error (style change):", e); }
             
-            // Update current street view style
             const isSatellite = newProvider === 'satellite';
             this.currentStreetContainer.style.background = isSatellite ? 'rgba(0,0,0,0.7)' : 'rgba(10, 10, 10, 0.92)';
             this.currentStreetContainer.style.backdropFilter = isSatellite ? 'blur(5px)' : 'blur(25px)';
@@ -1170,11 +1058,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.startAutoRecenterTimer(); 
             }
             
-            // Show controls immediately on interaction
-            if (this.dynamicControls) {
-                this.dynamicControls.classList.add('visible');
-                if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
-            }
+            const showControls = () => {
+                if (this.dynamicControls) {
+                    this.dynamicControls.classList.add('visible');
+                    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+                }
+            };
+            showControls();
         }
         
         handleMouseDown(e) { this.startInteraction(); this.isDragging = true; this.dragStart = { x: e.clientX, y: e.clientY }; this.centerOnDragStart = { ...this.center }; this.mapContainer.classList.add('dragging'); }
@@ -1201,33 +1091,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         preloadWeatherFrames(lookahead = 3) {
             if (!this.isWeatherLayerVisible || this.weatherTimestamps.length === 0) return;
-            
             const { offsetWidth: width, offsetHeight: height } = this.mapContainer;
-            // Relaxed zoom for preload too
             const weatherZoom = Math.max(0, Math.min(this.MAX_WEATHER_TILE_ZOOM, Math.floor(this.zoom) - 1));
-            
             const getWeatherTileUrl = (framePath, x, y, z) => {
                 const maxTileIndex = Math.pow(2, z) - 1;
                 if (y < 0 || y > maxTileIndex) return null;
                 const wrappedX = ((x % (maxTileIndex + 1)) + (maxTileIndex + 1)) % (maxTileIndex + 1);
                 return \`https://tilecache.rainviewer.com\${framePath}/512/\${z}/\${wrappedX}/\${y}/4/1_1.png\`;
             };
-
             const scaledTileSize = this.TILE_SIZE * Math.pow(2, this.zoom - weatherZoom);
             const centerTileX = this.lon2tile(this.center.lng, weatherZoom);
             const centerTileY = this.lat2tile(this.center.lat, weatherZoom);
             const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 1;
-
             for(let f = 0; f < lookahead; f++) {
                 const frameIndex = (this.currentWeatherFrame + f) % this.weatherTimestamps.length;
                 const frame = this.weatherTimestamps[frameIndex];
                 if (!frame) continue;
-
                 for (let i = Math.floor(centerTileX - tilesToLoad); i <= Math.ceil(centerTileX + tilesToLoad); i++) {
                     for (let j = Math.floor(centerTileY - tilesToLoad); j <= Math.ceil(centerTileY + tilesToLoad); j++) {
                         const url = getWeatherTileUrl(frame.path, i, j, weatherZoom);
                         if (url) {
-                            // Use loadWeatherTile to prevent map queue blocking
                             this.loadWeatherTile(url, this.weatherImageCache);
                         }
                     }
@@ -1254,10 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
                 const road = data.address?.road;
                 const suburb = data.address?.suburb;
-                const city = data.address?.city || data.address?.town || data.address?.village;
-
                 let streetText = road || suburb;
-                
                 if (streetText) {
                     this.streetNameText.textContent = streetText;
                     this.currentStreetContainer.classList.add('visible');
@@ -1279,19 +1159,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             this.currentPosition = newPos;
-
             const now = Date.now();
             if (now - this.lastReverseGeocodeTime > this.REVERSE_GEOCODE_INTERVAL) {
                 this.lastReverseGeocodeTime = now;
                 this.updateCurrentStreet(newPos.lat, newPos.lng);
             }
-
             if (this.pendingDestination) {
                 const { coords, name, startNavigating } = this.pendingDestination;
-                this.pendingDestination = null; // Important: clear it
+                this.pendingDestination = null; 
                 this.setDestination(coords, name, startNavigating);
             }
-            
             if (this.isFollowingUser && !this.isUserInteracting) {
                 this.center = newPos;
                 this.requestRedraw();
@@ -1311,136 +1188,37 @@ document.addEventListener('DOMContentLoaded', () => {
         updateDestinationMarkerPosition() { if (!this.destination || !this.destinationMarker) return; const markerPos = this.geoToScreenPxWithRotation(this.destination.lat, this.destination.lng); this.destinationMarker.style.left = \`\${markerPos.x}px\`; this.destinationMarker.style.top = \`\${markerPos.y}px\`; }
         
         lon2tile(lon, zoom) { return (lon + 180) / 360 * Math.pow(2, zoom); }
-        
         lat2tile(lat, zoom) { return (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom); }
-        
         tile2lon(x, z) { return (x / Math.pow(2, z) * 360 - 180); }
-        
         tile2lat(y, z) { const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))); }
         
         geoToScreenPxWithRotation(lat, lng) { const { offsetWidth, offsetHeight } = this.mapContainer; let p = this.geoToScreenPx(lat, lng); const currentBearing = this.frozenBearing ?? this.vehicleOrientationBearing; if (this.compassMode === 'heading-up' && this.currentPosition) { const angle = -currentBearing * Math.PI / 180; const cx = offsetWidth / 2, cy = offsetHeight / 2; const rotatedX = Math.cos(angle) * (p.x - cx) - Math.sin(angle) * (p.y - cy) + cx; const rotatedY = Math.sin(angle) * (p.x - cx) + Math.cos(angle) * (p.y - cy) + cy; return { x: rotatedX, y: rotatedY }; } return p;}
-        
         geoToScreenPx(lat, lng) { const { offsetWidth, offsetHeight } = this.mapContainer; const centerTileX = this.lon2tile(this.center.lng, this.zoom); const centerTileY = this.lat2tile(this.center.lat, this.zoom); const pointTileX = this.lon2tile(lng, this.zoom); const pointTileY = this.lat2tile(lat, this.zoom); return { x: (pointTileX - centerTileX) * this.TILE_SIZE + offsetWidth / 2, y: (pointTileY - centerTileY) * this.TILE_SIZE + offsetHeight / 2 };}
-        
         screenPxToGeo(px, py) { const { offsetWidth, offsetHeight } = this.mapContainer; let tdx = px - offsetWidth / 2, tdy = py - offsetHeight / 2; if (this.compassMode === 'heading-up' && this.currentPosition) { const angle = this.currentRotation; const rdx = tdx * Math.cos(-angle) - tdy * Math.sin(-angle); const rdy = tdx * Math.sin(-angle) + tdy * Math.cos(-angle); tdx = rdx; tdy = rdy;} const centerTileX = this.lon2tile(this.center.lng, this.zoom); const centerTileY = this.lat2tile(this.center.lat, this.zoom); return { lat: this.tile2lat(centerTileY + tdy / this.TILE_SIZE, this.zoom), lng: this.tile2lon(centerTileX + tdx / this.TILE_SIZE, this.zoom) };}
-        
         calculateBearing(lat1, lon1, lat2, lon2){ const dLon = (lon2 - lon1) * Math.PI / 180; const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180); const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon); return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360; }
-        
-        calculateGeoDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Raggio della Terra in km
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        }
-
+        calculateGeoDistance(lat1, lon1, lat2, lon2) { const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180; const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2); const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); return R * c; }
         smoothBearing(t,e){let i=e-t;if(i>180)i-=360;if(i<-180)i+=360;return(t+i*this.trackingConfig.bearingSmoothing+360)%360}
-        
-        normalizeString(str) { return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/'/g, "").trim(); }
-        
-        async searchLocations(query) { this.searchLoading.classList.remove('hidden'); this.searchResults.innerHTML = ''; this.noResults.classList.add('hidden'); this.searchResultsContainer.classList.remove('hidden'); try { const response = await fetch(\`https://api.geoapify.com/v1/geocode/search?text=\${encodeURIComponent(query)}&lang=it&apiKey=\${this.geoapifyApiKey}\`); const data = await response.json(); if (data.features?.length) { const normalizedQuery = this.normalizeString(query); data.features.sort((a, b) => { const nameA = this.normalizeString(a.properties.name || a.properties.formatted); const nameB = this.normalizeString(b.properties.name || b.properties.formatted); if (nameA.startsWith(normalizedQuery) && !nameB.startsWith(normalizedQuery)) return -1; if (!nameA.startsWith(normalizedQuery) && nameB.startsWith(normalizedQuery)) return 1; return 0; }); this.displaySearchResults(data.features);} else { this.noResults.classList.remove('hidden');}} catch (searchError) { console.error('Errore ricerca:', searchError); this.noResults.classList.remove('hidden');} finally { this.searchLoading.classList.add('hidden');}}
-        
-        displaySearchResults(results) { this.searchResults.innerHTML = ''; results.forEach(result => { const { name, formatted } = result.properties; const [lng, lat] = result.geometry.coordinates; const item = document.createElement('div'); item.className = 'search-result-item'; item.innerHTML = \`<div class="search-result-name">\${name || formatted}</div><div class="search-result-address">\${formatted}</div>\`; item.onclick = () => { this.setDestination({ lat, lng }, name || formatted); this.hideSearchResults(); }; this.searchResults.appendChild(item); }); }
-        
-        hideSearchResults() { this.searchResultsContainer.classList.add('hidden');}
-        
-        async fetchAndSetRoute(startCoords, endCoords) {
-            const url = \`https://api.geoapify.com/v1/routing?waypoints=\${startCoords.lat},\${startCoords.lng}|\${endCoords.lat},\${endCoords.lng}&mode=drive&details=route_details&lang=it&apiKey=\${this.geoapifyApiKey}\`;
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
-                if (data.features?.length) {
-                    const route = data.features[0];
-                    this.routeGeometry = route.geometry.coordinates[0];
-                    this.tripInfo = route.properties;
-                    this.requestRedraw();
-                    try {
-                        window.parent.postMessage({
-                            type: 'ROUTE_UPDATED',
-                            payload: {
-                                geometry: this.routeGeometry,
-                                info: this.tripInfo,
-                                target: {
-                                    lat: endCoords.lat,
-                                    lng: endCoords.lng,
-                                    name: this.searchInput.value
-                                }
-                            }
-                        }, '*');
-                    } catch (e) {
-                        console.error("Map communication error (route update):", e);
-                    }
-                    return true;
-                }
-                return false;
-            } catch (routeError) {
-                console.error("Errore routing:", routeError);
-                return false;
-            }
-        }
-        
-        startNavigation() { if (!this.routeGeometry) return; this.isNavigating = true; this.isViewingRoute = false; this.currentStepIndex = 0; this.updateUIVisibility(); this.recenterMap(); this.showInfoToast("Navigazione avviata!", "navigation");}
-        
-        _clearRouteInternals() {
-            this.isNavigating = false;
-            this.isViewingRoute = false;
-            this.currentStepIndex = 0;
-            this.destination = null;
-            this.routeGeometry = null;
-            this.tripInfo = null;
-            if (this.destinationMarker) {
-                this.destinationMarker.remove();
-                this.destinationMarker = null;
-            }
-            this.updateUIVisibility();
-            this.requestRedraw();
-        }
-        
-        clearRouteAndNotify() { 
-            this._clearRouteInternals(); 
-            this.searchInput.value = ''; 
-            this.clearSearchBtn.style.display = 'none'; 
-            this.showInfoToast("Percorso annullato", "x-circle"); 
-            this.recenterMap();
-            try {
-                window.parent.postMessage({ type: 'ROUTE_CLEARED' }, '*');
-            } catch (e) {
-                console.error("Map communication error (route clear):", e);
-            }
-        }
-        
-        updateUIVisibility() { if (this.isNavigating) { document.getElementById('search-panel').classList.add('hidden'); this.tripInfoPanel.classList.remove('visible'); this.endTripContainer.classList.remove('hidden');} else { document.getElementById('search-panel').classList.remove('hidden'); this.endTripContainer.classList.add('hidden'); if (this.routeGeometry) { this.tripInfoPanel.classList.add('visible'); } else { this.tripInfoPanel.classList.remove('visible'); }}}
-        
-        updateTripInfoPanel() { if (!this.tripInfo) return; const distance = (this.tripInfo.distance / 1000).toFixed(1); const hours = Math.floor(this.tripInfo.time / 3600); const minutes = Math.round((this.tripInfo.time % 3600) / 60); this.tripDurationEl.textContent = (hours > 0 ? \`\${hours} h \` : '') + \`\${minutes} min\`; this.tripDistanceEl.textContent = \`\${distance} km\`; this.updateUIVisibility();}
-        
-        fitBounds() { if (!this.currentPosition || !this.routeGeometry) return; this.isFollowingUser = false; this.isViewingRoute = true; if(this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); const points = [this.currentPosition, ...this.routeGeometry.map(p => ({lng: p[0], lat: p[1]}))]; let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180; points.forEach(p => { if(!p) return; minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat); minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng); }); const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 }; const { offsetWidth, offsetHeight } = this.mapContainer; const dLng = maxLng - minLng, dLat = maxLat - minLat; if (dLng === 0 && dLat === 0) { this.flyTo({ center, zoom: 15 }); return; } const zoomX = dLng > 0 ? Math.log2((offsetWidth - 80) * 360 / (dLng * this.TILE_SIZE)) : this.MAX_ZOOM; const zoomY = dLat > 0 ? Math.log2((offsetHeight - 120) * 180 / (dLat * this.TILE_SIZE)) : this.MAX_ZOOM; const zoom = Math.max(this.MIN_ZOOM, Math.min(zoomX, zoomY, this.MAX_ZOOM - 0.5)); this.flyTo({ center, zoom: zoom - 0.3 }); }
-        
-        async recalculateRoute() { if (this.isRecalculating || !this.destination) return; this.isRecalculating = true; this.showInfoToast('Ricalcolo percorso...', 'refresh-cw'); const success = await this.fetchAndSetRoute(this.currentPosition, this.destination); if (success) { this.currentStepIndex = 0; this.updateTripInfoPanel(); this.showInfoToast('Percorso aggiornato!', 'check-circle');} else { this.showInfoToast("Errore nel ricalcolo", "alert-triangle"); this.clearRouteAndNotify();} this.isRecalculating = false;}
-        
-        checkRouteDeviation() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { distance } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (distance > 70) { this.recalculateRoute();}}
-        
-        updateRouteProgress() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { index } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (index > this.currentStepIndex) { this.currentStepIndex = index; this.requestRedraw();}}
-        
-        findClosestPointOnRoute(point, route) { let minDistance = Infinity; let closestIndex = 0; for (let i = 0; i < route.length - 1; i++) { const p1 = {lat: route[i][1], lng: route[i][0]}; const p2 = {lat: route[i+1][1], lng: route[i+1][0]}; const distance = this.pointToSegmentDistance(point, p1, p2); if (distance < minDistance) { minDistance = distance; closestIndex = i;}} return { distance: minDistance, index: closestIndex };}
-        
-        pointToSegmentDistance(p, p1, p2) { const latRad = p.lat * (Math.PI / 180); const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * latRad) + 1.175 * Math.cos(4 * latRad); const mPerDegLon = 111320 * Math.cos(latRad); const dx = (p2.lng - p1.lng) * mPerDegLon; const dy = (p2.lat - p1.lat) * mPerDegLat; const lenSq = dx * dx + dy * dy; if (lenSq === 0) return Math.hypot((p.lng - p1.lng) * mPerDegLon, (p.lat - p1.lat) * mPerDegLat); let t = ((p.lng - p1.lng) * mPerDegLon * dx + (p.lat - p1.lat) * mPerDegLat * dy) / lenSq; t = Math.max(0, Math.min(1, t)); const closestLng = p1.lng + t * (p2.lng - p1.lng); const closestLat = p1.lat + t * (p2.lat - p1.lat); return Math.hypot((p.lng - closestLng) * mPerDegLon, (p.lat - closestLat) * mPerDegLat);}
-        
         showInfoToast(text, icon = 'info', duration = 3000) { const toast = document.getElementById('info-toast'); toast.querySelector('#info-toast-icon').setAttribute('data-lucide', icon); toast.querySelector('#info-toast-text').textContent = text; toast.classList.add('show'); lucide.createIcons(); setTimeout(() => toast.classList.remove('show'), duration);}
-    
+        _clearRouteInternals() { this.isNavigating = false; this.isViewingRoute = false; this.currentStepIndex = 0; this.destination = null; this.routeGeometry = null; this.tripInfo = null; if (this.destinationMarker) { this.destinationMarker.remove(); this.destinationMarker = null; } this.updateUIVisibility(); this.requestRedraw(); }
+        clearRouteAndNotify() { this._clearRouteInternals(); this.showInfoToast("Percorso annullato", "x-circle"); this.recenterMap(); try { window.parent.postMessage({ type: 'ROUTE_CLEARED' }, '*'); } catch (e) { console.error("Map communication error (route clear):", e); } }
+        updateUIVisibility() { if (this.isNavigating) { this.tripInfoPanel.classList.remove('visible'); this.endTripContainer.classList.remove('hidden');} else { this.endTripContainer.classList.add('hidden'); if (this.routeGeometry) { this.tripInfoPanel.classList.add('visible'); } else { this.tripInfoPanel.classList.remove('visible'); }}}
+        updateTripInfoPanel() { if (!this.tripInfo) return; const distance = (this.tripInfo.distance / 1000).toFixed(1); const hours = Math.floor(this.tripInfo.time / 3600); const minutes = Math.round((this.tripInfo.time % 3600) / 60); this.tripDurationEl.textContent = (hours > 0 ? \`\${hours} h \` : '') + \`\${minutes} min\`; this.tripDistanceEl.textContent = \`\${distance} km\`; this.updateUIVisibility();}
+        fitBounds() { if (!this.currentPosition || !this.routeGeometry) return; this.isFollowingUser = false; this.isViewingRoute = true; if(this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); const points = [this.currentPosition, ...this.routeGeometry.map(p => ({lng: p[0], lat: p[1]}))]; let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180; points.forEach(p => { if(!p) return; minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat); minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng); }); const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 }; const { offsetWidth, offsetHeight } = this.mapContainer; const dLng = maxLng - minLng, dLat = maxLat - minLat; if (dLng === 0 && dLat === 0) { this.flyTo({ center, zoom: 15 }); return; } const zoomX = dLng > 0 ? Math.log2((offsetWidth - 80) * 360 / (dLng * this.TILE_SIZE)) : this.MAX_ZOOM; const zoomY = dLat > 0 ? Math.log2((offsetHeight - 120) * 180 / (dLat * this.TILE_SIZE)) : this.MAX_ZOOM; const zoom = Math.max(this.MIN_ZOOM, Math.min(zoomX, zoomY, this.MAX_ZOOM - 0.5)); this.flyTo({ center, zoom: zoom - 0.3 }); }
+        async recalculateRoute() { if (this.isRecalculating || !this.destination) return; this.isRecalculating = true; this.showInfoToast('Ricalcolo percorso...', 'refresh-cw'); const success = await this.fetchAndSetRoute(this.currentPosition, this.destination); if (success) { this.currentStepIndex = 0; this.updateTripInfoPanel(); this.showInfoToast('Percorso aggiornato!', 'check-circle');} else { this.showInfoToast("Errore nel ricalcolo", "alert-triangle"); this.clearRouteAndNotify();} this.isRecalculating = false;}
+        checkRouteDeviation() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { distance } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (distance > 70) { this.recalculateRoute();}}
+        updateRouteProgress() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { index } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (index > this.currentStepIndex) { this.currentStepIndex = index; this.requestRedraw();}}
+        findClosestPointOnRoute(point, route) { let minDistance = Infinity; let closestIndex = 0; for (let i = 0; i < route.length - 1; i++) { const p1 = {lat: route[i][1], lng: route[i][0]}; const p2 = {lat: route[i+1][1], lng: route[i+1][0]}; const distance = this.pointToSegmentDistance(point, p1, p2); if (distance < minDistance) { minDistance = distance; closestIndex = i;}} return { distance: minDistance, index: closestIndex };}
+        pointToSegmentDistance(p, p1, p2) { const latRad = p.lat * (Math.PI / 180); const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * latRad) + 1.175 * Math.cos(4 * latRad); const mPerDegLon = 111320 * Math.cos(latRad); const dx = (p2.lng - p1.lng) * mPerDegLon; const dy = (p2.lat - p1.lat) * mPerDegLat; const lenSq = dx * dx + dy * dy; if (lenSq === 0) return Math.hypot((p.lng - p1.lng) * mPerDegLon, (p.lat - p1.lat) * mPerDegLat); let t = ((p.lng - p1.lng) * mPerDegLon * dx + (p.lat - p1.lat) * mPerDegLat * dy) / lenSq; t = Math.max(0, Math.min(1, t)); const closestLng = p1.lng + t * (p2.lng - p1.lng); const closestLat = p1.lat + t * (p2.lat - p1.lat); return Math.hypot((p.lng - closestLng) * mPerDegLon, (p.lat - closestLat) * mPerDegLat);}
+        async fetchAndSetRoute(startCoords, endCoords) { const url = \`https://api.geoapify.com/v1/routing?waypoints=\${startCoords.lat},\${startCoords.lng}|\${endCoords.lat},\${endCoords.lng}&mode=drive&details=route_details&lang=it&apiKey=\${this.geoapifyApiKey}\`; try { const response = await fetch(url); const data = await response.json(); if (data.features?.length) { const route = data.features[0]; this.routeGeometry = route.geometry.coordinates[0]; this.tripInfo = route.properties; this.requestRedraw(); try { window.parent.postMessage({ type: 'ROUTE_UPDATED', payload: { geometry: this.routeGeometry, info: this.tripInfo, target: { lat: endCoords.lat, lng: endCoords.lng, name: 'Destinazione' } } }, '*'); } catch (e) { console.error("Map communication error (route update):", e); } return true; } return false; } catch (routeError) { console.error("Errore routing:", routeError); return false; } }
     }
 
     window.teslaNav = new TeslaNavigation();
     
-    // Process any queued message that arrived before initialization
     if (window.pendingNavMessage) {
         const { lat, lng, name } = window.pendingNavMessage.payload;
         window.teslaNav.setDestination({ lat, lng }, name, true);
-        window.pendingNavMessage = null; // Clear it
+        window.pendingNavMessage = null;
     }
-    // Signal to parent that the map is ready to receive commands
     window.parent.postMessage({ type: 'MAP_IFRAME_READY' }, '*');
 });
 </script>
@@ -1449,7 +1227,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 `
 
-// WRAP IN REACT.MEMO: CRITICAL FOR PERFORMANCE
 const MapsContainer = React.memo(({ 
     isOpen, 
     onClose,
@@ -1462,7 +1239,16 @@ const MapsContainer = React.memo(({
     satelliteLabelBrightness,
     satelliteLabelOutlineWidth,
     onDragProgress,
-    onInteractionStart, // New prop
+    onInteractionStart,
+    currentPosition,
+    homeLocation,
+    workLocation,
+    onSelectDestination,
+    width,
+    widgetBgColor,
+    dayPlayerButtonColor,
+    nightPlayerButtonColor,
+    darkNavigateInputBg,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
@@ -1475,19 +1261,27 @@ const MapsContainer = React.memo(({
     satelliteLabelBrightness: number;
     satelliteLabelOutlineWidth: number;
     onDragProgress?: (progress: number | null) => void;
-    onInteractionStart?: () => void; // New prop type definition
+    onInteractionStart?: () => void;
+    currentPosition: { lat: number; lng: number } | null;
+    homeLocation: { lat: number, lng: number, name: string } | null;
+    workLocation: { lat: number, lng: number, name: string } | null;
+    onSelectDestination: (target: { lat: number, lng: number, name: string }) => void;
+    width: number;
+    widgetBgColor: string;
+    dayPlayerButtonColor: string;
+    nightPlayerButtonColor: string;
+    darkNavigateInputBg: string;
 }) => {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isIframeReady, setIsIframeReady] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // --- PHYSICS ENGINE (Unified with SpotifyPlayer) ---
   const physics = useRef({
-      currentX: 100, // 0 = open, 100 = closed
+      currentX: 100,
       targetX: 100,
       isDragging: false,
-      isInteracting: false, // NEW: Tracks interaction sequence
+      isInteracting: false,
       dragStartX: 0,
       dragStartCurrentX: 0,
       panelWidth: 0,
@@ -1500,10 +1294,6 @@ const MapsContainer = React.memo(({
   const finalMapHtml = useMemo(() => {
     const dynamicStyles = `
       <style>
-        :root {
-          --maps-search-panel-width: ${searchPanelWidth}px;
-          --maps-search-panel-top: ${searchPanelTop}px;
-        }
         /* DYNAMIC LABEL OVERRIDE */
         #labels-canvas {
             filter: brightness(${satelliteLabelBrightness}) saturate(0) drop-shadow(0 0 ${satelliteLabelOutlineWidth}px rgba(0,0,0,1)) !important;
@@ -1511,7 +1301,7 @@ const MapsContainer = React.memo(({
       </style>
     `;
     return mapHtmlContent.replace('</head>', `${dynamicStyles}</head>`);
-  }, [searchPanelWidth, searchPanelTop, satelliteLabelBrightness, satelliteLabelOutlineWidth]);
+  }, [satelliteLabelBrightness, satelliteLabelOutlineWidth]);
 
   const postMessageToIframe = useCallback((message: object) => {
     if (iframeRef.current?.contentWindow) {
@@ -1519,7 +1309,6 @@ const MapsContainer = React.memo(({
     }
   }, []);
 
-  // Listen for the "ready" message from the iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
         if (event.data?.type === 'MAP_IFRAME_READY' && !isIframeReady) {
@@ -1556,13 +1345,11 @@ const MapsContainer = React.memo(({
     }
   }, [isOpen, isNight]);
 
-  // --- PHYSICS LOOP ---
   useEffect(() => {
     const update = () => {
         const state = physics.current;
         const panel = panelRef.current;
 
-        // 1. Update Physics
         if (!state.isDragging) {
             const diff = state.targetX - state.currentX;
             if (Math.abs(diff) > 0.01) {
@@ -1572,21 +1359,18 @@ const MapsContainer = React.memo(({
             }
         }
 
-        // 2. Report Progress to 3D Scene (Seamless Handoff)
         if (state.isInteracting) {
             let visualProgress = state.currentX / 100;
             visualProgress = Math.max(0, Math.min(1, visualProgress));
             
             onDragProgress?.(visualProgress);
 
-            // Check if settled
             if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
                 state.isInteracting = false;
                 onDragProgress?.(null);
             }
         }
 
-        // 3. Render Panel
         if (panel) {
             let visualX = state.currentX;
             if (!state.isDragging) {
@@ -1603,7 +1387,6 @@ const MapsContainer = React.memo(({
     return () => cancelAnimationFrame(physics.current.animationId);
   }, [onDragProgress]);
 
-  // --- SYNC REACT PROP TO PHYSICS TARGET ---
   useEffect(() => {
     const state = physics.current;
     if (!state.isDragging) {
@@ -1611,20 +1394,16 @@ const MapsContainer = React.memo(({
     }
   }, [isOpen]);
 
-  // --- DRAG HANDLERS ---
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!panelRef.current) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     
-    // --- TRIGGER INTERACTION START IMMEDIATELY ---
-    // This allows the parent (App.tsx) to close layered apps (Spotify)
-    // the moment the user starts interacting with the Maps handle.
     onInteractionStart?.();
 
     const state = physics.current;
     state.isDragging = true;
-    state.isInteracting = true; // Start interaction sequence
+    state.isInteracting = true;
     state.dragStartX = e.clientX;
     state.dragStartCurrentX = state.currentX;
     state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
@@ -1639,7 +1418,7 @@ const MapsContainer = React.memo(({
     const deltaPercent = (deltaPx / state.panelWidth) * 100;
     
     let newPercent = state.dragStartCurrentX + deltaPercent;
-    if (newPercent < 0) newPercent = 0; // Prevent widening
+    if (newPercent < 0) newPercent = 0; 
     
     state.currentX = newPercent;
   };
@@ -1650,7 +1429,6 @@ const MapsContainer = React.memo(({
     
     const state = physics.current;
     state.isDragging = false;
-    // DO NOT call onDragProgress(null) here. Let loop handle settling.
 
     if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
         state.targetX = 100;
@@ -1667,7 +1445,6 @@ const MapsContainer = React.memo(({
         ref={panelRef}
         className={`fixed top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel`}
         style={{ 
-            // Transform managed by physics loop
             willChange: 'transform',
         }}
         aria-hidden={!isOpen}
@@ -1677,7 +1454,6 @@ const MapsContainer = React.memo(({
         onClick={stopPropagation}
     >
         <div className="w-full h-full flex flex-col relative bg-[#050505]">
-            {/* --- DRAG HANDLE (OUTSIDE LEFT) --- */}
             <div
                 className={`absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`}
                 onPointerDown={handlePointerDown}
@@ -1690,14 +1466,10 @@ const MapsContainer = React.memo(({
                     className={`w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
                 />
             </div>
-            {/* ------------------- */}
 
             <h1 id="maps-player-title" className="sr-only">Maps Player</h1>
             
-            {/* --- ANCHOR POINT FOR LAYERED APPS (e.g. Spotify) --- */}
-            {/* This div is inside the transform hierarchy, so children move rigidly with the map. */}
             <div id="maps-anchored-container" className="absolute inset-0 z-30 pointer-events-none"></div>
-            {/* --------------------------------------------------- */}
 
             <iframe
                 ref={iframeRef}
@@ -1706,6 +1478,32 @@ const MapsContainer = React.memo(({
                 allow="geolocation"
                 className="w-full h-full border-none"
             ></iframe>
+
+            {/* Overlay NavigateTool inside the Map App */}
+            {!navigationTarget && (
+                <div 
+                    className="absolute z-40 pointer-events-auto"
+                    style={{
+                        top: '20px',
+                        left: '20px',
+                    }}
+                >
+                    <NavigateTool 
+                        isNight={true} // Always dark theme over map usually looks best
+                        onSelectDestination={onSelectDestination}
+                        currentPosition={currentPosition}
+                        width={width} // Use the specific width prop passed from App.tsx
+                        widgetBgColor={widgetBgColor}
+                        dayPlayerButtonColor={dayPlayerButtonColor}
+                        nightPlayerButtonColor={nightPlayerButtonColor}
+                        homeLocation={homeLocation}
+                        workLocation={workLocation}
+                        darkNavigateInputBg={darkNavigateInputBg}
+                        isHome={true} // Maps container is essentially full-screen "home" for navigation
+                        showRecentsOnFocus={false} // Disable auto-expansion on focus
+                    />
+                </div>
+            )}
         </div>
     </div>
   );

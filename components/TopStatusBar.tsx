@@ -20,6 +20,7 @@ export default function TopStatusBar({
   setTempUnit,
   scale,
   offsetY,
+  setTopBarOffsetY,
   mapStyle,
   isMapVisible,
 }: { 
@@ -35,6 +36,7 @@ export default function TopStatusBar({
   setTempUnit: React.Dispatch<React.SetStateAction<TempUnit>>,
   scale: number,
   offsetY: number,
+  setTopBarOffsetY?: (offset: number) => void,
   mapStyle: string,
   isMapVisible: boolean,
 }) {
