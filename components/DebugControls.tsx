@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { SceneConfig, HeadlightConfig } from './VehicleCanvas';
@@ -9,6 +9,7 @@ import { initialSceneColors } from '../App';
 interface DebugControlsProps {
   isOpen: boolean;
   onClose: () => void;
+  onDragProgress?: (progress: number | null) => void;
   timeOverride: Date | null;
   setTimeOverride: (date: Date | null) => void;
   sunsetArrowYPosition: number;
@@ -409,15 +410,147 @@ export default function DebugControls({
   skipButtonScale,
   setSkipButtonScale,
   isAppView = false,
+  onDragProgress,
 }: DebugControlsProps) {
-  if (!isOpen) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // --- PHYSICS ENGINE (Unified) ---
+  const physics = useRef({
+      currentX: 100, // 0 = open, 100 = closed
+      targetX: 100,
+      isDragging: false,
+      isInteracting: false, // NEW: Interaction sequence tracking
+      dragStartX: 0,
+      dragStartCurrentX: 0,
+      panelWidth: 0,
+      animationId: 0
+  });
+
+  const ANIMATION_SPEED = 0.18; 
+  const CLOSE_THRESHOLD_PERCENT = 25;
+
+  // --- PHYSICS LOOP ---
+  useEffect(() => {
+      if (!isAppView) return; // Only animate if it's an app view
+      
+      const update = () => {
+          const state = physics.current;
+          const panel = panelRef.current;
+
+          // 1. Update Physics
+          if (!state.isDragging) {
+              const diff = state.targetX - state.currentX;
+              if (Math.abs(diff) > 0.01) {
+                  state.currentX += diff * ANIMATION_SPEED;
+              } else {
+                  state.currentX = state.targetX;
+              }
+          }
+
+          // 2. Report Progress to 3D Scene (Seamless Handoff)
+          if (state.isInteracting) {
+              let visualProgress = state.currentX / 100;
+              visualProgress = Math.max(0, Math.min(1, visualProgress));
+              
+              onDragProgress?.(visualProgress);
+
+              // Check if settled
+              if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
+                  state.isInteracting = false;
+                  onDragProgress?.(null);
+              }
+          }
+
+          // 3. Render
+          if (panel) {
+              let visualX = state.currentX;
+              if (!state.isDragging) {
+                  if (visualX < 0.01) visualX = 0;
+                  if (visualX > 99.9) visualX = 100;
+              }
+              panel.style.transform = `translateX(${visualX}%)`;
+          }
+
+          state.animationId = requestAnimationFrame(update);
+      };
+
+      physics.current.animationId = requestAnimationFrame(update);
+      return () => {
+          cancelAnimationFrame(physics.current.animationId);
+          if (physics.current.isInteracting) {
+              onDragProgress?.(null);
+          }
+      };
+  }, [onDragProgress, isAppView]);
+
+  // --- SYNC REACT PROP TO PHYSICS TARGET ---
+  useEffect(() => {
+      if (!isAppView) return;
+      const state = physics.current;
+      if (!state.isDragging) {
+          state.targetX = isOpen ? 0 : 100;
+      }
+  }, [isOpen, isAppView]);
+
+  // --- DRAG HANDLERS ---
+  const handlePointerDown = (e: React.PointerEvent) => {
+      if (!isAppView || !panelRef.current) return;
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      
+      const state = physics.current;
+      state.isDragging = true;
+      state.isInteracting = true; // Start interaction sequence
+      state.dragStartX = e.clientX;
+      state.dragStartCurrentX = state.currentX;
+      state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+      if (!isAppView) return;
+      const state = physics.current;
+      if (!state.isDragging) return;
+      e.stopPropagation();
+
+      const deltaPx = e.clientX - state.dragStartX;
+      const deltaPercent = (deltaPx / state.panelWidth) * 100;
+      
+      let newPercent = state.dragStartCurrentX + deltaPercent;
+      if (newPercent < 0) newPercent = 0; // Prevent widening
+      
+      state.currentX = newPercent;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+      if (!isAppView) return;
+      e.stopPropagation();
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      
+      const state = physics.current;
+      if (!state.isDragging) return;
+
+      state.isDragging = false;
+
+      if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
+          state.targetX = 100;
+          if (isOpen) onClose();
+      } else {
+          state.targetX = 0;
+      }
+  };
+
+  if (!isOpen && !isAppView) {
     return null;
   }
   
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   
+  const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
+  const handleContainerClass = `absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
+  const handlePillClass = `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
+
   const containerClass = isAppView 
-    ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start"
+    ? "spotify-app-panel w-2/3 shadow-2xl flex"
     : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
 
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
@@ -557,33 +690,53 @@ export default function DebugControls({
   return (
     <div 
       id="debug-panel"
+      ref={panelRef}
       className={containerClass}
+      style={isAppView ? {
+          top: `${spotifyPlayerTop}px`,
+          bottom: `${spotifyPlayerBottom}px`,
+          willChange: 'transform',
+          transform: 'translateX(100%)'
+      } : undefined}
       onClick={stopPropagation}
       role="dialog"
       aria-modal="true"
       aria-labelledby="debug-panel-title"
     >
-      {!isAppView && (
-      <div className="flex justify-between items-center mb-4">
-        <h2 id="debug-panel-title" className="font-bold text-lg">Debug Controls</h2>
-        <button onClick={onClose} className="p-1 hover:bg-zinc-700 rounded-full">
-          <FiX />
-        </button>
-      </div>
-      )}
-
       {isAppView && (
-        <div className="col-span-full flex justify-between items-center mb-6 border-b border-zinc-700 pb-4">
-             <h1 className="text-3xl font-bold">Debug & Customization App</h1>
-             <button onClick={onClose} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg font-medium transition-colors">
-                Close App
-             </button>
+        <div
+            className={handleContainerClass}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+            aria-label="Drag to close"
+        >
+            <div className={handlePillClass} />
         </div>
       )}
-      
-      <div className="space-y-6 text-sm">
+      <div className={isAppView ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start relative" : "w-full"}>
+        {!isAppView && (
+        <div className="flex justify-between items-center mb-4">
+          <h2 id="debug-panel-title" className="font-bold text-lg">Debug Controls</h2>
+          <button onClick={onClose} className="p-1 hover:bg-zinc-700 rounded-full">
+            <FiX />
+          </button>
+        </div>
+        )}
 
-        {/* --- SECTION: MUSIC PLAYER CUSTOMIZATION --- */}
+        {isAppView && (
+          <div className="col-span-full flex justify-between items-center mb-6 border-b border-zinc-700 pb-4">
+               <h1 className="text-3xl font-bold">Debug & Customization App</h1>
+               <button onClick={onClose} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg font-medium transition-colors">
+                  Close App
+               </button>
+          </div>
+        )}
+        
+        <div className={isAppView ? "col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" : "space-y-6 text-sm"}>
+
+          {/* --- SECTION: MUSIC PLAYER CUSTOMIZATION --- */}
         <div className="space-y-4 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
             <h3 className="text-lg font-bold text-green-400 border-b border-zinc-700 pb-2 mb-4">Music Player Customization</h3>
             
@@ -938,6 +1091,7 @@ export default function DebugControls({
         >
           Reset All to Defaults
         </button>
+      </div>
       </div>
     </div>
   );

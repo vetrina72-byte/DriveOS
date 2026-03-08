@@ -20,12 +20,6 @@ export default defineConfig(({ mode }) => {
     return {
       base: '/',
       server: {
-        proxy: {
-          '/api': {
-            target: 'http://localhost:8888',
-            changeOrigin: true,
-          },
-        },
       },
       // Vite automatically makes VITE_* variables available on import.meta.env.
       // We define them here to ensure our development default is included.
