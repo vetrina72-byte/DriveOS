@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import apiClient from '../api';
+import apiClient from '../spotifyClient';
 import { FiPlay } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import ContentCarousel from './ContentCarousel';

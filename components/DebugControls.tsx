@@ -176,6 +176,18 @@ interface DebugControlsProps {
   setSatelliteLabelOutlineWidth: (val: number) => void;
   headlightConfig: HeadlightConfig;
   setHeadlightConfig: React.Dispatch<React.SetStateAction<HeadlightConfig>>;
+  
+  // New Music Player Customization Props
+  progressBarHeight: number;
+  setProgressBarHeight: (height: number) => void;
+  progressBarVerticalOffset: number;
+  setProgressBarVerticalOffset: (offset: number) => void;
+  playButtonScale: number;
+  setPlayButtonScale: (scale: number) => void;
+  skipButtonScale: number;
+  setSkipButtonScale: (scale: number) => void;
+  
+  isAppView?: boolean;
 }
 
 const WEATHER_CONDITIONS = [
@@ -388,6 +400,15 @@ export default function DebugControls({
   setSatelliteLabelOutlineWidth,
   headlightConfig,
   setHeadlightConfig,
+  progressBarHeight,
+  setProgressBarHeight,
+  progressBarVerticalOffset,
+  setProgressBarVerticalOffset,
+  playButtonScale,
+  setPlayButtonScale,
+  skipButtonScale,
+  setSkipButtonScale,
+  isAppView = false,
 }: DebugControlsProps) {
   if (!isOpen) {
     return null;
@@ -395,6 +416,10 @@ export default function DebugControls({
   
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   
+  const containerClass = isAppView 
+    ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start"
+    : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
+
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
 
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -532,21 +557,89 @@ export default function DebugControls({
   return (
     <div 
       id="debug-panel"
-      className="absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto"
+      className={containerClass}
       onClick={stopPropagation}
       role="dialog"
       aria-modal="true"
       aria-labelledby="debug-panel-title"
     >
+      {!isAppView && (
       <div className="flex justify-between items-center mb-4">
         <h2 id="debug-panel-title" className="font-bold text-lg">Debug Controls</h2>
         <button onClick={onClose} className="p-1 hover:bg-zinc-700 rounded-full">
           <FiX />
         </button>
       </div>
+      )}
+
+      {isAppView && (
+        <div className="col-span-full flex justify-between items-center mb-6 border-b border-zinc-700 pb-4">
+             <h1 className="text-3xl font-bold">Debug & Customization App</h1>
+             <button onClick={onClose} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg font-medium transition-colors">
+                Close App
+             </button>
+        </div>
+      )}
       
       <div className="space-y-6 text-sm">
-        
+
+        {/* --- SECTION: MUSIC PLAYER CUSTOMIZATION --- */}
+        <div className="space-y-4 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+            <h3 className="text-lg font-bold text-green-400 border-b border-zinc-700 pb-2 mb-4">Music Player Customization</h3>
+            
+            <div>
+                <label className="block font-medium text-zinc-300 mb-1">Progress Bar Height: {progressBarHeight.toFixed(1)}px</label>
+                <input 
+                    type="range" 
+                    min="1" 
+                    max="20" 
+                    step="0.1" 
+                    value={progressBarHeight} 
+                    onChange={(e) => setProgressBarHeight(Number(e.target.value))} 
+                    className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500" 
+                />
+            </div>
+
+            <div>
+                <label className="block font-medium text-zinc-300 mb-1">Vertical Offset (Top Margin): {progressBarVerticalOffset.toFixed(1)}px</label>
+                <input 
+                    type="range" 
+                    min="0" 
+                    max="50" 
+                    step="0.1" 
+                    value={progressBarVerticalOffset} 
+                    onChange={(e) => setProgressBarVerticalOffset(Number(e.target.value))} 
+                    className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500" 
+                />
+            </div>
+
+            <div>
+                <label className="block font-medium text-zinc-300 mb-1">Play Button Scale: {playButtonScale.toFixed(2)}x</label>
+                <input 
+                    type="range" 
+                    min="0.5" 
+                    max="2.0" 
+                    step="0.01" 
+                    value={playButtonScale} 
+                    onChange={(e) => setPlayButtonScale(Number(e.target.value))} 
+                    className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500" 
+                />
+            </div>
+
+            <div>
+                <label className="block font-medium text-zinc-300 mb-1">Skip Buttons Scale: {skipButtonScale.toFixed(2)}x</label>
+                <input 
+                    type="range" 
+                    min="0.5" 
+                    max="2.0" 
+                    step="0.01" 
+                    value={skipButtonScale} 
+                    onChange={(e) => setSkipButtonScale(Number(e.target.value))} 
+                    className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500" 
+                />
+            </div>
+        </div>
+
         {/* --- SECTION: TIME & WEATHER --- */}
         <div className="space-y-4">
             <h3 className="text-md font-bold text-zinc-200 border-b border-zinc-700 pb-1">Time & Weather</h3>

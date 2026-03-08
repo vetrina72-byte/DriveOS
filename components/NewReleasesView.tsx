@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import apiClient from '../api';
+import apiClient from '../spotifyClient';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
 

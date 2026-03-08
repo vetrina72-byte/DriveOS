@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import apiClient from '../api';
+import apiClient from '../spotifyClient';
 import { FiPlay, FiMic, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';

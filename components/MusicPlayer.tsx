@@ -3,12 +3,12 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom';
 import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
-import apiClient from '../api';
+import apiClient from '../spotifyClient';
 import { 
     FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
 } from 'react-icons/fi';
 import { 
-    IoPlaySharp, IoPauseSharp, IoPlaySkipBackSharp, IoPlaySkipForwardSharp, IoGameControllerOutline
+    IoGameControllerOutline
 } from 'react-icons/io5';
 import { 
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
@@ -46,12 +46,16 @@ interface MusicPlayerProps {
     spinnerBottom: number | undefined;
     spinnerLeft: number | undefined;
     dragProgress: React.MutableRefObject<number | null>;
+    progressBarHeight: number;
+    progressBarVerticalOffset: number;
+    playButtonScale: number;
+    skipButtonScale: number;
 }
 
 /**
  * SpotifyProgressBar - Visual Dictatorship Version
  */
-const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, state: SpotifyPlayerState }) => {
+const SpotifyProgressBar = ({ player, state, height, offset }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, height: number, offset: number }) => {
     const barFillRef = useRef<HTMLDivElement>(null);
     const progressContainerRef = useRef<HTMLDivElement>(null);
     const [isSeeking, setIsSeeking] = useState(false);
@@ -189,7 +193,8 @@ const SpotifyProgressBar = ({ player, state }: { player: SpotifyPlayer | null, s
     return (
         <div
             ref={progressContainerRef}
-            className="spotify-progress-bar w-full h-1.5 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible"
+            className="spotify-progress-bar w-full rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible flex-shrink-0"
+            style={{ height: `${height}px`, marginTop: `${offset}px` }}
             onMouseDown={handleMouseDown}
         >
             <div 
@@ -213,12 +218,16 @@ const YouTubeProgressBar = ({
     onSeek,
     onSeekStart,
     onSeekEnd,
+    height,
+    offset,
 }: {
     progress: { position: number; duration: number };
     isSeeking: boolean;
     onSeek: (position: number) => void;
     onSeekStart: () => void;
     onSeekEnd: () => void;
+    height: number;
+    offset: number;
 }) => {
     const [localPosition, setLocalPosition] = useState(progress.position);
     const progressRef = useRef<HTMLDivElement>(null);
@@ -267,7 +276,8 @@ const YouTubeProgressBar = ({
     return (
         <div
             ref={progressRef}
-            className="w-full h-1.5 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
+            className="w-full rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible flex-shrink-0"
+            style={{ height: `${height}px`, marginTop: `${offset}px` }}
             onMouseDown={handleMouseDown}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
@@ -365,7 +375,18 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
     );
 };
 
-const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft' | 'dragProgress'>) => {
+const DisabledPlayerView = ({ 
+    isNight, 
+    playerControlsSize, 
+    playerControlsGap, 
+    playerControlsVerticalPosition, 
+    dayPlayerButtonColor, 
+    nightPlayerButtonColor,
+    progressBarHeight,
+    progressBarVerticalOffset,
+    playButtonScale,
+    skipButtonScale
+}: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft' | 'dragProgress'>) => {
     const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
@@ -396,14 +417,23 @@ const DisabledPlayerView = ({ isNight, playerControlsSize, playerControlsGap, pl
                 </div>
             </div>
             {/* Progress bar */}
-            <div className="w-full h-1.5 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden" />
+            <div 
+                className="w-full rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden flex-shrink-0" 
+                style={{ height: `${progressBarHeight}px`, marginTop: `${progressBarVerticalOffset}px` }}
+            />
             {/* Controls */}
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
                 <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /></button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                    </button>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                    </button>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                    </button>
                     <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
                 </div>
                 <div className="flex-1 flex justify-end items-center">
@@ -443,7 +473,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     spinnerRight,
     spinnerBottom,
     spinnerLeft,
-    dragProgress
+    dragProgress,
+    progressBarHeight,
+    progressBarVerticalOffset,
+    playButtonScale,
+    skipButtonScale
 }) => {
   const { 
       isAuthenticated, 
@@ -978,18 +1012,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         onSeek={handleSeekYouTube}
                         onSeekStart={handleYouTubeSeekStart}
                         onSeekEnd={handleYouTubeSeekEnd}
+                        height={progressBarHeight}
+                        offset={progressBarVerticalOffset}
                     />
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap * 0.8}px` }}>
-                            <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                            </button>
                             <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
                                 {isYouTubePlaying
-                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
-                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg>
+                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
-                            <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                            </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
                             <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
@@ -1023,18 +1063,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-[var(--progress-bg)]" />
+                    <div 
+                        className="w-full rounded-full bg-[var(--progress-bg)] flex-shrink-0"
+                        style={{ height: `${progressBarHeight}px`, marginTop: `${progressBarVerticalOffset}px` }}
+                    />
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                         <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                            </button>
                             <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
                                 {isRadioPlaying
-                                    ? <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
-                                    : <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg>
+                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
-                            <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                            </button>
                             <button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
                                 <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} />
                             </button>
@@ -1088,19 +1135,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                     </div>
                     
-                    <SpotifyProgressBar player={player} state={playerState} />
+                    <SpotifyProgressBar 
+                        player={player} 
+                        state={playerState} 
+                        height={progressBarHeight} 
+                        offset={progressBarVerticalOffset} 
+                    />
                     
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                          <div className="flex-1 flex justify-start"></div>
                         <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipBackSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                            </button>
                             <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
-                                    ? <IoPlaySharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} /> 
-                                    : <IoPauseSharp style={{ width: `${playerControlsSize * 1.5}px`, height: `${playerControlsSize * 1.5}px`}} />
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg>
                                 }
                             </button>
-                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}><IoPlaySkipForwardSharp style={{ width: `${playerControlsSize}px`, height: `${playerControlsSize}px`}} /></button>
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4 * skipButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4 * skipButtonScale}px`} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                            </button>
                             <button
                                 onClick={handleToggleLike}
                                 className="transition"
@@ -1120,7 +1176,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
         
         // Default / Initial State
-        return <DisabledPlayerView {...{ isNight, playerControlsSize, playerControlsGap, playerControlsVerticalPosition, dayPlayerButtonColor, nightPlayerButtonColor }} />;
+        return <DisabledPlayerView {...{ 
+            isNight, 
+            playerControlsSize, 
+            playerControlsGap, 
+            playerControlsVerticalPosition, 
+            dayPlayerButtonColor, 
+            nightPlayerButtonColor,
+            progressBarHeight,
+            progressBarVerticalOffset,
+            playButtonScale,
+            skipButtonScale
+        }} />;
     };
 
     const nextSpotifyTrack = playerState?.track_window.next_tracks[0];

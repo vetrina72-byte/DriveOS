@@ -1,6 +1,6 @@
 
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
-import apiClient from '../api';
+import apiClient from '../spotifyClient';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import { NowPlayingState, YouTubeTrackInfo, PlayOptions } from '../types';
 import { SpotifyItem as MediaItem } from '../components/PlaylistItem';

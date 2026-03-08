@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import apiClient from '../api';
+import apiClient from '../spotifyClient';
 import { FiPlay, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import { useAuth } from '../context/AuthContext';

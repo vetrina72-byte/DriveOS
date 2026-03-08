@@ -382,9 +382,14 @@ window.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SET_DESTINATION') {
         if (window.teslaNav) {
             const { lat, lng, name } = event.data.payload;
-            window.teslaNav.setDestination({ lat, lng }, name, true);
+            window.teslaNav.setDestination({ lat, lng }, name, false);
         } else {
             window.pendingNavMessage = event.data;
+        }
+    }
+    if (event.data && event.data.type === 'CLEAR_ROUTE_FROM_PARENT') {
+        if (window.teslaNav) {
+            window.teslaNav._clearRouteInternals();
         }
     }
 });
@@ -392,15 +397,21 @@ window.addEventListener('message', (event) => {
 document.addEventListener('DOMContentLoaded', () => {
     class TeslaNavigation {
         constructor() {
-            this.stadiaApiKey = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
             this.geoapifyApiKey = '0d2c9c7f72c0477eb3260838db72a383';
             this.maptilerApiKey = 'T3ITqSa4x2w9qQOiIENK';
             
             this.mapContainer = document.getElementById('map-container');
             this.canvas = document.getElementById('map-canvas');
             this.ctx = this.canvas.getContext('2d');
+            
+            // Double Buffering Architecture
+            this.offscreenCanvas = document.createElement('canvas');
+            this.offscreenCtx = this.offscreenCanvas.getContext('2d', { alpha: false });
+            
             this.labelsCanvas = document.getElementById('labels-canvas');
             this.labelsCtx = this.labelsCanvas.getContext('2d');
+            
+            // Helper canvas for tile resizing/drawing if needed (kept from old implementation)
             this.tileCanvas = document.createElement('canvas');
             this.tileCtx = this.tileCanvas.getContext('2d');
             this.labelTileCanvas = document.createElement('canvas');
@@ -427,29 +438,40 @@ document.addEventListener('DOMContentLoaded', () => {
             this.streetNameText = document.getElementById('street-name-text');
             this.dynamicControls = document.getElementById('dynamic-controls');
 
+            // Game Loop & Architecture State
+            this.lastTime = 0;
+            this.animationState = {
+                isActive: false,
+                startTime: 0,
+                duration: 2000,
+                startZoom: 0,
+                endZoom: 0,
+                startWorld: { x: 0, y: 0 },
+                endWorld: { x: 0, y: 0 },
+                onComplete: null
+            };
+
             this.imageCache = {};
             this.weatherImageCache = {};
             this.failedTiles = {};
-            this.redrawRequested = false;
             this.tileQueue = [];
             this.weatherTileQueue = [];
             this.loadingTiles = new Set();
             this.activeMapLoads = 0;
-            this.MAX_CONCURRENT_LOADS = 12;
+            this.MAX_CONCURRENT_LOADS = 20;
             this.activeWeatherLoads = 0;
             this.MAX_WEATHER_CONCURRENT_LOADS = 16;
             this.TILE_RETRY_DELAY = 15000;
-            this.weatherNeedsRedraw = false;
             this.TILE_SIZE = 256;
             this.MIN_ZOOM = 3;
             this.MAX_ZOOM = 19;
             this.MAX_LAT = 85.0511287798;
             this.DEFAULT_DRIVING_ZOOM = 17;
-            this.FADE_DURATION = 350;
+            this.FADE_DURATION = 200; 
             
             this.tileProviders = {
-                dark: \`https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=\${this.stadiaApiKey}\`,
-                light: \`https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=\${this.stadiaApiKey}\`,
+                dark: 'https://a.basemaps.cartocdn.com/dark_matter/{z}/{x}/{y}{r}.png',
+                light: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                 satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                 satelliteLabels: 'https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
             };
@@ -474,7 +496,6 @@ document.addEventListener('DOMContentLoaded', () => {
             this.centerOnDragStart = { lat: 0, lng: 0 };
             this.isFollowingUser = true;
             this.autoRecenterTimer = null;
-            this.animation = null;
             this.frozenBearing = null;
             this.touchStartDist = 0;
             this.isNavigating = false;
@@ -499,6 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.lastReverseGeocodeTime = 0;
             this.REVERSE_GEOCODE_INTERVAL = 10000;
             this.controlsTimeout = null;
+            this.pendingDestinationName = null;
 
             this.init();
         }
@@ -509,255 +531,152 @@ document.addEventListener('DOMContentLoaded', () => {
             this.initEventListeners();
             this.loadMapMode();
             this.startTimeOfDayChecker();
-            this.startRenderLoop();
+            
+            // Replaces startRenderLoop with Game Loop
+            this.startGameLoop();
+            
             lucide.createIcons();
             this.getCurrentPosition();
         }
 
-        async setDestination(coords, name, startNavigating = false) {
-            if (this.destination && this.destination.lat === coords.lat && this.destination.lng === coords.lng) {
-                if (this.isNavigating) {
-                    this.updateUIVisibility();
-                    this.recenterMap();
-                } else {
-                    this.isViewingRoute = true;
-                    this.updateTripInfoPanel();
-                    this.fitBounds();
+        easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        startGameLoop() {
+            const loop = (timestamp) => {
+                if (!this.lastTime) this.lastTime = timestamp;
+                const deltaTime = timestamp - this.lastTime;
+                this.lastTime = timestamp;
+
+                this.update(deltaTime);
+                this.render();
+
+                requestAnimationFrame(loop);
+            };
+            requestAnimationFrame(loop);
+        }
+
+        update(deltaTime) {
+            // 1. Animation Physics
+            if (this.animationState.isActive) {
+                const now = performance.now();
+                const elapsed = now - this.animationState.startTime;
+                let progress = elapsed / this.animationState.duration;
+
+                if (progress >= 1) {
+                    progress = 1;
+                    this.animationState.isActive = false;
+                    if (this.animationState.onComplete) this.animationState.onComplete();
                 }
-                return;
-            }
 
-            if (!this.currentPosition) {
-                this.showInfoToast("In attesa della posizione GPS...", "loader");
-                this.pendingDestination = { coords, name, startNavigating };
-                return;
-            }
+                const eased = this.easeInOutCubic(progress);
+                const startZoom = this.animationState.startZoom;
+                const endZoom = this.animationState.endZoom;
+                const dist = this.animationState.worldPixelDist || 0;
 
-            this._clearRouteInternals();
-            this.destination = coords;
-            // No search input to update
-            this.destinationMarker = document.createElement('div');
-            this.destinationMarker.className = 'destination-marker';
-            this.markerOverlay.appendChild(this.destinationMarker);
-            this.showInfoToast('Calcolo percorso...', 'loader');
-            const success = await this.fetchAndSetRoute(this.currentPosition, this.destination);
-            if (success) {
-                if (startNavigating) {
-                    this.startNavigation();
-                } else {
-                    this.isViewingRoute = true;
-                    this.updateTripInfoPanel();
-                    this.fitBounds();
-                }
-            } else {
-                this.showInfoToast("Impossibile calcolare il percorso", "route-off");
-                this.clearRouteAndNotify();
-            }
-        }
+                let zoomProgress, posProgress;
 
-        setExternalTheme(theme) {
-            this.externalTheme = theme;
-            this.setMapMode(this.userSelectedMapMode, false);
-        }
-        
-        getTileUrl(x, y, z, providerKey = this.currentTileProvider) {
-            const numTiles = Math.pow(2, z);
-            if (y < 0 || y >= numTiles) return null;
-            const wrappedX = ((x % numTiles) + numTiles) % numTiles;
-            const providerUrl = this.tileProviders[providerKey] || this.tileProviders.dark;
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
-            return providerUrl.replace('{z}', z).replace('{x}', wrappedX).replace('{y}', y).replace('{r}', dpr > 1.5 ? '@2x' : '');
-        }
-
-        getCurrentPosition() {
-            navigator.geolocation.watchPosition(
-                (position) => {
-                    const firstFix = !this.currentPosition;
-                    this.handlePositionUpdate(position);
-                    if (firstFix) {
-                        this.flyTo({ center: this.currentPosition, zoom: 16 });
-                        this.showInfoToast("Posizione trovata!", "map-pin");
+                if (dist > 300) {
+                    // Distanza grande: prima sposta poi zooma (come Mapbox/Tesla)
+                    // La posizione arriva prima dello zoom — effetto "volo"
+                    posProgress = Math.min(1, eased * 1.4); // posizione più veloce
+                    
+                    // Zoom: prima scende leggermente poi sale alla fine
+                    if (progress < 0.4) {
+                        // Fase 1: zoom out leggero mentre parte
+                        const t = progress / 0.4;
+                        const zoomDip = Math.min(1.5, dist / 1000);
+                        zoomProgress = -Math.sin(t * Math.PI) * zoomDip / (endZoom - startZoom || 1);
+                        this.zoom = startZoom + (endZoom - startZoom) * eased * 0.3 - 
+                                    Math.sin(t * Math.PI) * zoomDip;
+                    } else {
+                        // Fase 2: zoom in fluido verso destinazione
+                        const t = (progress - 0.4) / 0.6;
+                        const easedT = this.easeInOutCubic(t);
+                        this.zoom = (startZoom + (endZoom - startZoom) * 0.3) + 
+                                    (endZoom - (startZoom + (endZoom - startZoom) * 0.3)) * easedT;
                     }
-                    this.vehicleMarkerEl.style.display = 'block';
-                },
-                (geoError) => {
-                    console.error("Errore di geolocalizzazione:", \`Code \${geoError.code}: \${geoError.message}\`);
-                    let message = "Impossibile ottenere la posizione";
-                    if (geoError.code === geoError.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato.";
-                    if (geoError.code === geoError.POSITION_UNAVAILABLE) message = "Informazioni sulla posizione non disponibili.";
-                    if (geoError.code === geoError.TIMEOUT) message = "Timeout nel trovare la posizione.";
-                    this.showInfoToast(message, 'map-pin-off');
-                },
-                { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-            );
-        }
-
-        resizeCanvas() {
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
-            const { offsetWidth: width, offsetHeight: height } = this.mapContainer;
-            
-            this.canvas.width = width * dpr;
-            this.canvas.height = height * dpr;
-            this.canvas.style.width = \`\${width}px\`;
-            this.canvas.style.height = \`\${height}px\`;
-            
-            this.labelsCanvas.width = width * dpr;
-            this.labelsCanvas.height = height * dpr;
-            this.labelsCanvas.style.width = \`\${width}px\`;
-            this.labelsCanvas.style.height = \`\${height}px\`;
-
-            [this.tileCanvas, this.labelTileCanvas, this.weatherCanvas].forEach(canvas => {
-                canvas.width = this.canvas.width;
-                canvas.height = this.canvas.height;
-                canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
-            });
-            
-            this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            this.labelsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-            this.requestRedraw();
-        }
-        
-        recenterMap(zoomLevel = this.DEFAULT_DRIVING_ZOOM) {
-            if (this.currentPosition) {
-                this.isUserInteracting = false;
-                if (this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer);
-                this.isFollowingUser = true;
-                this.flyTo({
-                    center: this.currentPosition,
-                    zoom: zoomLevel,
-                    onComplete: () => {
-                        if (this.wasInHeadingUpMode) {
-                            this.setCompassMode('heading-up');
-                            this.wasInHeadingUpMode = false;
-                        }
-                    }
-                });
-            }
-        }
-        
-        updateAnimation(timestamp) {
-            if (!this.animation) return;
-            const t = Math.min(1, (timestamp - this.animation.startTime) / this.animation.duration);
-            const easedT = t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
-            
-            this.zoom = this.animation.startZoom + (this.animation.endZoom - this.animation.startZoom) * easedT;
-            this.center = {
-                lat: this.animation.startCenter.lat + (this.animation.endCenter.lat - this.animation.startCenter.lat) * easedT,
-                lng: this.animation.startCenter.lng + (this.animation.endCenter.lng - this.animation.startCenter.lng) * easedT,
-            };
-            this.clampCenter();
-            this.requestRedraw();
-            if (t === 1) {
-                if (this.animation.onComplete) {
-                    this.animation.onComplete();
+                } else {
+                    // Distanza corta: animazione semplice
+                    posProgress = eased;
+                    this.zoom = startZoom + (endZoom - startZoom) * eased;
                 }
-                this.animation = null;
+
+                posProgress = Math.max(0, Math.min(1, posProgress));
+                const curX = this.animationState.startWorld.x + 
+                             (this.animationState.endWorld.x - this.animationState.startWorld.x) * posProgress;
+                const curY = this.animationState.startWorld.y + 
+                             (this.animationState.endWorld.y - this.animationState.startWorld.y) * posProgress;
+
+                this.center = this.worldToLatLng(curX, curY);
+                this.clampCenter();
             }
+
+            // 2. Rotation Smoothing
+            // Using existing logic but ensuring it's called every frame
+            this.updateRotation();
+
+            // 3. Tile Management
+            // The drawing function currently handles queueing. 
+            // Ideally move queue management here, but for now we keep it coupled 
+            // to the "what tiles are visible" logic which is calculated during draw/render prep.
         }
-        
-        initEventListeners() { 
-            this.mapModeToggleBtn.addEventListener('click', () => this.setMapMode(this.userSelectedMapMode === 'auto' ? 'satellite' : 'auto')); 
-            this.weatherToggleBtn.addEventListener('click', () => this.toggleWeatherLayer()); 
-            this.timelapsePlayPauseBtn.addEventListener('click', () => this.playPauseTimelapse()); 
-            this.timelapseSlider.addEventListener('input', (e) => { this.stopTimelapse(); this.setTimelapseFrame(parseInt(e.target.value)); this.preloadWeatherFrames(5); }); 
-            document.getElementById('compass-btn').addEventListener('click', () => this.toggleCompassMode()); 
-            this.recenterBtn.addEventListener('click', () => this.manualRecenter()); 
-            this.startTripBtn.addEventListener('click', () => this.startNavigation()); 
-            this.cancelTripBtn.addEventListener('click', () => this.clearRouteAndNotify()); 
-            document.getElementById('end-trip-btn').addEventListener('click', () => this.clearRouteAndNotify()); 
-            
-            const showControls = () => {
-                if (this.dynamicControls) {
-                    this.dynamicControls.classList.add('visible');
-                    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
-                }
-            };
-            
-            const scheduleHideControls = () => {
-                if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
-                this.controlsTimeout = setTimeout(() => {
-                    if (this.dynamicControls) this.dynamicControls.classList.remove('visible');
-                }, 4000);
-            };
 
-            this.mapContainer.addEventListener('mousedown', (e) => { this.handleMouseDown(e); showControls(); });
-            this.mapContainer.addEventListener('mousemove', (e) => { this.handleMouseMove(e); });
-            this.mapContainer.addEventListener('mouseup', (e) => { this.handleMouseUp(e); scheduleHideControls(); });
-            this.mapContainer.addEventListener('mouseleave', (e) => { this.handleMouseUp(e); scheduleHideControls(); });
-            this.mapContainer.addEventListener('wheel', (e) => { this.handleWheel(e); showControls(); scheduleHideControls(); }, { passive: false });
-            this.mapContainer.addEventListener('touchstart', (e) => { this.handleTouchStart(e); showControls(); }, { passive: false });
-            this.mapContainer.addEventListener('touchmove', (e) => { this.handleTouchMove(e); }, { passive: false });
-            this.mapContainer.addEventListener('touchend', (e) => { this.handleTouchEnd(e); scheduleHideControls(); });
-
-            if (this.dynamicControls) {
-                this.dynamicControls.addEventListener('mouseenter', showControls);
-                this.dynamicControls.addEventListener('mouseleave', scheduleHideControls);
-                this.dynamicControls.addEventListener('touchstart', showControls, {passive: true});
+        render() {
+            // Double Buffering: Draw to offscreen canvas first
+            
+            // Sync dimensions
+            if (this.offscreenCanvas.width !== this.canvas.width || this.offscreenCanvas.height !== this.canvas.height) {
+                this.offscreenCanvas.width = this.canvas.width;
+                this.offscreenCanvas.height = this.canvas.height;
             }
-        }
-        
-        requestRedraw() { if (!this.redrawRequested) { this.redrawRequested = true; requestAnimationFrame(() => { this.weatherNeedsRedraw = true; this.redrawRequested = false; }); } }
-        
-        clampCenter() { this.center.lng = ((this.center.lng + 180) % 360 + 360) % 360 - 180; const { offsetHeight: height } = this.mapContainer; const minTileY = this.lat2tile(this.MAX_LAT, this.zoom); const maxTileY = this.lat2tile(-this.MAX_LAT, this.zoom); const screenHalfHeightInTiles = (height / 2) / this.TILE_SIZE; const minCenterTileY = minTileY + screenHalfHeightInTiles; const maxCenterTileY = maxTileY - screenHalfHeightInTiles; const currentCenterTileY = this.lat2tile(this.center.lat, this.zoom); if (currentCenterTileY < minCenterTileY) { this.center.lat = this.tile2lat(minCenterTileY, this.zoom); } else if (currentCenterTileY > maxCenterTileY) { this.center.lat = this.tile2lat(maxCenterTileY, this.zoom); } }
-        
-        panMap(dx, dy) { let moveDx = dx, moveDy = dy; const currentBearing = this.frozenBearing ?? this.vehicleOrientationBearing; if (this.compassMode === 'heading-up' && currentBearing !== 0) { const θ = currentBearing * Math.PI / 180; moveDx = dx * Math.cos(θ) - dy * Math.sin(θ); moveDy = dx * Math.sin(θ) + dy * Math.cos(θ); } const startTileX = this.lon2tile(this.centerOnDragStart.lng, this.zoom); const startTileY = this.lat2tile(this.centerOnDragStart.lat, this.zoom); this.center = { lat: this.tile2lat(startTileY - (moveDy / this.TILE_SIZE), this.zoom), lng: this.tile2lon(startTileX - (moveDx / this.TILE_SIZE), this.zoom) }; this.clampCenter(); this.requestRedraw(); }
-        
-        zoomAtPoint(zoomChange, x, y) { const mouseGeoBefore = this.screenPxToGeo(x, y); this.zoom = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoom + zoomChange)); const mouseGeoAfter = this.screenPxToGeo(x, y); this.center = { lat: this.center.lat - (mouseGeoAfter.lat - mouseGeoBefore.lat), lng: this.center.lng - (mouseGeoAfter.lng - mouseGeoBefore.lng) }; this.clampCenter(); this.requestRedraw(); }
-        
-        startRenderLoop() { 
-            const render = (timestamp) => { 
-                this.updateAnimation(timestamp); 
-                this.updateRotation(); 
-                this.drawMapToBuffer(); 
-                
-                if (this.isWeatherLayerVisible && this.weatherNeedsRedraw) { 
-                    this.drawWeatherToBuffer(); 
-                    this.weatherNeedsRedraw = false; 
-                } 
-                
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); 
-                this.labelsCtx.clearRect(0, 0, this.labelsCanvas.width, this.labelsCanvas.height);
 
-                this.ctx.drawImage(this.tileCanvas, 0, 0); 
-                this.labelsCtx.drawImage(this.labelTileCanvas, 0, 0);
+            const ctx = this.offscreenCtx;
+            const lCtx = this.labelTileCtx; // Keep labels separate for now or draw on top?
+            // Actually, to fix flickering completely, labels should also be drawn to an offscreen buffer 
+            // and then blitted. For now, let's focus on the main map.
+            
+            const width = this.offscreenCanvas.width;
+            const height = this.offscreenCanvas.height;
 
-                if (this.isWeatherLayerVisible) { 
-                    this.ctx.globalAlpha = 0.8; 
-                    this.ctx.drawImage(this.weatherCanvas, 0, 0); 
-                    this.ctx.globalAlpha = 1.0; 
-                } 
-                
-                this.updateUiElements(); 
-                requestAnimationFrame(render); 
-            }; 
-            requestAnimationFrame(render); 
-        }
-        
-        processTileQueue() { while (this.activeMapLoads < this.MAX_CONCURRENT_LOADS && this.tileQueue.length > 0) { const url = this.tileQueue.shift(); this.loadTile(url, this.imageCache); } }
+            // 1. Clear Offscreen
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--tile-placeholder-color');
+            ctx.fillRect(0, 0, width, height);
 
-        processWeatherTileQueue() {
-             while (this.activeWeatherLoads < this.MAX_WEATHER_CONCURRENT_LOADS && this.weatherTileQueue.length > 0) {
-                const url = this.weatherTileQueue.shift();
-                this.loadWeatherTile(url, this.weatherImageCache);
-             }
+            // 2. Draw Map Layers to Offscreen Context
+            this.drawMapToContext(ctx, this.labelsCtx); 
+
+            // 3. Draw Route to Offscreen Context
+            this.drawRoute(ctx);
+
+            // 4. Draw Weather to Offscreen Context
+            if (this.isWeatherLayerVisible) {
+                 this.drawWeatherToContext(ctx);
+            }
+
+            // 5. Blit Offscreen to Main Canvas
+            this.ctx.clearRect(0, 0, width, height);
+            this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+            
+            // Update UI DOM elements
+            this.updateUiElements(); 
         }
-        
-        drawMapToBuffer() { 
-            const ctx = this.tileCtx; 
-            const lCtx = this.labelTileCtx; 
+
+        drawMapToContext(ctx, lCtx) {
             const { offsetWidth: width, offsetHeight: height } = this.mapContainer; 
             
-            ctx.save(); 
-            ctx.clearRect(0, 0, width, height); 
+            ctx.save();
+            // Rotation is handled by transforming the context before drawing tiles
             if (Math.abs(this.currentRotation) > 0.001) { 
                 ctx.translate(width / 2, height / 2); 
                 ctx.rotate(this.currentRotation); 
                 ctx.translate(-width / 2, -height / 2); 
             } 
 
-            lCtx.save();
+            // Clear labels context (it overlays the map)
             lCtx.clearRect(0, 0, width, height);
+            lCtx.save();
             if (Math.abs(this.currentRotation) > 0.001) { 
                 lCtx.translate(width / 2, height / 2); 
                 lCtx.rotate(this.currentRotation); 
@@ -769,7 +688,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const scaledTileSize = this.TILE_SIZE * scale; 
             const centerTileX = this.lon2tile(this.center.lng, tileZ); 
             const centerTileY = this.lat2tile(this.center.lat, tileZ); 
-            const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 3; 
+
+            // Tile loading logic...
+            const tilesToLoad = Math.ceil(Math.hypot(width, height) / scaledTileSize / 2) + 3;
             const newTileQueue = []; 
             
             for (let i = Math.floor(centerTileX - tilesToLoad); i < Math.ceil(centerTileX + tilesToLoad); i++) { 
@@ -813,6 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const worldWidthInPixels = Math.pow(2, this.zoom) * this.TILE_SIZE; 
             drawWorld(); 
+            // Wrap around drawing
             ctx.translate(-worldWidthInPixels, 0); lCtx.translate(-worldWidthInPixels, 0);
             drawWorld(); 
             ctx.translate(2 * worldWidthInPixels, 0); lCtx.translate(2 * worldWidthInPixels, 0);
@@ -820,79 +742,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             ctx.restore(); 
             lCtx.restore();
-
-            ctx.save(); 
-            if (Math.abs(this.currentRotation) > 0.001) { 
-                ctx.translate(width / 2, height / 2); 
-                ctx.rotate(this.currentRotation); 
-                ctx.translate(-width / 2, -height / 2); 
-            } 
-            this.drawRoute(ctx); 
-            ctx.restore(); 
-        }
-        
-        loadTile(url, cache, onLoadCallback = null) { if (!url || this.loadingTiles.has(url) || cache[url]) return; this.loadingTiles.add(url); this.activeMapLoads++; const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { if (img.naturalWidth === 0) { img.onerror(); return; } img.loadTime = performance.now(); cache[url] = img; delete this.failedTiles[url]; this.loadingTiles.delete(url); this.activeMapLoads--; this.processTileQueue(); if (onLoadCallback) onLoadCallback(); this.requestRedraw(); }; img.onerror = () => { this.failedTiles[url] = { timestamp: performance.now() }; this.loadingTiles.delete(url); this.activeMapLoads--; this.processTileQueue(); }; img.src = url; }
-        
-        loadWeatherTile(url, cache, onLoadCallback = null) {
-            if (!url || this.loadingTiles.has(url) || cache[url]) return;
-            this.loadingTiles.add(url);
-            this.activeWeatherLoads++; 
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.onload = () => {
-                if (img.naturalWidth === 0) { img.onerror(); return; }
-                img.loadTime = performance.now();
-                cache[url] = img;
-                delete this.failedTiles[url];
-                this.loadingTiles.delete(url);
-                this.activeWeatherLoads--; 
-                this.processWeatherTileQueue(); 
-                if (onLoadCallback) onLoadCallback();
-                this.requestRedraw();
-            };
-            img.onerror = () => {
-                this.failedTiles[url] = { timestamp: performance.now() };
-                this.loadingTiles.delete(url);
-                this.activeWeatherLoads--;
-                this.processWeatherTileQueue();
-            };
-            img.src = url;
         }
 
-        drawTile(ctx, x, y, z, canvasX, canvasY, size, providerKey = this.currentTileProvider) { 
-            if (providerKey !== 'satelliteLabels') { 
-                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--tile-placeholder-color'); 
-                ctx.fillRect(canvasX, canvasY, size + 1, size + 1); 
-            } 
-            
-            const fallbackData = this.findLoadedTile(x, y, z - 1, this.imageCache, (px,py,pz) => this.getTileUrl(px,py,pz, providerKey)); 
-            if (fallbackData) { 
-                this.drawParentTile(ctx, fallbackData, x, y, z, canvasX, canvasY, size); 
-            } 
-            
-            const idealUrl = this.getTileUrl(x, y, z, providerKey); 
-            if (!idealUrl) return; 
-            const idealImage = this.imageCache[idealUrl]; 
-            
-            if (idealImage?.complete && idealImage.naturalWidth > 0) { 
-                const elapsed = performance.now() - (idealImage.loadTime || 0); 
-                const opacity = Math.min(1, elapsed / this.FADE_DURATION); 
-                if (opacity < 1) ctx.globalAlpha = opacity; 
-                ctx.imageSmoothingEnabled = true; 
-                ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(idealImage, canvasX, canvasY, size + 1, size + 1); 
-                if (opacity < 1) ctx.globalAlpha = 1; 
-            }  
-        }
-        
-        drawWeatherToBuffer() {
-            const ctx = this.weatherCtx;
+        drawWeatherToContext(ctx) {
             const { offsetWidth: width, offsetHeight: height } = this.mapContainer;
-            ctx.clearRect(0, 0, width, height);
+            // No clearing here, we are drawing ON TOP of the map in the offscreen buffer
 
             if (!this.isWeatherLayerVisible || !this.weatherTimestamps.length) return;
 
             ctx.save();
+            ctx.globalAlpha = 0.8; // Weather transparency
+            
             if (Math.abs(this.currentRotation) > 0.001) { 
                 ctx.translate(width / 2, height / 2); 
                 ctx.rotate(this.currentRotation); 
@@ -945,9 +805,302 @@ document.addEventListener('DOMContentLoaded', () => {
             newWeatherQueue.sort((a, b) => a.distance - b.distance);
             this.weatherTileQueue = newWeatherQueue.map(item => item.url);
             this.processWeatherTileQueue();
+            
+            ctx.globalAlpha = 1.0;
             ctx.restore();
         }
 
+        flyTo({ center, zoom, duration = 2000, onComplete = null }) {
+            if (!center || typeof center.lat !== 'number') return;
+
+            const startWorld = this.latLngToWorld(this.center.lat, this.center.lng);
+            const endWorld = this.latLngToWorld(center.lat, center.lng);
+            
+            let dx = endWorld.x - startWorld.x;
+            if (dx > 0.5) dx -= 1;
+            if (dx < -0.5) dx += 1;
+            endWorld.x = startWorld.x + dx;
+
+            // Calcola distanza in pixel world per decidere l'animazione
+            const worldPixelDist = Math.hypot(
+                (endWorld.x - startWorld.x) * Math.pow(2, this.zoom) * this.TILE_SIZE,
+                (endWorld.y - startWorld.y) * Math.pow(2, this.zoom) * this.TILE_SIZE
+            );
+            
+            this.animationState = {
+                isActive: true,
+                startTime: performance.now(),
+                duration: duration,
+                startZoom: this.zoom,
+                endZoom: zoom,
+                startWorld: startWorld,
+                endWorld: endWorld,
+                worldPixelDist: worldPixelDist,
+                onComplete: onComplete
+            };
+        }
+
+        latLngToWorld(lat, lng) {
+          const x = (lng + 180) / 360;
+          const y = 0.5 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / (2 * Math.PI);
+          return { x, y };
+        }
+
+        worldToLatLng(x, y) {
+          const lng = x * 360 - 180;
+          const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
+          return { lat, lng };
+        }
+
+        async setDestination(coords, name, startNavigating = false) {
+            if (this.destination && this.destination.lat === coords.lat && this.destination.lng === coords.lng) {
+                if (this.isNavigating) {
+                    this.updateUIVisibility();
+                    this.recenterMap();
+                } else {
+                    this.isViewingRoute = true;
+                    this.updateTripInfoPanel();
+                    this.fitBounds();
+                }
+                return;
+            }
+
+            if (!this.currentPosition) {
+                this.showInfoToast("In attesa della posizione GPS...", "loader");
+                this.pendingDestination = { coords, name, startNavigating };
+                return;
+            }
+
+            this._clearRouteInternals();
+            this.destination = coords;
+            this.pendingDestinationName = name; // Store name temporarily for route update
+            this.destinationMarker = document.createElement('div');
+            this.destinationMarker.className = 'destination-marker';
+            this.markerOverlay.appendChild(this.destinationMarker);
+            this.showInfoToast('Calcolo percorso...', 'loader');
+            const success = await this.fetchAndSetRoute(this.currentPosition, this.destination);
+            if (success) {
+                if (startNavigating) {
+                    this.startNavigation();
+                } else {
+                    this.isViewingRoute = true;
+                    this.updateTripInfoPanel();
+                    this.fitBounds();
+                }
+            } else {
+                this.showInfoToast("Impossibile calcolare il percorso", "route-off");
+                this.clearRouteAndNotify();
+            }
+        }
+
+        setExternalTheme(theme) {
+            this.externalTheme = theme;
+            this.setMapMode(this.userSelectedMapMode, false);
+        }
+        
+        getTileUrl(x, y, z, providerKey = this.currentTileProvider) {
+            const numTiles = Math.pow(2, z);
+            if (y < 0 || y >= numTiles) return null;
+            const wrappedX = ((x % numTiles) + numTiles) % numTiles;
+            const providerUrl = this.tileProviders[providerKey] || this.tileProviders.dark;
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            return providerUrl
+                .replace('{z}', z)
+                .replace('{x}', wrappedX)
+                .replace('{y}', y)
+                .replace('{r}', dpr > 1.5 ? '@2x' : '');
+        }
+
+        getCurrentPosition() {
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const firstFix = !this.currentPosition;
+                    this.handlePositionUpdate(position);
+                    if (firstFix) {
+                        this.flyTo({ center: this.currentPosition, zoom: 16 });
+                        this.showInfoToast("Posizione trovata!", "map-pin");
+                    }
+                    this.vehicleMarkerEl.style.display = 'block';
+                },
+                (geoError) => {
+                    console.error("Errore di geolocalizzazione:", \`Code \${geoError.code}: \${geoError.message}\`);
+                    let message = "Impossibile ottenere la posizione";
+                    if (geoError.code === geoError.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato.";
+                    if (geoError.code === geoError.POSITION_UNAVAILABLE) message = "Informazioni sulla posizione non disponibili.";
+                    if (geoError.code === geoError.TIMEOUT) message = "Timeout nel trovare la posizione.";
+                    this.showInfoToast(message, 'map-pin-off');
+                },
+                { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+            );
+        }
+
+        resizeCanvas() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const { offsetWidth: width, offsetHeight: height } = this.mapContainer;
+            
+            this.canvas.width = width * dpr;
+            this.canvas.height = height * dpr;
+            this.canvas.style.width = \`\${width}px\`;
+            this.canvas.style.height = \`\${height}px\`;
+            
+            // Offscreen canvas should match main canvas dimensions (dpr scaled)
+            this.offscreenCanvas.width = this.canvas.width;
+            this.offscreenCanvas.height = this.canvas.height;
+            
+            this.labelsCanvas.width = width * dpr;
+            this.labelsCanvas.height = height * dpr;
+            this.labelsCanvas.style.width = \`\${width}px\`;
+            this.labelsCanvas.style.height = \`\${height}px\`;
+
+            // Helper canvases
+            [this.tileCanvas, this.labelTileCanvas, this.weatherCanvas].forEach(canvas => {
+                canvas.width = this.canvas.width;
+                canvas.height = this.canvas.height;
+                canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+            });
+            
+            this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            this.labelsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            this.offscreenCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            // Request redraw but we are in a loop now so it's handled automatically
+        }
+        
+        recenterMap(zoomLevel = this.DEFAULT_DRIVING_ZOOM) {
+            if (this.currentPosition) {
+                this.isUserInteracting = false;
+                if (this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer);
+                this.isFollowingUser = true;
+                this.flyTo({
+                    center: this.currentPosition,
+                    zoom: zoomLevel,
+                    onComplete: () => {
+                        if (this.wasInHeadingUpMode) {
+                            this.setCompassMode('heading-up');
+                            this.wasInHeadingUpMode = false;
+                        }
+                    }
+                });
+            }
+        }
+        
+        initEventListeners() { 
+            this.mapModeToggleBtn.addEventListener('click', () => this.setMapMode(this.userSelectedMapMode === 'auto' ? 'satellite' : 'auto')); 
+            this.weatherToggleBtn.addEventListener('click', () => this.toggleWeatherLayer()); 
+            this.timelapsePlayPauseBtn.addEventListener('click', () => this.playPauseTimelapse()); 
+            this.timelapseSlider.addEventListener('input', (e) => { this.stopTimelapse(); this.setTimelapseFrame(parseInt(e.target.value)); this.preloadWeatherFrames(5); }); 
+            document.getElementById('compass-btn').addEventListener('click', () => this.toggleCompassMode()); 
+            this.recenterBtn.addEventListener('click', () => this.manualRecenter()); 
+            this.startTripBtn.addEventListener('click', () => this.startNavigation()); 
+            this.cancelTripBtn.addEventListener('click', () => this.clearRouteAndNotify()); 
+            document.getElementById('end-trip-btn').addEventListener('click', () => this.clearRouteAndNotify()); 
+            
+            const showControls = () => {
+                if (this.dynamicControls) {
+                    this.dynamicControls.classList.add('visible');
+                    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+                }
+            };
+            
+            const scheduleHideControls = () => {
+                if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+                this.controlsTimeout = setTimeout(() => {
+                    if (this.dynamicControls) this.dynamicControls.classList.remove('visible');
+                }, 4000);
+            };
+
+            this.mapContainer.addEventListener('mousedown', (e) => { 
+                window.parent.postMessage({ type: 'MAP_INTERACTION' }, '*'); 
+                this.handleMouseDown(e); 
+                showControls(); 
+            });
+            this.mapContainer.addEventListener('mousemove', (e) => { this.handleMouseMove(e); });
+            this.mapContainer.addEventListener('mouseup', (e) => { this.handleMouseUp(e); scheduleHideControls(); });
+            this.mapContainer.addEventListener('mouseleave', (e) => { this.handleMouseUp(e); scheduleHideControls(); });
+            this.mapContainer.addEventListener('wheel', (e) => { this.handleWheel(e); showControls(); scheduleHideControls(); }, { passive: false });
+            this.mapContainer.addEventListener('touchstart', (e) => { 
+                window.parent.postMessage({ type: 'MAP_INTERACTION' }, '*'); 
+                this.handleTouchStart(e); 
+                showControls(); 
+            }, { passive: false });
+            this.mapContainer.addEventListener('touchmove', (e) => { this.handleTouchMove(e); }, { passive: false });
+            this.mapContainer.addEventListener('touchend', (e) => { this.handleTouchEnd(e); scheduleHideControls(); });
+
+            if (this.dynamicControls) {
+                this.dynamicControls.addEventListener('mouseenter', showControls);
+                this.dynamicControls.addEventListener('mouseleave', scheduleHideControls);
+                this.dynamicControls.addEventListener('touchstart', showControls, {passive: true});
+            }
+        }
+        
+        clampCenter() { this.center.lng = ((this.center.lng + 180) % 360 + 360) % 360 - 180; const { offsetHeight: height } = this.mapContainer; const minTileY = this.lat2tile(this.MAX_LAT, this.zoom); const maxTileY = this.lat2tile(-this.MAX_LAT, this.zoom); const screenHalfHeightInTiles = (height / 2) / this.TILE_SIZE; const minCenterTileY = minTileY + screenHalfHeightInTiles; const maxCenterTileY = maxTileY - screenHalfHeightInTiles; const currentCenterTileY = this.lat2tile(this.center.lat, this.zoom); if (currentCenterTileY < minCenterTileY) { this.center.lat = this.tile2lat(minCenterTileY, this.zoom); } else if (currentCenterTileY > maxCenterTileY) { this.center.lat = this.tile2lat(maxCenterTileY, this.zoom); } }
+        
+        panMap(dx, dy) { let moveDx = dx, moveDy = dy; const currentBearing = this.frozenBearing ?? this.vehicleOrientationBearing; if (this.compassMode === 'heading-up' && currentBearing !== 0) { const θ = currentBearing * Math.PI / 180; moveDx = dx * Math.cos(θ) - dy * Math.sin(θ); moveDy = dx * Math.sin(θ) + dy * Math.cos(θ); } const startTileX = this.lon2tile(this.centerOnDragStart.lng, this.zoom); const startTileY = this.lat2tile(this.centerOnDragStart.lat, this.zoom); this.center = { lat: this.tile2lat(startTileY - (moveDy / this.TILE_SIZE), this.zoom), lng: this.tile2lon(startTileX - (moveDx / this.TILE_SIZE), this.zoom) }; this.clampCenter(); }
+        
+        zoomAtPoint(zoomChange, x, y) { const mouseGeoBefore = this.screenPxToGeo(x, y); this.zoom = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoom + zoomChange)); const mouseGeoAfter = this.screenPxToGeo(x, y); this.center = { lat: this.center.lat - (mouseGeoAfter.lat - mouseGeoBefore.lat), lng: this.center.lng - (mouseGeoAfter.lng - mouseGeoBefore.lng) }; this.clampCenter(); }
+        
+        processTileQueue() { while (this.activeMapLoads < this.MAX_CONCURRENT_LOADS && this.tileQueue.length > 0) { const url = this.tileQueue.shift(); this.loadTile(url, this.imageCache); } }
+
+        processWeatherTileQueue() {
+             while (this.activeWeatherLoads < this.MAX_WEATHER_CONCURRENT_LOADS && this.weatherTileQueue.length > 0) {
+                const url = this.weatherTileQueue.shift();
+                this.loadWeatherTile(url, this.weatherImageCache);
+             }
+        }
+        
+        loadTile(url, cache, onLoadCallback = null) { if (!url || this.loadingTiles.has(url) || cache[url]) return; this.loadingTiles.add(url); this.activeMapLoads++; const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { if (img.naturalWidth === 0) { img.onerror(); return; } img.loadTime = performance.now(); cache[url] = img; delete this.failedTiles[url]; this.loadingTiles.delete(url); this.activeMapLoads--; this.processTileQueue(); if (onLoadCallback) onLoadCallback(); }; img.onerror = () => { this.failedTiles[url] = { timestamp: performance.now() }; this.loadingTiles.delete(url); this.activeMapLoads--; this.processTileQueue(); }; img.src = url; }
+        
+        loadWeatherTile(url, cache, onLoadCallback = null) {
+            if (!url || this.loadingTiles.has(url) || cache[url]) return;
+            this.loadingTiles.add(url);
+            this.activeWeatherLoads++; 
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => {
+                if (img.naturalWidth === 0) { img.onerror(); return; }
+                img.loadTime = performance.now();
+                cache[url] = img;
+                delete this.failedTiles[url];
+                this.loadingTiles.delete(url);
+                this.activeWeatherLoads--; 
+                this.processWeatherTileQueue(); 
+                if (onLoadCallback) onLoadCallback();
+            };
+            img.onerror = () => {
+                this.failedTiles[url] = { timestamp: performance.now() };
+                this.loadingTiles.delete(url);
+                this.activeWeatherLoads--;
+                this.processWeatherTileQueue();
+            };
+            img.src = url;
+        }
+
+        drawTile(ctx, x, y, z, canvasX, canvasY, size, providerKey = this.currentTileProvider) { 
+            if (providerKey !== 'satelliteLabels') { 
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--tile-placeholder-color'); 
+                ctx.fillRect(canvasX, canvasY, size + 1, size + 1); 
+            } 
+            
+            const fallbackData = this.findLoadedTile(x, y, z - 1, this.imageCache, (px,py,pz) => this.getTileUrl(px,py,pz, providerKey)); 
+            if (fallbackData) { 
+                this.drawParentTile(ctx, fallbackData, x, y, z, canvasX, canvasY, size); 
+            } 
+            
+            const idealUrl = this.getTileUrl(x, y, z, providerKey); 
+            if (!idealUrl) return; 
+            const idealImage = this.imageCache[idealUrl]; 
+            
+            if (idealImage?.complete && idealImage.naturalWidth > 0) { 
+                const elapsed = performance.now() - (idealImage.loadTime || 0); 
+                const opacity = Math.min(1, elapsed / this.FADE_DURATION); 
+                if (opacity < 1) ctx.globalAlpha = opacity; 
+                ctx.imageSmoothingEnabled = true; 
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(idealImage, canvasX, canvasY, size + 1, size + 1); 
+                if (opacity < 1) ctx.globalAlpha = 1; 
+            }  
+        }
+        
         drawParentTile(ctx, parentTile, x, y, z, canvasX, canvasY, size) { const { img, x: pX, y: pY, z: pZ } = parentTile; const tileRes = img.src.includes('@2x') || img.src.includes('/512/') ? 512 : 256; const tileSizeOnParent = tileRes / Math.pow(2, z - pZ); const clipX = (x - pX * Math.pow(2, z - pZ)) * tileSizeOnParent; const clipY = (y - pY * Math.pow(2, z - pZ)) * tileSizeOnParent; ctx.imageSmoothingEnabled = true; ctx.drawImage(img, clipX, clipY, tileSizeOnParent, tileSizeOnParent, canvasX, canvasY, size + 1, size + 1); }
         
         findLoadedTile(x, y, z, cache, urlBuilder) { 
@@ -964,32 +1117,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return null; 
         }
         
-        async toggleWeatherLayer() { this.isWeatherLayerVisible = !this.isWeatherLayerVisible; this.weatherToggleBtn.classList.toggle('active', this.isWeatherLayerVisible); this.timelapseControls.classList.toggle('visible', this.isWeatherLayerVisible); this.requestRedraw(); if (this.isWeatherLayerVisible) { this.isWeatherOverviewActive = true; this.isFollowingUser = false; if (this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); if (this.compassMode === 'heading-up') { this.wasInHeadingUpMode = true; this.setCompassMode('north-up'); this.showInfoToast('Modalità North Up per vista radar', 'compass'); } this.flyTo({ center: this.currentPosition ?? this.center, zoom: this.WEATHER_ZOOM_OUT_LEVEL }); this.startWeatherRecenterTimer(); this.stopTimelapse(); if (this.weatherTimestamps.length === 0) { this.showInfoToast("Caricamento dati radar...", "loader"); try { const response = await fetch('https://api.rainviewer.com/public/weather-maps.json'); const data = await response.json(); this.weatherTimestamps = [...data.radar.past, ...data.radar.nowcast]; this.pastFramesCount = data.radar.past.length; this.timelapseSlider.max = this.weatherTimestamps.length - 1; this.updateTimelapseSliderStyle(); this.setTimelapseFrame(this.pastFramesCount - 1); this.showInfoToast("Radar meteo caricato", "cloud-rain"); this.playPauseTimelapse(); } catch (weatherError) { console.error('Errore caricamento dati meteo:', weatherError); this.showInfoToast("Errore caricamento dati meteo", "alert-triangle"); this.toggleWeatherLayer(); } } else { this.playPauseTimelapse(); } } else { this.showInfoToast("Radar meteo disattivato", "cloud-off"); this.stopTimelapse(); if (this.isWeatherOverviewActive) { this.isWeatherOverviewActive = false; if (this.weatherOverviewRecenterTimer) clearTimeout(this.weatherOverviewRecenterTimer); this.recenterMap(); } } }
+        async toggleWeatherLayer() { this.isWeatherLayerVisible = !this.isWeatherLayerVisible; this.weatherToggleBtn.classList.toggle('active', this.isWeatherLayerVisible); this.timelapseControls.classList.toggle('visible', this.isWeatherLayerVisible); if (this.isWeatherLayerVisible) { this.isWeatherOverviewActive = true; this.isFollowingUser = false; if (this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); if (this.compassMode === 'heading-up') { this.wasInHeadingUpMode = true; this.setCompassMode('north-up'); this.showInfoToast('Modalità North Up per vista radar', 'compass'); } this.flyTo({ center: this.currentPosition ?? this.center, zoom: this.WEATHER_ZOOM_OUT_LEVEL }); this.startWeatherRecenterTimer(); this.stopTimelapse(); if (this.weatherTimestamps.length === 0) { this.showInfoToast("Caricamento dati radar...", "loader"); try { const response = await fetch('https://api.rainviewer.com/public/weather-maps.json'); const data = await response.json(); this.weatherTimestamps = [...data.radar.past, ...data.radar.nowcast]; this.pastFramesCount = data.radar.past.length; this.timelapseSlider.max = this.weatherTimestamps.length - 1; this.updateTimelapseSliderStyle(); this.setTimelapseFrame(this.pastFramesCount - 1); this.showInfoToast("Radar meteo caricato", "cloud-rain"); this.playPauseTimelapse(); } catch (weatherError) { console.error('Errore caricamento dati meteo:', weatherError); this.showInfoToast("Errore caricamento dati meteo", "alert-triangle"); this.toggleWeatherLayer(); } } else { this.playPauseTimelapse(); } } else { this.showInfoToast("Radar meteo disattivato", "cloud-off"); this.stopTimelapse(); if (this.isWeatherOverviewActive) { this.isWeatherOverviewActive = false; if (this.weatherOverviewRecenterTimer) clearTimeout(this.weatherOverviewRecenterTimer); this.recenterMap(); } } }
         
-        setTimelapseFrame(frameIndex) { this.currentWeatherFrame = frameIndex; this.timelapseSlider.value = frameIndex; this.updateTimelapseLabel(); this.requestRedraw(); }
-
-        flyTo({ center, zoom, duration = null, onComplete = null }) {
-            const startCenter = { ...this.center };
-            const endCenter = { ...center };
-
-            let finalDuration = duration;
-            if (finalDuration === null) {
-                const distance = this.calculateGeoDistance(startCenter.lat, startCenter.lng, endCenter.lat, endCenter.lng);
-                finalDuration = Math.max(800, Math.min(3000, Math.sqrt(distance) * 60));
-            }
-            
-            this.animation = { 
-                startZoom: this.zoom, 
-                endZoom: zoom, 
-                startCenter: startCenter, 
-                endCenter: endCenter, 
-                startTime: performance.now(), 
-                duration: finalDuration, 
-                onComplete: onComplete 
-            };
-        }
+        setTimelapseFrame(frameIndex) { this.currentWeatherFrame = frameIndex; this.timelapseSlider.value = frameIndex; this.updateTimelapseLabel(); }
         
-        updateRotation() { const currentBearing = this.frozenBearing ?? this.vehicleOrientationBearing; if (this.compassMode === 'heading-up' && this.currentPosition) { this.targetRotation = -currentBearing * Math.PI / 180; } else { this.targetRotation = 0; } let diff = this.targetRotation - this.currentRotation; if (diff > Math.PI) diff -= 2 * Math.PI; else if (diff < -Math.PI) diff += 2 * Math.PI; const oldRotation = this.currentRotation; this.currentRotation += diff * this.rotationSmoothing; if (Math.abs(this.currentRotation - oldRotation) > 0.0001) { this.requestRedraw(); this.weatherNeedsRedraw = true; } if (Math.abs(diff) < 0.001) { this.currentRotation = this.targetRotation; } }
+        updateRotation() { const currentBearing = this.frozenBearing ?? this.vehicleOrientationBearing; if (this.compassMode === 'heading-up' && this.currentPosition) { this.targetRotation = -currentBearing * Math.PI / 180; } else { this.targetRotation = 0; } let diff = this.targetRotation - this.currentRotation; if (diff > Math.PI) diff -= 2 * Math.PI; else if (diff < -Math.PI) diff += 2 * Math.PI; const oldRotation = this.currentRotation; this.currentRotation += diff * this.rotationSmoothing; if (Math.abs(this.currentRotation - oldRotation) > 0.0001) { this.weatherNeedsRedraw = true; } if (Math.abs(diff) < 0.001) { this.currentRotation = this.targetRotation; } }
         
         setMapMode(mode, save = true) {
             this.userSelectedMapMode = mode;
@@ -1012,7 +1144,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.imageCache = {};
                 this.failedTiles = {};
                 this.loadingTiles.clear();
-                this.requestRedraw();
             }
 
             if (save) {
@@ -1045,13 +1176,14 @@ document.addEventListener('DOMContentLoaded', () => {
             this.isFollowingUser = false; 
             this.isUserInteracting = true; 
             this.frozenBearing = this.vehicleOrientationBearing; 
-            if (this.animation) this.animation = null; 
+            if (this.animationState.isActive) {
+                this.animationState.isActive = false; // Stop auto animation on user interaction
+            }
             if (this.compassMode === 'heading-up') { 
                 this.wasInHeadingUpMode = true; 
                 this.setCompassMode('north-up'); 
                 this.showInfoToast('Modalità North Up (automatica)', 'compass'); 
             } 
-            this.requestRedraw(); 
             if (this.isWeatherLayerVisible) { 
                 this.startWeatherRecenterTimer(); 
             } else { 
@@ -1067,7 +1199,14 @@ document.addEventListener('DOMContentLoaded', () => {
             showControls();
         }
         
-        handleMouseDown(e) { this.startInteraction(); this.isDragging = true; this.dragStart = { x: e.clientX, y: e.clientY }; this.centerOnDragStart = { ...this.center }; this.mapContainer.classList.add('dragging'); }
+        handleMouseDown(e) { 
+            window.parent.postMessage({ type: 'MAP_CLICKED' }, '*'); 
+            this.startInteraction(); 
+            this.isDragging = true; 
+            this.dragStart = { x: e.clientX, y: e.clientY }; 
+            this.centerOnDragStart = { ...this.center }; 
+            this.mapContainer.classList.add('dragging'); 
+        }
         
         handleMouseMove(e) { if (this.isDragging) { const dx = e.clientX - this.dragStart.x; const dy = e.clientY - this.dragStart.y; this.panMap(dx, dy); } }
         
@@ -1075,7 +1214,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         handleWheel(e) { e.preventDefault(); this.startInteraction(); const rect = this.mapContainer.getBoundingClientRect(); this.zoomAtPoint(e.deltaY > 0 ? -0.25 : 0.25, e.clientX - rect.left, e.clientY - rect.top); this.preloadWeatherFrames(5); }
         
-        handleTouchStart(e) { e.preventDefault(); this.startInteraction(); if (e.touches.length === 2) { this.isDragging = false; this.touchStartDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); } else if (e.touches.length === 1) { this.isDragging = true; this.dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; this.centerOnDragStart = { ...this.center }; } }
+        handleTouchStart(e) { 
+            window.parent.postMessage({ type: 'MAP_CLICKED' }, '*');
+            e.preventDefault(); 
+            this.startInteraction(); 
+            if (e.touches.length === 2) { 
+                this.isDragging = false; 
+                this.touchStartDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); 
+            } else if (e.touches.length === 1) { 
+                this.isDragging = true; 
+                this.dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; 
+                this.centerOnDragStart = { ...this.center }; 
+            } 
+        }
         
         handleTouchMove(e) { e.preventDefault(); if (e.touches.length === 2 && this.touchStartDist > 0) { const newDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); const zoomFactor = (newDist / this.touchStartDist - 1) * 1.5; const rect = this.mapContainer.getBoundingClientRect(); const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left; const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top; this.zoomAtPoint(zoomFactor, midX, midY); this.touchStartDist = newDist; } else if (e.touches.length === 1 && this.isDragging) { const dx = e.touches[0].clientX - this.dragStart.x; const dy = e.touches[0].clientY - this.dragStart.y; this.panMap(dx, dy); } }
         
@@ -1126,7 +1277,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         startAutoRecenterTimer() { if (this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); this.autoRecenterTimer = setTimeout(() => { if (!this.isFollowingUser && !this.isUserInteracting) { if (this.isViewingRoute) { this.fitBounds(); this.showInfoToast('Vista percorso ripristinata', 'route'); } else { this.recenterMap(); this.showInfoToast('Tracking riattivato', 'crosshair');}}}, 10000); }
         
-        setCompassMode(mode) { if (this.compassMode === mode) return; this.vehicleMarkerEl.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.4, 1)'; this.compassMode = mode; const isHeadingUp = mode === 'heading-up'; document.getElementById('compass-north-icon').style.display = isHeadingUp ? 'none' : 'flex'; document.getElementById('compass-heading-icon').style.display = isHeadingUp ? 'flex' : 'none'; document.getElementById('compass-btn').classList.toggle('active', isHeadingUp); this.requestRedraw(); if (isHeadingUp) { this.recenterMap(); } void this.vehicleMarkerEl.offsetWidth; requestAnimationFrame(() => { this.vehicleMarkerEl.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.4, 1)'; }); }
+        setCompassMode(mode) { if (this.compassMode === mode) return; this.vehicleMarkerEl.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.4, 1)'; this.compassMode = mode; const isHeadingUp = mode === 'heading-up'; document.getElementById('compass-north-icon').style.display = isHeadingUp ? 'none' : 'flex'; document.getElementById('compass-heading-icon').style.display = isHeadingUp ? 'flex' : 'none'; document.getElementById('compass-btn').classList.toggle('active', isHeadingUp); if (isHeadingUp) { this.recenterMap(); } void this.vehicleMarkerEl.offsetWidth; requestAnimationFrame(() => { this.vehicleMarkerEl.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.4, 1)'; }); }
         
         toggleCompassMode() { const newMode = this.compassMode === 'heading-up' ? 'north-up' : 'heading-up'; this.setCompassMode(newMode); this.showInfoToast(newMode === 'heading-up' ? 'Modalità Heading Up' : 'Modalità North Up', newMode === 'heading-up' ? 'navigation' : 'navigation-off'); }
         
@@ -1171,7 +1322,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (this.isFollowingUser && !this.isUserInteracting) {
                 this.center = newPos;
-                this.requestRedraw();
             }
             if (this.isNavigating && !this.isRecalculating) {
                 this.checkRouteDeviation();
@@ -1199,17 +1349,61 @@ document.addEventListener('DOMContentLoaded', () => {
         calculateGeoDistance(lat1, lon1, lat2, lon2) { const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180; const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2); const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); return R * c; }
         smoothBearing(t,e){let i=e-t;if(i>180)i-=360;if(i<-180)i+=360;return(t+i*this.trackingConfig.bearingSmoothing+360)%360}
         showInfoToast(text, icon = 'info', duration = 3000) { const toast = document.getElementById('info-toast'); toast.querySelector('#info-toast-icon').setAttribute('data-lucide', icon); toast.querySelector('#info-toast-text').textContent = text; toast.classList.add('show'); lucide.createIcons(); setTimeout(() => toast.classList.remove('show'), duration);}
-        _clearRouteInternals() { this.isNavigating = false; this.isViewingRoute = false; this.currentStepIndex = 0; this.destination = null; this.routeGeometry = null; this.tripInfo = null; if (this.destinationMarker) { this.destinationMarker.remove(); this.destinationMarker = null; } this.updateUIVisibility(); this.requestRedraw(); }
+        _clearRouteInternals() { this.isNavigating = false; this.isViewingRoute = false; this.currentStepIndex = 0; this.destination = null; this.routeGeometry = null; this.tripInfo = null; if (this.destinationMarker) { this.destinationMarker.remove(); this.destinationMarker = null; } this.updateUIVisibility(); }
         clearRouteAndNotify() { this._clearRouteInternals(); this.showInfoToast("Percorso annullato", "x-circle"); this.recenterMap(); try { window.parent.postMessage({ type: 'ROUTE_CLEARED' }, '*'); } catch (e) { console.error("Map communication error (route clear):", e); } }
         updateUIVisibility() { if (this.isNavigating) { this.tripInfoPanel.classList.remove('visible'); this.endTripContainer.classList.remove('hidden');} else { this.endTripContainer.classList.add('hidden'); if (this.routeGeometry) { this.tripInfoPanel.classList.add('visible'); } else { this.tripInfoPanel.classList.remove('visible'); }}}
         updateTripInfoPanel() { if (!this.tripInfo) return; const distance = (this.tripInfo.distance / 1000).toFixed(1); const hours = Math.floor(this.tripInfo.time / 3600); const minutes = Math.round((this.tripInfo.time % 3600) / 60); this.tripDurationEl.textContent = (hours > 0 ? \`\${hours} h \` : '') + \`\${minutes} min\`; this.tripDistanceEl.textContent = \`\${distance} km\`; this.updateUIVisibility();}
-        fitBounds() { if (!this.currentPosition || !this.routeGeometry) return; this.isFollowingUser = false; this.isViewingRoute = true; if(this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); const points = [this.currentPosition, ...this.routeGeometry.map(p => ({lng: p[0], lat: p[1]}))]; let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180; points.forEach(p => { if(!p) return; minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat); minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng); }); const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 }; const { offsetWidth, offsetHeight } = this.mapContainer; const dLng = maxLng - minLng, dLat = maxLat - minLat; if (dLng === 0 && dLat === 0) { this.flyTo({ center, zoom: 15 }); return; } const zoomX = dLng > 0 ? Math.log2((offsetWidth - 80) * 360 / (dLng * this.TILE_SIZE)) : this.MAX_ZOOM; const zoomY = dLat > 0 ? Math.log2((offsetHeight - 120) * 180 / (dLat * this.TILE_SIZE)) : this.MAX_ZOOM; const zoom = Math.max(this.MIN_ZOOM, Math.min(zoomX, zoomY, this.MAX_ZOOM - 0.5)); this.flyTo({ center, zoom: zoom - 0.3 }); }
+        fitBounds() { 
+            if (!this.currentPosition || !this.routeGeometry) return; 
+            this.isFollowingUser = false; 
+            this.isViewingRoute = true; 
+            if(this.autoRecenterTimer) clearTimeout(this.autoRecenterTimer); 
+            const points = [this.currentPosition, ...this.routeGeometry.map(p => ({lng: p[0], lat: p[1]}))]; 
+            let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180; 
+            points.forEach(p => { if(!p) return; minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat); minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng); }); 
+            const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 }; 
+            const { offsetWidth, offsetHeight } = this.mapContainer; 
+            const dLng = maxLng - minLng, dLat = maxLat - minLat; 
+            if (dLng === 0 && dLat === 0) { this.flyTo({ center, zoom: 15 }); return; } 
+            const zoomX = dLng > 0 ? Math.log2((offsetWidth - 80) * 360 / (dLng * this.TILE_SIZE)) : this.MAX_ZOOM; 
+            const zoomY = dLat > 0 ? Math.log2((offsetHeight - 120) * 180 / (dLat * this.TILE_SIZE)) : this.MAX_ZOOM; 
+            const zoom = Math.max(this.MIN_ZOOM, Math.min(zoomX, zoomY, this.MAX_ZOOM - 0.5)); 
+            
+            // Set 4000ms duration for slower route overview
+            this.flyTo({ center, zoom: zoom - 0.3, duration: 4000 }); 
+        }
         async recalculateRoute() { if (this.isRecalculating || !this.destination) return; this.isRecalculating = true; this.showInfoToast('Ricalcolo percorso...', 'refresh-cw'); const success = await this.fetchAndSetRoute(this.currentPosition, this.destination); if (success) { this.currentStepIndex = 0; this.updateTripInfoPanel(); this.showInfoToast('Percorso aggiornato!', 'check-circle');} else { this.showInfoToast("Errore nel ricalcolo", "alert-triangle"); this.clearRouteAndNotify();} this.isRecalculating = false;}
         checkRouteDeviation() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { distance } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (distance > 70) { this.recalculateRoute();}}
-        updateRouteProgress() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { index } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (index > this.currentStepIndex) { this.currentStepIndex = index; this.requestRedraw();}}
+        updateRouteProgress() { const { routeGeometry, currentPosition } = this; if (!routeGeometry || !currentPosition) return; const { index } = this.findClosestPointOnRoute(currentPosition, routeGeometry); if (index > this.currentStepIndex) { this.currentStepIndex = index;}}
         findClosestPointOnRoute(point, route) { let minDistance = Infinity; let closestIndex = 0; for (let i = 0; i < route.length - 1; i++) { const p1 = {lat: route[i][1], lng: route[i][0]}; const p2 = {lat: route[i+1][1], lng: route[i+1][0]}; const distance = this.pointToSegmentDistance(point, p1, p2); if (distance < minDistance) { minDistance = distance; closestIndex = i;}} return { distance: minDistance, index: closestIndex };}
         pointToSegmentDistance(p, p1, p2) { const latRad = p.lat * (Math.PI / 180); const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * latRad) + 1.175 * Math.cos(4 * latRad); const mPerDegLon = 111320 * Math.cos(latRad); const dx = (p2.lng - p1.lng) * mPerDegLon; const dy = (p2.lat - p1.lat) * mPerDegLat; const lenSq = dx * dx + dy * dy; if (lenSq === 0) return Math.hypot((p.lng - p1.lng) * mPerDegLon, (p.lat - p1.lat) * mPerDegLat); let t = ((p.lng - p1.lng) * mPerDegLon * dx + (p.lat - p1.lat) * mPerDegLat * dy) / lenSq; t = Math.max(0, Math.min(1, t)); const closestLng = p1.lng + t * (p2.lng - p1.lng); const closestLat = p1.lat + t * (p2.lat - p1.lat); return Math.hypot((p.lng - closestLng) * mPerDegLon, (p.lat - closestLat) * mPerDegLat);}
-        async fetchAndSetRoute(startCoords, endCoords) { const url = \`https://api.geoapify.com/v1/routing?waypoints=\${startCoords.lat},\${startCoords.lng}|\${endCoords.lat},\${endCoords.lng}&mode=drive&details=route_details&lang=it&apiKey=\${this.geoapifyApiKey}\`; try { const response = await fetch(url); const data = await response.json(); if (data.features?.length) { const route = data.features[0]; this.routeGeometry = route.geometry.coordinates[0]; this.tripInfo = route.properties; this.requestRedraw(); try { window.parent.postMessage({ type: 'ROUTE_UPDATED', payload: { geometry: this.routeGeometry, info: this.tripInfo, target: { lat: endCoords.lat, lng: endCoords.lng, name: 'Destinazione' } } }, '*'); } catch (e) { console.error("Map communication error (route update):", e); } return true; } return false; } catch (routeError) { console.error("Errore routing:", routeError); return false; } }
+        async fetchAndSetRoute(startCoords, endCoords) { const url = \`https://api.geoapify.com/v1/routing?waypoints=\${startCoords.lat},\${startCoords.lng}|\${endCoords.lat},\${endCoords.lng}&mode=drive&details=route_details&lang=it&apiKey=\${this.geoapifyApiKey}\`; try { const response = await fetch(url); const data = await response.json(); if (data.features?.length) { const route = data.features[0]; this.routeGeometry = route.geometry.coordinates[0]; this.tripInfo = route.properties; try { window.parent.postMessage({ type: 'ROUTE_UPDATED', payload: { geometry: this.routeGeometry, info: this.tripInfo, target: { lat: endCoords.lat, lng: endCoords.lng, name: this.pendingDestinationName || 'Destinazione' } } }, '*'); } catch (e) { console.error("Map communication error (route update):", e); } return true; } return false; } catch (routeError) { console.error("Errore routing:", routeError); return false; } }
+        
+        startNavigation() { 
+            if (!this.routeGeometry) return; 
+            this.isNavigating = true; 
+            this.isViewingRoute = false; 
+            this.currentStepIndex = 0; 
+            this.updateUIVisibility(); 
+            this.compassMode = 'heading-up'; 
+            
+            // FIX: Set 2000ms duration for snappier "Return to Car" swoop
+            this.flyTo({ 
+                center: this.currentPosition, 
+                zoom: 19,
+                duration: 2000 
+            }); 
+            
+            // Force UI update for Heading Up mode
+            document.getElementById('compass-north-icon').style.display = 'none';
+            document.getElementById('compass-heading-icon').style.display = 'flex';
+            document.getElementById('compass-btn').classList.add('active');
+
+            this.showInfoToast("Navigazione avviata!", "navigation");
+            try {
+                window.parent.postMessage({ type: 'NAVIGATION_STARTED' }, '*');
+            } catch (e) { console.error("Message error", e); }
+        }
     }
 
     window.teslaNav = new TeslaNavigation();
@@ -1314,6 +1508,12 @@ const MapsContainer = React.memo(({
         if (event.data?.type === 'MAP_IFRAME_READY' && !isIframeReady) {
             setIsIframeReady(true);
         }
+        if (event.data?.type === 'MAP_CLICKED') {
+             // Blur any active input (Close keyboard)
+             if (document.activeElement instanceof HTMLElement) {
+                 document.activeElement.blur();
+             }
+        }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -1324,6 +1524,13 @@ const MapsContainer = React.memo(({
         postMessageToIframe({ type: 'SET_DESTINATION', payload: navigationTarget });
     }
   }, [isOpen, navigationTarget, isIframeReady, postMessageToIframe]);
+
+  // Sync effect: When navigation ends (navigationTarget becomes null), ensure iframe clears route.
+  useEffect(() => {
+    if (navigationTarget === null && isIframeReady) {
+        postMessageToIframe({ type: 'CLEAR_ROUTE_FROM_PARENT' });
+    }
+  }, [navigationTarget, isIframeReady, postMessageToIframe]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
