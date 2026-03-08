@@ -1023,7 +1023,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                             <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
                                 {isYouTubePlaying
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg>
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M609.92-206q-24.51 0-41.44-16.94-16.94-16.94-16.94-41.45v-433.22q0-23.51 16.94-40.95Q585.41-756 609.92-756h70q23.51 0 40.95 17.44t17.44 40.95v433.22q0 24.51-17.44 41.45T679.92-206h-70Zm-328.84 0q-24.51 0-41.45-16.94t-16.94-41.45v-433.22q0-23.51 16.94-40.95T281.08-756h70.38q23.21 0 40.8 17.44 17.59 17.44 17.59 40.95v433.22q0 24.51-17.59 41.45T351.46-206h-70.38Z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
@@ -1075,7 +1075,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                             <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
                                 {isRadioPlaying
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg>
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M609.92-206q-24.51 0-41.44-16.94-16.94-16.94-16.94-41.45v-433.22q0-23.51 16.94-40.95Q585.41-756 609.92-756h70q23.51 0 40.95 17.44t17.44 40.95v433.22q0 24.51-17.44 41.45T679.92-206h-70Zm-328.84 0q-24.51 0-41.45-16.94t-16.94-41.45v-433.22q0-23.51 16.94-40.95T281.08-756h70.38q23.21 0 40.8 17.44 17.59 17.44 17.59 40.95v433.22q0 24.51-17.59 41.45T351.46-206h-70.38Z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
@@ -1151,7 +1151,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
                                     ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
-                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg>
+                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0 * playButtonScale}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0 * playButtonScale}px`} fill="currentColor"><path d="M609.92-206q-24.51 0-41.44-16.94-16.94-16.94-16.94-41.45v-433.22q0-23.51 16.94-40.95Q585.41-756 609.92-756h70q23.51 0 40.95 17.44t17.44 40.95v433.22q0 24.51-17.44 41.45T679.92-206h-70Zm-328.84 0q-24.51 0-41.45-16.94t-16.94-41.45v-433.22q0-23.51 16.94-40.95T281.08-756h70.38q23.21 0 40.8 17.44 17.59 17.44 17.59 40.95v433.22q0 24.51-17.59 41.45T351.46-206h-70.38Z"/></svg>
                                 }
                             </button>
                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
