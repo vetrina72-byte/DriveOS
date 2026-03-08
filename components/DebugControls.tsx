@@ -791,6 +791,19 @@ export default function DebugControls({
                     className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500" 
                 />
             </div>
+
+            <div>
+                <label className="block font-medium text-zinc-300 mb-1">Controls Vertical Offset: {playerControlsVerticalPosition.toFixed(1)}px</label>
+                <input 
+                    type="range" 
+                    min="-50" 
+                    max="50" 
+                    step="0.1" 
+                    value={playerControlsVerticalPosition} 
+                    onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} 
+                    className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500" 
+                />
+            </div>
         </div>
 
         {/* --- SECTION: TIME & WEATHER --- */}
@@ -1010,7 +1023,6 @@ export default function DebugControls({
             
             <div><label className="block font-medium text-zinc-300">Button Size: {playerControlsSize}px</label><input type="range" min="10" max="40" value={playerControlsSize} onChange={(e) => setPlayerControlsSize(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Button Gap: {playerControlsGap}px</label><input type="range" min="0" max="200" value={playerControlsGap} onChange={(e) => setPlayerControlsGap(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
-            <div><label className="block font-medium text-zinc-300">Vertical Pos: {playerControlsVerticalPosition}px</label><input type="range" min="-20" max="20" value={playerControlsVerticalPosition} onChange={(e) => setPlayerControlsVerticalPosition(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             
             <div><label className="block font-medium text-zinc-300">Day Button Color</label><input type="color" value={dayPlayerButtonColor} onChange={(e) => setDayPlayerButtonColor(e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Night Button Color</label><input type="color" value={nightPlayerButtonColor} onChange={(e) => setNightPlayerButtonColor(e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>

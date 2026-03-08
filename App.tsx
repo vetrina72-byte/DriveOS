@@ -188,12 +188,11 @@ const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo
 
     const theme = {
         bg: 'var(--player-bg)',
-        border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
     };
 
     return (
         <div 
-            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${theme.border}`}
+            className={`relative backdrop-blur-md rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0`}
             style={{ 
                 width: `${width}px`,
                 height: '113px',
@@ -481,10 +480,10 @@ function AppContent() {
   const [satelliteLabelOutlineWidth, setSatelliteLabelOutlineWidth] = useState(1.2);
 
   // Music Player Customization State
-  const [progressBarHeight, setProgressBarHeight] = useState(7.2);
-  const [progressBarVerticalOffset, setProgressBarVerticalOffset] = useState(10.3);
-  const [playButtonScale, setPlayButtonScale] = useState(0.95);
-  const [skipButtonScale, setSkipButtonScale] = useState(1.42);
+  const [progressBarHeight, setProgressBarHeight] = useState(5.4);
+  const [progressBarVerticalOffset, setProgressBarVerticalOffset] = useState(8.6);
+  const [playButtonScale, setPlayButtonScale] = useState(0.87);
+  const [skipButtonScale, setSkipButtonScale] = useState(1.29);
 
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);

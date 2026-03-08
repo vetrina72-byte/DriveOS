@@ -222,7 +222,7 @@ const NavigateTool = ({
     return (
         <div 
             ref={containerRef}
-            className={`relative backdrop-blur-md border rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${theme.border} pointer-events-auto`}
+            className={`relative backdrop-blur-md rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
             style={{ 
                 width: `${width}px`,
                 height: `${isExpanded ? expandedHeight : baseHeight}px`,
