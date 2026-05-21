@@ -202,6 +202,8 @@ function SceneController({
 
   const isRestoringHome = useRef(false);
   const restoreAnimProgress = useRef(1.0);
+  const snapshotHomePos = useRef(new THREE.Vector3());
+  const snapshotHomeTarget = useRef(new THREE.Vector3());
 
   // Gestione interazione orbit controls
   useEffect(() => {
@@ -226,15 +228,15 @@ function SceneController({
       onInteractionChange?.(false);
       
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
-      // Iniziamo il contatore per ripristinare la home (8 secondi)
+      // Iniziamo il contatore per ripristinare la home (10 secondi)
       interactTimeout.current = window.setTimeout(() => {
         if (!isAppOpen) {
-            isRestoringHome.current = true;
-            restoreAnimProgress.current = 0;
             snapshotHomePos.current.copy(camera.position);
             if (controls) snapshotHomeTarget.current.copy((controls as any).target);
+            isRestoringHome.current = true;
+            restoreAnimProgress.current = 0;
         }
-      }, 8000);
+      }, 10000);
     };
     
     ctrl.addEventListener('start', onStart);
@@ -277,13 +279,8 @@ function SceneController({
       let thetaB = sphB.theta;
       
       let diff = thetaB - thetaA;
-      // FIX: "Ritorno da sinistra bruttino"
-      // Spostiamo il threshold di wrap da 180° (Math.PI) a ~208° (Math.PI + 0.5)
-      // Questo crea un "bias" direzionale: se la telecamera è nel retro (simmetrica a 180°),
-      // il rientro preferirà sempre il percorso da 'destra' visivamente più fluido,
-      // evitando di attraversare la scocca dal lato sinistro o frontale.
-      while (diff > Math.PI + 0.5) diff -= 2 * Math.PI;
-      while (diff < -Math.PI + 0.5) diff += 2 * Math.PI;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
 
       const r = THREE.MathUtils.lerp(sphA.radius, sphB.radius, t);
       const t_path = thetaA + diff * t;
@@ -308,7 +305,8 @@ function SceneController({
           const pLinear = isAppOpen ? (1 - t) : t; // La posizione è legata alla modalità aperta/chiusa per semplicità (0: Open, 1: Home)
           // Se la destinazione è Home (endScale == homeConfig.modelScale), usa p=t ... wait
           // Compute a pure linear P per positions for simplicity
-          const rawP = endScale === homeConfig.modelScale ? t : (1 - t); 
+          let rawP = endScale === homeConfig.modelScale ? t : (1 - t); 
+          if (isRestoringHome.current) rawP = 1;
           modelRef.current.position.lerpVectors(vec3A, vec3B, rawP);
 
           // Rotazione
@@ -503,8 +501,8 @@ function SceneController({
     else if (isRestoringHome.current) {
         // FLUSSO: RIPRISTINO AUTO DOPO INATTIVITÀ (8s)
         restoreAnimProgress.current += delta;
-        if (restoreAnimProgress.current < 2.0) {
-            const t = Math.min(restoreAnimProgress.current / 2.0, 1.0);
+        if (restoreAnimProgress.current < 1.4) {
+            const t = Math.min(restoreAnimProgress.current / 1.4, 1.0);
             const easeT = 1 - Math.pow(1 - t, 4);
             
             const ePos = new THREE.Vector3(homeConfig.cameraPos.x, homeConfig.cameraPos.y, homeConfig.cameraPos.z);
