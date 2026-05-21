@@ -89,6 +89,8 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
     const physics = useRef({
         currentX: 100, // 0 = open, 100 = closed
         targetX: 100,
+        startX: 100,
+        animStartTime: 0,
         isDragging: false,
         isInteracting: false, // NEW: Interaction sequence tracking
         dragStartX: 0,
@@ -119,9 +121,13 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
 
             // 1. Update Physics
             if (!state.isDragging) {
-                const diff = state.targetX - state.currentX;
-                if (Math.abs(diff) > 0.01) {
-                    state.currentX += diff * ANIMATION_SPEED;
+                if (state.animStartTime > 0) {
+                    const elapsed = performance.now() - state.animStartTime;
+                    const duration = 400; // ms
+                    const t = Math.min(elapsed / duration, 1.0);
+                    // power4.out easing
+                    const easeT = 1 - Math.pow(1 - t, 4);
+                    state.currentX = state.startX + (state.targetX - state.startX) * easeT;
                 } else {
                     state.currentX = state.targetX;
                 }
@@ -169,7 +175,13 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
     useEffect(() => {
         const state = physics.current;
         if (!state.isDragging) {
-            state.targetX = isOpen ? 0 : 100;
+            const newTargetX = isOpen ? 0 : 100;
+            if (state.targetX !== newTargetX || state.animStartTime === 0) {
+                state.startX = state.currentX;
+                state.targetX = newTargetX;
+                state.animStartTime = performance.now();
+                // state.isInteracting = true; // REMOVED: Prevent emitting onDragProgress during click transitions
+            }
         }
     }, [isOpen]);
 
@@ -214,10 +226,14 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
         // DO NOT call onDragProgress(null) here. The loop handles it.
 
         if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
+            state.startX = state.currentX;
             state.targetX = 100;
+            state.animStartTime = performance.now();
             if (isOpen) onClose();
         } else {
+            state.startX = state.currentX;
             state.targetX = 0;
+            state.animStartTime = performance.now();
         }
     };
 

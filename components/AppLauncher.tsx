@@ -27,7 +27,7 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
             className={`
                 absolute left-1/2 -translate-x-1/2 bottom-24 z-[7000]
                 bg-black/70 backdrop-blur-lg rounded-2xl border border-white/20
-                transition-all duration-300 ease-out
+                transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]
                 flex flex-col
                 ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}
             `}

@@ -283,11 +283,11 @@ export default function WeatherModal({ isOpen, onClose, isNight, status, data, e
 
     return (
         <div 
-            className={`fixed inset-0 bg-black/40 backdrop-blur-md z-[9999] flex justify-center items-start pt-[15vh] transition-opacity duration-500 ease-in-out ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`fixed inset-0 bg-black/40 backdrop-blur-md z-[9999] flex justify-center items-start pt-[15vh] transition-opacity duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={onClose}
         >
             <div
-                className={`w-11/12 max-w-[240px] sm:max-w-[288px] md:max-w-[336px] ${theme.bg} ${theme.textPrimary} rounded-2xl shadow-xl p-2 sm:p-3 md:p-4 flex flex-col gap-1 sm:gap-2 md:gap-3 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-12'}`}
+                className={`w-11/12 max-w-[240px] sm:max-w-[288px] md:max-w-[336px] ${theme.bg} ${theme.textPrimary} rounded-2xl shadow-xl p-2 sm:p-3 md:p-4 flex flex-col gap-1 sm:gap-2 md:gap-3 transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-12'}`}
                 onClick={stopPropagation}
                 role="dialog"
                 aria-modal="true"

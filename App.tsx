@@ -384,11 +384,11 @@ function AppContent() {
   const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
 
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>({
-      cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
-      cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
-      modelPos: { x: -5.45, y: -1.00, z: 1.90 }, 
-      modelRot: { x: 0.01, y: -1.49, z: 0.01 },
-      modelScale: 1.25, 
+      cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
+      cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
+      modelPos: { x: -4.90, y: -0.15, z: -0.40 }, 
+      modelRot: { x: 0.01, y: -1.19, z: 0.01 },
+      modelScale: 1.57,
   });
 
   const [headlightConfig, setHeadlightConfig] = useState({
@@ -416,7 +416,7 @@ function AppContent() {
   const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
   const [dayFogNear, setDayFogNear] = useState(13);
-  const [dayFogFar, setDayFogFar] = useState(52);
+  const [dayFogFar, setDayFogFar] = useState(800);
 
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(80);
@@ -516,15 +516,18 @@ function AppContent() {
 
   // Stable callback to update the ref
   const handleDragProgress = useCallback((val: number | null) => {
+    if (isSwitchingRef.current) return;
     dragProgressRef.current = val;
   }, []);
 
   const handleSpotifyDrag = useCallback((progress: number | null) => {
-    if (isMapsLayered && progress !== null) {
+    if (isSwitchingRef.current) return;
+    // If maps is layered, OR we are transitioning back to maps, ignore
+    if ((isMapsLayered || activeApp === 'maps') && progress !== null) {
         return; 
     }
     dragProgressRef.current = progress;
-  }, [isMapsLayered]);
+  }, [isMapsLayered, activeApp]);
 
   // --- NAVIGATE TOOL ANIMATION LOOP ---
   useEffect(() => {
@@ -900,13 +903,34 @@ function AppContent() {
   useEffect(() => { if (youtubeHomeQuotaExceeded) { if (retryIntervalRef.current) clearInterval(retryIntervalRef.current); retryIntervalRef.current = window.setInterval(() => fetchYouTubeHomeData(), 15 * 60 * 1000); } else if (retryIntervalRef.current) { clearInterval(retryIntervalRef.current); retryIntervalRef.current = null; } return () => { if (retryIntervalRef.current) clearInterval(retryIntervalRef.current); }; }, [youtubeHomeQuotaExceeded, fetchYouTubeHomeData]);
   const handleGenericQuotaError = useCallback(() => setYoutubeHomeQuotaExceeded(true), []);
 
-  const toggleApp = (appName: string) => {
+  const isSwitchingRef = useRef(false);
+  const switchTimeoutRef = useRef<number | null>(null);
+
+  const switchApp = useCallback((newApp: string) => {
+      isSwitchingRef.current = true;
+      if (switchTimeoutRef.current) clearTimeout(switchTimeoutRef.current);
+      switchTimeoutRef.current = window.setTimeout(() => {
+          isSwitchingRef.current = false;
+      }, 500);
+      setActiveApp(newApp);
+      setIsMapsLayered(false);
+  }, []);
+
+  const toggleApp = useCallback((appName: string) => {
     setIsAppLauncherOpen(false); setIsCustomizing(false);
-    const willBeActive = activeApp !== appName; if (willBeActive && !dockApps.includes(appName)) setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
-    if (appName === 'spotify' && activeApp === 'maps') { setActiveApp('spotify'); setIsMapsLayered(true); }
-    else if (appName === 'spotify' && activeApp === 'spotify' && isMapsLayered) { setActiveApp('maps'); setIsMapsLayered(false); }
-    else { setIsMapsLayered(false); setActiveApp(prevApp => (prevApp === appName ? null : appName)); }
-  };
+    const willBeActive = activeApp !== appName; 
+    if (willBeActive && !dockApps.includes(appName)) setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
+    
+    if (appName === 'spotify' && activeApp === 'maps') { setActiveApp('spotify'); setIsMapsLayered(true); return; }
+    if (appName === 'spotify' && activeApp === 'spotify' && isMapsLayered) { setActiveApp('maps'); setIsMapsLayered(false); return; }
+    
+    if (activeApp !== null && activeApp !== appName) {
+        switchApp(appName);
+    } else {
+        setIsMapsLayered(false); 
+        setActiveApp(prevApp => (prevApp === appName ? null : appName));
+    }
+  }, [activeApp, dockApps, isMapsLayered, switchApp]);
 
   const toggleLauncher = (e: React.MouseEvent) => { e.stopPropagation(); const newLauncherState = !isAppLauncherOpen; setIsAppLauncherOpen(newLauncherState); if (!newLauncherState) setIsCustomizing(false); };
   const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
@@ -931,7 +955,7 @@ function AppContent() {
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
   return (
-    <div className="relative w-screen h-screen bg-black select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
+    <div id="main-app-container" className="absolute top-0 left-0 w-screen h-screen select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
       <VehicleCanvas isAppOpen={activeApp !== null} isNight={isNight} minOrbitDistance={minOrbitDistance} maxOrbitDistance={maxOrbitDistance} appOpenConfig={appOpenConfig} homeConfig={homeConfig} sceneColors={sceneColors} nightAmbientIntensity={nightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} onInteractionChange={setIsCanvasInteracting} effectiveWeatherCondition={effectiveWeatherCondition} dayFogNear={dayFogNear} dayFogFar={dayFogFar} targetWeatherParams={targetWeatherParams} uiScale={uiScale ?? 1.0} headlightConfig={headlightConfig} dragProgress={dragProgressRef}/>
       <TopStatusBar isNight={useDarkTheme} onWeatherClick={handleWeatherClick} weatherData={weatherData} weatherCondition={effectiveWeatherCondition} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} isHot={isHot} isCold={isCold} tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} mapStyle={mapStyle} isMapVisible={activeApp === 'maps' || isMapsLayered}/>
       <WeatherModal isOpen={isWeatherModalOpen} onClose={() => setWeatherModalOpen(false)} isNight={useDarkTheme} status={weatherStatus} data={weatherData} error={weatherError} effectiveTime={effectiveTime} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} tempUnit={tempUnit}/>
@@ -963,11 +987,9 @@ function AppContent() {
             darkNavigateInputBg={darkNavigateInputBg}
         />
         <SpotifyApp isOpen={activeApp === 'spotify'} onClose={() => toggleApp('spotify')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered} onDragProgress={handleSpotifyDrag} />
-        <AnimatePresence>
-          {activeApp === 'theater' && <TheaterApp onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleDragProgress}/>}
-          {activeApp === 'debug' && (
-                <DebugControls
-                    isOpen={true}
+        <TheaterApp isOpen={activeApp === 'theater'} onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleDragProgress}/>
+        <DebugControls
+            isOpen={activeApp === 'debug'}
                     onClose={() => setActiveApp(null)}
                     onDragProgress={handleDragProgress}
                     isAppView={true}
@@ -1148,10 +1170,8 @@ function AppContent() {
                     skipButtonScale={skipButtonScale}
                     setSkipButtonScale={setSkipButtonScale}
                 />
-          )}
-          {activeApp === 'radio' && <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleDragProgress}/>}
-          {activeApp === 'youtube-music' && <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleDragProgress}/>}
-        </AnimatePresence>
+        <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleDragProgress}/>
+        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleDragProgress}/>
         <AnimatePresence>{arrivalMessage && <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.9 }} className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10" style={{ bottom: '230px' }}>{arrivalMessage}</motion.div>}</AnimatePresence>
         {/* NAVIGATE TOOL CONTAINER */}
         <div ref={navigateToolRef} className="flex items-end" style={navigateToolStyle}>

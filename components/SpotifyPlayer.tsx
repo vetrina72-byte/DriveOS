@@ -88,6 +88,8 @@ const SpotifyPlayer = ({
     const physics = useRef({
         currentPercent: 100, // 0 = open, 100 = closed
         targetPercent: 100,
+        startPercent: 100,
+        animStartTime: 0,
         isDragging: false,
         isInteracting: false, // NEW: Tracks if user interaction sequence is active (drag + settle)
         dragStart: 0,        // Pixel value (X or Y depending on mode)
@@ -100,7 +102,6 @@ const SpotifyPlayer = ({
     const [viewHistory, setViewHistory] = useState<ViewState[]>([]);
 
     // Constants
-    const ANIMATION_SPEED = 0.18; // Lerp factor
     const CLOSE_THRESHOLD_PERCENT = 20; // Drag past 20% to close
 
     // --- MAIN LOOP ---
@@ -112,10 +113,13 @@ const SpotifyPlayer = ({
 
             // 1. Update Physics
             if (!state.isDragging) {
-                // Smoothly interpolate towards target
-                const diff = state.targetPercent - state.currentPercent;
-                if (Math.abs(diff) > 0.01) {
-                    state.currentPercent += diff * ANIMATION_SPEED;
+                if (state.animStartTime > 0) {
+                    const elapsed = performance.now() - state.animStartTime;
+                    const duration = 400; // ms
+                    const t = Math.min(elapsed / duration, 1.0);
+                    // power4.out easing
+                    const easeT = 1 - Math.pow(1 - t, 4);
+                    state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
                 } else {
                     state.currentPercent = state.targetPercent;
                 }
@@ -168,16 +172,22 @@ const SpotifyPlayer = ({
         
         // Only update target if not dragging
         if (!state.isDragging) {
+            const newTargetPercent = isOpen ? 0 : 100;
+            if (state.targetPercent !== newTargetPercent || state.animStartTime === 0) {
+                state.startPercent = state.currentPercent;
+                state.targetPercent = newTargetPercent;
+                state.animStartTime = performance.now();
+                // state.isInteracting = true; // REMOVED: Prevent emitting onDragProgress during click transitions
+            }
+            
             if (isOpen) {
-                state.targetPercent = 0; // Slide IN (0%)
                 const timer = setTimeout(() => triggerHomeContentFetch(), 400);
                 return () => clearTimeout(timer);
             } else {
-                state.targetPercent = 100; // Slide OUT (100%)
                 const timer = setTimeout(() => {
                     setView({ type: 'home' });
                     setViewHistory([]);
-                }, 500);
+                }, 400); // Changed to match 400ms duration
                 return () => clearTimeout(timer);
             }
         }
@@ -238,11 +248,15 @@ const SpotifyPlayer = ({
         // Decision Logic
         if (state.currentPercent > CLOSE_THRESHOLD_PERCENT) {
             // Close
+            state.startPercent = state.currentPercent;
             state.targetPercent = 100;
+            state.animStartTime = performance.now();
             if (isOpen) onClose(); 
         } else {
             // Re-open (Snap back)
+            state.startPercent = state.currentPercent;
             state.targetPercent = 0;
+            state.animStartTime = performance.now();
         }
     };
 
