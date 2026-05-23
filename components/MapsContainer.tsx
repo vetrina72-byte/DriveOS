@@ -1347,7 +1347,7 @@ const MapsContainer = React.memo(({
 
             <h1 id="maps-player-title" className="sr-only">Maps Player</h1>
             
-            <div id="maps-anchored-container" className="absolute inset-0 z-30 pointer-events-none"></div>
+            <div id="maps-anchored-container" className="absolute inset-0 z-50 pointer-events-none"></div>
 
             <iframe
                 ref={iframeRef}

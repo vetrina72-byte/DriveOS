@@ -923,6 +923,11 @@ function AppContent() {
       setIsMapsLayered(false);
   }, []);
 
+  const handleSubAppClose = useCallback(() => {
+      setActiveApp('maps');
+      setIsMapsLayered(false);
+  }, []);
+
   const toggleApp = useCallback((appName: string) => {
     setIsAppLauncherOpen(false); setIsCustomizing(false);
     const willBeActive = activeApp !== appName; 
@@ -935,7 +940,7 @@ function AppContent() {
         return; 
     }
     if (SPLIT_APPS_WITH_MAP_UNDER.includes(appName) && activeApp === appName) { 
-        setActiveApp('maps'); 
+        setActiveApp(null); 
         setIsMapsLayered(false); 
         return; 
     }
@@ -1005,11 +1010,11 @@ function AppContent() {
             nightPlayerButtonColor={nightPlayerButtonColor}
             darkNavigateInputBg={darkNavigateInputBg}
         />
-        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={() => toggleApp('spotify')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered || isMapLayeredBehind} onDragProgress={handleSpotifyDrag} />
-        <TheaterApp isOpen={activeApp === 'theater'} onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
+        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered || isMapLayeredBehind} onDragProgress={handleSpotifyDrag} />
+        <TheaterApp isOpen={activeApp === 'theater'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <DebugControls
             isOpen={activeApp === 'debug'}
-                    onClose={() => toggleApp('debug')}
+                    onClose={handleSubAppClose}
                     onDragProgress={handleSpotifyDrag}
                     isMapsLayered={isMapsLayered || isMapLayeredBehind}
                     isAppView={true}
@@ -1190,8 +1195,8 @@ function AppContent() {
                     skipButtonScale={skipButtonScale}
                     setSkipButtonScale={setSkipButtonScale}
                 />
-        <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
-        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
+        <RadioApp isOpen={activeApp === 'radio'} onClose={handleSubAppClose} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
+        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <AnimatePresence>{arrivalMessage && <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.9 }} className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10" style={{ bottom: '230px' }}>{arrivalMessage}</motion.div>}</AnimatePresence>
         {/* NAVIGATE TOOL CONTAINER */}
         <div ref={navigateToolRef} className="flex items-end" style={navigateToolStyle}>
