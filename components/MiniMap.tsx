@@ -4,6 +4,8 @@ import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { routeStore } from './routeStore';
 import VehicleArrowIcon from './VehicleArrowIcon';
+import { useNavigation } from '../context/NavigationContext';
+import { useWeather } from '../context/WeatherContext';
 
 // Function to create a leaflet icon from the React component - UPDATED
 const createVehicleIcon = (bearing: number): L.DivIcon => {
@@ -89,21 +91,19 @@ const STADIA_API_KEY = 'a09f6dcb-e401-4de9-9609-c4ab6ae1da10';
 const MAPTILER_API_KEY = 'T3ITqSa4x2w9qQOiIENK';
 
 // Main MiniMap component
-const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeStart, fadeEnd, isNight, useDarkTheme, onClick, uiScale }: {
+const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClick, uiScale }: {
     isVisible: boolean;
-    position: { lat: number; lng: number } | null;
-    bearing: number;
     top: number;
     right: number;
     size: number;
     zoom: number;
     fadeStart: number;
     fadeEnd: number;
-    isNight: boolean;
-    useDarkTheme: boolean;
     onClick: (e: React.MouseEvent) => void;
     uiScale: number;
 }) => {
+  const { currentPosition: position, bearing } = useNavigation();
+  const { isNight, useDarkTheme } = useWeather();
   const markerRef = useRef<L.Marker>(null);
 
   useEffect(() => {

@@ -11,8 +11,7 @@ import AppLauncher from './components/AppLauncher';
 import TopStatusBar from './components/TopStatusBar';
 import WeatherModal from './components/WeatherModal';
 import MiniMap from './components/MiniMap';
-import { WeatherData, TempUnit, WeatherParams, RadioStation, NowPlayingState } from './types';
-import { HOT_TEMP, COLD_TEMP } from './components/WeatherIcon';
+import { TempUnit, RadioStation, NowPlayingState } from './types';
 import { routeStore } from './components/routeStore';
 import VehicleArrowIcon from './components/VehicleArrowIcon';
 import DebugControls from './components/DebugControls';
@@ -26,6 +25,12 @@ import VirtualKeyboard from './components/VirtualKeyboard';
 import { SpotifyItem as MediaItem } from './components/PlaylistItem';
 import WebAppViewer from './components/WebAppViewer';
 import NavigateTool, { formatTravelTime } from './components/NavigateTool';
+
+import { isDemoMode, getYouTubeMockHomeData } from './lib/youtubeDemoFallback';
+
+import { WeatherProvider, useWeather } from './context/WeatherContext';
+import { NavigationProvider, useNavigation } from './context/NavigationContext';
+import NavigationStatus from './components/NavigationStatus';
 
 interface AppDefinition {
   id: string;
@@ -45,30 +50,6 @@ const ALL_APPS: AppDefinition[] = [
 
 export const SPLIT_APPS_WITH_MAP_UNDER = ['spotify', 'youtube-music', 'radio', 'theater', 'debug'];
 
-const weatherConfig: Record<string, WeatherParams> = {
-  'Cielo sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
-  'Prevalentemente sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 45, fogFar: 140 },
-  'Parzialmente nuvoloso': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 35, fogFar: 120 },
-  'Coperto': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 25, fogFar: 80 },
-  'Pioggerella': { rainDensity: 0.2, rainSpeed: 5, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 20, fogFar: 60 },
-  'Pioggia leggera': { rainDensity: 0.4, rainSpeed: 8, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 18, fogFar: 50 },
-  'Pioggia': { rainDensity: 0.7, rainSpeed: 11, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 15, fogFar: 40 },
-  'Pioggia forte': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
-  'Rovescio': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 10, fogFar: 30 },
-  'Temporale': { rainDensity: 1.0, rainSpeed: 18, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 8, fogFar: 25 },
-  'Neve leggera': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.4, snowSpeed: 1.5, hailDensity: 0, fogNear: 15, fogFar: 40 },
-  'Neve': { rainDensity: 0, rainSpeed: 0, snowDensity: 0.7, snowSpeed: 3.0, hailDensity: 0, fogNear: 12, fogFar: 35 },
-  'Neve forte': { rainDensity: 0, rainSpeed: 0, snowDensity: 1.0, snowSpeed: 6.0, hailDensity: 0, fogNear: 8, fogFar: 25 },
-  'Grandine': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 1.0, fogNear: 12, fogFar: 35 },
-  'Nebbia': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 1, fogFar: 20 },
-  'Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
-  'Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 130 },
-  'Cloudy Sunrise': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
-  'Cloudy Sunset': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 30, fogFar: 100 },
-  'Partly Cloudy Night': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 40, fogFar: 120 },
-  'Default': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
-};
-
 const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 hover:text-white' }: { 
   icon: React.ComponentType<any>, 
   onClick: (e: React.MouseEvent) => void, 
@@ -79,203 +60,6 @@ const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 
     <Icon className="w-8 h-8" />
   </button>
 );
-
-const NavigationStatus = ({ target, currentPosition, isNight, onCancel, tripInfo, simulatedRemainingDistance, width, widgetBgColor }: {
-    target: { lat: number, lng: number, name: string },
-    currentPosition: { lat: number, lng: number } | null,
-    isNight: boolean,
-    onCancel: (message?: string) => void,
-    tripInfo: { time: number, distance: number } | null,
-    simulatedRemainingDistance: number | null,
-    width: number,
-    widgetBgColor: string,
-}) => {
-    const [totalDistance, setTotalDistance] = useState<number | null>(null);
-    const [remainingDistance, setRemainingDistance] = useState<number | null>(null);
-    const [remainingTime, setRemainingTime] = useState<number | null>(null);
-    const routeRef = useRef<[number, number][] | null>(null);
-    const trackRef = useRef<HTMLDivElement>(null);
-    const arrowIndicatorRef = useRef<HTMLDivElement>(null);
-    const isNewTrip = useRef(false);
-    const ARROW_SIZE = 44;
-
-    useEffect(() => {
-        const unsubscribe = routeStore.subscribe(coords => {
-            routeRef.current = coords;
-        });
-        return unsubscribe;
-    }, []);
-
-    useEffect(() => {
-        if (target && tripInfo) {
-            const totalDistKm = tripInfo.distance / 1000;
-            setTotalDistance(totalDistKm);
-            setRemainingDistance(totalDistKm);
-            setRemainingTime(tripInfo.time / 60); 
-            isNewTrip.current = true;
-        } else {
-            setTotalDistance(null);
-            setRemainingDistance(null);
-            setRemainingTime(null);
-        }
-    }, [target, tripInfo]);
-
-    useEffect(() => {
-        if (!currentPosition || !routeRef.current || totalDistance === null) return;
-        
-        if (isNewTrip.current) {
-            isNewTrip.current = false;
-            return;
-        }
-
-        let minDistanceSq = Infinity;
-        let closestIndex = 0;
-        
-        for (let i = 0; i < routeRef.current.length; i++) {
-            const dLat = routeRef.current[i][0] - currentPosition.lat;
-            const dLng = routeRef.current[i][1] - currentPosition.lng;
-            const distSq = dLat * dLat + dLng * dLng;
-            if (distSq < minDistanceSq) {
-                minDistanceSq = distSq;
-                closestIndex = i;
-            }
-        }
-
-        let remDist = 0;
-        for (let i = closestIndex; i < routeRef.current.length - 1; i++) {
-            remDist += calculateGeoDistance(routeRef.current[i][0], routeRef.current[i][1], routeRef.current[i+1][0], routeRef.current[i+1][1]);
-        }
-        
-        setRemainingDistance(remDist);
-
-        if (tripInfo?.time && totalDistance > 0) {
-            const timeInMinutes = tripInfo.time / 60;
-            const remainingTimeCalc = (remDist / totalDistance) * timeInMinutes;
-            setRemainingTime(remainingTimeCalc);
-        } else {
-            setRemainingTime(null);
-        }
-
-        if (remDist < 0.05) { 
-            onCancel('Sei arrivato a destinazione!');
-        }
-
-    }, [currentPosition, totalDistance, onCancel, tripInfo]);
-
-    const { percent } = useMemo(() => {
-        const track = trackRef.current;
-        if (!track) {
-            return { percent: 0 };
-        }
-        
-        const effectiveRemaining = simulatedRemainingDistance ?? remainingDistance;
-        const hasRouteData = totalDistance !== null && totalDistance > 0 && effectiveRemaining !== null;
-
-        if (!hasRouteData) {
-            return { percent: 0 };
-        }
-
-        const p = totalDistance > 0 ? 1 - (effectiveRemaining / totalDistance) : 0;
-        const clampedP = Math.max(0, Math.min(1, p));
-        
-        return { percent: clampedP };
-    }, [totalDistance, remainingDistance, simulatedRemainingDistance]);
-
-    useEffect(() => {
-        const arrow = arrowIndicatorRef.current;
-        if (arrow) {
-            arrow.style.opacity = '1';
-        }
-    }, [percent]);
-
-    const theme = {
-        bg: 'var(--player-bg)',
-    };
-
-    return (
-        <div 
-            className={`relative backdrop-blur-md rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0`}
-            style={{ 
-                width: `${width}px`,
-                height: '113px',
-                background: !isNight ? widgetBgColor : theme.bg
-            }}
-        >
-            <div className="p-4 flex flex-col h-full justify-between">
-                <div className="flex justify-between items-start">
-                    <div className="flex-grow min-w-0 pr-2">
-                        <p className={`font-semibold truncate text-base ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>{target.name}</p>
-                         <div className={`flex items-center gap-2 text-sm font-medium ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                            <span>{formatTravelTime(remainingTime)}</span>
-                            <span className="text-xs">&#9679;</span>
-                            <span>{remainingDistance?.toFixed(1) ?? '--'} km</span>
-                        </div>
-                    </div>
-                     <button onClick={() => onCancel('Navigazione terminata.')} className={`flex-shrink-0 flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors ${isNight ? 'bg-red-800/50 hover:bg-red-800/80 text-red-200' : 'bg-red-100 hover:bg-red-200 text-red-700'}`}>
-                        <ICONS.endTrip className="w-4 h-4" />
-                        <span>Termina</span>
-                    </button>
-                </div>
-
-                <div className="relative w-full h-10">
-                    <div 
-                        ref={trackRef} 
-                        className="absolute top-1/2 -translate-y-1/2 w-full h-2.5"
-                    >
-                        <div 
-                            className="w-full h-full rounded-full"
-                            style={{ backgroundColor: isNight ? 'rgba(90, 90, 100, 0.6)' : '#e5e7eb' }} 
-                        />
-                        <div 
-                            className="absolute top-0 left-0 h-full rounded-full bg-blue-500" 
-                            style={{ 
-                                width: `${percent * 100}%`,
-                                transition: 'width 300ms linear'
-                            }}
-                        />
-                    </div>
-                    <div 
-                        ref={arrowIndicatorRef}
-                        className="absolute top-1/2 z-10"
-                        style={{ 
-                            left: `${percent * 100}%`,
-                            transform: `translate(-50%, -50%)`,
-                            opacity: 1,
-                            transition: 'left 300ms linear',
-                        }}
-                        aria-label="Vehicle position indicator"
-                    >
-                        <VehicleArrowIcon size={ARROW_SIZE} bearing={90} />
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-const degToCompass = (num: number) => {
-    const val = Math.floor((num / 45) + 0.5);
-    const arr = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
-    return arr[(val % 8)];
-};
-const timestampToHHMM = (ts: number) => {
-    const date = new Date(ts * 1000);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-};
-
-const wmoCodeToCondition = (code: number): string => {
-    const mapping: { [key: number]: string } = {
-        0: 'Cielo sereno', 1: 'Prevalentemente sereno', 2: 'Parzialmente nuvoloso', 3: 'Coperto',
-        45: 'Nebbia', 48: 'Nebbia', 51: 'Pioggerella', 53: 'Pioggerella', 55: 'Pioggerella',
-        56: 'Pioggerella', 57: 'Pioggerella', 61: 'Pioggia leggera', 63: 'Pioggia', 65: 'Pioggia forte',
-        66: 'Pioggia', 67: 'Pioggia', 71: 'Neve leggera', 73: 'Neve', 75: 'Neve forte', 77: 'Grandine',
-        80: 'Rovescio', 81: 'Rovescio', 82: 'Rovescio', 85: 'Neve', 86: 'Neve', 95: 'Temporale',
-        96: 'Temporale', 99: 'Temporale',
-    };
-    return mapping[code] ?? 'Parzialmente nuvoloso';
-};
 
 const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
     if (!item || !item.snippet) return null;
@@ -296,7 +80,7 @@ const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
     };
 };
 
-const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
 
 type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
 
@@ -339,17 +123,6 @@ export const initialSceneColors: SceneColors = {
   }
 };
 
-function calculateGeoDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371; 
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
-
 const DEFAULT_HOME_CONFIG: SceneConfig = {
     cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
     cameraTarget: { x: -1.30, y: -0.40, z: 0.05 }, 
@@ -358,13 +131,73 @@ const DEFAULT_HOME_CONFIG: SceneConfig = {
     modelScale: 2.68,
 };
 
+const ArrivalToast = () => {
+    const { arrivalMessage } = useNavigation();
+    return (
+        <AnimatePresence>
+            {arrivalMessage && (
+                <motion.div 
+                    initial={{ opacity: 0, y: 50, scale: 0.9 }} 
+                    animate={{ opacity: 1, y: 0, scale: 1 }} 
+                    exit={{ opacity: 0, y: 50, scale: 0.9 }} 
+                    className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10" 
+                    style={{ bottom: '230px' }}
+                >
+                    {arrivalMessage}
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+};
+
+const NavigationWidget = ({ 
+    navigateToolRef, 
+    navigateToolStyle, 
+    navigateToolWidth, 
+    widgetBgColor, 
+    dayPlayerButtonColor, 
+    nightPlayerButtonColor, 
+    darkNavigateInputBg, 
+    isHome 
+}: { 
+    navigateToolRef: React.RefObject<HTMLDivElement | null>;
+    navigateToolStyle: React.CSSProperties;
+    navigateToolWidth: number;
+    widgetBgColor: string;
+    dayPlayerButtonColor: string;
+    nightPlayerButtonColor: string;
+    darkNavigateInputBg: string;
+    isHome: boolean;
+}) => {
+    const { navigationTarget } = useNavigation();
+    const { useDarkTheme } = useWeather();
+    return (
+        <div ref={navigateToolRef} className="flex items-end" style={navigateToolStyle}>
+            {navigationTarget ? (
+                <NavigationStatus width={navigateToolWidth} widgetBgColor={widgetBgColor}/>
+            ) : (
+                <NavigateTool 
+                    isNight={useDarkTheme} 
+                    width={navigateToolWidth} 
+                    widgetBgColor={widgetBgColor} 
+                    dayPlayerButtonColor={dayPlayerButtonColor} 
+                    nightPlayerButtonColor={nightPlayerButtonColor} 
+                    darkNavigateInputBg={darkNavigateInputBg} 
+                    isHome={isHome}
+                />
+            )}
+        </div>
+    );
+};
+
 function AppContent() {
   const { nowPlaying, setNowPlaying, pauseSpotify } = useAuth();
-
-  const [timeOverride, setTimeOverride] = useState<Date | null>(null);
-  const [weatherConditionOverride, setWeatherConditionOverride] = useState<string | null>(null);
-  const [sunsetArrowYPosition, setSunsetArrowYPosition] = useState(1);
-  const [sunriseArrowYPosition, setSunriseArrowYPosition] = useState(5);
+  const {
+    isNight,
+    useDarkTheme,
+    effectiveWeatherCondition,
+    targetWeatherParams,
+  } = useWeather();
 
   const [topBarScale, setTopBarScale] = useState(1.0);
   const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
@@ -627,6 +460,23 @@ function AppContent() {
     setKeyboardTarget(null);
   }, [keyboardTarget]);
 
+  // --- NAVIGATION CUSTOM EVENT SUBSCRIBERS ---
+  useEffect(() => {
+    const handleSelectDestEvent = () => {
+      setActiveApp('maps');
+    };
+    const handleMapInterEvent = () => {
+      handleKeyboardClose();
+    };
+
+    window.addEventListener('select-destination', handleSelectDestEvent);
+    window.addEventListener('map-interaction', handleMapInterEvent);
+    return () => {
+      window.removeEventListener('select-destination', handleSelectDestEvent);
+      window.removeEventListener('map-interaction', handleMapInterEvent);
+    };
+  }, [handleKeyboardClose]);
+
   // --- CASCADING CLOSE LOGIC ---
   const handleCloseMaps = useCallback(() => {
     setActiveApp(null);
@@ -684,28 +534,7 @@ function AppContent() {
   }, []);
 
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
-  const [isWeatherModalOpen, setWeatherModalOpen] = useState(false);
-  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
-  const [weatherError, setWeatherError] = useState<string | null>(null);
-  const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle');
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [tempUnit, setTempUnit] = useState<TempUnit>('C');
-  const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [bearing, setBearing] = useState(0);
-  const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
-  const [arrivalMessage, setArrivalMessage] = useState<string | null>(null);
-  const arrivalTimeoutRef = useRef<number | null>(null);
-  const [tripInfo, setTripInfo] = useState<{ time: number, distance: number } | null>(null);
-  const [throttledPosition, setThrottledPosition] = useState(currentPosition);
-  const [homeLocation, setHomeLocation] = useState<{ lat: number, lng: number, name: string } | null>(null);
-  const [workLocation, setWorkLocation] = useState<{ lat: number, lng: number, name: string } | null>(null);
-  const [favoriteLocations, setFavoriteLocations] = useState<{ lat: number, lng: number, name: string }[]>([]);
-
-  const [simulatedRemainingDistance, setSimulatedRemainingDistance] = useState<number | null>(null);
-  const simulationIntervalRef = useRef<number | null>(null);
-  
-  const [navigationTarget, setNavigationTarget] = useState<{ lat: number, lng: number, name: string } | null>(null);
-  const [mapStyle, setMapStyle] = useState('dark');
   
   const handlePlayStation = (station: RadioStation, context: RadioStation[]) => {
       pauseSpotify();
@@ -721,132 +550,8 @@ function AppContent() {
       setNowPlaying(prev => ({ ...prev, radioStation: radioContext[nextIndex] }));
   };
 
-  const startTripSimulation = useCallback(() => {
-    if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
-    if (!tripInfo) return;
-    const totalDistKm = tripInfo.distance / 1000;
-    let currentDist = totalDistKm;
-    setSimulatedRemainingDistance(currentDist);
-    simulationIntervalRef.current = window.setInterval(() => {
-        currentDist -= totalDistKm / 100; 
-        if (currentDist <= 0) {
-            currentDist = 0;
-            if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
-        }
-        setSimulatedRemainingDistance(currentDist);
-    }, 200);
-  }, [tripInfo]);
-
-  const stopTripSimulation = useCallback(() => {
-    if (simulationIntervalRef.current) { clearInterval(simulationIntervalRef.current); simulationIntervalRef.current = null; }
-    setSimulatedRemainingDistance(null);
-  }, []);
-
-  const handleSelectDestination = (target: { lat: number, lng: number, name: string }) => { setNavigationTarget(target); setActiveApp('maps'); };
-  
-  const handleCancelNavigation = useCallback((message?: string) => {
-    setNavigationTarget(null); setTripInfo(null); routeStore.setRoute(null);
-    const mapsIframe = document.querySelector('iframe[title="Tesla Navigation"]');
-    if (mapsIframe && (mapsIframe as HTMLIFrameElement).contentWindow) { (mapsIframe as HTMLIFrameElement).contentWindow.postMessage({ type: 'CLEAR_ROUTE_FROM_PARENT' }, '*'); }
-    if (message) { setArrivalMessage(message); if (arrivalTimeoutRef.current) clearTimeout(arrivalTimeoutRef.current); arrivalTimeoutRef.current = window.setTimeout(() => setArrivalMessage(null), 5000); }
-  }, []);
-
-  // --- MAP INTERACTION HANDLER FOR KEYBOARD DISMISSAL ---
-  // Moved here to fix "Block-scoped variable used before declaration" error
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'ROUTE_CLEARED') handleCancelNavigation();
-      if (event.data?.type === 'ROUTE_UPDATED' && event.data.payload) {
-        const { geometry, info, target } = event.data.payload;
-        const routeData: [number, number][] = geometry.map((coords: [number, number]) => [coords[1], coords[0]]);
-        routeStore.setRoute(routeData); setTripInfo(info); 
-        // When route updates, don't overwrite if we already have the target (to preserve custom name), 
-        // unless it's a new nav started from within map
-        if (target) {
-             setNavigationTarget(prev => prev ? prev : target);
-        }
-      }
-      if (event.data?.type === 'MAP_STYLE_CHANGED') setMapStyle(event.data.payload.style);
-      if (event.data?.type === 'SAVE_LOCATION' && event.data.payload) {
-        const { type, coords, name } = event.data.payload;
-        const locationData = { lat: coords.lat, lng: coords.lng, name };
-        if (type === 'home') { setHomeLocation(locationData); localStorage.setItem('home_location', JSON.stringify(locationData)); }
-        else if (type === 'work') { setWorkLocation(locationData); localStorage.setItem('work_location', JSON.stringify(locationData)); }
-      }
-       if (event.data?.type === 'SAVE_FAVORITE' && event.data.payload) {
-            const newFavorite = event.data.payload;
-            setFavoriteLocations(prev => {
-                if (prev.some(f => f.name === newFavorite.name)) return prev;
-                const updatedFavorites = [newFavorite, ...prev]; localStorage.setItem('favorite_locations', JSON.stringify(updatedFavorites));
-                return updatedFavorites;
-            });
-        }
-        // Listen for MAP_INTERACTION from MapsContainer
-        if (event.data?.type === 'MAP_INTERACTION') {
-            handleKeyboardClose();
-        }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [handleCancelNavigation, handleKeyboardClose]); // Added handleKeyboardClose
-
-  useEffect(() => {
-    try {
-        const storedHome = localStorage.getItem('home_location'); if (storedHome) setHomeLocation(JSON.parse(storedHome));
-        const storedWork = localStorage.getItem('work_location'); if (storedWork) setWorkLocation(JSON.parse(storedWork));
-        const storedFavorites = localStorage.getItem('favorite_locations'); if (storedFavorites) setFavoriteLocations(JSON.parse(storedFavorites));
-    } catch (e) { console.error(e); }
-  }, []);
-
   useEffect(() => { const intervalId = setInterval(() => setCurrentTime(new Date()), 60000); return () => clearInterval(intervalId); }, []);
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude, heading } = position.coords;
-          const newPos = { lat: latitude, lng: longitude };
-          setCurrentPosition(newPos);
-          if (heading !== null && heading !== undefined) {
-              setBearing(prevBearing => { let diff = heading - prevBearing; if (diff > 180) diff -= 360; if (diff < -180) diff += 360; return (prevBearing + diff * 0.3 + 360) % 360; });
-          }
-          lastPositionRef.current = newPos;
-        },
-        (error) => console.warn(error.message),
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
-      );
-      return () => navigator.geolocation.clearWatch(watchId);
-    }
-  }, []);
-  
-  useEffect(() => { const handler = setTimeout(() => { if (currentPosition) setThrottledPosition(currentPosition); }, 250); return () => clearTimeout(handler); }, [currentPosition]);
-
-  const effectiveTime = timeOverride || currentTime;
-
-  const { isNight, effectiveWeatherCondition, isHot, isCold } = useMemo(() => {
-    const now = effectiveTime; let night: boolean; let condition: string;
-    if (weatherData?.details?.sunrise && weatherData?.details?.sunset) {
-        const sunriseDate = new Date(now.getTime()); const sunsetDate = new Date(now.getTime());
-        const [sr_h, sr_m] = weatherData.details.sunrise.split(':').map(Number);
-        const [ss_h, ss_m] = weatherData.details.sunset.split(':').map(Number);
-        sunriseDate.setHours(sr_h, sr_m, 0, 0); sunsetDate.setHours(ss_h, ss_m, 0, 0);
-        night = now.getTime() < sunriseDate.getTime() || now.getTime() >= sunsetDate.getTime();
-        const isCloudy = /nuvol|nebbia|coperto/i.test(weatherData.current.condition);
-        if (now.getHours() === sunriseDate.getHours()) condition = isCloudy ? 'Cloudy Sunrise' : 'Sunrise';
-        else if (now.getHours() === sunsetDate.getHours()) condition = isCloudy ? 'Cloudy Sunset' : 'Sunset';
-        else condition = weatherData.current.condition;
-    } else {
-        const hour = now.getHours(); const month = now.getMonth();
-        night = hour < (month >= 3 && month <= 8 ? 6 : 7) || hour >= (month >= 3 && month <= 8 ? 20 : 17);
-        condition = 'Nuvoloso';
-    }
-    const finalCondition = weatherConditionOverride || condition;
-    const currentTemp = weatherData?.hourly.find(h => new Date(h.dt * 1000).getHours() === now.getHours())?.temperature ?? weatherData?.current.temperature ?? 20;
-    return { isNight: night, effectiveWeatherCondition: finalCondition, isHot: currentTemp >= HOT_TEMP && !/nuvol|coperto|piogg|rovescio|nev|nebbia|temporale|grandin/i.test(finalCondition), isCold: currentTemp <= COLD_TEMP };
-  }, [effectiveTime, weatherData, weatherConditionOverride]);
-
-  const useDarkTheme = isNight || /temporale|pioggia|rovescio|grandine|neve|nebbia/i.test(effectiveWeatherCondition.toLowerCase());
-  
   useEffect(() => {
     const root = document.documentElement;
     if (useDarkTheme) {
@@ -858,44 +563,17 @@ function AppContent() {
     }
   }, [useDarkTheme, darkVolumeTrackBg, darkVolumeThumbBg, darkVolumeFillBg, darkPlayerBg]);
 
-  const targetWeatherParams = useMemo(() => weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'], [effectiveWeatherCondition]);
-
-  const fetchWeatherData = useCallback(async (latitude: number, longitude: number) => {
-      setWeatherStatus('fetching'); setWeatherError(null);
-      try {
-          const [weatherResponse, locationResponse] = await Promise.all([
-              fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`),
-              fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`)
-          ]);
-          const weatherApiData = await weatherResponse.json(); const locationData = await locationResponse.json();
-          if (weatherApiData.error) throw new Error(`Open-Meteo Error: ${weatherApiData.reason}`);
-          const locationName = locationData.address?.city || locationData.address?.town || locationData.address?.village || locationData.address?.county || 'Current Location';
-          const mappedData: Omit<WeatherData, 'lastUpdated'> = {
-              locationName, current: { temperature: Math.round(weatherApiData.current.temperature_2m), condition: wmoCodeToCondition(weatherApiData.current.weather_code), high: Math.round(weatherApiData.daily.temperature_2m_max[0]), low: Math.round(weatherApiData.daily.temperature_2m_min[0]) },
-              hourly: weatherApiData.hourly.time.map((isoTime: string, index: number) => ({ time: new Date(isoTime).getHours().toString().padStart(2, '0') + ':00', dt: new Date(isoTime).getTime() / 1000, temperature: Math.round(weatherApiData.hourly.temperature_2m[index]), condition: wmoCodeToCondition(weatherApiData.hourly.weather_code[index]) })),
-              details: { chanceOfRain: Math.round(weatherApiData.current.precipitation_probability ?? 0), humidity: Math.round(weatherApiData.current.relative_humidity_2m), wind: `${Math.round(weatherApiData.current.wind_speed_10m)} km/h ${degToCompass(weatherApiData.current.wind_direction_10m)}`, sunrise: timestampToHHMM(new Date(weatherApiData.daily.sunrise[0]).getTime() / 1000), sunset: timestampToHHMM(new Date(weatherApiData.daily.sunset[0]).getTime() / 1000) }
-          };
-          setWeatherData({ ...mappedData, lastUpdated: new Date() }); setWeatherStatus('success');
-      } catch (error: any) { setWeatherError(error.message || "Impossibile recuperare i dati."); setWeatherData(null); setWeatherStatus('error'); }
-  }, []);
-
-  const requestWeather = useCallback(() => {
-    setWeatherData(null); setWeatherError(null); setWeatherStatus('locating');
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => { if (position.coords.accuracy > 1500) { setWeatherError("Posizione troppo imprecisa."); setWeatherStatus('error'); return; } fetchWeatherData(position.coords.latitude, position.coords.longitude); },
-            (error) => { setWeatherError("Impossibile ottenere la posizione."); setWeatherStatus('error'); },
-            { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
-        );
-    } else { setWeatherError("Geolocalizzazione non supportata."); setWeatherStatus('error'); }
-  }, [fetchWeatherData]);
-
-  useEffect(() => { requestWeather(); const intervalId = setInterval(requestWeather, 15 * 60 * 1000); return () => clearInterval(intervalId); }, [requestWeather]);
-  const handleWeatherClick = () => { setWeatherModalOpen(true); if (weatherStatus !== 'locating' && weatherStatus !== 'fetching') { if (!weatherData || (new Date().getTime() - weatherData.lastUpdated.getTime()) > 300000) requestWeather(); } };
-  
   const fetchYouTubeHomeData = useCallback(async () => {
     if (Object.keys(youtubeHomeData).length > 0 && !youtubeHomeQuotaExceeded) return;
     setYoutubeHomeIsLoading(true); setYoutubeHomeError(null);
+    if (isDemoMode(YOUTUBE_API_KEY)) {
+        setTimeout(() => {
+            setYoutubeHomeData(getYouTubeMockHomeData() as any);
+            setYoutubeHomeQuotaExceeded(false);
+            setYoutubeHomeIsLoading(false);
+        }, 300);
+        return;
+    }
     try {
         const endpoints = [ `videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10`, `search?part=snippet&q=official pop hits playlist&type=playlist&maxResults=10`, `search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10`, `search?part=snippet&q=musica italiana playlist&type=playlist&maxResults=10`, `search?part=snippet&q=workout music playlist&type=playlist&maxResults=10`, `search?part=snippet&q=acoustic sessions live&type=video&maxResults=10` ];
         const responses = await Promise.all(endpoints.map(ep => fetch(`https://www.googleapis.com/youtube/v3/${ep}&key=${YOUTUBE_API_KEY}`)));
@@ -981,28 +659,22 @@ function AppContent() {
   return (
     <div id="main-app-container" className="absolute top-0 left-0 w-full h-full select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
       <VehicleCanvas isAppOpen={activeApp !== null} isNight={isNight} minOrbitDistance={minOrbitDistance} maxOrbitDistance={maxOrbitDistance} appOpenConfig={appOpenConfig} homeConfig={homeConfig} sceneColors={sceneColors} nightAmbientIntensity={nightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} onInteractionChange={setIsCanvasInteracting} effectiveWeatherCondition={effectiveWeatherCondition} dayFogNear={dayFogNear} dayFogFar={dayFogFar} targetWeatherParams={targetWeatherParams} uiScale={uiScale ?? 1.0} headlightConfig={headlightConfig} dragProgress={dragProgressRef}/>
-      <TopStatusBar isNight={useDarkTheme} onWeatherClick={handleWeatherClick} weatherData={weatherData} weatherCondition={effectiveWeatherCondition} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} isHot={isHot} isCold={isCold} tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} mapStyle={mapStyle} isMapVisible={shouldShowMap}/>
-      <WeatherModal isOpen={isWeatherModalOpen} onClose={() => setWeatherModalOpen(false)} isNight={useDarkTheme} status={weatherStatus} data={weatherData} error={weatherError} effectiveTime={effectiveTime} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} tempUnit={tempUnit}/>
-      <MiniMap isVisible={activeApp === null && !isCanvasInteracting} position={currentPosition} bearing={bearing} isNight={isNight} useDarkTheme={useDarkTheme} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
+      <TopStatusBar tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} isMapVisible={shouldShowMap}/>
+      <WeatherModal tempUnit={tempUnit}/>
+      <MiniMap isVisible={activeApp === null && !isCanvasInteracting} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
         <MapsContainer 
             isOpen={shouldShowMap} 
             onClose={handleCloseMaps} 
             onInteractionStart={handleMapsInteractionStart} 
-            isNight={useDarkTheme} 
             searchPanelWidth={mapsSearchPanelWidth} // This prop is now ignored by MapsContainer in favor of width, but kept for compatibility if needed
             searchPanelTop={mapsSearchPanelTop} 
-            navigationTarget={navigationTarget} 
             spotifyPlayerTop={spotifyPlayerTop} 
             spotifyPlayerBottom={spotifyPlayerBottom} 
             satelliteLabelBrightness={satelliteLabelBrightness} 
             satelliteLabelOutlineWidth={satelliteLabelOutlineWidth} 
             onDragProgress={handleDragProgress}
-            currentPosition={currentPosition}
-            homeLocation={homeLocation}
-            workLocation={workLocation}
-            onSelectDestination={handleSelectDestination}
             // NEW PROPS FOR NAVIGATE TOOL CONSISTENCY
             width={navigateToolWidth}
             widgetBgColor={widgetBgColor}
@@ -1018,18 +690,6 @@ function AppContent() {
                     onDragProgress={handleSpotifyDrag}
                     isMapsLayered={isMapsLayered || isMapLayeredBehind}
                     isAppView={true}
-                    timeOverride={timeOverride}
-                    setTimeOverride={setTimeOverride}
-                    sunsetArrowYPosition={sunsetArrowYPosition}
-                    setSunsetArrowYPosition={setSunsetArrowYPosition}
-                    sunriseArrowYPosition={sunriseArrowYPosition}
-                    setSunriseArrowYPosition={setSunriseArrowYPosition}
-                    weatherConditionOverride={weatherConditionOverride}
-                    setWeatherConditionOverride={setWeatherConditionOverride}
-                    effectiveWeatherCondition={effectiveWeatherCondition}
-                    isNight={isNight}
-                    isHot={isHot}
-                    isCold={isCold}
                     topBarScale={topBarScale}
                     setTopBarScale={setTopBarScale}
                     topBarOffsetY={topBarOffsetY}
@@ -1084,10 +744,6 @@ function AppContent() {
                     setNightFrontLightIntensity={setNightFrontLightIntensity}
                     nightEnvironmentIntensity={nightEnvironmentIntensity}
                     setNightEnvironmentIntensity={setNightEnvironmentIntensity}
-                    tripInfo={tripInfo}
-                    startTripSimulation={startTripSimulation}
-                    stopTripSimulation={stopTripSimulation}
-                    isSimulating={!!simulationIntervalRef.current}
                     playerControlsSize={playerControlsSize}
                     setPlayerControlsSize={setPlayerControlsSize}
                     playerControlsGap={playerControlsGap}
@@ -1197,11 +853,18 @@ function AppContent() {
                 />
         <RadioApp isOpen={activeApp === 'radio'} onClose={handleSubAppClose} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
-        <AnimatePresence>{arrivalMessage && <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.9 }} className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10" style={{ bottom: '230px' }}>{arrivalMessage}</motion.div>}</AnimatePresence>
+        <ArrivalToast />
         {/* NAVIGATE TOOL CONTAINER */}
-        <div ref={navigateToolRef} className="flex items-end" style={navigateToolStyle}>
-            {navigationTarget ? <NavigationStatus target={navigationTarget} currentPosition={throttledPosition} isNight={useDarkTheme} onCancel={handleCancelNavigation} tripInfo={tripInfo} simulatedRemainingDistance={simulatedRemainingDistance} width={navigateToolWidth} widgetBgColor={widgetBgColor}/> : <NavigateTool isNight={useDarkTheme} onSelectDestination={handleSelectDestination} currentPosition={currentPosition} width={navigateToolWidth} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} homeLocation={homeLocation} workLocation={workLocation} darkNavigateInputBg={darkNavigateInputBg} isHome={activeApp === null}/>}
-        </div>
+        <NavigationWidget 
+            navigateToolRef={navigateToolRef}
+            navigateToolStyle={navigateToolStyle}
+            navigateToolWidth={navigateToolWidth}
+            widgetBgColor={widgetBgColor}
+            dayPlayerButtonColor={dayPlayerButtonColor}
+            nightPlayerButtonColor={nightPlayerButtonColor}
+            darkNavigateInputBg={darkNavigateInputBg}
+            isHome={activeApp === null}
+        />
         <MusicPlayer activeApp={activeApp} onStationChange={handleStationChange} isAnyAppOpen={isHomeScreenDocked} isNight={useDarkTheme} dockedConfig={{ width: playerDockedWidth, bottom: playerFloatingBottom, left: playerDockedLeft, height: playerDockedHeight }} floatingConfig={{ width: playerFloatingWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: navigateToolWidth }} playerControlsSize={playerControlsSize} playerControlsGap={playerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} spinnerSize={spinnerSize} spinnerShuffleGap={spinnerShuffleGap} debugSpinner={debugSpinner} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} favoriteStationUUIDs={favoriteStationUUIDs} onToggleFavorite={handleToggleFavorite} queuePopoverHeight={queuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} queuePopoverWidth={queuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} spinnerTop={spinnerTop} spinnerRight={spinnerRight} spinnerBottom={spinnerBottom} spinnerLeft={spinnerLeft} dragProgress={dragProgressRef} progressBarHeight={progressBarHeight} progressBarVerticalOffset={progressBarVerticalOffset} playButtonScale={playButtonScale} skipButtonScale={skipButtonScale} />
         <AppLauncher isOpen={isAppLauncherOpen} width={appLauncherWidth} height={appLauncherHeight} apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)} isCustomizing={isCustomizing} onCustomizeClick={moveAppToDock} onAppLaunch={toggleApp} isNight={useDarkTheme}/>
         {isAppLauncherOpen && <button onClick={(e) => { e.stopPropagation(); setIsCustomizing(prev => !prev); }} className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'} ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} style={{ bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)` }}>{isCustomizing ? 'Fine' : 'Personalizza'}</button>}
@@ -1227,7 +890,11 @@ export default function App() {
   return (
     <VehicleProvider>
       <AuthProvider>
-        <AppContent />
+        <WeatherProvider>
+          <NavigationProvider>
+            <AppContent />
+          </NavigationProvider>
+        </WeatherProvider>
       </AuthProvider>
     </VehicleProvider>
   );

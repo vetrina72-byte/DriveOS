@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { WeatherData, TempUnit } from '../types';
+import { useWeather } from '../context/WeatherContext';
+import { useNavigation } from '../context/NavigationContext';
 
 type TimeParts = {
   time: string;
@@ -8,38 +10,32 @@ type TimeParts = {
 };
 
 export default function TopStatusBar({ 
-  isNight, 
-  onWeatherClick, 
-  weatherData,
-  weatherCondition,
-  sunsetArrowYPosition,
-  sunriseArrowYPosition,
-  isHot,
-  isCold,
   tempUnit,
   setTempUnit,
   scale,
   offsetY,
   setTopBarOffsetY,
-  mapStyle,
   isMapVisible,
 }: { 
-  isNight: boolean, 
-  onWeatherClick: () => void, 
-  weatherData: WeatherData | null,
-  weatherCondition: string,
-  sunsetArrowYPosition: number,
-  sunriseArrowYPosition: number,
-  isHot: boolean,
-  isCold: boolean,
   tempUnit: TempUnit,
   setTempUnit: React.Dispatch<React.SetStateAction<TempUnit>>,
   scale: number,
   offsetY: number,
   setTopBarOffsetY?: (offset: number) => void,
-  mapStyle: string,
   isMapVisible: boolean,
 }) {
+  const { mapStyle } = useNavigation();
+  const {
+    isNight,
+    handleWeatherClick: onWeatherClick,
+    weatherData,
+    effectiveWeatherCondition: weatherCondition,
+    sunsetArrowYPosition,
+    sunriseArrowYPosition,
+    isHot,
+    isCold,
+  } = useWeather();
+
   const [use24HourFormat, setUse24HourFormat] = useState(false);
   const [timeParts, setTimeParts] = useState<TimeParts>({ time: '', ampm: null });
   const [isTimeFlipping, setIsTimeFlipping] = useState(false);

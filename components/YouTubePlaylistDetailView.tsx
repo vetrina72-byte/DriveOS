@@ -3,8 +3,9 @@ import { FiChevronLeft, FiPlay, FiMusic, FiHeart } from 'react-icons/fi';
 import type { YouTubeTrackInfo } from '../types';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { isDemoMode, getPlaylistTracksMock } from '../lib/youtubeDemoFallback';
 
-const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -37,6 +38,13 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
         const fetchPlaylistItems = async () => {
             setLoading(true);
             setError(null);
+            if (isDemoMode(YOUTUBE_API_KEY)) {
+                setTimeout(() => {
+                    setTracks(getPlaylistTracksMock(playlist.id));
+                    setLoading(false);
+                }, 300);
+                return;
+            }
             try {
                 const response = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlist.id}&maxResults=50&key=${YOUTUBE_API_KEY}`);
                 if (!response.ok) {

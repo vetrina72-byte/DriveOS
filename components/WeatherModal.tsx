@@ -4,18 +4,9 @@ import WeatherIcon, { ExtremeTemp, HOT_TEMP, COLD_TEMP } from './WeatherIcon';
 import { ICONS } from '../constants';
 import type { WeatherData, TempUnit } from '../types';
 
-type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
+import { useWeather } from '../context/WeatherContext';
 
 interface WeatherModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    isNight: boolean;
-    status: WeatherStatus;
-    data: WeatherData | null;
-    error: string | null;
-    effectiveTime: Date;
-    sunsetArrowYPosition: number;
-    sunriseArrowYPosition: number;
     tempUnit: TempUnit;
 }
 
@@ -129,7 +120,21 @@ const getHourlyForecastToDisplay = (data: WeatherData | null, effectiveTime: Dat
 };
 
 
-export default function WeatherModal({ isOpen, onClose, isNight, status, data, error, effectiveTime, sunsetArrowYPosition, sunriseArrowYPosition, tempUnit }: WeatherModalProps) {
+export default function WeatherModal({ tempUnit }: WeatherModalProps) {
+    const {
+        isWeatherModalOpen: isOpen,
+        setWeatherModalOpen,
+        useDarkTheme: isNight,
+        weatherStatus: status,
+        weatherData: data,
+        weatherError: error,
+        effectiveTime,
+        sunsetArrowYPosition,
+        sunriseArrowYPosition,
+    } = useWeather();
+
+    const onClose = () => setWeatherModalOpen(false);
+
     const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
 
     const theme = {

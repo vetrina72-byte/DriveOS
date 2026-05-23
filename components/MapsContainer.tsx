@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import NavigateTool from './NavigateTool';
+import { useNavigation } from '../context/NavigationContext';
+import { useWeather } from '../context/WeatherContext';
 
 const mapHtmlContent = `
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -11,7 +14,7 @@ const mapHtmlContent = `
 <title>Drive-OS Navigation</title>
 <link rel="preconnect" href="https://api.protomaps.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.20.0/dist/maplibre-gl.css">
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -264,10 +267,10 @@ window.addEventListener('message',function(e){
   if(d.type==='SET_WORK_LOCATION'&&window.teslaNav)window.teslaNav.workLocation=d.payload;
   if(d.type==='SHOW_NAVIGATE_BOX'){var b=document.getElementById('nav-box');if(b)b.classList.remove('hidden');}
 });
-(function(){var s=document.createElement('script');s.src='https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js';s.onload=initApp;document.head.appendChild(s);})();
+(function(){var s=document.createElement('script');s.src='https://unpkg.com/maplibre-gl@5.20.0/dist/maplibre-gl.js';s.onload=initApp;s.onerror=function(){document.body.innerHTML='<div style="color:red;font-size:20px;padding:20px;z-index:9999;position:absolute;background:black;">Failed to load maplibre-gl.js</div>';};document.head.appendChild(s);})();
 
 function initApp(){
-
+try {
 var IMU=(function(){
   var g=null,gps=null,fused=null,lt=null,ok=false,A=0.97;
   function h(e){var n=performance.now();if(e.rotationRate&&e.rotationRate.alpha!==null){if(lt!==null){var dt=(n-lt)/1000;if(g===null)g=gps!==null?gps:0;g=(g+(e.rotationRate.alpha||0)*dt+360)%360;}lt=n;}ok=true;}
@@ -286,25 +289,25 @@ var DR=(function(){
 
 function drawArrow(key){
   var paths={
-    straight: \`<path d="m435-688-59 59q-14 14-32.5 14T312-629q-14-13-14-31.5t14-32.5l136-137q12-12 32-12t33 12l136 137q13 14 13 32.5T649-629q-13 13-32 13.5T585-629l-59-59v543q0 21-13.5 33.5T480-99q-19 0-32-12.5T435-145v-543Z"/>\`,
-    right:\`<path d="M263-182v-329q0-39 27.5-66.5T357-605h328l-56-57q-15-14-15-32.5t14.5-33Q643-742 662-742t33 14l137 136q14 14 14 34t-14 34L695-388q-14 15-32.5 14.5t-33-15Q615-403 615-422t14-33l56-56H357v329q0 20-13.5 33.5T310-135q-20 0-33.5-13.5T263-182Z"/>\`,
-    left:\`<path d="m275-511 57 56q14 15 13.5 34t-15 33.5Q316-373 297.5-373T264-388L128-524q-14-14-14-34t14-34l137-136q14-15 33-15t33.5 14.5Q346-714 346-695t-14 33l-57 57h328q39 0 66.5 27.5T697-511v329q0 20-13.5 33.5T650-135q-20 0-33.5-13.5T603-182v-329H275Z"/>\`,
-    'slight-right':\`<path d="M356.5-148.63Q343-162.25 343-182v-266q0-18.09 7.5-35.54Q358-501 371-514l216-217h-79q-20.75 0-34.37-13.68Q460-758.35 460-778.18 460-798 473.63-812q13.62-14 34.37-14h193q19.75 0 33.88 14.12Q749-797.75 749-778v193q0 20.75-14.18 34.37-14.17 13.63-34 13.63-19.82 0-33.32-13.63Q654-564.25 654-585v-79L437-448v266q0 19.75-13.68 33.37Q409.65-135 389.82-135q-19.82 0-33.32-13.63Z"/>\`,
-    'slight-left':\`<path d="M542.5-148.63Q529-162.25 529-182v-266L312-664v79q0 20.75-13.68 34.37Q284.65-537 264.82-537q-19.82 0-33.32-13.63Q218-564.25 218-585v-193q0-19.75 13.63-33.88Q245.25-826 265-826h194q19.75 0 33.38 14.18 13.62 14.17 13.62 34 0 19.82-13.62 33.32Q478.75-731 459-731h-80l216 217q13 13 20.5 30.46Q623-466.09 623-448v266q0 19.75-13.68 33.37Q595.65-135 575.82-135q-19.82 0-33.32-13.63Z"/>\`,
-    'sharp-right':\`<path d="M246.5-108.63Q233-122.25 233-142v-211q0-38.8 27.6-66.4Q288.2-447 327-447h306v-239l-57 57q-14 15-33 15t-33-14.43q-14-14.43-14-33T510-695l136-136q14.36-14 34.18-14T714-831l136 136q14 14.53 14 33.27 0 18.73-14 33.23-14 14.5-33 14.5t-33-15l-57-57v239q0 38.8-27.6 66.4Q671.8-353 633-353H327v211q0 19.75-13.68 33.37Q299.65-95 279.82-95 260-95 246.5-108.63Z"/>\`,
-    'sharp-left':\`<path d="M633-142v-211H327q-38.77 0-66.39-27.61Q233-408.23 233-447v-239l-57 57q-14 15-33 15t-33-14.5Q96-643 96-661.73q0-18.74 14-33.27l136-136q14.73-14 34.36-14Q300-845 314-831l136 136q14 14.53 14 33.27 0 18.73-14 33.23-14 14.5-33 14.5t-33-15l-57-57v239h306q38.77 0 66.39 27.61Q727-391.77 727-353v211q0 19.75-13.68 33.37Q699.65-95 679.82-95 660-95 646.5-108.63 633-122.25 633-142Z"/>\`,
-    uturn:\`<path d="M249.5-277q-8.5-4-15.5-11L98-424q-15-14-15-33t15-33q14-14 32.5-14t33.5 14l57 57v-172q0-108 76-184.5T481.5-866q108.5 0 185 76.5T743-605v434q0 20-14 33.5T695-124q-20 0-33.5-13.5T648-171v-434q0-69-48.5-117.5t-118-48.5q-69.5 0-118 48.5T315-605v172l59-58q14-14 31.5-13.5T437-490q15 15 15 33.5T438-424L302-288q-7 7-16 11t-18.5 4q-9.5 0-18-4Z"/>\`,
-    'uturn-right':\`<path d="M234.5-137.5Q221-151 221-171v-434q0-108 76-184.5T481.5-866q108.5 0 185 76.5T743-605v172l57-57q14-14 32.5-14t33.5 14q14 14 14 33t-14 33L729-288q-7 7-15.5 11t-18 4q-9.5 0-18.5-4t-15-11L525-424q-14-14-14-32.5t15-33.5q14-14 31.5-14.5T590-491l58 58v-172q0-69-48.5-117.5t-118-48.5q-69.5 0-118 48.5T315-605v434q0 20-13.5 33.5T268-124q-20 0-33.5-13.5Z"/>\`,
-    roundabout:\`<path d="M601-172v-198q0-29 17.58-51.1T665-448q63.14-7.28 104.57-52.67Q811-546.06 811-607.94q0-68.06-47.26-115.56Q716.47-771 648-771q-62.42 0-108.71 42Q493-687 487-624q-4.68 25.84-27.77 44.42Q436.14-561 409-561H234l57 57q13 14 13.5 33T292-438q-14 14-33.5 14T226-438L89-575q-7-6-11-15t-4-18.5q0-9.5 4.05-18.1Q82.09-635.2 89-642l137-137q14.25-14.17 33.13-13.58Q278-792 292-779q14 14.53 14 33.27Q306-727 292-713l-58 57h163q15-91 87-150.5T648.09-866q106.88 0 182.39 75.52Q906-714.97 906-608.09 906-516 846.5-444T696-357v185q0 20-14.09 33.5t-34 13.5q-19.91 0-33.41-13.5Q601-152 601-172Z"/>\`,
-    'roundabout-right':\`<path d="M265-172v-185q-91-16-150.5-87T55-608q0-107 75-182.5T313-866q93 0 164 59.5T564-656h163l-57-57q-14-14-14-33t13-33q14-14 33-14t33 14l137 137q7 7 11 15.5t4 18q0 9.5-4 18.5t-11 15L735-438q-14 14-33 14t-33-14q-13-14-13-33t13-32l58-58H552q-29 0-51.5-17.5T474-624q-7-63-52.5-105T313-771q-68 0-115.5 47.5T150-608q0 62 41.5 107.5T296-448q28 5 46 27t18 51v198q0 20-13.5 33.5t-34 13.5q-20.5 0-34-13.5T265-172Z"/>\`,
-    arrive:\`<path d="M480-334 274-128q-14 15-33 14.5T208-128q-14-14-14-32.5t14-33.5l190-190q21-21 28-38t7-53v-211l-57 57q-14 15-33 15t-33-15q-14-14-14-32.5t14-33.5l136-136q14-14 34-14t34 14l136 136q14 15 14 33.5T650-629q-14 15-33 15t-33-14l-57-58v211q0 36 7 53t28 38l190 190q14 15 14 34t-14 32q-14 15-33 15t-33-15L480-334Z"/>\`,
-    depart:\`<path d="M326.5-198.62Q263-262.24 263-353.29q0-83.28 50.5-137.99Q364-546 433-565v-161l-50 50q-15.5 14-33.75 14.5T317-676q-15-14-15-33t15-33l130-131q7.16-6 15.68-10t17.4-4q8.88 0 17.4 4 8.52 4 15.52 10l130 131q15 14 15 32.97 0 18.98-14.09 33.5Q630-661 610.7-661T577-676l-50-50v161q69 19 119.5 73.72Q697-436.57 697-353.29q0 91.05-63.5 154.67Q570-135 480-135t-153.5-63.62ZM567-265.65q36-35.64 36-87 0-51.35-36-86.85-36-35.5-87-35.5t-87 35.65q-36 35.64-36 87 0 51.35 36 86.85 36 35.5 87 35.5t87-35.65ZM480-353Z"/>\`,
-    merge:\`<path d="M480-334 274-128q-14 15-33 14.5T208-128q-14-14-14-32.5t14-33.5l190-190q21-21 28-38t7-53v-211l-57 57q-14 15-33 15t-33-15q-14-14-14-32.5t14-33.5l136-136q14-14 34-14t34 14l136 136q14 15 14 33.5T650-629q-14 15-33 15t-33-14l-57-58v211q0 36 7 53t28 38l190 190q14 15 14 34t-14 32q-14 15-33 15t-33-15L480-334Z"/>\`,
-    'merge-right':\`<path d="M225-201.43Q225-220 239-235l192-191v-259l-72 72q-14.36 14-33.18 13.5T293-614q-14-14-14-33.3 0-19.3 14-33.7l151-152q7.16-6 16.18-10.5t17.9-4.5q8.88 0 17.9 4.5Q505-839 512-833l152 153q14 14.36 14 33.18T664-614q-14 14-33.3 14-19.3 0-33.7-14l-72-71v258q0 18.51-7.5 36.26Q510-373 497-359L305-168q-14 15-33 14.5t-33-14.93q-14-14.43-14-33Zm491.09 32.34Q702-155 682.5-155q-19.5 0-33.5-14l-96-95q-14-14-13.5-33.43t14.03-32.5q13.52-14.07 33-14.07Q606-344 620-330l96 95q14.17 14.75 13.58 33.37-.58 18.63-13.49 32.54Z"/>\`,
-    'ramp-right':\`<path d="M444.5-108.5Q431-122 431-142v-189q-25 31-61 61.5T289-212q-19 13-40.5 11T211-218q-14-14-8.5-33t23.5-32q121-79 163-141.5T431-565v-121l-57 57q-14 15-33 14.5T308-629q-14-14-14-33t14-33l136-137q7-7 16-11t18-4q9 0 18 4t16 11l136 137q14 14 14 33t-14 33q-14 14-33 14t-33-14l-57-57v544q0 20-13.5 33.5T478-95q-20 0-33.5-13.5Z"/>\`,
-    'ramp-left':\`<path d="M435-142v-544l-57 57q-14 14-33 14t-33-14q-14-14-14-33t14-33l136-137q7-7 16-11t18-4q9 0 18 4t16 11l136 137q14 14 14 33t-14 33q-14 14-33 14.5T586-629l-57-57v121q0 78 42 140.5T735-283q17 13 22.5 32t-8.5 33q-16 15-37.5 17T671-212q-45-27-81-57.5T529-331v189q0 20-13.5 33.5T482-95q-20 0-33.5-13.5T435-142Z"/>\`,
-    'keep-right':\`<path d="M356.5-148.63Q343-162.25 343-182v-266q0-18.09 7.5-35.54Q358-501 371-514l216-217h-79q-20.75 0-34.37-13.68Q460-758.35 460-778.18 460-798 473.63-812q13.62-14 34.37-14h193q19.75 0 33.88 14.12Q749-797.75 749-778v193q0 20.75-14.18 34.37-14.17 13.63-34 13.63-19.82 0-33.32-13.63Q654-564.25 654-585v-79L437-448v266q0 19.75-13.68 33.37Q409.65-135 389.82-135q-19.82 0-33.32-13.63Z"/>\`,
-    'keep-left':\`<path d="M542.5-148.63Q529-162.25 529-182v-266L312-664v79q0 20.75-13.68 34.37Q284.65-537 264.82-537q-19.82 0-33.32-13.63Q218-564.25 218-585v-193q0-19.75 13.63-33.88Q245.25-826 265-826h194q19.75 0 33.38 14.18 13.62 14.17 13.62 34 0 19.82-13.62 33.32Q478.75-731 459-731h-80l216 217q13 13 20.5 30.46Q623-466.09 623-448v266q0 19.75-13.68 33.37Q595.65-135 575.82-135q-19.82 0-33.32-13.63Z"/>\`
+    straight: "\\x3Cpath d=\"m435-688-59 59q-14 14-32.5 14T312-629q-14-13-14-31.5t14-32.5l136-137q12-12 32-12t33 12l136 137q13 14 13 32.5T649-629q-13 13-32 13.5T585-629l-59-59v543q0 21-13.5 33.5T480-99q-19 0-32-12.5T435-145v-543Z\"/>",
+    right:"\\x3Cpath d=\"M263-182v-329q0-39 27.5-66.5T357-605h328l-56-57q-15-14-15-32.5t14.5-33Q643-742 662-742t33 14l137 136q14 14 14 34t-14 34L695-388q-14 15-32.5 14.5t-33-15Q615-403 615-422t14-33l56-56H357v329q0 20-13.5 33.5T310-135q-20 0-33.5-13.5T263-182Z\"/>",
+    left:"\\x3Cpath d=\"m275-511 57 56q14 15 13.5 34t-15 33.5Q316-373 297.5-373T264-388L128-524q-14-14-14-34t14-34l137-136q14-15 33-15t33.5 14.5Q346-714 346-695t-14 33l-57 57h328q39 0 66.5 27.5T697-511v329q0 20-13.5 33.5T650-135q-20 0-33.5-13.5T603-182v-329H275Z\"/>",
+    'slight-right':"\\x3Cpath d=\"M356.5-148.63Q343-162.25 343-182v-266q0-18.09 7.5-35.54Q358-501 371-514l216-217h-79q-20.75 0-34.37-13.68Q460-758.35 460-778.18 460-798 473.63-812q13.62-14 34.37-14h193q19.75 0 33.88 14.12Q749-797.75 749-778v193q0 20.75-14.18 34.37-14.17 13.63-34 13.63-19.82 0-33.32-13.63Q654-564.25 654-585v-79L437-448v266q0 19.75-13.68 33.37Q409.65-135 389.82-135q-19.82 0-33.32-13.63Z\"/>",
+    'slight-left':"\\x3Cpath d=\"M542.5-148.63Q529-162.25 529-182v-266L312-664v79q0 20.75-13.68 34.37Q284.65-537 264.82-537q-19.82 0-33.32-13.63Q218-564.25 218-585v-193q0-19.75 13.63-33.88Q245.25-826 265-826h194q19.75 0 33.38 14.18 13.62 14.17 13.62 34 0 19.82-13.62 33.32Q478.75-731 459-731h-80l216 217q13 13 20.5 30.46Q623-466.09 623-448v266q0 19.75-13.68 33.37Q595.65-135 575.82-135q-19.82 0-33.32-13.63Z\"/>",
+    'sharp-right':"\\x3Cpath d=\"M246.5-108.63Q233-122.25 233-142v-211q0-38.8 27.6-66.4Q288.2-447 327-447h306v-239l-57 57q-14 15-33 15t-33-14.43q-14-14.43-14-33T510-695l136-136q14.36-14 34.18-14T714-831l136 136q14 14.53 14 33.27 0 18.73-14 33.23-14 14.5-33 14.5t-33-15l-57-57v239q0 38.8-27.6 66.4Q671.8-353 633-353H327v211q0 19.75-13.68 33.37Q299.65-95 279.82-95 260-95 246.5-108.63Z\"/>",
+    'sharp-left':"\\x3Cpath d=\"M633-142v-211H327q-38.77 0-66.39-27.61Q233-408.23 233-447v-239l-57 57q-14 15-33 15t-33-14.5Q96-643 96-661.73q0-18.74 14-33.27l136-136q14.73-14 34.36-14Q300-845 314-831l136 136q14 14.53 14 33.27 0 18.73-14 33.23-14 14.5-33 14.5t-33-15l-57-57v239h306q38.77 0 66.39 27.61Q727-391.77 727-353v211q0 19.75-13.68 33.37Q699.65-95 679.82-95 660-95 646.5-108.63 633-122.25 633-142Z\"/>",
+    uturn:"\\x3Cpath d=\"M249.5-277q-8.5-4-15.5-11L98-424q-15-14-15-33t15-33q14-14 32.5-14t33.5 14l57 57v-172q0-108 76-184.5T481.5-866q108.5 0 185 76.5T743-605v434q0 20-14 33.5T695-124q-20 0-33.5-13.5T648-171v-434q0-69-48.5-117.5t-118-48.5q-69.5 0-118 48.5T315-605v172l59-58q14-14 31.5-13.5T437-490q15 15 15 33.5T438-424L302-288q-7 7-16 11t-18.5 4q-9.5 0-18-4Z\"/>",
+    'uturn-right':"\\x3Cpath d=\"M234.5-137.5Q221-151 221-171v-434q0-108 76-184.5T481.5-866q108.5 0 185 76.5T743-605v172l57-57q14-14 32.5-14t33.5 14q14 14 14 33t-14 33L729-288q-7 7-15.5 11t-18 4q-9.5 0-18.5-4t-15-11L525-424q-14-14-14-32.5t15-33.5q14-14 31.5-14.5T590-491l58 58v-172q0-69-48.5-117.5t-118-48.5q-69.5 0-118 48.5T315-605v434q0 20-13.5 33.5T268-124q-20 0-33.5-13.5Z\"/>",
+    roundabout:"\\x3Cpath d=\"M601-172v-198q0-29 17.58-51.1T665-448q63.14-7.28 104.57-52.67Q811-546.06 811-607.94q0-68.06-47.26-115.56Q716.47-771 648-771q-62.42 0-108.71 42Q493-687 487-624q-4.68 25.84-27.77 44.42Q436.14-561 409-561H234l57 57q13 14 13.5 33T292-438q-14 14-33.5 14T226-438L89-575q-7-6-11-15t-4-18.5q0-9.5 4.05-18.1Q82.09-635.2 89-642l137-137q14.25-14.17 33.13-13.58Q278-792 292-779q14 14.53 14 33.27Q306-727 292-713l-58 57h163q15-91 87-150.5T648.09-866q106.88 0 182.39 75.52Q906-714.97 906-608.09 906-516 846.5-444T696-357v185q0 20-14.09 33.5t-34 13.5q-19.91 0-33.41-13.5Q601-152 601-172Z\"/>",
+    'roundabout-right':"\\x3Cpath d=\"M265-172v-185q-91-16-150.5-87T55-608q0-107 75-182.5T313-866q93 0 164 59.5T564-656h163l-57-57q-14-14-14-33t13-33q14-14 33-14t33 14l137 137q7 7 11 15.5t4 18q0 9.5-4 18.5t-11 15L735-438q-14 14-33 14t-33-14q-13-14-13-33t13-32l58-58H552q-29 0-51.5-17.5T474-624q-7-63-52.5-105T313-771q-68 0-115.5 47.5T150-608q0 62 41.5 107.5T296-448q28 5 46 27t18 51v198q0 20-13.5 33.5t-34 13.5q-20.5 0-34-13.5T265-172Z\"/>",
+    arrive:"\\x3Cpath d=\"M480-334 274-128q-14 15-33 14.5T208-128q-14-14-14-32.5t14-33.5l190-190q21-21 28-38t7-53v-211l-57 57q-14 15-33 15t-33-15q-14-14-14-32.5t14-33.5l136-136q14-14 34-14t34 14l136 136q14 15 14 33.5T650-629q-14 15-33 15t-33-14l-57-58v211q0 36 7 53t28 38l190 190q14 15 14 34t-14 32q-14 15-33 15t-33-15L480-334Z\"/>",
+    depart:"\\x3Cpath d=\"M326.5-198.62Q263-262.24 263-353.29q0-83.28 50.5-137.99Q364-546 433-565v-161l-50 50q-15.5 14-33.75 14.5T317-676q-15-14-15-33t15-33l130-131q7.16-6 15.68-10t17.4-4q8.88 0 17.4 4 8.52 4 15.52 10l130 131q15 14 15 32.97 0 18.98-14.09 33.5Q630-661 610.7-661T577-676l-50-50v161q69 19 119.5 73.72Q697-436.57 697-353.29q0 91.05-63.5 154.67Q570-135 480-135t-153.5-63.62ZM567-265.65q36-35.64 36-87 0-51.35-36-86.85-36-35.5-87-35.5t-87 35.65q-36 35.64-36 87 0 51.35 36 86.85 36 35.5 87 35.5t87-35.65ZM480-353Z\"/>",
+    merge:"\\x3Cpath d=\"M480-334 274-128q-14 15-33 14.5T208-128q-14-14-14-32.5t14-33.5l190-190q21-21 28-38t7-53v-211l-57 57q-14 15-33 15t-33-15q-14-14-14-32.5t14-33.5l136-136q14-14 34-14t34 14l136 136q14 15 14 33.5T650-629q-14 15-33 15t-33-14l-57-58v211q0 36 7 53t28 38l190 190q14 15 14 34t-14 32q-14 15-33 15t-33-15L480-334Z\"/>",
+    'merge-right':"\\x3Cpath d=\"M225-201.43Q225-220 239-235l192-191v-259l-72 72q-14.36 14-33.18 13.5T293-614q-14-14-14-33.3 0-19.3 14-33.7l151-152q7.16-6 16.18-10.5t17.9-4.5q8.88 0 17.9 4.5Q505-839 512-833l152 153q14 14.36 14 33.18T664-614q-14 14-33.3 14-19.3 0-33.7-14l-72-71v258q0 18.51-7.5 36.26Q510-373 497-359L305-168q-14 15-33 14.5t-33-14.93q-14-14.43-14-33Zm491.09 32.34Q702-155 682.5-155q-19.5 0-33.5-14l-96-95q-14-14-13.5-33.43t14.03-32.5q13.52-14.07 33-14.07Q606-344 620-330l96 95q14.17 14.75 13.58 33.37-.58 18.63-13.49 32.54Z\"/>",
+    'ramp-right':"\\x3Cpath d=\"M444.5-108.5Q431-122 431-142v-189q-25 31-61 61.5T289-212q-19 13-40.5 11T211-218q-14-14-8.5-33t23.5-32q121-79 163-141.5T431-565v-121l-57 57q-14 15-33 14.5T308-629q-14-14-14-33t14-33l136-137q7-7 16-11t18-4q9 0 18 4t16 11l136 137q14 14 14 33t-14 33q-14 14-33 14t-33-14l-57-57v544q0 20-13.5 33.5T478-95q-20 0-33.5-13.5Z\"/>",
+    'ramp-left':"\\x3Cpath d=\"M435-142v-544l-57 57q-14 14-33 14t-33-14q-14-14-14-33t14-33l136-137q7-7 16-11t18-4q9 0 18 4t16 11l136 137q14 14 14 33t-14 33q-14 14-33 14.5T586-629l-57-57v121q0 78 42 140.5T735-283q17 13 22.5 32t-8.5 33q-16 15-37.5 17T671-212q-45-27-81-57.5T529-331v189q0 20-13.5 33.5T482-95q-20 0-33.5-13.5T435-142Z\"/>",
+    'keep-right':"\\x3Cpath d=\"M356.5-148.63Q343-162.25 343-182v-266q0-18.09 7.5-35.54Q358-501 371-514l216-217h-79q-20.75 0-34.37-13.68Q460-758.35 460-778.18 460-798 473.63-812q13.62-14 34.37-14h193q19.75 0 33.88 14.12Q749-797.75 749-778v193q0 20.75-14.18 34.37-14.17 13.63-34 13.63-19.82 0-33.32-13.63Q654-564.25 654-585v-79L437-448v266q0 19.75-13.68 33.37Q409.65-135 389.82-135q-19.82 0-33.32-13.63Z\"/>",
+    'keep-left':"\\x3Cpath d=\"M542.5-148.63Q529-162.25 529-182v-266L312-664v79q0 20.75-13.68 34.37Q284.65-537 264.82-537q-19.82 0-33.32-13.63Q218-564.25 218-585v-193q0-19.75 13.63-33.88Q245.25-826 265-826h194q19.75 0 33.38 14.18 13.62 14.17 13.62 34 0 19.82-13.62 33.32Q478.75-731 459-731h-80l216 217q13 13 20.5 30.46Q623-466.09 623-448v266q0 19.75-13.68 33.37Q595.65-135 575.82-135q-19.82 0-33.32-13.63Z\"/>"
   };
   return paths[key]||paths.straight;
 }
@@ -366,8 +369,8 @@ class Nav {
 
   buildStyle(t){
     var K='c8deb6d53bc6a94d';
-    if(t==='light') return 'https://api.protomaps.com/styles/v5/white/it.json?key='+K;
-    if(t==='dark')  return 'https://api.protomaps.com/styles/v5/black/it.json?key='+K;
+    if(t==='light') return 'https://api.protomaps.com/styles/v5/light/it.json?key='+K;
+    if(t==='dark')  return 'https://api.protomaps.com/styles/v5/dark/it.json?key='+K;
 
     if(t==='satellite'){
       return {
@@ -396,7 +399,7 @@ class Nav {
         ]
       };
     }
-    return 'https://api.protomaps.com/styles/v5/black/it.json?key='+K;
+    return 'https://api.protomaps.com/styles/v5/dark/it.json?key='+K;
   }
 
   ensureGlobalLabels(){
@@ -417,13 +420,12 @@ class Nav {
       container: 'map',
       style: this.buildStyle(th),
       center:[12.4964, 41.9028],
-      zoom: 2,
+      zoom: 14,
       attributionControl: false,
       pitchWithRotate: false,
       touchPitch: false,
       maxPitch: 0,
       minPitch: 0,
-      preserveDrawingBuffer: true,
       fadeDuration: 300,
       minZoom: 1.8,
       bearingSnap: 0,
@@ -588,7 +590,7 @@ class Nav {
       if(this.proxMark){this.proxMark.remove();this.proxMark=null;}
       var el=document.createElement('div');
       el.className='map-pin-arrow'+(isNear?' near':'');
-      el.innerHTML=\`<svg viewBox="0 -960 960 960" fill="#3B82F6" stroke="none">\${drawArrow(key)}</svg>\`;
+      el.innerHTML="\\x3Csvg viewBox=\"0 -960 960 960\" fill=\"#3B82F6\" stroke=\"none\">"+drawArrow(key)+"\\x3C/svg>";
       this.proxMark=new maplibregl.Marker({element:el,anchor:'center'}).setLngLat([loc[0],loc[1]]).addTo(this.map);
       this.proxStep=this.si;
     } else {
@@ -614,9 +616,9 @@ class Nav {
       var cls='mi'+(done?' done':'');
       var distLbl='';
       if(!done){var cum=0;for(var s=this.si;s<idx;s++)if(this.steps[s])cum+=this.steps[s].distance||0;distLbl=fd(cum);}
-      html+=\`<div class="\${cls}"><div class="mi-box"><svg class="mi-svg" viewBox="0 -960 960 960" stroke="none">\${drawArrow(k)}</svg></div><div class="mi-txt">\${distLbl?\`<div class="mi-d">\${distLbl}</div>\`:''}<div class="mi-n">\${esc(instr)}</div></div></div>\`;
+      html+="<div class=\""+cls+"\"><div class=\"mi-box\">\\x3Csvg class=\"mi-svg\" viewBox=\"0 -960 960 960\" stroke=\"none\">"+drawArrow(k)+"\\x3C/svg></div><div class=\"mi-txt\">"+(distLbl?"<div class=\"mi-d\">"+distLbl+"</div>":"")+"<div class=\"mi-n\">"+esc(instr)+"</div></div></div>";
     });
-    html+=\`<div class="mi-dest"><div class="mi-dpin"><svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="24px" viewBox="0 0 24 24" width="24px" fill="#e3e3e3"><g><rect fill="none" height="24" width="24"/></g><g><path d="M12,2c-4.2,0-8,3.22-8,8.2c0,3.18,2.45,6.92,7.34,11.23c0.38,0.33,0.95,0.33,1.33,0C17.55,17.12,20,13.38,20,10.2 C20,5.22,16.2,2,12,2z M12,12c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2c1.1,0,2,0.9,2,2C14,11.1,13.1,12,12,12z"/></g></svg></div><div><div class="mi-dlbl">\${esc(this.destName)}</div></div></div>\`;
+    html+="<div class=\"mi-dest\"><div class=\"mi-dpin\">\\x3Csvg xmlns=\"http://www.w3.org/2000/svg\" enable-background=\"new 0 0 24 24\" height=\"24px\" viewBox=\"0 0 24 24\" width=\"24px\" fill=\"#e3e3e3\">\\x3Cg>\\x3Crect fill=\"none\" height=\"24\" width=\"24\"/>\\x3C/g>\\x3Cg>\\x3Cpath d=\"M12,2c-4.2,0-8,3.22-8,8.2c0,3.18,2.45,6.92,7.34,11.23c0.38,0.33,0.95,0.33,1.33,0C17.55,17.12,20,13.38,20,10.2 C20,5.22,16.2,2,12,2z M12,12c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2c1.1,0,2,0.9,2,2C14,11.1,13.1,12,12,12z\"/>\\x3C/g>\\x3C/svg></div><div><div class=\"mi-dlbl\">"+esc(this.destName)+"</div></div></div>";
     list.innerHTML=html;
   }
 
@@ -708,7 +710,7 @@ class Nav {
     document.getElementById('nb-dest').textContent = this.destName;
 
     var el=document.createElement('div'); el.className='dest-pin';
-    el.innerHTML = \`<svg width="48" height="64" viewBox="0 0 24 24"><ellipse cx="12" cy="22.5" rx="5" ry="1.5" fill="rgba(0,0,0,.2)"/><g><path d="M12,2c-4.2,0-8,3.22-8,8.2c0,3.18,2.45,6.92,7.34,11.23c0.38,0.33,0.95,0.33,1.33,0C17.55,17.12,20,13.38,20,10.2 C20,5.22,16.2,2,12,2z M12,12c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2c1.1,0,2,0.9,2,2C14,11.1,13.1,12,12,12z" fill="#EF4444" stroke="#FFFFFF" stroke-width="1.2"/></g></svg>\`;
+    el.innerHTML = "\\x3Csvg width=\"48\" height=\"64\" viewBox=\"0 0 24 24\">\\x3Cellipse cx=\"12\" cy=\"22.5\" rx=\"5\" ry=\"1.5\" fill=\"rgba(0,0,0,.2)\"/>\\x3Cg>\\x3Cpath d=\"M12,2c-4.2,0-8,3.22-8,8.2c0,3.18,2.45,6.92,7.34,11.23c0.38,0.33,0.95,0.33,1.33,0C17.55,17.12,20,13.38,20,10.2 C20,5.22,16.2,2,12,2z M12,12c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2c1.1,0,2,0.9,2,2C14,11.1,13.1,12,12,12z\" fill=\"#EF4444\" stroke=\"#FFFFFF\" stroke-width=\"1.2\"/>\\x3C/g>\\x3C/svg>";
     this.destMark=new maplibregl.Marker({element:el,anchor:'bottom',offset:[0,0]}).setLngLat([coords.lng,coords.lat]).addTo(this.map);
     
     var start=this.tgt||this.rpos;
@@ -920,21 +922,6 @@ class Nav {
     });
   }
 
-  setExternalTheme(theme){
-    this.extTheme=theme;
-    if(this.mapMode!=='satellite'){
-      var th=theme||(new Date().getHours()>=6&&new Date().getHours()<19?'light':'dark');
-      document.body.className='theme-'+th;
-      this.map.setStyle(this.buildStyle(th));
-      this.map.once('style.load',()=>{
-        this.map.setProjection({type:'globe'});
-        this.ensureGlobalLabels();
-        this.onLoad();
-        if(this.geo)this.updRouteMap();
-      });
-    }
-  }
-
   showDyn(){document.getElementById('dyn-ctrl').classList.add('visible');if(this.ctTo)clearTimeout(this.ctTo);}
   hideDyn(){document.getElementById('dyn-ctrl').classList.remove('visible');}
   schedHide(){if(this.wVis)return;this.ctTo=setTimeout(()=>this.hideDyn(), 20000);}
@@ -970,7 +957,7 @@ class Nav {
     var tt=isFut?'<span style="color:#EF4444;font-weight:700">Previsione</span>':'<span style="color:#3B82F6;font-weight:700">Storico</span>';
     document.getElementById('tl-lbl').innerHTML=tt+' '+date.getHours()+':'+(date.getMinutes()<10?'0':'')+date.getMinutes();
     var tot=this.wTs.length-1,sp=(this.wNow/tot)*100;
-    document.getElementById('tl-slider').style.background=\`linear-gradient(to right,#3B82F6 0%,#3B82F6 \${sp}%,#EF4444 \${sp}%,#EF4444 100%)\`;
+    document.getElementById('tl-slider').style.background="linear-gradient(to right,#3B82F6 0%,#3B82F6 "+sp+"%,#EF4444 "+sp+"%,#EF4444 100%)";
     var ns=this.wSlot==='A'?'B':'A',src=this.map.getSource('w-'+ns);
     if(src)src.setTiles([this.rUrl(this.wTs[idx].path)]);
     await new Promise(res=>{if(this.map.isSourceLoaded('w-'+ns)){res();return;}var od=e=>{if(e.sourceId==='w-'+ns&&e.isSourceLoaded){this.map.off('sourcedata',od);res();}};this.map.on('sourcedata',od);setTimeout(()=>{this.map.off('sourcedata',od);res();},400);});
@@ -989,7 +976,7 @@ class Nav {
   loadR(){try{var r=localStorage.getItem('rec_dest');return r?JSON.parse(r):[]}catch(e){return[];}}
   saveR(){try{localStorage.setItem('rec_dest',JSON.stringify(this.recents));}catch(e){}}
   addR(p){this.recents=[p,...this.recents.filter(r=>!(r.name===p.name&&Math.abs(r.lat-p.lat)<.0001))].slice(0,5);this.saveR();}
-  hl(text,q){if(!text||!q)return esc(text||'');var e2=esc(text),pts=q.trim().split(/\\s+/).filter(p=>p.length>0);if(!pts.length)return e2;var reg=pts.map(p=>p.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&')).join('|');return e2.replace(new RegExp('('+reg+')','gi'),'<strong>$1</strong>');}
+  hl(text,q){if(!text||!q)return esc(text||'');var e2=esc(text),pts=q.trim().split(/\s+/).filter(p=>p.length>0);if(!pts.length)return e2;var reg=pts.map(p=>p.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&')).join('|');return e2.replace(new RegExp('('+reg+')','gi'),'<strong>$1</strong>');}
 
   initSearch(){
     var inp=document.getElementById('nav-inp'),res=document.getElementById('nav-res'),clr=document.getElementById('nav-clr');
@@ -1014,7 +1001,7 @@ class Nav {
   rendRec(container){
     if(!this.recents||!this.recents.length){container.innerHTML='';return;}
     var html='<div class="nsh">Recenti</div>';
-    this.recents.forEach((r,i)=>{html+=\`<button class="nri" data-idx="\${i}" data-t="r"><div class="nri-ico"><i data-lucide="clock" style="width:20px;height:20px"></i></div><div class="nri-inf"><div class="nri-name">\${esc(r.name)}</div>\${r.address?\`<div class="nri-addr">\${esc(r.address)}</div>\`:''}</div></button>\`;});
+    this.recents.forEach((r,i)=>{html+="<button class=\"nri\" data-idx=\""+i+"\" data-t=\"r\"><div class=\"nri-ico\">\\x3Ci data-lucide=\"clock\" style=\"width:20px;height:20px\">\\x3C/i></div><div class=\"nri-inf\"><div class=\"nri-name\">"+esc(r.name)+"</div>"+(r.address?"<div class=\"nri-addr\">"+esc(r.address)+"</div>":"")+"</div></button>";});
     container.innerHTML=html;lucide.createIcons();
     container.querySelectorAll('[data-t=r]').forEach(b=>{b.addEventListener('mousedown',e=>{e.preventDefault();var r=this.recents[parseInt(b.dataset.idx)];this.selPlace(r.lat,r.lng,r.name,r.address||'');});});
   }
@@ -1038,10 +1025,10 @@ class Nav {
       if(this.rpos)results.sort((a,b)=>{var an=a.name&&a.name!==a.address,bn=b.name&&b.name!==b.address;if(an&&!bn)return-1;if(!an&&bn)return 1;return(a.dk||9999)-(b.dk||9999);});
       var html='';
       results.slice(0,10).forEach((r,i)=>{
-        var dh=r.dk!==undefined?\`<div class="nri-meta"><div class="nri-dist">\${r.dk.toFixed(1)} km</div>\${r.em?\`<div class="nri-time">~\${Math.round(r.em)} min</div>\`:''}</div>\`:'';
+        var dh=r.dk!==undefined?"<div class=\"nri-meta\"><div class=\"nri-dist\">"+r.dk.toFixed(1)+" km</div>"+(r.em?"<div class=\"nri-time\">~"+Math.round(r.em)+" min</div>":"")+"</div>":'';
         var iconC=r.isShop?'shop':'';
         var ico=r.isShop?'shopping-bag':'map-pin';
-        html+=\`<button class="nri \${iconC}" data-idx="\${i}"><div class="nri-ico"><i data-lucide="\${ico}" style="width:20px;height:20px"></i></div><div class="nri-inf"><div class="nri-name">\${this.hl(r.name,raw)}</div>\${r.address?\`<div class="nri-addr">\${this.hl(r.address,raw)}</div>\`:''}</div>\${dh}</button>\`;
+        html+="<button class=\"nri "+iconC+"\" data-idx=\""+i+"\"><div class=\"nri-ico\">\\x3Ci data-lucide=\""+ico+"\" style=\"width:20px;height:20px\">\\x3C/i></div><div class=\"nri-inf\"><div class=\"nri-name\">"+this.hl(r.name,raw)+"</div>"+(r.address?"<div class=\"nri-addr\">"+this.hl(r.address,raw)+"</div>":"")+"</div>"+dh+"</button>";
       });
       container.innerHTML=html;lucide.createIcons();
       var fins=results.slice(0,10);
@@ -1080,211 +1067,91 @@ class Nav {
 window.teslaNav=new Nav();
 if(window.pendingNavMsg){var pm=window.pendingNavMsg;window.pendingNavMsg=null;var pp=pm.payload;setTimeout(()=>window.teslaNav.setDest({lat:pp.lat,lng:pp.lng},pp.name,false),500);}
 
+} catch(e) {
+  document.body.innerHTML = '<div style="color:red;font-size:20px;padding:20px;z-index:9999;position:absolute;background:black;">Error: ' + e.message + '<br/>' + e.stack + '</div>';
+}
 } // end initApp
 </script>
 
 </body>
 </html>
-`;
 
-export interface MapsContainerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onInteractionStart?: () => void;
-  isNight: boolean;
-  searchPanelWidth?: number;
-  searchPanelTop?: number | string;
-  navigationTarget: { lat: number; lng: number; name: string; isPreset?: 'home' | 'work'; coords?: {lat: number, lng: number} } | null;
-  spotifyPlayerTop?: string | number;
-  spotifyPlayerBottom?: string | number;
-  satelliteLabelBrightness: number;
-  satelliteLabelOutlineWidth: number;
-  onDragProgress?: (progress: number | null) => void;
-  currentPosition?: {lat: number, lng: number} | null;
-  homeLocation?: {lat: number, lng: number, name: string} | null;
-  workLocation?: {lat: number, lng: number, name: string} | null;
-  onSelectDestination?: (target: { lat: number; lng: number; name: string; isPreset?: 'home' | 'work'; coords?: {lat: number, lng: number} } | null) => void;
-  width?: number;
-  widgetBgColor?: string;
-  dayPlayerButtonColor?: string;
-  nightPlayerButtonColor?: string;
-  darkNavigateInputBg?: string;
-}
+`
 
-const MapsContainer = React.memo(({
-  isOpen,
-  onClose,
-  onInteractionStart,
-  isNight,
-  searchPanelWidth,
-  searchPanelTop,
-  navigationTarget,
-  spotifyPlayerTop,
-  spotifyPlayerBottom,
-  satelliteLabelBrightness,
-  satelliteLabelOutlineWidth,
-  onDragProgress,
-  currentPosition,
-  homeLocation,
-  workLocation,
-  onSelectDestination,
-  width,
-  widgetBgColor,
-  dayPlayerButtonColor,
-  nightPlayerButtonColor,
-  darkNavigateInputBg
-}: MapsContainerProps) => {
+const MapsContainer = React.memo(({ 
+    isOpen, 
+    onClose,
+    searchPanelWidth,
+    searchPanelTop,
+    spotifyPlayerTop,
+    spotifyPlayerBottom,
+    satelliteLabelBrightness,
+    satelliteLabelOutlineWidth,
+    onDragProgress,
+    onInteractionStart,
+    width,
+    widgetBgColor,
+    dayPlayerButtonColor,
+    nightPlayerButtonColor,
+    darkNavigateInputBg,
+}: { 
+    isOpen: boolean; 
+    onClose: () => void;
+    searchPanelWidth: number;
+    searchPanelTop: number;
+    spotifyPlayerTop: number;
+    spotifyPlayerBottom: number;
+    satelliteLabelBrightness: number;
+    satelliteLabelOutlineWidth: number;
+    onDragProgress?: (progress: number | null) => void;
+    onInteractionStart?: () => void;
+    width: number;
+    widgetBgColor: string;
+    dayPlayerButtonColor: string;
+    nightPlayerButtonColor: string;
+    darkNavigateInputBg: string;
+}) => {
+  const {
+    navigationTarget,
+    currentPosition,
+    homeLocation,
+    workLocation,
+    handleSelectDestination: onSelectDestination,
+  } = useNavigation();
+
+  const { useDarkTheme: isNight } = useWeather();
+
+  const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const [isIframeReady, setIsIframeReady] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const physics = useRef({
-      currentPercent: 100, // 0 = open, 100 = closed
-      targetPercent: 100,
-      startPercent: 100,
+      currentX: 100,
+      targetX: 100,
+      startX: 100,
       animStartTime: 0,
       isDragging: false,
       isInteracting: false,
-      dragStart: 0,
-      dragStartPercent: 0,
-      panelDimension: 0,
+      dragStartX: 0,
+      dragStartCurrentX: 0,
+      panelWidth: 0,
       animationId: 0
   });
 
+  const ANIMATION_SPEED = 0.18; 
   const CLOSE_THRESHOLD_PERCENT = 25;
 
-  // --- PHYSICS LOOP ---
-  useEffect(() => {
-      const update = () => {
-          const state = physics.current;
-          const panel = panelRef.current;
-
-          // 1. Update Physics
-          if (!state.isDragging) {
-              if (state.animStartTime > 0) {
-                  const elapsed = performance.now() - state.animStartTime;
-                  const duration = 400; // ms
-                  const t = Math.min(elapsed / duration, 1.0);
-                  // power4.out easing
-                  const easeT = 1 - Math.pow(1 - t, 4);
-                  state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
-              } else {
-                  state.currentPercent = state.targetPercent;
-              }
-          }
-
-          // 2. Report Progress to 3D Scene
-          if (state.isInteracting) {
-              let visualProgress = state.currentPercent / 100;
-              visualProgress = Math.max(0, Math.min(1, visualProgress));
-              
-              onDragProgress?.(visualProgress);
-
-              // Check if settled
-              if (!state.isDragging && Math.abs(state.targetPercent - state.currentPercent) < 0.5) {
-                  state.isInteracting = false;
-                  onDragProgress?.(null);
-              }
-          }
-
-          // 3. Render
-          if (panel) {
-              let visualPercent = state.currentPercent;
-              if (!state.isDragging) {
-                  if (visualPercent < 0.01) visualPercent = 0;
-                  if (visualPercent > 99.9) visualPercent = 100;
-              }
-              panel.style.transform = `translateX(${visualPercent}%)`;
-          }
-
-          state.animationId = requestAnimationFrame(update);
-      };
-
-      physics.current.animationId = requestAnimationFrame(update);
-      return () => {
-          cancelAnimationFrame(physics.current.animationId);
-          if (physics.current.isInteracting) {
-              onDragProgress?.(null);
-          }
-      };
-  }, [onDragProgress]);
-
-  // --- SYNC REACT PROP TO PHYSICS TARGET ---
-  useEffect(() => {
-      const state = physics.current;
-      if (!state.isDragging) {
-          const newTargetPercent = isOpen ? 0 : 100;
-          if (state.targetPercent !== newTargetPercent || state.animStartTime === 0) {
-              state.startPercent = state.currentPercent;
-              state.targetPercent = newTargetPercent;
-              state.animStartTime = performance.now();
-          }
-      }
-  }, [isOpen]);
-
-  // --- DRAG HANDLERS ---
-  const handlePointerDown = (e: React.PointerEvent) => {
-      if (!panelRef.current) return;
-      e.stopPropagation();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      
-      onInteractionStart?.();
-
-      const state = physics.current;
-      state.isDragging = true;
-      state.isInteracting = true;
-      state.dragStart = e.clientX;
-      state.panelDimension = panelRef.current.offsetWidth || window.innerWidth * 0.66;
-      state.dragStartPercent = state.currentPercent;
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-      const state = physics.current;
-      if (!state.isDragging) return;
-      e.stopPropagation();
-
-      const currentPos = e.clientX;
-      const deltaPx = currentPos - state.dragStart;
-      const deltaPercent = (deltaPx / state.panelDimension) * 100;
-      
-      let newPercent = state.dragStartPercent + deltaPercent;
-      if (newPercent < 0) newPercent = 0; // Prevent widening
-      
-      state.currentPercent = newPercent;
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-      e.stopPropagation();
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      
-      const state = physics.current;
-      if (!state.isDragging) return;
-
-      state.isDragging = false;
-
-      if (state.currentPercent > CLOSE_THRESHOLD_PERCENT) {
-          state.startPercent = state.currentPercent;
-          state.targetPercent = 100;
-          state.animStartTime = performance.now();
-          if (isOpen) onClose();
-      } else {
-          state.startPercent = state.currentPercent;
-          state.targetPercent = 0;
-          state.animStartTime = performance.now();
-      }
-  };
-
-  // We add dynamic styles to adjust contrast of protomaps labels in satellite mode
-  const processedHtmlContent = useMemo(() => {
+  const finalMapHtml = useMemo(() => {
     const dynamicStyles = `
       <style>
-        .maplibregl-ctrl-logo, .maplibregl-ctrl-attrib {
-            display: none !important;
+        /* DYNAMIC LABEL OVERRIDE */
+        #labels-canvas {
+            filter: brightness(${satelliteLabelBrightness}) saturate(0) drop-shadow(0 0 ${satelliteLabelOutlineWidth}px rgba(0,0,0,1)) !important;
         }
       </style>
     `;
     return mapHtmlContent.replace('</head>', `${dynamicStyles}</head>`);
-
   }, [satelliteLabelBrightness, satelliteLabelOutlineWidth]);
 
   const postMessageToIframe = useCallback((message: object) => {
@@ -1342,12 +1209,119 @@ const MapsContainer = React.memo(({
     }
   }, [isOpen, isNight]);
 
+  useEffect(() => {
+    const update = () => {
+        const state = physics.current;
+        const panel = panelRef.current;
+
+        if (!state.isDragging) {
+            if (state.animStartTime > 0) {
+                const elapsed = performance.now() - state.animStartTime;
+                const duration = 400; // ms
+                const t = Math.min(elapsed / duration, 1.0);
+                // power4.out easing
+                const easeT = 1 - Math.pow(1 - t, 4);
+                state.currentX = state.startX + (state.targetX - state.startX) * easeT;
+            } else {
+                state.currentX = state.targetX;
+            }
+        }
+
+        if (state.isInteracting) {
+            let visualProgress = state.currentX / 100;
+            visualProgress = Math.max(0, Math.min(1, visualProgress));
+            
+            onDragProgress?.(visualProgress);
+
+            if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
+                state.isInteracting = false;
+                onDragProgress?.(null);
+            }
+        }
+
+        if (panel) {
+            let visualX = state.currentX;
+            if (!state.isDragging) {
+                if (visualX < 0.01) visualX = 0;
+                if (visualX > 99.9) visualX = 100;
+            }
+            panel.style.transform = `translateX(${visualX}%)`;
+        }
+
+        state.animationId = requestAnimationFrame(update);
+    };
+
+    physics.current.animationId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(physics.current.animationId);
+  }, [onDragProgress]);
+
+  useEffect(() => {
+    const state = physics.current;
+    if (!state.isDragging) {
+        const newTargetX = isOpen ? 0 : 100;
+        if (state.targetX !== newTargetX || state.animStartTime === 0) {
+            state.startX = state.currentX;
+            state.targetX = newTargetX;
+            state.animStartTime = performance.now();
+            // state.isInteracting = true; // REMOVED
+        }
+    }
+  }, [isOpen]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!panelRef.current) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    
+    onInteractionStart?.();
+
+    const state = physics.current;
+    state.isDragging = true;
+    state.isInteracting = true;
+    state.dragStartX = e.clientX;
+    state.dragStartCurrentX = state.currentX;
+    state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const state = physics.current;
+    if (!state.isDragging) return;
+    e.stopPropagation();
+
+    const deltaPx = e.clientX - state.dragStartX;
+    const deltaPercent = (deltaPx / state.panelWidth) * 100;
+    
+    let newPercent = state.dragStartCurrentX + deltaPercent;
+    if (newPercent < 0) newPercent = 0; 
+    
+    state.currentX = newPercent;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    
+    const state = physics.current;
+    state.isDragging = false;
+
+    if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
+        state.startX = state.currentX;
+        state.targetX = 100;
+        state.animStartTime = performance.now();
+        if (isOpen) onClose();
+    } else {
+        state.startX = state.currentX;
+        state.targetX = 0;
+        state.animStartTime = performance.now();
+    }
+  };
+
   const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
 
   return (
     <div 
         ref={panelRef}
-        className="fixed top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel"
+        className={`fixed top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel`}
         style={{ 
             willChange: 'transform',
         }}
@@ -1355,7 +1329,7 @@ const MapsContainer = React.memo(({
         role="dialog"
         aria-modal="true"
         aria-labelledby="maps-player-title"
-        onClick={(e) => e.stopPropagation()}
+        onClick={stopPropagation}
     >
         <div className="w-full h-full flex flex-col relative bg-[#050505]">
             <div
@@ -1378,10 +1352,36 @@ const MapsContainer = React.memo(({
             <iframe
                 ref={iframeRef}
                 title="Tesla Navigation"
-                srcDoc={processedHtmlContent}
+                srcDoc={finalMapHtml}
                 allow="geolocation"
                 className="w-full h-full border-none"
             ></iframe>
+
+            {/* Overlay NavigateTool inside the Map App */}
+            {!navigationTarget && (
+                <div 
+                    className="absolute z-40 pointer-events-auto"
+                    style={{
+                        top: '20px',
+                        left: '20px',
+                    }}
+                >
+                    <NavigateTool 
+                        isNight={true} // Always dark theme over map usually looks best
+                        onSelectDestination={onSelectDestination}
+                        currentPosition={currentPosition}
+                        width={width} // Use the specific width prop passed from App.tsx
+                        widgetBgColor={widgetBgColor}
+                        dayPlayerButtonColor={dayPlayerButtonColor}
+                        nightPlayerButtonColor={nightPlayerButtonColor}
+                        homeLocation={homeLocation}
+                        workLocation={workLocation}
+                        darkNavigateInputBg={darkNavigateInputBg}
+                        isHome={true} // Maps container is essentially full-screen "home" for navigation
+                        showRecentsOnFocus={false} // Disable auto-expansion on focus
+                    />
+                </div>
+            )}
         </div>
     </div>
   );

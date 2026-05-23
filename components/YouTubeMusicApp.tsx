@@ -8,6 +8,7 @@ import { FiLoader, FiSearch, FiX } from 'react-icons/fi';
 import type { YouTubeTrackInfo } from '../types';
 import YouTubePlaylistDetailView from './YouTubePlaylistDetailView';
 import QuotaErrorModal from './QuotaErrorModal';
+import { isDemoMode } from '../lib/youtubeDemoFallback';
 
 interface YouTubeMusicAppProps {
     isOpen: boolean;
@@ -282,8 +283,22 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         setSearchResults([]);
         setSelectedPlaylist(null); // Exit playlist view on new search
 
+        const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
+
+        if (isDemoMode(YOUTUBE_API_KEY)) {
+            setTimeout(() => {
+                const mockMatches: MediaItem[] = [
+                    { id: 'jfKfPfyJRdk', name: `${searchQuery} - Live Acoustic Chill`, uri: 'youtube:track:jfKfPfyJRdk', images: [{ url: 'https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg' }], description: 'DriveOS Acoustic Demo', type: 'track' },
+                    { id: '4xDzrJKXOOY', name: `${searchQuery} - Synthwave Ride Beats`, uri: 'youtube:track:4xDzrJKXOOY', images: [{ url: 'https://i.ytimg.com/vi/4xDzrJKXOOY/hqdefault.jpg' }], description: 'DriveOS Retro Demo', type: 'track' },
+                    { id: '5qap5aO4i9A', name: `${searchQuery} - Deep Relaxation Ambience`, uri: 'youtube:track:5qap5aO4i9A', images: [{ url: 'https://i.ytimg.com/vi/5qap5aO4i9A/hqdefault.jpg' }], description: 'DriveOS Ambient Demo', type: 'track' }
+                ];
+                setSearchResults(mockMatches);
+                setIsSearching(false);
+            }, 300);
+            return;
+        }
+
         try {
-            const YOUTUBE_API_KEY = process.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
             const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchQuery}&type=video&videoCategoryId=10&maxResults=20&key=${YOUTUBE_API_KEY}`);
              if (!res.ok) {
                 const errorData = await res.json();

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ICONS } from '../constants';
 import { FiClock } from 'react-icons/fi';
+import { useNavigation } from '../context/NavigationContext';
 
 export const formatTravelTime = (minutes: number | null): string => {
     if (minutes === null || isNaN(minutes)) return '-- min';
@@ -29,31 +30,30 @@ interface RecentPlace {
 
 const NavigateTool = ({ 
     isNight,
-    onSelectDestination,
-    currentPosition,
     width,
     widgetBgColor,
     dayPlayerButtonColor,
     nightPlayerButtonColor,
-    homeLocation,
-    workLocation,
     darkNavigateInputBg,
     isHome = true,
     showRecentsOnFocus = true
 }: { 
     isNight: boolean,
-    onSelectDestination: (target: { lat: number, lng: number, name: string }) => void,
-    currentPosition: { lat: number; lng: number } | null,
     width: number,
     widgetBgColor: string;
     dayPlayerButtonColor: string;
     nightPlayerButtonColor: string;
-    homeLocation: { lat: number, lng: number, name: string } | null;
-    workLocation: { lat: number, lng: number, name: string } | null;
     darkNavigateInputBg: string;
     isHome?: boolean;
     showRecentsOnFocus?: boolean;
 }) => {
+    const {
+        currentPosition,
+        homeLocation,
+        workLocation,
+        handleSelectDestination: onSelectDestination,
+    } = useNavigation();
+
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
     const [loading, setLoading] = useState(false);

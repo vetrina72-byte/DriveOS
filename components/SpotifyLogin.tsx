@@ -89,8 +89,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     if (pollTimer.current) clearInterval(pollTimer.current);
     clearError();
     
-    const clientId = 'ecc9e126d442404b92e8081c7d95ecca';
-    const redirectUri = process.env.VITE_REDIRECT_URI;
+    const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
+    const redirectUri = import.meta.env.VITE_REDIRECT_URI || process.env.VITE_REDIRECT_URI;
     const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
     
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${encodeURIComponent(scope)}&state=${sidRef.current}&show_dialog=true`;

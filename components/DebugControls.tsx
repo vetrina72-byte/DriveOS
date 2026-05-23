@@ -6,24 +6,14 @@ import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { SceneConfig, HeadlightConfig } from './VehicleCanvas';
 import type { SceneColors } from '../App';
 import { initialSceneColors } from '../App';
+import { useWeather } from '../context/WeatherContext';
+import { useNavigation } from '../context/NavigationContext';
 
 interface DebugControlsProps {
   isOpen: boolean;
   onClose: () => void;
   isMapsLayered?: boolean;
   onDragProgress?: (progress: number | null) => void;
-  timeOverride: Date | null;
-  setTimeOverride: (date: Date | null) => void;
-  sunsetArrowYPosition: number;
-  setSunsetArrowYPosition: (y: number) => void;
-  sunriseArrowYPosition: number;
-  setSunriseArrowYPosition: (y: number) => void;
-  weatherConditionOverride: string | null;
-  setWeatherConditionOverride: (condition: string | null) => void;
-  effectiveWeatherCondition: string;
-  isNight: boolean;
-  isHot: boolean;
-  isCold: boolean;
   topBarScale: number;
   setTopBarScale: (scale: number) => void;
   topBarOffsetY: number;
@@ -78,10 +68,6 @@ interface DebugControlsProps {
   setNightFrontLightIntensity: (intensity: number) => void;
   nightEnvironmentIntensity: number;
   setNightEnvironmentIntensity: (intensity: number) => void;
-  tripInfo: { time: number, distance: number } | null;
-  startTripSimulation: () => void;
-  stopTripSimulation: () => void;
-  isSimulating: boolean;
   playerControlsSize: number;
   setPlayerControlsSize: (size: number) => void;
   playerControlsGap: number;
@@ -236,18 +222,6 @@ const DEFAULT_HOME_CONFIG: SceneConfig = {
 export default function DebugControls({ 
   isOpen, 
   onClose, 
-  timeOverride, 
-  setTimeOverride, 
-  sunsetArrowYPosition, 
-  setSunsetArrowYPosition, 
-  sunriseArrowYPosition, 
-  setSunriseArrowYPosition,
-  weatherConditionOverride,
-  setWeatherConditionOverride,
-  effectiveWeatherCondition,
-  isNight,
-  isHot,
-  isCold,
   topBarScale,
   setTopBarScale,
   topBarOffsetY,
@@ -302,10 +276,6 @@ export default function DebugControls({
   setNightFrontLightIntensity,
   nightEnvironmentIntensity,
   setNightEnvironmentIntensity,
-  tripInfo,
-  startTripSimulation,
-  stopTripSimulation,
-  isSimulating,
   playerControlsSize,
   setPlayerControlsSize,
   playerControlsGap,
@@ -415,6 +385,28 @@ export default function DebugControls({
   onDragProgress,
   isMapsLayered,
 }: DebugControlsProps) {
+  const {
+    timeOverride,
+    setTimeOverride,
+    sunsetArrowYPosition,
+    setSunsetArrowYPosition,
+    sunriseArrowYPosition,
+    setSunriseArrowYPosition,
+    weatherConditionOverride,
+    setWeatherConditionOverride,
+    effectiveWeatherCondition,
+    isNight,
+    isHot,
+    isCold,
+  } = useWeather();
+
+  const {
+    tripInfo,
+    startTripSimulation,
+    stopTripSimulation,
+    isSimulating,
+  } = useNavigation();
+
   const panelRef = useRef<HTMLDivElement>(null);
 
   // --- PHYSICS ENGINE (Unified) ---
