@@ -144,13 +144,16 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
 
   const themeProps = isNight ? nightThemeProps : (useDarkTheme ? darkThemeProps : lightThemeProps);
 
+  const AnyMapContainer = MapContainer as any;
+  const AnyMarker = Marker as any;
+
   return (
     <div 
       className={`minimap-container ${isVisible ? 'visible' : ''}`}
       style={containerStyle}
       onClick={onClick}
     >
-      <MapContainer
+      <AnyMapContainer
         center={[position.lat, position.lng]}
         zoom={zoom}
         className="minimap-leaflet"
@@ -167,7 +170,8 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
             {...themeProps}
         />
         {position && (
-            <Marker
+            // @ts-ignore
+            <AnyMarker
               ref={markerRef}
               position={[position.lat, position.lng]}
               icon={createVehicleIcon(bearing)}
@@ -175,7 +179,7 @@ const MiniMap = ({ isVisible, position, bearing, top, right, size, zoom, fadeSta
         )}
         <RouteManager useDarkTheme={useDarkTheme} />
         {position && <MapUpdater position={position} zoom={zoom} />}
-      </MapContainer>
+      </AnyMapContainer>
     </div>
   );
 };

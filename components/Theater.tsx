@@ -1,5 +1,6 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, Variants } from 'framer-motion';
 
 // A self-contained component for the service button with 3D hover effects.
@@ -144,27 +145,39 @@ const Theater = ({
     spotifyPlayerTop,
     spotifyPlayerBottom,
     onDragProgress,
+    isMapsLayered,
 }: {
     isOpen: boolean;
     onClose: () => void;
     isNight: boolean;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
+    isMapsLayered?: boolean;
     onDragProgress?: (progress: number | null) => void;
 }) => {
     const panelRef = useRef<HTMLDivElement>(null);
 
+    const [renderLayered, setRenderLayered] = useState(isMapsLayered);
+    const isVerticalRef = useRef(isMapsLayered);
+
+    useEffect(() => {
+        if (isOpen) {
+            setRenderLayered(!!isMapsLayered);
+            isVerticalRef.current = !!isMapsLayered;
+        }
+    }, [isMapsLayered, isOpen]);
+
     // --- PHYSICS ENGINE (Unified) ---
     const physics = useRef({
-        currentX: 100, // 0 = open, 100 = closed
-        targetX: 100,
-        startX: 100,
+        currentPercent: 100, // 0 = open, 100 = closed
+        targetPercent: 100,
+        startPercent: 100,
         animStartTime: 0,
         isDragging: false,
         isInteracting: false, // NEW: Interaction sequence tracking
-        dragStartX: 0,
-        dragStartCurrentX: 0,
-        panelWidth: 0,
+        dragStart: 0,
+        dragStartPercent: 0,
+        panelDimension: 0,
         animationId: 0
     });
 
@@ -185,21 +198,21 @@ const Theater = ({
                     const t = Math.min(elapsed / duration, 1.0);
                     // power4.out easing
                     const easeT = 1 - Math.pow(1 - t, 4);
-                    state.currentX = state.startX + (state.targetX - state.startX) * easeT;
+                    state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
                 } else {
-                    state.currentX = state.targetX;
+                    state.currentPercent = state.targetPercent;
                 }
             }
 
             // 2. Report Progress to 3D Scene (Seamless Handoff)
             if (state.isInteracting) {
-                let visualProgress = state.currentX / 100;
+                let visualProgress = state.currentPercent / 100;
                 visualProgress = Math.max(0, Math.min(1, visualProgress));
                 
                 onDragProgress?.(visualProgress);
 
                 // Check if settled
-                if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
+                if (!state.isDragging && Math.abs(state.targetPercent - state.currentPercent) < 0.5) {
                     state.isInteracting = false;
                     onDragProgress?.(null);
                 }
@@ -207,12 +220,16 @@ const Theater = ({
 
             // 3. Render
             if (panel) {
-                let visualX = state.currentX;
+                let visualPercent = state.currentPercent;
                 if (!state.isDragging) {
-                    if (visualX < 0.01) visualX = 0;
-                    if (visualX > 99.9) visualX = 100;
+                    if (visualPercent < 0.01) visualPercent = 0;
+                    if (visualPercent > 99.9) visualPercent = 100;
                 }
-                panel.style.transform = `translateX(${visualX}%)`;
+                if (isVerticalRef.current) {
+                    panel.style.transform = `translateY(${visualPercent}%)`;
+                } else {
+                    panel.style.transform = `translateX(${visualPercent}%)`;
+                }
             }
 
             state.animationId = requestAnimationFrame(update);
@@ -231,10 +248,10 @@ const Theater = ({
     useEffect(() => {
         const state = physics.current;
         if (!state.isDragging) {
-            const newTargetX = isOpen ? 0 : 100;
-            if (state.targetX !== newTargetX || state.animStartTime === 0) {
-                state.startX = state.currentX;
-                state.targetX = newTargetX;
+            const newTargetPercent = isOpen ? 0 : 100;
+            if (state.targetPercent !== newTargetPercent || state.animStartTime === 0) {
+                state.startPercent = state.currentPercent;
+                state.targetPercent = newTargetPercent;
                 state.animStartTime = performance.now();
                 // state.isInteracting = true; // REMOVED: Prevent emitting onDragProgress during click transitions
             }
@@ -250,9 +267,14 @@ const Theater = ({
         const state = physics.current;
         state.isDragging = true;
         state.isInteracting = true; // Start interaction sequence
-        state.dragStartX = e.clientX;
-        state.dragStartCurrentX = state.currentX;
-        state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+        if (renderLayered) {
+             state.dragStart = e.clientY;
+             state.panelDimension = panelRef.current.offsetHeight || window.innerHeight;
+        } else {
+             state.dragStart = e.clientX;
+             state.panelDimension = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+        }
+        state.dragStartPercent = state.currentPercent;
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
@@ -260,13 +282,14 @@ const Theater = ({
         if (!state.isDragging) return;
         e.stopPropagation();
 
-        const deltaPx = e.clientX - state.dragStartX;
-        const deltaPercent = (deltaPx / state.panelWidth) * 100;
+        const currentPos = renderLayered ? e.clientY : e.clientX;
+        const deltaPx = currentPos - state.dragStart;
+        const deltaPercent = (deltaPx / state.panelDimension) * 100;
         
-        let newPercent = state.dragStartCurrentX + deltaPercent;
+        let newPercent = state.dragStartPercent + deltaPercent;
         if (newPercent < 0) newPercent = 0; // Prevent widening
         
-        state.currentX = newPercent;
+        state.currentPercent = newPercent;
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
@@ -277,14 +300,14 @@ const Theater = ({
         state.isDragging = false;
         // DO NOT call onDragProgress(null) here.
 
-        if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
-            state.startX = state.currentX;
-            state.targetX = 100;
+        if (state.currentPercent > CLOSE_THRESHOLD_PERCENT) {
+            state.startPercent = state.currentPercent;
+            state.targetPercent = 100;
             state.animStartTime = performance.now();
             if (isOpen) onClose();
         } else {
-            state.startX = state.currentX;
-            state.targetX = 0;
+            state.startPercent = state.currentPercent;
+            state.targetPercent = 0;
             state.animStartTime = performance.now();
         }
     };
@@ -322,13 +345,24 @@ const Theater = ({
 
     const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
 
-    return (
+    // --- CONDITIONAL HANDLE STYLES & POSITIONING ---
+    const handleContainerClass = renderLayered
+        ? `absolute -top-12 left-0 right-0 h-12 flex items-end justify-center pb-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
+        : `absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
+
+    const handlePillClass = renderLayered
+        ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-x-110 ${handleColorClass}`
+        : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
+
+    const portalTarget = renderLayered ? document.getElementById('maps-anchored-container') : null;
+
+    const mainContent = (
         <div
             ref={panelRef}
-            className="spotify-app-panel w-2/3 shadow-2xl flex"
+            className={`spotify-app-panel shadow-2xl flex ${renderLayered ? 'absolute w-full right-0 pointer-events-auto' : 'fixed w-2/3'}`}
             style={{
                 top: `${spotifyPlayerTop}px`,
-                bottom: `${spotifyPlayerBottom}px`,
+                bottom: `${renderLayered ? 0 : spotifyPlayerBottom}px`,
                 willChange: 'transform',
                 // Start initially closed (physics loop will open it)
                 transform: 'translateX(100%)' 
@@ -341,16 +375,14 @@ const Theater = ({
             <div className="theater-container relative">
                 {/* --- DRAG HANDLE --- */}
                 <div
-                    className={`absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group bubble-handle`}
+                    className={handleContainerClass}
                     onPointerDown={handlePointerDown}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
                     onPointerLeave={handlePointerUp}
                     aria-label="Drag to close"
                 >
-                    <div 
-                        className={`w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
-                    />
+                    <div className={handlePillClass} />
                 </div>
                 {/* ------------------- */}
 
@@ -394,6 +426,12 @@ const Theater = ({
             </div>
         </div>
     );
+
+    if (renderLayered && portalTarget) {
+        return ReactDOM.createPortal(mainContent, portalTarget);
+    }
+
+    return mainContent;
 };
 
 export default React.memo(Theater);

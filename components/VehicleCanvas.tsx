@@ -205,6 +205,48 @@ function SceneController({
   const snapshotHomePos = useRef(new THREE.Vector3());
   const snapshotHomeTarget = useRef(new THREE.Vector3());
 
+  // Calcolo coefficiente di responsive e configurazioni locali dinamiche per evitare tagli
+  const responsiveCoeff = useMemo(() => {
+    const aspect = size.width / size.height;
+    return Math.min(1.0, Math.max(0.0, (aspect - 1.0) / 0.77));
+  }, [size.width, size.height]);
+
+  const localHomeConfig = useMemo(() => {
+    return {
+      ...homeConfig,
+      modelPos: {
+        ...homeConfig.modelPos,
+        x: homeConfig.modelPos.x * responsiveCoeff,
+      },
+      cameraTarget: {
+        ...homeConfig.cameraTarget,
+        x: homeConfig.cameraTarget.x * responsiveCoeff,
+      },
+      cameraPos: {
+        ...homeConfig.cameraPos,
+        x: homeConfig.cameraPos.x * responsiveCoeff,
+      }
+    };
+  }, [homeConfig, responsiveCoeff]);
+
+  const localAppOpenConfig = useMemo(() => {
+    return {
+      ...appOpenConfig,
+      modelPos: {
+        ...appOpenConfig.modelPos,
+        x: appOpenConfig.modelPos.x * responsiveCoeff,
+      },
+      cameraTarget: {
+        ...appOpenConfig.cameraTarget,
+        x: appOpenConfig.cameraTarget.x * responsiveCoeff,
+      },
+      cameraPos: {
+        ...appOpenConfig.cameraPos,
+        x: appOpenConfig.cameraPos.x * responsiveCoeff,
+      }
+    };
+  }, [appOpenConfig, responsiveCoeff]);
+
   // Gestione interazione orbit controls
   useEffect(() => {
     const ctrl = (controls as any);
@@ -257,8 +299,6 @@ function SceneController({
   const frozenModelScale = useRef<number>(1);
   const frozenModelRot = useRef(new THREE.Quaternion());
 
-  // Inizializzazione home al primo avvio is now handled inside useFrame
-
   // Helper per interpolare tutto (Camera e Modello)
   const applyInterpolation = (
       startCamPos: THREE.Vector3, startCamTarget: THREE.Vector3, startScale: number, startQuat: THREE.Quaternion,
@@ -300,12 +340,10 @@ function SceneController({
           modelRef.current.scale.set(s, s, s);
           
           // Posizione
-          vec3A.set(appOpenConfig.modelPos.x, appOpenConfig.modelPos.y, appOpenConfig.modelPos.z);
-          vec3B.set(homeConfig.modelPos.x, homeConfig.modelPos.y, homeConfig.modelPos.z);
-          const pLinear = isAppOpen ? (1 - t) : t; // La posizione è legata alla modalità aperta/chiusa per semplicità (0: Open, 1: Home)
-          // Se la destinazione è Home (endScale == homeConfig.modelScale), usa p=t ... wait
-          // Compute a pure linear P per positions for simplicity
-          let rawP = endScale === homeConfig.modelScale ? t : (1 - t); 
+          vec3A.set(localAppOpenConfig.modelPos.x, localAppOpenConfig.modelPos.y, localAppOpenConfig.modelPos.z);
+          vec3B.set(localHomeConfig.modelPos.x, localHomeConfig.modelPos.y, localHomeConfig.modelPos.z);
+          const pLinear = isAppOpen ? (1 - t) : t; 
+          let rawP = endScale === localHomeConfig.modelScale ? t : (1 - t); 
           if (isRestoringHome.current) rawP = 1;
           modelRef.current.position.lerpVectors(vec3A, vec3B, rawP);
 
@@ -317,15 +355,15 @@ function SceneController({
   };
 
   // Pre-computiamo i target puri
-  const quatTargetAppOpen = useMemo(() => new THREE.Quaternion().setFromEuler(new THREE.Euler(appOpenConfig.modelRot.x, appOpenConfig.modelRot.y, appOpenConfig.modelRot.z)), [appOpenConfig.modelRot]);
-  const quatTargetHome = useMemo(() => new THREE.Quaternion().setFromEuler(new THREE.Euler(homeConfig.modelRot.x, homeConfig.modelRot.y, homeConfig.modelRot.z)), [homeConfig.modelRot]);
+  const quatTargetAppOpen = useMemo(() => new THREE.Quaternion().setFromEuler(new THREE.Euler(localAppOpenConfig.modelRot.x, localAppOpenConfig.modelRot.y, localAppOpenConfig.modelRot.z)), [localAppOpenConfig.modelRot]);
+  const quatTargetHome = useMemo(() => new THREE.Quaternion().setFromEuler(new THREE.Euler(localHomeConfig.modelRot.x, localHomeConfig.modelRot.y, localHomeConfig.modelRot.z)), [localHomeConfig.modelRot]);
 
   // Animazione camera e modello
   useFrame((_, delta) => {
     const ctrl = typeof controls !== 'undefined' ? (controls as any) : null;
     
     if (!initializedDynamicHome.current && ctrl && modelRef.current) {
-        const initConfig = isAppOpen ? appOpenConfig : homeConfig;
+        const initConfig = isAppOpen ? localAppOpenConfig : localHomeConfig;
         
         dynamicHomePos.current.set(initConfig.cameraPos.x as number, initConfig.cameraPos.y as number, initConfig.cameraPos.z as number);
         dynamicHomeTarget.current.set(initConfig.cameraTarget.x as number, initConfig.cameraTarget.y as number, initConfig.cameraTarget.z as number);
@@ -341,7 +379,6 @@ function SceneController({
         modelRef.current.position.set(initConfig.modelPos.x, initConfig.modelPos.y, initConfig.modelPos.z);
         frontLightTarget.position.copy(modelRef.current.position).add(new THREE.Vector3(0, 0.5, 0));
         
-        // Se isAppOpen è true l'utente dovrebbe poter ruotare normalmente? No, a schermo intero rotea, ad app aperta no.
         ctrl.enableRotate = !isAppOpen;
         
         initializedDynamicHome.current = true;
@@ -379,95 +416,87 @@ function SceneController({
         transitionMode.current = 'idle'; 
         if (!isAppOpen) {
             // FORZATURA DEI VALORI REALI HOME A SCHERMO INTERO E UPDATE DELLA MATRICE
-            camera.position.set(homeConfig.cameraPos.x as number, homeConfig.cameraPos.y as number, homeConfig.cameraPos.z as number);
+            camera.position.set(localHomeConfig.cameraPos.x as number, localHomeConfig.cameraPos.y as number, localHomeConfig.cameraPos.z as number);
             camera.updateProjectionMatrix();
             if (ctrl) {
-                ctrl.target.set(homeConfig.cameraTarget.x as number, homeConfig.cameraTarget.y as number, homeConfig.cameraTarget.z as number);
+                ctrl.target.set(localHomeConfig.cameraTarget.x as number, localHomeConfig.cameraTarget.y as number, localHomeConfig.cameraTarget.z as number);
                 ctrl.enableRotate = true;
                 ctrl.update();
             }
             if (modelRef.current) {
-                modelRef.current.scale.set(homeConfig.modelScale, homeConfig.modelScale, homeConfig.modelScale);
+                modelRef.current.scale.set(localHomeConfig.modelScale, localHomeConfig.modelScale, localHomeConfig.modelScale);
                 modelRef.current.quaternion.copy(quatTargetHome);
-                vec3B.set(homeConfig.modelPos.x, homeConfig.modelPos.y, homeConfig.modelPos.z);
+                vec3B.set(localHomeConfig.modelPos.x, localHomeConfig.modelPos.y, localHomeConfig.modelPos.z);
                 modelRef.current.position.copy(vec3B);
                 frontLightTarget.position.copy(vec3B).add(new THREE.Vector3(0, 0.5, 0));
             }
-            // RISOLTO BUG B: Niente più copie da camera a riposo
-            dynamicHomePos.current.set(homeConfig.cameraPos.x as number, homeConfig.cameraPos.y as number, homeConfig.cameraPos.z as number);
-            dynamicHomeTarget.current.set(homeConfig.cameraTarget.x as number, homeConfig.cameraTarget.y as number, homeConfig.cameraTarget.z as number);
+            dynamicHomePos.current.set(localHomeConfig.cameraPos.x as number, localHomeConfig.cameraPos.y as number, localHomeConfig.cameraPos.z as number);
+            dynamicHomeTarget.current.set(localHomeConfig.cameraTarget.x as number, localHomeConfig.cameraTarget.y as number, localHomeConfig.cameraTarget.z as number);
         }
     }
 
     // ESECUZIONE DEL CANALE ATTIVO
-    let p = isAppOpen ? 0 : 1; // Default layout
+    let p = isAppOpen ? 0 : 1; 
 
     if (interacting) {
         // UTENTE MANOVRA A SCHERMO INTERO
         transitionMode.current = 'idle';
-        // Forza l'orbit controls sul target di default
         if (ctrl) {
-            ctrl.target.set(homeConfig.cameraTarget.x as number, homeConfig.cameraTarget.y as number, homeConfig.cameraTarget.z as number);
+            ctrl.target.set(localHomeConfig.cameraTarget.x as number, localHomeConfig.cameraTarget.y as number, localHomeConfig.cameraTarget.z as number);
             ctrl.update();
         }
         dynamicHomePos.current.copy(camera.position);
         if (ctrl) dynamicHomeTarget.current.copy(ctrl.target);
         
-        // Applica solo la rotazione di default al modello
         if (modelRef.current) {
-            modelRef.current.scale.set(homeConfig.modelScale, homeConfig.modelScale, homeConfig.modelScale);
+            modelRef.current.scale.set(localHomeConfig.modelScale, localHomeConfig.modelScale, localHomeConfig.modelScale);
             modelRef.current.quaternion.copy(quatTargetHome);
-            vec3B.set(homeConfig.modelPos.x, homeConfig.modelPos.y, homeConfig.modelPos.z);
+            vec3B.set(localHomeConfig.modelPos.x, localHomeConfig.modelPos.y, localHomeConfig.modelPos.z);
             modelRef.current.position.copy(vec3B);
             frontLightTarget.position.copy(vec3B).add(new THREE.Vector3(0, 0.5, 0));
         }
     } 
     else if (transitionMode.current === 'auto') {
-        // FLUSSO: CLICK - Forza la stessa identica durata (0.4s) e lo stesso easing delle app
         animTime.current += delta;
         let t = Math.min(animTime.current / 0.4, 1.0);
-        const easeT = 1 - Math.pow(1 - t, 4); // power4.out
+        const easeT = 1 - Math.pow(1 - t, 4); 
 
         if (t >= 1.0) {
             transitionMode.current = 'idle';
             if (!isAppOpen) {
-                // FORZATURA DEI VALORI REALI HOME A SCHERMO INTERO E UPDATE DELLA MATRICE
-                camera.position.set(homeConfig.cameraPos.x as number, homeConfig.cameraPos.y as number, homeConfig.cameraPos.z as number);
+                camera.position.set(localHomeConfig.cameraPos.x as number, localHomeConfig.cameraPos.y as number, localHomeConfig.cameraPos.z as number);
                 camera.updateProjectionMatrix();
                 if (ctrl) {
-                    ctrl.target.set(homeConfig.cameraTarget.x as number, homeConfig.cameraTarget.y as number, homeConfig.cameraTarget.z as number);
+                    ctrl.target.set(localHomeConfig.cameraTarget.x as number, localHomeConfig.cameraTarget.y as number, localHomeConfig.cameraTarget.z as number);
                     ctrl.enableRotate = true;
                     ctrl.update();
                 }
                 if (modelRef.current) {
-                    modelRef.current.scale.set(homeConfig.modelScale, homeConfig.modelScale, homeConfig.modelScale);
+                    modelRef.current.scale.set(localHomeConfig.modelScale, localHomeConfig.modelScale, localHomeConfig.modelScale);
                     modelRef.current.quaternion.copy(quatTargetHome);
-                    vec3B.set(homeConfig.modelPos.x, homeConfig.modelPos.y, homeConfig.modelPos.z);
+                    vec3B.set(localHomeConfig.modelPos.x, localHomeConfig.modelPos.y, localHomeConfig.modelPos.z);
                     modelRef.current.position.copy(vec3B);
                     frontLightTarget.position.copy(vec3B).add(new THREE.Vector3(0, 0.5, 0));
                 }
-                // RISOLTO BUG A riposo: niente overwrites da camera.position
-                dynamicHomePos.current.set(homeConfig.cameraPos.x as number, homeConfig.cameraPos.y as number, homeConfig.cameraPos.z as number);
-                dynamicHomeTarget.current.set(homeConfig.cameraTarget.x as number, homeConfig.cameraTarget.y as number, homeConfig.cameraTarget.z as number);
+                dynamicHomePos.current.set(localHomeConfig.cameraPos.x as number, localHomeConfig.cameraPos.y as number, localHomeConfig.cameraPos.z as number);
+                dynamicHomeTarget.current.set(localHomeConfig.cameraTarget.x as number, localHomeConfig.cameraTarget.y as number, localHomeConfig.cameraTarget.z as number);
             } else {
-                // App aperta
                 dynamicHomePos.current.copy(camera.position);
                 if (ctrl) dynamicHomeTarget.current.copy(ctrl.target);
             }
         }
 
-        // Determina target fisso
         const endPos = new THREE.Vector3(
-            isAppOpen ? appOpenConfig.cameraPos.x : homeConfig.cameraPos.x,
-            isAppOpen ? appOpenConfig.cameraPos.y : homeConfig.cameraPos.y,
-            isAppOpen ? appOpenConfig.cameraPos.z : homeConfig.cameraPos.z
+            isAppOpen ? localAppOpenConfig.cameraPos.x : localHomeConfig.cameraPos.x,
+            isAppOpen ? localAppOpenConfig.cameraPos.y : localHomeConfig.cameraPos.y,
+            isAppOpen ? localAppOpenConfig.cameraPos.z : localHomeConfig.cameraPos.z
         );
         const endTarget = new THREE.Vector3(
-            isAppOpen ? appOpenConfig.cameraTarget.x : homeConfig.cameraTarget.x,
-            isAppOpen ? appOpenConfig.cameraTarget.y : homeConfig.cameraTarget.y,
-            isAppOpen ? appOpenConfig.cameraTarget.z : homeConfig.cameraTarget.z
+            isAppOpen ? localAppOpenConfig.cameraTarget.x : localHomeConfig.cameraTarget.x,
+            isAppOpen ? localAppOpenConfig.cameraTarget.y : localHomeConfig.cameraTarget.y,
+            isAppOpen ? localAppOpenConfig.cameraTarget.z : localHomeConfig.cameraTarget.z
         );
-        const endScale = isAppOpen ? appOpenConfig.modelScale : homeConfig.modelScale;
+        const endScale = isAppOpen ? localAppOpenConfig.modelScale : localHomeConfig.modelScale;
         const endQuat = isAppOpen ? quatTargetAppOpen : quatTargetHome;
 
         applyInterpolation(
@@ -479,59 +508,54 @@ function SceneController({
         p = isAppOpen ? (1 - easeT) : easeT;
     }
     else if (transitionMode.current === 'drag') {
-        // FLUSSO: DRAG
         let rawP = dragProgress.current as number;
         rawP = Math.max(0, Math.min(1, rawP));
 
-        // Partenza (App Aperta: p=0) / Destinazione (Home: p=1) rigida
-        const sPos = new THREE.Vector3(appOpenConfig.cameraPos.x, appOpenConfig.cameraPos.y, appOpenConfig.cameraPos.z);
-        const sTarget = new THREE.Vector3(appOpenConfig.cameraTarget.x, appOpenConfig.cameraTarget.y, appOpenConfig.cameraTarget.z);
+        const sPos = new THREE.Vector3(localAppOpenConfig.cameraPos.x, localAppOpenConfig.cameraPos.y, localAppOpenConfig.cameraPos.z);
+        const sTarget = new THREE.Vector3(localAppOpenConfig.cameraTarget.x, localAppOpenConfig.cameraTarget.y, localAppOpenConfig.cameraTarget.z);
         
-        const ePos = new THREE.Vector3(homeConfig.cameraPos.x, homeConfig.cameraPos.y, homeConfig.cameraPos.z);
-        const eTarget = new THREE.Vector3(homeConfig.cameraTarget.x, homeConfig.cameraTarget.y, homeConfig.cameraTarget.z);
+        const ePos = new THREE.Vector3(localHomeConfig.cameraPos.x, localHomeConfig.cameraPos.y, localHomeConfig.cameraPos.z);
+        const eTarget = new THREE.Vector3(localHomeConfig.cameraTarget.x, localHomeConfig.cameraTarget.y, localHomeConfig.cameraTarget.z);
 
         applyInterpolation(
-            sPos, sTarget, appOpenConfig.modelScale, quatTargetAppOpen,
-            ePos, eTarget, homeConfig.modelScale, quatTargetHome,
+            sPos, sTarget, localAppOpenConfig.modelScale, quatTargetAppOpen,
+            ePos, eTarget, localHomeConfig.modelScale, quatTargetHome,
             rawP, ctrl
         );
         
         p = rawP;
     }
     else if (isRestoringHome.current) {
-        // FLUSSO: RIPRISTINO AUTO DOPO INATTIVITÀ (8s)
         restoreAnimProgress.current += delta;
         if (restoreAnimProgress.current < 1.4) {
             const t = Math.min(restoreAnimProgress.current / 1.4, 1.0);
             const easeT = 1 - Math.pow(1 - t, 4);
             
-            const ePos = new THREE.Vector3(homeConfig.cameraPos.x, homeConfig.cameraPos.y, homeConfig.cameraPos.z);
-            const eTarget = new THREE.Vector3(homeConfig.cameraTarget.x, homeConfig.cameraTarget.y, homeConfig.cameraTarget.z);
+            const ePos = new THREE.Vector3(localHomeConfig.cameraPos.x, localHomeConfig.cameraPos.y, localHomeConfig.cameraPos.z);
+            const eTarget = new THREE.Vector3(localHomeConfig.cameraTarget.x, localHomeConfig.cameraTarget.y, localHomeConfig.cameraTarget.z);
 
             applyInterpolation(
-                snapshotHomePos.current, snapshotHomeTarget.current, homeConfig.modelScale, quatTargetHome, // Parte dal vecchio home
-                ePos, eTarget, homeConfig.modelScale, quatTargetHome,
+                snapshotHomePos.current, snapshotHomeTarget.current, localHomeConfig.modelScale, quatTargetHome, 
+                ePos, eTarget, localHomeConfig.modelScale, quatTargetHome,
                 easeT, ctrl
             );
         } else {
             isRestoringHome.current = false;
-            // Snappa
-            vec3A.set(homeConfig.cameraPos.x as number, homeConfig.cameraPos.y as number, homeConfig.cameraPos.z as number);
+            vec3A.set(localHomeConfig.cameraPos.x as number, localHomeConfig.cameraPos.y as number, localHomeConfig.cameraPos.z as number);
             camera.position.copy(vec3A);
             camera.updateProjectionMatrix();
             if (ctrl) {
-                 vec3B.set(homeConfig.cameraTarget.x as number, homeConfig.cameraTarget.y as number, homeConfig.cameraTarget.z as number);
+                 vec3B.set(localHomeConfig.cameraTarget.x as number, localHomeConfig.cameraTarget.y as number, localHomeConfig.cameraTarget.z as number);
                  ctrl.target.copy(vec3B);
                  ctrl.enableRotate = true;
                  ctrl.update();
             }
-            dynamicHomePos.current.set(homeConfig.cameraPos.x as number, homeConfig.cameraPos.y as number, homeConfig.cameraPos.z as number);
-            dynamicHomeTarget.current.set(homeConfig.cameraTarget.x as number, homeConfig.cameraTarget.y as number, homeConfig.cameraTarget.z as number);
+            dynamicHomePos.current.set(localHomeConfig.cameraPos.x as number, localHomeConfig.cameraPos.y as number, localHomeConfig.cameraPos.z as number);
+            dynamicHomeTarget.current.set(localHomeConfig.cameraTarget.x as number, localHomeConfig.cameraTarget.y as number, localHomeConfig.cameraTarget.z as number);
         }
         p = 1;
     }
     else {
-        // IDLE
         if (!isAppOpen && ctrl) ctrl.enableRotate = true;
     }
 
@@ -542,8 +566,19 @@ function SceneController({
         const cw = container.clientWidth;
         const ch = container.clientHeight;
         
-        // Calcola la porzione di schermo visibile in larghezza (da 1/3 a screen_width)
-        const visibleWidth = Math.round(cw * (1 / 3) + cw * (2 / 3) * p);
+        // Percentuale minima della larghezza del canvas ad app aperta (p = 0)
+        // Se lo schermo è largo (cw >= 1024px), usiamo 1/3 (0.33)
+        // Se lo schermo è medio (768px <= cw < 1024px), usiamo 1/2 (0.5)
+        // Se lo schermo è stretto (cw < 768px), usiamo 1.0 (100%), per un layout splendido e overlays protettivi
+        let minWidthPercent = 0.3333;
+        if (cw < 768) {
+            minWidthPercent = 1.0;
+        } else if (cw < 1024) {
+            minWidthPercent = 0.5;
+        }
+
+        // Calcola la porzione di schermo visibile in larghezza
+        const visibleWidth = Math.round(cw * minWidthPercent + cw * (1 - minWidthPercent) * p);
 
         // Forza il ridimensionamento fisico e l'aggiornamento degli stili CSS del Canvas ad ogni singolo frame
         if (canvas.width !== visibleWidth || canvas.height !== ch) {
@@ -555,14 +590,11 @@ function SceneController({
             const aspect = visibleWidth / ch;
             if (camera.aspect !== aspect) {
                 camera.aspect = aspect;
-                // Manteniamo un FOV costante per una traiettoria fluida e naturale
                 camera.fov = 48; 
                 camera.updateProjectionMatrix();
             }
         }
 
-        // Con il ridimensionamento fisico del Canvas, lo Scissor Test non serve più,
-        // ma impostiamo comunque il viewport e disabilitiamo lo Scissor Test per prestazioni ottimali.
         gl.setViewport(0, 0, visibleWidth, ch);
         gl.setScissorTest(false);
     }

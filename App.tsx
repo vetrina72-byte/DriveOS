@@ -43,6 +43,8 @@ const ALL_APPS: AppDefinition[] = [
   { id: 'debug', icon: ICONS.settings, label: 'Debug', colorClasses: 'text-gray-400 hover:text-white' },
 ];
 
+export const SPLIT_APPS_WITH_MAP_UNDER = ['spotify', 'youtube-music', 'radio', 'theater', 'debug'];
+
 const weatherConfig: Record<string, WeatherParams> = {
   'Cielo sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 50, fogFar: 150 },
   'Prevalentemente sereno': { rainDensity: 0, rainSpeed: 0, snowDensity: 0, snowSpeed: 0, hailDensity: 0, fogNear: 45, fogFar: 140 },
@@ -523,7 +525,8 @@ function AppContent() {
   const handleSpotifyDrag = useCallback((progress: number | null) => {
     if (isSwitchingRef.current) return;
     // If maps is layered, OR we are transitioning back to maps, ignore
-    if ((isMapsLayered || activeApp === 'maps') && progress !== null) {
+    const isMapLayeredBehind = activeApp !== null && ['spotify', 'youtube-music', 'radio', 'theater', 'debug'].includes(activeApp);
+    if ((isMapsLayered || activeApp === 'maps' || isMapLayeredBehind) && progress !== null) {
         return; 
     }
     dragProgressRef.current = progress;
@@ -669,7 +672,11 @@ function AppContent() {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (e.ctrlKey && e.altKey && (e.key === 'd' || e.key === 'D')) {
             e.preventDefault();
-            setIsDebugOpen(prev => !prev);
+            if (activeApp === 'debug') {
+                toggleApp('maps');
+            } else {
+                toggleApp('debug');
+            }
         }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -921,8 +928,17 @@ function AppContent() {
     const willBeActive = activeApp !== appName; 
     if (willBeActive && !dockApps.includes(appName)) setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
     
-    if (appName === 'spotify' && activeApp === 'maps') { setActiveApp('spotify'); setIsMapsLayered(true); return; }
-    if (appName === 'spotify' && activeApp === 'spotify' && isMapsLayered) { setActiveApp('maps'); setIsMapsLayered(false); return; }
+    // We generalize the map layering logic to all apps in SPLIT_APPS_WITH_MAP_UNDER
+    if (SPLIT_APPS_WITH_MAP_UNDER.includes(appName) && activeApp === 'maps') { 
+        setActiveApp(appName); 
+        setIsMapsLayered(true); 
+        return; 
+    }
+    if (SPLIT_APPS_WITH_MAP_UNDER.includes(appName) && activeApp === appName) { 
+        setActiveApp('maps'); 
+        setIsMapsLayered(false); 
+        return; 
+    }
     
     if (activeApp !== null && activeApp !== appName) {
         switchApp(appName);
@@ -954,16 +970,19 @@ function AppContent() {
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
+  const isMapLayeredBehind = activeApp !== null && SPLIT_APPS_WITH_MAP_UNDER.includes(activeApp);
+  const shouldShowMap = activeApp === 'maps' || isMapsLayered || isMapLayeredBehind;
+
   return (
-    <div id="main-app-container" className="absolute top-0 left-0 w-screen h-screen select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
+    <div id="main-app-container" className="absolute top-0 left-0 w-full h-full select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
       <VehicleCanvas isAppOpen={activeApp !== null} isNight={isNight} minOrbitDistance={minOrbitDistance} maxOrbitDistance={maxOrbitDistance} appOpenConfig={appOpenConfig} homeConfig={homeConfig} sceneColors={sceneColors} nightAmbientIntensity={nightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} onInteractionChange={setIsCanvasInteracting} effectiveWeatherCondition={effectiveWeatherCondition} dayFogNear={dayFogNear} dayFogFar={dayFogFar} targetWeatherParams={targetWeatherParams} uiScale={uiScale ?? 1.0} headlightConfig={headlightConfig} dragProgress={dragProgressRef}/>
-      <TopStatusBar isNight={useDarkTheme} onWeatherClick={handleWeatherClick} weatherData={weatherData} weatherCondition={effectiveWeatherCondition} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} isHot={isHot} isCold={isCold} tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} mapStyle={mapStyle} isMapVisible={activeApp === 'maps' || isMapsLayered}/>
+      <TopStatusBar isNight={useDarkTheme} onWeatherClick={handleWeatherClick} weatherData={weatherData} weatherCondition={effectiveWeatherCondition} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} isHot={isHot} isCold={isCold} tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} mapStyle={mapStyle} isMapVisible={shouldShowMap}/>
       <WeatherModal isOpen={isWeatherModalOpen} onClose={() => setWeatherModalOpen(false)} isNight={useDarkTheme} status={weatherStatus} data={weatherData} error={weatherError} effectiveTime={effectiveTime} sunsetArrowYPosition={sunsetArrowYPosition} sunriseArrowYPosition={sunriseArrowYPosition} tempUnit={tempUnit}/>
       <MiniMap isVisible={activeApp === null && !isCanvasInteracting} position={currentPosition} bearing={bearing} isNight={isNight} useDarkTheme={useDarkTheme} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
         <MapsContainer 
-            isOpen={activeApp === 'maps' || isMapsLayered} 
+            isOpen={shouldShowMap} 
             onClose={handleCloseMaps} 
             onInteractionStart={handleMapsInteractionStart} 
             isNight={useDarkTheme} 
@@ -986,12 +1005,13 @@ function AppContent() {
             nightPlayerButtonColor={nightPlayerButtonColor}
             darkNavigateInputBg={darkNavigateInputBg}
         />
-        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={() => toggleApp('spotify')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered} onDragProgress={handleSpotifyDrag} />
-        <TheaterApp isOpen={activeApp === 'theater'} onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleDragProgress}/>
+        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={() => toggleApp('spotify')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered || isMapLayeredBehind} onDragProgress={handleSpotifyDrag} />
+        <TheaterApp isOpen={activeApp === 'theater'} onClose={() => toggleApp('theater')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <DebugControls
             isOpen={activeApp === 'debug'}
-                    onClose={() => setActiveApp(null)}
-                    onDragProgress={handleDragProgress}
+                    onClose={() => toggleApp('debug')}
+                    onDragProgress={handleSpotifyDrag}
+                    isMapsLayered={isMapsLayered || isMapLayeredBehind}
                     isAppView={true}
                     timeOverride={timeOverride}
                     setTimeOverride={setTimeOverride}
@@ -1170,8 +1190,8 @@ function AppContent() {
                     skipButtonScale={skipButtonScale}
                     setSkipButtonScale={setSkipButtonScale}
                 />
-        <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleDragProgress}/>
-        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleDragProgress}/>
+        <RadioApp isOpen={activeApp === 'radio'} onClose={() => toggleApp('radio')} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
+        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={() => toggleApp('youtube-music')} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <AnimatePresence>{arrivalMessage && <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.9 }} className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10" style={{ bottom: '230px' }}>{arrivalMessage}</motion.div>}</AnimatePresence>
         {/* NAVIGATE TOOL CONTAINER */}
         <div ref={navigateToolRef} className="flex items-end" style={navigateToolStyle}>
