@@ -28,7 +28,7 @@ This project includes a small Node.js server to handle the Spotify authenticatio
 
     ```
     # .env
-    SPOTIFY_CLIENT_ID=ecc9e126d442404b92e8081c7d95ecca
+    SPOTIFY_CLIENT_ID=il_tuo_client_id
     SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET
     VITE_REDIRECT_URI=http://localhost:5173/api/spotify-callback
     MAPTILER_API_KEY=YOUR_MAPTILER_API_KEY
