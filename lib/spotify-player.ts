@@ -36,10 +36,29 @@ export function initSpotifyPlayerOnce(options: InitOptions) {
                 getOAuthToken: cb => options.getAccessToken().then(token => cb(token)),
             });
 
-            player.addListener('ready', (details) => {
+            player.addListener('ready', async (details) => {
                 console.log('[Spotify SDK] Ready with Device ID', details.device_id);
                 spotifyDeviceId = details.device_id;
                 playerReady = true;
+
+                // --- AUTO-TRANSFER DEVICE ---
+                try {
+                    const token = await options.getAccessToken();
+                    if (token) {
+                        await fetch('https://api.spotify.com/v1/me/player', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({ device_ids: [details.device_id], play: false })
+                        });
+                        console.log('[Spotify SDK] Auto-transferred active device on connect');
+                    }
+                } catch (e) {
+                    console.error('[Spotify SDK] Failed to auto-transfer device', e);
+                }
+
                 options.onReady(details);
                 resolve(player);
             });

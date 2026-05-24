@@ -355,13 +355,14 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             // Persist the essential track metadata for next session instant-load
             if (newState.track_window.current_track) {
                 localStorage.setItem("cached_track_data", JSON.stringify(newState.track_window.current_track));
+                localStorage.setItem("spotify_last_track", newState.track_window.current_track.uri);
             }
             
             localStorage.setItem("last_is_playing", String(!newState.paused));
-            localStorage.setItem("last_progress_ms", String(newState.position));
-            if (newState.track_window.current_track) localStorage.setItem("last_track_uri", newState.track_window.current_track.uri);
-            if (newState.context && newState.context.uri) localStorage.setItem("last_context_uri", newState.context.uri);
-            else localStorage.removeItem("last_context_uri");
+            localStorage.setItem("spotify_last_position", String(newState.position));
+            
+            if (newState.context && newState.context.uri) localStorage.setItem("spotify_last_context", newState.context.uri);
+            else localStorage.removeItem("spotify_last_context");
         }
     }, [setNowPlaying, checkRemotePlayerState]);
     
@@ -632,7 +633,34 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
 
         try {
-            const success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
+            let success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
+
+            // --- RECOVERY LOGIC ON COLD RESUME ---
+            if (!success && isResume) {
+                const { getDeviceId } = await import('../lib/spotify-player');
+                const deviceId = getDeviceId();
+                const lastCtx = localStorage.getItem("last_context_uri");
+                const lastUr = localStorage.getItem("last_track_uri");
+                const lastPos = localStorage.getItem("last_progress_ms");
+                
+                if (deviceId && (lastCtx || lastUr)) {
+                    console.log("Device not active, attempting fallback play recovery from local storage...");
+                    const body: any = {};
+                    if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
+                    else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
+                    if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
+                    
+                    try {
+                        const res = await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+                        // If no exception, consider it successful
+                        console.log("Fallback recovery play explicit succeeded.");
+                        success = true;
+                    } catch (recErr) {
+                        console.error('Fallback recovery play failed', recErr);
+                    }
+                }
+            }
+
             if (!success) {
                 // Only reset loading if it failed. If it succeeded, we wait for SDK state change to clear loading.
                 setNowPlaying(prev => ({ ...prev, isLoading: false }));
