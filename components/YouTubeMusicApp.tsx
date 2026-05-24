@@ -9,6 +9,7 @@ import type { YouTubeTrackInfo } from '../types';
 import YouTubePlaylistDetailView from './YouTubePlaylistDetailView';
 import QuotaErrorModal from './QuotaErrorModal';
 import { isDemoMode } from '../lib/youtubeDemoFallback';
+import { useYouTubeMusic, mapYouTubeItemToMediaItem } from '../context/YouTubeMusicContext';
 
 interface YouTubeMusicAppProps {
     isOpen: boolean;
@@ -16,12 +17,6 @@ interface YouTubeMusicAppProps {
     isNight: boolean;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
-    homeData: { [key: string]: MediaItem[] };
-    isHomeDataLoading: boolean;
-    youtubeHomeError: string | null;
-    homeDataQuotaExceeded: boolean;
-    onRetry: () => void;
-    onQuotaError: () => void;
     isMapsLayered?: boolean;
     onDragProgress?: (progress: number | null) => void;
 }
@@ -44,25 +39,6 @@ const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     );
 };
 
-const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
-    if (!item || !item.snippet) return null;
-
-    const id = typeof item.id === 'string' ? item.id : item.id?.videoId || item.id?.playlistId;
-    if (!id) return null;
-
-    const type = item.kind === 'youtube#video' || item.id?.kind === 'youtube#video' ? 'track' :
-                 item.kind === 'youtube#playlist' || item.id?.kind === 'youtube#playlist' ? 'playlist' : 'track';
-
-    return {
-        id,
-        name: item.snippet.title,
-        uri: `youtube:${type}:${id}`,
-        images: [item.snippet.thumbnails.high || item.snippet.thumbnails.default],
-        description: item.snippet.channelTitle,
-        type: type,
-    };
-};
-
 const logoUrlDark = "https://upload.wikimedia.org/wikipedia/commons/c/c3/YouTube_Music_short_logo_with_white_wordmark.svg";
 const logoUrlLight = "https://upload.wikimedia.org/wikipedia/commons/0/0a/YouTube_Music_short_logo-black.svg";
 
@@ -72,16 +48,18 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     isNight, 
     spotifyPlayerTop, 
     spotifyPlayerBottom,
-    homeData,
-    isHomeDataLoading,
-    youtubeHomeError,
-    homeDataQuotaExceeded,
-    onRetry,
-    onQuotaError,
     onDragProgress,
     isMapsLayered,
 }) => {
     const { playYouTube } = useAuth();
+    const {
+        youtubeHomeData: homeData,
+        youtubeHomeIsLoading: isHomeDataLoading,
+        youtubeHomeError,
+        youtubeHomeQuotaExceeded: homeDataQuotaExceeded,
+        fetchYouTubeHomeData: onRetry,
+        handleGenericQuotaError: onQuotaError
+    } = useYouTubeMusic();
     const panelRef = useRef<HTMLDivElement>(null);
 
     const [renderLayered, setRenderLayered] = useState(isMapsLayered);
@@ -91,8 +69,9 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         if (isOpen) {
             setRenderLayered(!!isMapsLayered);
             isVerticalRef.current = !!isMapsLayered;
+            onRetry();
         }
-    }, [isMapsLayered, isOpen]);
+    }, [isMapsLayered, isOpen, onRetry]);
 
     // --- PHYSICS ENGINE (Unified) ---
     const physics = useRef({

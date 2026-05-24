@@ -11,7 +11,7 @@ export interface DemoMediaItem {
 
 // Check if Youtube key is present and is not a default placeholder
 export function isDemoMode(apiKey: string): boolean {
-  return !apiKey || apiKey.includes('placeholder') || apiKey === 'your_youtube_api_key_placeholder' || apiKey.startsWith('AIzaSy_Mock') || apiKey === '';
+  return !apiKey || apiKey.includes('placeholder') || apiKey === 'your_youtube_api_key_placeholder' || apiKey.startsWith('AIzaSy_Mock') || apiKey === 'DEVELOPMENT_DEMO_KEY' || apiKey === '';
 }
 
 // Curated copyright-free or ambient tracks for actual YouTube player streaming

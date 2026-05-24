@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { YouTubeMusicProvider } from './context/YouTubeMusicContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyApp from './components/SpotifyPlayer';
@@ -60,27 +61,6 @@ const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 
     <Icon className="w-8 h-8" />
   </button>
 );
-
-const mapYouTubeItemToMediaItem = (item: any): MediaItem | null => {
-    if (!item || !item.snippet) return null;
-
-    const id = typeof item.id === 'string' ? item.id : item.id?.videoId || item.id?.playlistId;
-    if (!id) return null;
-
-    const type = item.kind === 'youtube#video' || item.id?.kind === 'youtube#video' ? 'track' :
-                 item.kind === 'youtube#playlist' || item.id?.kind === 'youtube#playlist' ? 'playlist' : 'track';
-
-    return {
-        id,
-        name: item.snippet.title,
-        uri: `youtube:${type}:${id}`,
-        images: [item.snippet.thumbnails.high || item.snippet.thumbnails.default],
-        description: item.snippet.channelTitle,
-        type: type,
-    };
-};
-
-const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || "AIzaSyArzF2ad4FR6Ic_MFtd6JQ1cALR8j960sk";
 
 type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
 
@@ -201,8 +181,6 @@ function AppContent() {
 
   const [topBarScale, setTopBarScale] = useState(1.0);
   const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
-  // mapsSearchPanelWidth is no longer used, we use navigateToolWidth instead for consistency
-  const [mapsSearchPanelWidth, setMapsSearchPanelWidth] = useState(401);
   const [mapsSearchPanelTop, setMapsSearchPanelTop] = useState(61);
   const [miniMapTop, setMiniMapTop] = useState(-57);
   const [miniMapRight, setMiniMapRight] = useState(-86);
@@ -290,12 +268,6 @@ function AppContent() {
   const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
   const [queuePopoverWidth, setQueuePopoverWidth] = useState(288);
   const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(-29);
-
-  const [youtubeHomeData, setYoutubeHomeData] = useState<{[key: string]: MediaItem[]}>({});
-  const [youtubeHomeIsLoading, setYoutubeHomeIsLoading] = useState(true);
-  const [youtubeHomeError, setYoutubeHomeError] = useState<string | null>(null);
-  const [youtubeHomeQuotaExceeded, setYoutubeHomeQuotaExceeded] = useState(false);
-  const retryIntervalRef = useRef<number | null>(null);
 
   const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
   const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#ffffff');
@@ -502,7 +474,7 @@ function AppContent() {
     try {
         localStorage.setItem('radio_favorite_uuids', JSON.stringify(favoriteStationUUIDs));
     } catch (e) { console.error(e); }
-  }, []);
+  }, [favoriteStationUUIDs]);
 
   const handleToggleFavorite = useCallback((station: RadioStation) => {
     setFavoriteStationUUIDs(prev => prev.includes(station.stationuuid) ? prev.filter(uuid => uuid !== station.stationuuid) : [...prev, station.stationuuid]);
@@ -517,21 +489,6 @@ function AppContent() {
     setLauncherApps(prev => prev.filter(id => id !== appId));
     setDockApps(prev => [...prev, appId]);
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.ctrlKey && e.altKey && (e.key === 'd' || e.key === 'D')) {
-            e.preventDefault();
-            if (activeApp === 'debug') {
-                toggleApp('maps');
-            } else {
-                toggleApp('debug');
-            }
-        }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [tempUnit, setTempUnit] = useState<TempUnit>('C');
@@ -550,8 +507,6 @@ function AppContent() {
       setNowPlaying(prev => ({ ...prev, radioStation: radioContext[nextIndex] }));
   };
 
-  useEffect(() => { const intervalId = setInterval(() => setCurrentTime(new Date()), 60000); return () => clearInterval(intervalId); }, []);
-
   useEffect(() => {
     const root = document.documentElement;
     if (useDarkTheme) {
@@ -562,31 +517,6 @@ function AppContent() {
         root.style.removeProperty('--volume-slider-fill-bg'); root.style.removeProperty('--player-bg');
     }
   }, [useDarkTheme, darkVolumeTrackBg, darkVolumeThumbBg, darkVolumeFillBg, darkPlayerBg]);
-
-  const fetchYouTubeHomeData = useCallback(async () => {
-    if (Object.keys(youtubeHomeData).length > 0 && !youtubeHomeQuotaExceeded) return;
-    setYoutubeHomeIsLoading(true); setYoutubeHomeError(null);
-    if (isDemoMode(YOUTUBE_API_KEY)) {
-        setTimeout(() => {
-            setYoutubeHomeData(getYouTubeMockHomeData() as any);
-            setYoutubeHomeQuotaExceeded(false);
-            setYoutubeHomeIsLoading(false);
-        }, 300);
-        return;
-    }
-    try {
-        const endpoints = [ `videos?part=snippet&chart=mostPopular&regionCode=IT&videoCategoryId=10&maxResults=10`, `search?part=snippet&q=official pop hits playlist&type=playlist&maxResults=10`, `search?part=snippet&q=live performance full concert&type=video&videoCategoryId=10&maxResults=10`, `search?part=snippet&q=musica italiana playlist&type=playlist&maxResults=10`, `search?part=snippet&q=workout music playlist&type=playlist&maxResults=10`, `search?part=snippet&q=acoustic sessions live&type=video&maxResults=10` ];
-        const responses = await Promise.all(endpoints.map(ep => fetch(`https://www.googleapis.com/youtube/v3/${ep}&key=${YOUTUBE_API_KEY}`)));
-        for (const res of responses) { if (!res.ok) { const errorData = await res.json(); if (errorData.error?.message.toLowerCase().includes('quota')) throw new Error("quotaExceeded"); throw new Error(errorData.error?.message); } }
-        const data = await Promise.all(responses.map(res => res.json()));
-        setYoutubeHomeData({ musicCharts: data[0].items.map(mapYouTubeItemToMediaItem).filter(Boolean), popPlaylists: data[1].items.map(mapYouTubeItemToMediaItem).filter(Boolean), livePerformances: data[2].items.map(mapYouTubeItemToMediaItem).filter(Boolean), italianPlaylists: data[3].items.map(mapYouTubeItemToMediaItem).filter(Boolean), workoutPlaylists: data[4].items.map(mapYouTubeItemToMediaItem).filter(Boolean), acousticSessions: data[5].items.map(mapYouTubeItemToMediaItem).filter(Boolean) });
-        setYoutubeHomeQuotaExceeded(false);
-    } catch (err: any) { if (err.message === 'quotaExceeded') setYoutubeHomeQuotaExceeded(true); else setYoutubeHomeError(err.message); } finally { setYoutubeHomeIsLoading(false); }
-  }, [youtubeHomeData, youtubeHomeQuotaExceeded]);
-  
-  useEffect(() => { if (activeApp === 'youtube-music' && !nowPlaying.youtubeTrack) fetchYouTubeHomeData(); }, [activeApp, fetchYouTubeHomeData, nowPlaying.youtubeTrack]);
-  useEffect(() => { if (youtubeHomeQuotaExceeded) { if (retryIntervalRef.current) clearInterval(retryIntervalRef.current); retryIntervalRef.current = window.setInterval(() => fetchYouTubeHomeData(), 15 * 60 * 1000); } else if (retryIntervalRef.current) { clearInterval(retryIntervalRef.current); retryIntervalRef.current = null; } return () => { if (retryIntervalRef.current) clearInterval(retryIntervalRef.current); }; }, [youtubeHomeQuotaExceeded, fetchYouTubeHomeData]);
-  const handleGenericQuotaError = useCallback(() => setYoutubeHomeQuotaExceeded(true), []);
 
   const isSwitchingRef = useRef(false);
   const switchTimeoutRef = useRef<number | null>(null);
@@ -631,6 +561,21 @@ function AppContent() {
     }
   }, [activeApp, dockApps, isMapsLayered, switchApp]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.ctrlKey && e.altKey && (e.key === 'd' || e.key === 'D')) {
+            e.preventDefault();
+            if (activeApp === 'debug') {
+                toggleApp('maps');
+            } else {
+                toggleApp('debug');
+            }
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleApp, activeApp]);
+
   const toggleLauncher = (e: React.MouseEvent) => { e.stopPropagation(); const newLauncherState = !isAppLauncherOpen; setIsAppLauncherOpen(newLauncherState); if (!newLauncherState) setIsCustomizing(false); };
   const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
   
@@ -668,7 +613,6 @@ function AppContent() {
             isOpen={shouldShowMap} 
             onClose={handleCloseMaps} 
             onInteractionStart={handleMapsInteractionStart} 
-            searchPanelWidth={mapsSearchPanelWidth} // This prop is now ignored by MapsContainer in favor of width, but kept for compatibility if needed
             searchPanelTop={mapsSearchPanelTop} 
             spotifyPlayerTop={spotifyPlayerTop} 
             spotifyPlayerBottom={spotifyPlayerBottom} 
@@ -694,8 +638,6 @@ function AppContent() {
                     setTopBarScale={setTopBarScale}
                     topBarOffsetY={topBarOffsetY}
                     setTopBarOffsetY={setTopBarOffsetY}
-                    mapsSearchPanelWidth={mapsSearchPanelWidth}
-                    setMapsSearchPanelWidth={setMapsSearchPanelWidth}
                     mapsSearchPanelTop={mapsSearchPanelTop}
                     setMapsSearchPanelTop={setMapsSearchPanelTop}
                     miniMapTop={miniMapTop}
@@ -834,7 +776,6 @@ function AppContent() {
                     setSpinnerBottom={setSpinnerBottom}
                     spinnerLeft={spinnerLeft}
                     setSpinnerLeft={setSpinnerLeft}
-                    homeDataQuotaExceeded={youtubeHomeQuotaExceeded}
                     satelliteLabelBrightness={satelliteLabelBrightness}
                     setSatelliteLabelBrightness={setSatelliteLabelBrightness}
                     satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}
@@ -852,7 +793,7 @@ function AppContent() {
                     setSkipButtonScale={setSkipButtonScale}
                 />
         <RadioApp isOpen={activeApp === 'radio'} onClose={handleSubAppClose} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
-        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} homeData={youtubeHomeData} isHomeDataLoading={youtubeHomeIsLoading} youtubeHomeError={youtubeHomeError} homeDataQuotaExceeded={youtubeHomeQuotaExceeded} onRetry={fetchYouTubeHomeData} onQuotaError={handleGenericQuotaError} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
+        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <ArrivalToast />
         {/* NAVIGATE TOOL CONTAINER */}
         <NavigationWidget 
@@ -892,7 +833,9 @@ export default function App() {
       <AuthProvider>
         <WeatherProvider>
           <NavigationProvider>
-            <AppContent />
+            <YouTubeMusicProvider>
+              <AppContent />
+            </YouTubeMusicProvider>
           </NavigationProvider>
         </WeatherProvider>
       </AuthProvider>

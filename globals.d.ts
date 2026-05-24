@@ -134,6 +134,7 @@ declare global {
   interface ImportMetaEnv {
     readonly VITE_REDIRECT_URI: string;
     readonly VITE_YOUTUBE_API_KEY?: string;
+    readonly VITE_SPOTIFY_CLIENT_ID?: string;
   }
 
   interface ImportMeta {

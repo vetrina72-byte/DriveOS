@@ -1081,7 +1081,6 @@ if(window.pendingNavMsg){var pm=window.pendingNavMsg;window.pendingNavMsg=null;v
 const MapsContainer = React.memo(({ 
     isOpen, 
     onClose,
-    searchPanelWidth,
     searchPanelTop,
     spotifyPlayerTop,
     spotifyPlayerBottom,
@@ -1097,7 +1096,6 @@ const MapsContainer = React.memo(({
 }: { 
     isOpen: boolean; 
     onClose: () => void;
-    searchPanelWidth: number;
     searchPanelTop: number;
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
@@ -1368,14 +1366,10 @@ const MapsContainer = React.memo(({
                 >
                     <NavigateTool 
                         isNight={true} // Always dark theme over map usually looks best
-                        onSelectDestination={onSelectDestination}
-                        currentPosition={currentPosition}
                         width={width} // Use the specific width prop passed from App.tsx
                         widgetBgColor={widgetBgColor}
                         dayPlayerButtonColor={dayPlayerButtonColor}
                         nightPlayerButtonColor={nightPlayerButtonColor}
-                        homeLocation={homeLocation}
-                        workLocation={workLocation}
                         darkNavigateInputBg={darkNavigateInputBg}
                         isHome={true} // Maps container is essentially full-screen "home" for navigation
                         showRecentsOnFocus={false} // Disable auto-expansion on focus

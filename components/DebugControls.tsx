@@ -18,8 +18,6 @@ interface DebugControlsProps {
   setTopBarScale: (scale: number) => void;
   topBarOffsetY: number;
   setTopBarOffsetY: (offset: number) => void;
-  mapsSearchPanelWidth: number;
-  setMapsSearchPanelWidth: (width: number) => void;
   mapsSearchPanelTop: number;
   setMapsSearchPanelTop: (top: number) => void;
   miniMapTop: number;
@@ -158,7 +156,6 @@ interface DebugControlsProps {
   setSpinnerBottom: (val: number | undefined) => void;
   spinnerLeft: number | undefined;
   setSpinnerLeft: (val: number | undefined) => void;
-  homeDataQuotaExceeded: boolean;
   satelliteLabelBrightness: number;
   setSatelliteLabelBrightness: (val: number) => void;
   satelliteLabelOutlineWidth: number;
@@ -226,8 +223,6 @@ export default function DebugControls({
   setTopBarScale,
   topBarOffsetY,
   setTopBarOffsetY,
-  mapsSearchPanelWidth,
-  setMapsSearchPanelWidth,
   mapsSearchPanelTop,
   setMapsSearchPanelTop,
   miniMapTop,
@@ -366,7 +361,6 @@ export default function DebugControls({
   setSpinnerBottom,
   spinnerLeft,
   setSpinnerLeft,
-  homeDataQuotaExceeded,
   satelliteLabelBrightness,
   setSatelliteLabelBrightness,
   satelliteLabelOutlineWidth,
@@ -604,7 +598,6 @@ export default function DebugControls({
     setWeatherConditionOverride(null);
     setTopBarScale(1.0);
     setTopBarOffsetY(-7);
-    setMapsSearchPanelWidth(401);
     setMapsSearchPanelTop(61);
     setMiniMapTop(-57);
     setMiniMapRight(-86);
