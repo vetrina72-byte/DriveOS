@@ -16,7 +16,10 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors({ origin: true, credentials: true }));
+  app.use(cors({ 
+    origin: process.env.NODE_ENV === 'production' ? (process.env.FRONTEND_URL || 'https://tuo-dominio.vercel.app') : 'http://localhost:5173', 
+    credentials: true 
+  }));
   app.use(express.json());
   app.use(cookieParser());
 

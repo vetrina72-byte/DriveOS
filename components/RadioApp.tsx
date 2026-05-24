@@ -274,11 +274,10 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
 
     const radioBrowserApi = useMemo(() => {
         const servers = [
+            'https://all.api.radio-browser.info/json',
             'https://de1.api.radio-browser.info/json',
             'https://nl1.api.radio-browser.info/json',
-            'https://fr1.api.radio-browser.info/json',
-            'https://at1.api.radio-browser.info/json',
-        ].sort(() => Math.random() - 0.5);
+        ];
         let currentServerIndex = 0;
 
         const performRequest = async (config: { url: string; params?: any; }, retryCount = 0): Promise<{ data: any }> => {

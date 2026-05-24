@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { YouTubeMusicProvider } from './context/YouTubeMusicContext';
+import { UIConfigProvider, useUIConfig } from './context/UIConfigContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyApp from './components/SpotifyPlayer';
@@ -179,120 +180,31 @@ function AppContent() {
     targetWeatherParams,
   } = useWeather();
 
-  const [topBarScale, setTopBarScale] = useState(1.0);
-  const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
-  const [mapsSearchPanelTop, setMapsSearchPanelTop] = useState(61);
-  const [miniMapTop, setMiniMapTop] = useState(-57);
-  const [miniMapRight, setMiniMapRight] = useState(-86);
-  const [miniMapSize, setMiniMapSize] = useState(456);
-  const [miniMapZoom, setMiniMapZoom] = useState(17);
-  const [miniMapFadeStart, setMiniMapFadeStart] = useState(0);
-  const [miniMapFadeEnd, setMiniMapFadeEnd] = useState(69);
-  const [uiScale, setUiScale] = useState<number | null>(1.0);
-  const [appBarWidth, setAppBarWidth] = useState(500);
-
-  const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
-  const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
-  
-  const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
-
-  const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>({
-      cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
-      cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
-      modelPos: { x: -4.90, y: -0.15, z: -0.40 }, 
-      modelRot: { x: 0.01, y: -1.19, z: 0.01 },
-      modelScale: 1.57,
-  });
-
-  const [headlightConfig, setHeadlightConfig] = useState({
-      x: -0.05,
-      y: 0.77,
-      z: -1.55,
-      angle: 0.06,
-      yaw: 0.01, 
-      assemblyYaw: -1.588, // -91 deg in rad
-      intensity: 0.75,
-      startWidth: 0.30,
-      endWidth: 0.10,
-      length: 7.00,
-      startHeight: 0.03,
-      endHeight: 0.01,
-      fade: 7.40,
-      separation: 1.25,
-      circular: true,
-      linked: true, 
-  });
-
-  const [sceneColors, setSceneColors] = useState<SceneColors>(initialSceneColors);
-  const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.25);
-  const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.60);
-  const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
-  const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
-  const [dayFogNear, setDayFogNear] = useState(13);
-  const [dayFogFar, setDayFogFar] = useState(800);
-
-  const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
-  const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(80);
-  const [playerDockedWidth, setPlayerDockedWidth] = useState(519);
-  const [playerDockedLeft, setPlayerDockedLeft] = useState(66);
-  const [playerDockedHeight, setPlayerDockedHeight] = useState(113);
-  const [playerFloatingWidth, setPlayerFloatingWidth] = useState(520);
-  const [playerFloatingBottom, setPlayerFloatingBottom] = useState(98);
-  const [playerFloatingHeight, setPlayerFloatingHeight] = useState(113);
-  const [navigateToolWidth, setNavigateToolWidth] = useState(340);
-  const [playerControlsSize, setPlayerControlsSize] = useState(18);
-  const [playerControlsGap, setPlayerControlsGap] = useState(100);
-  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
-  const [spinnerSize, setSpinnerSize] = useState(18);
-  const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
-  const [debugSpinner, setDebugSpinner] = useState(false);
-  const [spinnerTop, setSpinnerTop] = useState<number | undefined>(22);
-  const [spinnerRight, setSpinnerRight] = useState<number | undefined>(100);
-  const [spinnerBottom, setSpinnerBottom] = useState<number | undefined>(undefined);
-  const [spinnerLeft, setSpinnerLeft] = useState<number | undefined>(undefined);
-  const [volumeIconSize, setVolumeIconSize] = useState(30);
-  const [volumeSliderOffsetY, setVolumeSliderOffsetY] = useState(36);
-  const [volumeSliderOffsetX, setVolumeSliderOffsetX] = useState(-128);
-  const [volumeControlMarginRight, setVolumeControlMarginRight] = useState(80);
-  const [volumeSliderWidth, setVolumeSliderWidth] = useState(177);
-  const [volumeSliderThickness, setVolumeSliderThickness] = useState(5.5);
-  const [volumeSliderThumbOffsetY, setVolumeSliderThumbOffsetY] = useState(2.3);
-  const [volumeSliderPopupWidth, setVolumeSliderPopupWidth] = useState(247);
-  const [volumeSliderPopupHeight, setVolumeSliderPopupHeight] = useState(40);
-  const [volumeControlZIndex, setVolumeControlZIndex] = useState(5000);
-
-  const [appLauncherWidth, setAppLauncherWidth] = useState(30);
-  const [appLauncherHeight, setAppLauncherHeight] = useState(286);
-  const [queuePopoverHeight, setQueuePopoverHeight] = useState(89);
-  const [queuePopoverBottomOffset, setQueuePopoverBottomOffset] = useState(16);
-  const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
-  const [queuePopoverWidth, setQueuePopoverWidth] = useState(288);
-  const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(-29);
-
-  const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
-  const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#ffffff');
-  const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
-  const widgetBgColor = useMemo(() => {
-    const rgb = hexToRgb(widgetBgHex);
-    return rgb ? `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})` : 'rgb(255, 255, 255)';
-  }, [widgetBgHex]);
-  
-  const [darkVolumeTrackBg, setDarkVolumeTrackBg] = useState('#4D4D4D');
-  const [darkVolumeThumbBg, setDarkVolumeThumbBg] = useState('#ffffff');
-  const [darkVolumeFillBg, setDarkVolumeFillBg] = useState('#ffffff');
-  const [darkPlayerBg, setDarkPlayerBg] = useState('#212121');
-  const [darkNavigateInputBg, setDarkNavigateInputBg] = useState('#2b2b2b');
-
-  const [satelliteLabelBrightness, setSatelliteLabelBrightness] = useState(2.3);
-  const [satelliteLabelOutlineWidth, setSatelliteLabelOutlineWidth] = useState(1.2);
-
-  // Music Player Customization State
-  const [progressBarHeight, setProgressBarHeight] = useState(5.4);
-  const [progressBarVerticalOffset, setProgressBarVerticalOffset] = useState(8.6);
-  const [playButtonScale, setPlayButtonScale] = useState(0.87);
-  const [skipButtonScale, setSkipButtonScale] = useState(1.29);
+  const {
+    topBarScale, topBarOffsetY, setTopBarOffsetY, mapsSearchPanelTop,
+    miniMapTop, miniMapRight, miniMapSize, miniMapZoom, miniMapFadeStart, miniMapFadeEnd,
+    uiScale, appBarWidth, minOrbitDistance, maxOrbitDistance,
+    homeConfig, appOpenConfig, headlightConfig, sceneColors,
+    nightAmbientIntensity, nightFrontLightIntensity, nightEnvironmentIntensity,
+    dayFogNear, dayFogFar, spotifyPlayerTop, spotifyPlayerBottom,
+    playerDockedWidth, playerDockedLeft, playerDockedHeight,
+    playerFloatingWidth, playerFloatingBottom, playerFloatingHeight, navigateToolWidth,
+    playerControlsSize, playerControlsGap, playerControlsVerticalPosition,
+    spinnerSize, spinnerShuffleGap, debugSpinner, spinnerTop, spinnerRight, spinnerBottom, spinnerLeft,
+    appLauncherWidth, appLauncherHeight, queuePopoverHeight, queuePopoverBottomOffset, queuePopoverScale, queuePopoverWidth, queuePopoverOffsetX,
+    dayPlayerButtonColor, nightPlayerButtonColor, widgetBgColor,
+    darkVolumeTrackBg, darkVolumeThumbBg, darkVolumeFillBg, darkPlayerBg, darkNavigateInputBg,
+    satelliteLabelBrightness, satelliteLabelOutlineWidth,
+    progressBarHeight, progressBarVerticalOffset, playButtonScale, skipButtonScale,
+    virtualKeyboardKeySize, virtualKeyboardHeight, virtualKeyboardPaddingX,
+    virtualKeyboardKeyGapX, virtualKeyboardKeyGapY, virtualKeyboardKeyFontWeight,
+    volumeIconSize, volumeSliderOffsetY, volumeSliderOffsetX, volumeControlMarginRight,
+    volumeSliderWidth, volumeSliderThickness, volumeSliderThumbOffsetY,
+    volumeSliderPopupWidth, volumeSliderPopupHeight, volumeControlZIndex
+  } = useUIConfig();
 
   const [isCustomizing, setIsCustomizing] = useState(false);
+  const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
   const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music', 'debug']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
@@ -301,12 +213,6 @@ function AppContent() {
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardTarget, setKeyboardTarget] = useState<HTMLElement | null>(null);
-  const [virtualKeyboardKeySize, setVirtualKeyboardKeySize] = useState(41);
-  const [virtualKeyboardHeight, setVirtualKeyboardHeight] = useState(38);
-  const [virtualKeyboardPaddingX, setVirtualKeyboardPaddingX] = useState(69);
-  const [virtualKeyboardKeyGapX, setVirtualKeyboardKeyGapX] = useState(2);
-  const [virtualKeyboardKeyGapY, setVirtualKeyboardKeyGapY] = useState(2);
-  const [virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight] = useState(600);
   const [webAppUrl, setWebAppUrl] = useState<string | null>(null);
 
   // --- MOVED UP ---
@@ -613,185 +519,17 @@ function AppContent() {
             isOpen={shouldShowMap} 
             onClose={handleCloseMaps} 
             onInteractionStart={handleMapsInteractionStart} 
-            searchPanelTop={mapsSearchPanelTop} 
-            spotifyPlayerTop={spotifyPlayerTop} 
-            spotifyPlayerBottom={spotifyPlayerBottom} 
-            satelliteLabelBrightness={satelliteLabelBrightness} 
-            satelliteLabelOutlineWidth={satelliteLabelOutlineWidth} 
             onDragProgress={handleDragProgress}
-            // NEW PROPS FOR NAVIGATE TOOL CONSISTENCY
-            width={navigateToolWidth}
-            widgetBgColor={widgetBgColor}
-            dayPlayerButtonColor={dayPlayerButtonColor}
-            nightPlayerButtonColor={nightPlayerButtonColor}
-            darkNavigateInputBg={darkNavigateInputBg}
         />
         <SpotifyApp isOpen={activeApp === 'spotify'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered || isMapLayeredBehind} onDragProgress={handleSpotifyDrag} />
         <TheaterApp isOpen={activeApp === 'theater'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <DebugControls
             isOpen={activeApp === 'debug'}
-                    onClose={handleSubAppClose}
-                    onDragProgress={handleSpotifyDrag}
-                    isMapsLayered={isMapsLayered || isMapLayeredBehind}
-                    isAppView={true}
-                    topBarScale={topBarScale}
-                    setTopBarScale={setTopBarScale}
-                    topBarOffsetY={topBarOffsetY}
-                    setTopBarOffsetY={setTopBarOffsetY}
-                    mapsSearchPanelTop={mapsSearchPanelTop}
-                    setMapsSearchPanelTop={setMapsSearchPanelTop}
-                    miniMapTop={miniMapTop}
-                    setMiniMapTop={setMiniMapTop}
-                    miniMapRight={miniMapRight}
-                    setMiniMapRight={setMiniMapRight}
-                    miniMapSize={miniMapSize}
-                    setMiniMapSize={setMiniMapSize}
-                    miniMapZoom={miniMapZoom}
-                    setMiniMapZoom={setMiniMapZoom}
-                    miniMapFadeStart={miniMapFadeStart}
-                    setMiniMapFadeStart={setMiniMapFadeStart}
-                    miniMapFadeEnd={miniMapFadeEnd}
-                    setMiniMapFadeEnd={setMiniMapFadeEnd}
-                    minOrbitDistance={minOrbitDistance}
-                    setMinOrbitDistance={setMinOrbitDistance}
-                    maxOrbitDistance={maxOrbitDistance}
-                    setMaxOrbitDistance={setMaxOrbitDistance}
-                    appOpenConfig={appOpenConfig}
-                    setAppOpenConfig={setAppOpenConfig}
-                    homeConfig={homeConfig}
-                    setHomeConfig={setHomeConfig}
-                    sceneColors={sceneColors}
-                    setSceneColors={setSceneColors}
-                    spotifyPlayerTop={spotifyPlayerTop}
-                    setSpotifyPlayerTop={setSpotifyPlayerTop}
-                    spotifyPlayerBottom={spotifyPlayerBottom}
-                    setSpotifyPlayerBottom={setSpotifyPlayerBottom}
-                    playerDockedWidth={playerDockedWidth}
-                    setPlayerDockedWidth={setPlayerDockedWidth}
-                    playerDockedLeft={playerDockedLeft}
-                    setPlayerDockedLeft={setPlayerDockedLeft}
-                    playerDockedHeight={playerDockedHeight}
-                    setPlayerDockedHeight={setPlayerDockedHeight}
-                    playerFloatingWidth={playerFloatingWidth}
-                    setPlayerFloatingWidth={setPlayerFloatingWidth}
-                    playerFloatingBottom={playerFloatingBottom}
-                    setPlayerFloatingBottom={setPlayerFloatingBottom}
-                    playerFloatingHeight={playerFloatingHeight}
-                    setPlayerFloatingHeight={setPlayerFloatingHeight}
-                    navigateToolWidth={navigateToolWidth}
-                    setNavigateToolWidth={setNavigateToolWidth}
-                    nightAmbientIntensity={nightAmbientIntensity}
-                    setNightAmbientIntensity={setNightAmbientIntensity}
-                    nightFrontLightIntensity={nightFrontLightIntensity}
-                    setNightFrontLightIntensity={setNightFrontLightIntensity}
-                    nightEnvironmentIntensity={nightEnvironmentIntensity}
-                    setNightEnvironmentIntensity={setNightEnvironmentIntensity}
-                    playerControlsSize={playerControlsSize}
-                    setPlayerControlsSize={setPlayerControlsSize}
-                    playerControlsGap={playerControlsGap}
-                    setPlayerControlsGap={setPlayerControlsGap}
-                    playerControlsVerticalPosition={playerControlsVerticalPosition}
-                    setPlayerControlsVerticalPosition={setPlayerControlsVerticalPosition}
-                    dayPlayerButtonColor={dayPlayerButtonColor}
-                    setDayPlayerButtonColor={setDayPlayerButtonColor}
-                    nightPlayerButtonColor={nightPlayerButtonColor}
-                    setNightPlayerButtonColor={setNightPlayerButtonColor}
-                    widgetBgHex={widgetBgHex}
-                    setWidgetBgHex={setWidgetBgHex}
-                    volumeIconSize={volumeIconSize}
-                    setVolumeIconSize={setVolumeIconSize}
-                    volumeSliderOffsetY={volumeSliderOffsetY}
-                    setVolumeSliderOffsetY={setVolumeSliderOffsetY}
-                    volumeSliderOffsetX={volumeSliderOffsetX}
-                    setVolumeSliderOffsetX={setVolumeSliderOffsetX}
-                    volumeControlMarginRight={volumeControlMarginRight}
-                    setVolumeControlMarginRight={setVolumeControlMarginRight}
-                    volumeSliderWidth={volumeSliderWidth}
-                    setVolumeSliderWidth={setVolumeSliderWidth}
-                    volumeSliderThickness={volumeSliderThickness}
-                    setVolumeSliderThickness={setVolumeSliderThickness}
-                    volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}
-                    setVolumeSliderThumbOffsetY={setVolumeSliderThumbOffsetY}
-                    volumeSliderPopupWidth={volumeSliderPopupWidth}
-                    setVolumeSliderPopupWidth={setVolumeSliderPopupWidth}
-                    volumeSliderPopupHeight={volumeSliderPopupHeight}
-                    setVolumeSliderPopupHeight={setVolumeSliderPopupHeight}
-                    volumeControlZIndex={volumeControlZIndex}
-                    setVolumeControlZIndex={setVolumeControlZIndex}
-                    appLauncherWidth={appLauncherWidth}
-                    setAppLauncherWidth={setAppLauncherWidth}
-                    appLauncherHeight={appLauncherHeight}
-                    setAppLauncherHeight={setAppLauncherHeight}
-                    dayFogNear={dayFogNear}
-                    setDayFogNear={setDayFogNear}
-                    dayFogFar={dayFogFar}
-                    setDayFogFar={setDayFogFar}
-                    virtualKeyboardKeySize={virtualKeyboardKeySize}
-                    setVirtualKeyboardKeySize={setVirtualKeyboardKeySize}
-                    virtualKeyboardHeight={virtualKeyboardHeight}
-                    setVirtualKeyboardHeight={setVirtualKeyboardHeight}
-                    virtualKeyboardPaddingX={virtualKeyboardPaddingX}
-                    setVirtualKeyboardPaddingX={setVirtualKeyboardPaddingX}
-                    virtualKeyboardKeyGapX={virtualKeyboardKeyGapX}
-                    setVirtualKeyboardKeyGapX={setVirtualKeyboardKeyGapX}
-                    virtualKeyboardKeyGapY={virtualKeyboardKeyGapY}
-                    setVirtualKeyboardKeyGapY={setVirtualKeyboardKeyGapY}
-                    virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}
-                    setVirtualKeyboardKeyFontWeight={setVirtualKeyboardKeyFontWeight}
-                    uiScale={uiScale}
-                    setUiScale={setUiScale}
-                    appBarWidth={appBarWidth}
-                    setAppBarWidth={setAppBarWidth}
-                    darkVolumeTrackBg={darkVolumeTrackBg}
-                    setDarkVolumeTrackBg={setDarkVolumeTrackBg}
-                    darkVolumeThumbBg={darkVolumeThumbBg}
-                    setDarkVolumeThumbBg={setDarkVolumeThumbBg}
-                    darkVolumeFillBg={darkVolumeFillBg}
-                    setDarkVolumeFillBg={setDarkVolumeFillBg}
-                    darkPlayerBg={darkPlayerBg}
-                    setDarkPlayerBg={setDarkPlayerBg}
-                    darkNavigateInputBg={darkNavigateInputBg}
-                    setDarkNavigateInputBg={setDarkNavigateInputBg}
-                    queuePopoverHeight={queuePopoverHeight}
-                    setQueuePopoverHeight={setQueuePopoverHeight}
-                    queuePopoverBottomOffset={queuePopoverBottomOffset}
-                    setQueuePopoverBottomOffset={setQueuePopoverBottomOffset}
-                    queuePopoverScale={queuePopoverScale}
-                    setQueuePopoverScale={setQueuePopoverScale}
-                    queuePopoverWidth={queuePopoverWidth}
-                    setQueuePopoverWidth={setQueuePopoverWidth}
-                    queuePopoverOffsetX={queuePopoverOffsetX}
-                    setQueuePopoverOffsetX={setQueuePopoverOffsetX}
-                    spinnerSize={spinnerSize}
-                    setSpinnerSize={setSpinnerSize}
-                    spinnerShuffleGap={spinnerShuffleGap}
-                    setSpinnerShuffleGap={setSpinnerShuffleGap}
-                    debugSpinner={debugSpinner}
-                    setDebugSpinner={setDebugSpinner}
-                    spinnerTop={spinnerTop}
-                    setSpinnerTop={setSpinnerTop}
-                    spinnerRight={spinnerRight}
-                    setSpinnerRight={setSpinnerRight}
-                    spinnerBottom={spinnerBottom}
-                    setSpinnerBottom={setSpinnerBottom}
-                    spinnerLeft={spinnerLeft}
-                    setSpinnerLeft={setSpinnerLeft}
-                    satelliteLabelBrightness={satelliteLabelBrightness}
-                    setSatelliteLabelBrightness={setSatelliteLabelBrightness}
-                    satelliteLabelOutlineWidth={satelliteLabelOutlineWidth}
-                    setSatelliteLabelOutlineWidth={setSatelliteLabelOutlineWidth}
-                    headlightConfig={headlightConfig}
-                    setHeadlightConfig={setHeadlightConfig}
-                    // New Props
-                    progressBarHeight={progressBarHeight}
-                    setProgressBarHeight={setProgressBarHeight}
-                    progressBarVerticalOffset={progressBarVerticalOffset}
-                    setProgressBarVerticalOffset={setProgressBarVerticalOffset}
-                    playButtonScale={playButtonScale}
-                    setPlayButtonScale={setPlayButtonScale}
-                    skipButtonScale={skipButtonScale}
-                    setSkipButtonScale={setSkipButtonScale}
-                />
+            onClose={handleSubAppClose}
+            onDragProgress={handleSpotifyDrag}
+            isMapsLayered={isMapsLayered || isMapLayeredBehind}
+            isAppView={true}
+        />
         <RadioApp isOpen={activeApp === 'radio'} onClose={handleSubAppClose} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
         <ArrivalToast />
@@ -834,7 +572,9 @@ export default function App() {
         <WeatherProvider>
           <NavigationProvider>
             <YouTubeMusicProvider>
-              <AppContent />
+              <UIConfigProvider>
+                <AppContent />
+              </UIConfigProvider>
             </YouTubeMusicProvider>
           </NavigationProvider>
         </WeatherProvider>

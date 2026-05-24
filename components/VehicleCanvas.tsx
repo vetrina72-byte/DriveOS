@@ -1,7 +1,7 @@
 
 import React, { Suspense, useEffect, useRef, useState, forwardRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
-import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial } from '@react-three/drei';
+import { useGLTF, OrbitControls, Environment, MeshReflectorMaterial, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { VolumetricHeadlight } from './VolumetricHeadlight';
 import WeatherEffects from './WeatherEffects';
@@ -966,7 +966,7 @@ export default function VehicleCanvas({
         </Suspense>
 
         <ModelErrorBoundary>
-          <Suspense fallback={null}>
+          <Suspense fallback={<Html center><div className="loading-spinner-border-dark w-12 h-12 rounded-full border-t-zinc-400 border-l-zinc-400"></div></Html>}>
             {/* Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error */}
             <Group ref={modelRef}>
               <Model

@@ -9,170 +9,13 @@ import { initialSceneColors } from '../App';
 import { useWeather } from '../context/WeatherContext';
 import { useNavigation } from '../context/NavigationContext';
 
+import { useUIConfig } from '../context/UIConfigContext';
+
 interface DebugControlsProps {
   isOpen: boolean;
   onClose: () => void;
   isMapsLayered?: boolean;
   onDragProgress?: (progress: number | null) => void;
-  topBarScale: number;
-  setTopBarScale: (scale: number) => void;
-  topBarOffsetY: number;
-  setTopBarOffsetY: (offset: number) => void;
-  mapsSearchPanelTop: number;
-  setMapsSearchPanelTop: (top: number) => void;
-  miniMapTop: number;
-  setMiniMapTop: (top: number) => void;
-  miniMapRight: number;
-  setMiniMapRight: (right: number) => void;
-  miniMapSize: number;
-  setMiniMapSize: (size: number) => void;
-  miniMapZoom: number;
-  setMiniMapZoom: (zoom: number) => void;
-  miniMapFadeStart: number;
-  setMiniMapFadeStart: (fade: number) => void;
-  miniMapFadeEnd: number;
-  setMiniMapFadeEnd: (fade: number) => void;
-  minOrbitDistance: number;
-  setMinOrbitDistance: (distance: number) => void;
-  maxOrbitDistance: number;
-  setMaxOrbitDistance: (distance: number) => void;
-  appOpenConfig: SceneConfig;
-  setAppOpenConfig: React.Dispatch<React.SetStateAction<SceneConfig>>;
-  homeConfig: SceneConfig;
-  setHomeConfig: React.Dispatch<React.SetStateAction<SceneConfig>>;
-  sceneColors: SceneColors;
-  setSceneColors: React.Dispatch<React.SetStateAction<SceneColors>>;
-  spotifyPlayerTop: number;
-  setSpotifyPlayerTop: (top: number) => void;
-  spotifyPlayerBottom: number;
-  setSpotifyPlayerBottom: (bottom: number) => void;
-  playerDockedWidth: number;
-  setPlayerDockedWidth: (width: number) => void;
-  playerDockedLeft: number;
-  setPlayerDockedLeft: (left: number) => void;
-  playerDockedHeight: number;
-  setPlayerDockedHeight: (height: number) => void;
-  playerFloatingWidth: number;
-  setPlayerFloatingWidth: (width: number) => void;
-  playerFloatingBottom: number;
-  setPlayerFloatingBottom: (bottom: number) => void;
-  playerFloatingHeight: number;
-  setPlayerFloatingHeight: (height: number) => void;
-  navigateToolWidth: number;
-  setNavigateToolWidth: (width: number) => void;
-  nightAmbientIntensity: number;
-  setNightAmbientIntensity: (intensity: number) => void;
-  nightFrontLightIntensity: number;
-  setNightFrontLightIntensity: (intensity: number) => void;
-  nightEnvironmentIntensity: number;
-  setNightEnvironmentIntensity: (intensity: number) => void;
-  playerControlsSize: number;
-  setPlayerControlsSize: (size: number) => void;
-  playerControlsGap: number;
-  setPlayerControlsGap: (gap: number) => void;
-  playerControlsVerticalPosition: number;
-  setPlayerControlsVerticalPosition: (pos: number) => void;
-  dayPlayerButtonColor: string;
-  setDayPlayerButtonColor: (color: string) => void;
-  nightPlayerButtonColor: string;
-  setNightPlayerButtonColor: (color: string) => void;
-  widgetBgHex: string;
-  setWidgetBgHex: (color: string) => void;
-  volumeIconSize: number;
-  setVolumeIconSize: (size: number) => void;
-  volumeSliderOffsetY: number;
-  setVolumeSliderOffsetY: (offset: number) => void;
-  volumeSliderOffsetX: number;
-  setVolumeSliderOffsetX: (offset: number) => void;
-  volumeControlMarginRight: number;
-  setVolumeControlMarginRight: (margin: number) => void;
-  volumeSliderWidth: number;
-  setVolumeSliderWidth: (width: number) => void;
-  volumeSliderThickness: number;
-  setVolumeSliderThickness: (thickness: number) => void;
-  volumeSliderThumbOffsetY: number;
-  setVolumeSliderThumbOffsetY: (offset: number) => void;
-  volumeSliderPopupWidth: number;
-  setVolumeSliderPopupWidth: (width: number) => void;
-  volumeSliderPopupHeight: number;
-  setVolumeSliderPopupHeight: (height: number) => void;
-  volumeControlZIndex: number;
-  setVolumeControlZIndex: (zIndex: number) => void;
-  appLauncherWidth: number;
-  setAppLauncherWidth: (width: number) => void;
-  appLauncherHeight: number;
-  setAppLauncherHeight: (height: number) => void;
-  dayFogNear: number;
-  setDayFogNear: (val: number) => void;
-  dayFogFar: number;
-  setDayFogFar: (val: number) => void;
-  virtualKeyboardKeySize: number;
-  setVirtualKeyboardKeySize: (size: number) => void;
-  virtualKeyboardHeight: number;
-  setVirtualKeyboardHeight: (height: number) => void;
-  virtualKeyboardPaddingX: number;
-  setVirtualKeyboardPaddingX: (padding: number) => void;
-  virtualKeyboardKeyGapX: number;
-  setVirtualKeyboardKeyGapX: (gap: number) => void;
-  virtualKeyboardKeyGapY: number;
-  setVirtualKeyboardKeyGapY: (gap: number) => void;
-  virtualKeyboardKeyFontWeight: number;
-  setVirtualKeyboardKeyFontWeight: (weight: number) => void;
-  uiScale: number | null;
-  setUiScale: (scale: number | null) => void;
-  appBarWidth: number;
-  setAppBarWidth: (width: number) => void;
-  darkVolumeTrackBg: string;
-  setDarkVolumeTrackBg: (color: string) => void;
-  darkVolumeThumbBg: string;
-  setDarkVolumeThumbBg: (color: string) => void;
-  darkVolumeFillBg: string;
-  setDarkVolumeFillBg: (color: string) => void;
-  darkPlayerBg: string;
-  setDarkPlayerBg: (color: string) => void;
-  darkNavigateInputBg: string;
-  setDarkNavigateInputBg: (color: string) => void;
-  queuePopoverHeight: number;
-  setQueuePopoverHeight: (height: number) => void;
-  queuePopoverBottomOffset: number;
-  setQueuePopoverBottomOffset: (offset: number) => void;
-  queuePopoverScale: number;
-  setQueuePopoverScale: (scale: number) => void;
-  queuePopoverWidth: number;
-  setQueuePopoverWidth: (width: number) => void;
-  queuePopoverOffsetX: number;
-  setQueuePopoverOffsetX: (offset: number) => void;
-  spinnerSize: number;
-  setSpinnerSize: (size: number) => void;
-  spinnerShuffleGap: number;
-  setSpinnerShuffleGap: (gap: number) => void;
-  debugSpinner: boolean;
-  setDebugSpinner: (debug: boolean) => void;
-  spinnerTop: number | undefined;
-  setSpinnerTop: (val: number | undefined) => void;
-  spinnerRight: number | undefined;
-  setSpinnerRight: (val: number | undefined) => void;
-  spinnerBottom: number | undefined;
-  setSpinnerBottom: (val: number | undefined) => void;
-  spinnerLeft: number | undefined;
-  setSpinnerLeft: (val: number | undefined) => void;
-  satelliteLabelBrightness: number;
-  setSatelliteLabelBrightness: (val: number) => void;
-  satelliteLabelOutlineWidth: number;
-  setSatelliteLabelOutlineWidth: (val: number) => void;
-  headlightConfig: HeadlightConfig;
-  setHeadlightConfig: React.Dispatch<React.SetStateAction<HeadlightConfig>>;
-  
-  // New Music Player Customization Props
-  progressBarHeight: number;
-  setProgressBarHeight: (height: number) => void;
-  progressBarVerticalOffset: number;
-  setProgressBarVerticalOffset: (offset: number) => void;
-  playButtonScale: number;
-  setPlayButtonScale: (scale: number) => void;
-  skipButtonScale: number;
-  setSkipButtonScale: (scale: number) => void;
-  
   isAppView?: boolean;
 }
 
@@ -218,167 +61,49 @@ const DEFAULT_HOME_CONFIG: SceneConfig = {
 
 export default function DebugControls({ 
   isOpen, 
-  onClose, 
-  topBarScale,
-  setTopBarScale,
-  topBarOffsetY,
-  setTopBarOffsetY,
-  mapsSearchPanelTop,
-  setMapsSearchPanelTop,
-  miniMapTop,
-  setMiniMapTop,
-  miniMapRight,
-  setMiniMapRight,
-  miniMapSize,
-  setMiniMapSize,
-  miniMapZoom,
-  setMiniMapZoom,
-  miniMapFadeStart,
-  setMiniMapFadeStart,
-  miniMapFadeEnd,
-  setMiniMapFadeEnd,
-  minOrbitDistance,
-  setMinOrbitDistance,
-  maxOrbitDistance,
-  setMaxOrbitDistance,
-  appOpenConfig,
-  setAppOpenConfig,
-  homeConfig,
-  setHomeConfig,
-  sceneColors,
-  setSceneColors,
-  spotifyPlayerTop,
-  setSpotifyPlayerTop,
-  spotifyPlayerBottom,
-  setSpotifyPlayerBottom,
-  playerDockedWidth,
-  setPlayerDockedWidth,
-  playerDockedLeft,
-  setPlayerDockedLeft,
-  playerDockedHeight,
-  setPlayerDockedHeight,
-  playerFloatingWidth,
-  setPlayerFloatingWidth,
-  playerFloatingBottom,
-  setPlayerFloatingBottom,
-  playerFloatingHeight,
-  setPlayerFloatingHeight,
-  navigateToolWidth,
-  setNavigateToolWidth,
-  nightAmbientIntensity,
-  setNightAmbientIntensity,
-  nightFrontLightIntensity,
-  setNightFrontLightIntensity,
-  nightEnvironmentIntensity,
-  setNightEnvironmentIntensity,
-  playerControlsSize,
-  setPlayerControlsSize,
-  playerControlsGap,
-  setPlayerControlsGap,
-  playerControlsVerticalPosition,
-  setPlayerControlsVerticalPosition,
-  dayPlayerButtonColor,
-  setDayPlayerButtonColor,
-  nightPlayerButtonColor,
-  setNightPlayerButtonColor,
-  widgetBgHex,
-  setWidgetBgHex,
-  volumeIconSize,
-  setVolumeIconSize,
-  volumeSliderOffsetY,
-  setVolumeSliderOffsetY,
-  volumeSliderOffsetX,
-  setVolumeSliderOffsetX,
-  volumeControlMarginRight,
-  setVolumeControlMarginRight,
-  volumeSliderWidth,
-  setVolumeSliderWidth,
-  volumeSliderThickness,
-  setVolumeSliderThickness,
-  volumeSliderThumbOffsetY,
-  setVolumeSliderThumbOffsetY,
-  volumeSliderPopupWidth,
-  setVolumeSliderPopupWidth,
-  volumeSliderPopupHeight,
-  setVolumeSliderPopupHeight,
-  volumeControlZIndex,
-  setVolumeControlZIndex,
-  appLauncherWidth,
-  setAppLauncherWidth,
-  appLauncherHeight,
-  setAppLauncherHeight,
-  dayFogNear,
-  setDayFogNear,
-  dayFogFar,
-  setDayFogFar,
-  virtualKeyboardKeySize,
-  setVirtualKeyboardKeySize,
-  virtualKeyboardHeight,
-  setVirtualKeyboardHeight,
-  virtualKeyboardPaddingX,
-  setVirtualKeyboardPaddingX,
-  virtualKeyboardKeyGapX,
-  setVirtualKeyboardKeyGapX,
-  virtualKeyboardKeyGapY,
-  setVirtualKeyboardKeyGapY,
-  virtualKeyboardKeyFontWeight,
-  setVirtualKeyboardKeyFontWeight,
-  uiScale,
-  setUiScale,
-  appBarWidth,
-  setAppBarWidth,
-  darkVolumeTrackBg,
-  setDarkVolumeTrackBg,
-  darkVolumeThumbBg,
-  setDarkVolumeThumbBg,
-  darkVolumeFillBg,
-  setDarkVolumeFillBg,
-  darkPlayerBg,
-  setDarkPlayerBg,
-  darkNavigateInputBg,
-  setDarkNavigateInputBg,
-  queuePopoverHeight,
-  setQueuePopoverHeight,
-  queuePopoverBottomOffset,
-  setQueuePopoverBottomOffset,
-  queuePopoverScale,
-  setQueuePopoverScale,
-  queuePopoverWidth,
-  setQueuePopoverWidth,
-  queuePopoverOffsetX,
-  setQueuePopoverOffsetX,
-  spinnerSize,
-  setSpinnerSize,
-  spinnerShuffleGap,
-  setSpinnerShuffleGap,
-  debugSpinner,
-  setDebugSpinner,
-  spinnerTop,
-  setSpinnerTop,
-  spinnerRight,
-  setSpinnerRight,
-  spinnerBottom,
-  setSpinnerBottom,
-  spinnerLeft,
-  setSpinnerLeft,
-  satelliteLabelBrightness,
-  setSatelliteLabelBrightness,
-  satelliteLabelOutlineWidth,
-  setSatelliteLabelOutlineWidth,
-  headlightConfig,
-  setHeadlightConfig,
-  progressBarHeight,
-  setProgressBarHeight,
-  progressBarVerticalOffset,
-  setProgressBarVerticalOffset,
-  playButtonScale,
-  setPlayButtonScale,
-  skipButtonScale,
-  setSkipButtonScale,
+  onClose,
   isAppView = false,
   onDragProgress,
   isMapsLayered,
 }: DebugControlsProps) {
+  const {
+    topBarScale, setTopBarScale, topBarOffsetY, setTopBarOffsetY, mapsSearchPanelTop, setMapsSearchPanelTop,
+    miniMapTop, setMiniMapTop, miniMapRight, setMiniMapRight, miniMapSize, setMiniMapSize,
+    miniMapZoom, setMiniMapZoom, miniMapFadeStart, setMiniMapFadeStart, miniMapFadeEnd, setMiniMapFadeEnd,
+    minOrbitDistance, setMinOrbitDistance, maxOrbitDistance, setMaxOrbitDistance,
+    appOpenConfig, setAppOpenConfig, homeConfig, setHomeConfig, sceneColors, setSceneColors,
+    spotifyPlayerTop, setSpotifyPlayerTop, spotifyPlayerBottom, setSpotifyPlayerBottom,
+    playerDockedWidth, setPlayerDockedWidth, playerDockedLeft, setPlayerDockedLeft,
+    playerDockedHeight, setPlayerDockedHeight, playerFloatingWidth, setPlayerFloatingWidth,
+    playerFloatingBottom, setPlayerFloatingBottom, playerFloatingHeight, setPlayerFloatingHeight,
+    navigateToolWidth, setNavigateToolWidth, nightAmbientIntensity, setNightAmbientIntensity,
+    nightFrontLightIntensity, setNightFrontLightIntensity, nightEnvironmentIntensity, setNightEnvironmentIntensity,
+    playerControlsSize, setPlayerControlsSize, playerControlsGap, setPlayerControlsGap,
+    playerControlsVerticalPosition, setPlayerControlsVerticalPosition,
+    dayPlayerButtonColor, setDayPlayerButtonColor, nightPlayerButtonColor, setNightPlayerButtonColor,
+    widgetBgHex, setWidgetBgHex, volumeIconSize, setVolumeIconSize, volumeSliderOffsetY, setVolumeSliderOffsetY,
+    volumeSliderOffsetX, setVolumeSliderOffsetX, volumeControlMarginRight, setVolumeControlMarginRight,
+    volumeSliderWidth, setVolumeSliderWidth, volumeSliderThickness, setVolumeSliderThickness,
+    volumeSliderThumbOffsetY, setVolumeSliderThumbOffsetY, volumeSliderPopupWidth, setVolumeSliderPopupWidth,
+    volumeSliderPopupHeight, setVolumeSliderPopupHeight, volumeControlZIndex, setVolumeControlZIndex,
+    appLauncherWidth, setAppLauncherWidth, appLauncherHeight, setAppLauncherHeight,
+    dayFogNear, setDayFogNear, dayFogFar, setDayFogFar,
+    virtualKeyboardKeySize, setVirtualKeyboardKeySize, virtualKeyboardHeight, setVirtualKeyboardHeight,
+    virtualKeyboardPaddingX, setVirtualKeyboardPaddingX, virtualKeyboardKeyGapX, setVirtualKeyboardKeyGapX,
+    virtualKeyboardKeyGapY, setVirtualKeyboardKeyGapY, virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight,
+    uiScale, setUiScale, appBarWidth, setAppBarWidth,
+    darkVolumeTrackBg, setDarkVolumeTrackBg, darkVolumeThumbBg, setDarkVolumeThumbBg,
+    darkVolumeFillBg, setDarkVolumeFillBg, darkPlayerBg, setDarkPlayerBg, darkNavigateInputBg, setDarkNavigateInputBg,
+    queuePopoverHeight, setQueuePopoverHeight, queuePopoverBottomOffset, setQueuePopoverBottomOffset,
+    queuePopoverScale, setQueuePopoverScale, queuePopoverWidth, setQueuePopoverWidth,
+    queuePopoverOffsetX, setQueuePopoverOffsetX, spinnerSize, setSpinnerSize, spinnerShuffleGap, setSpinnerShuffleGap,
+    debugSpinner, setDebugSpinner, spinnerTop, setSpinnerTop, spinnerRight, setSpinnerRight,
+    spinnerBottom, setSpinnerBottom, spinnerLeft, setSpinnerLeft,
+    satelliteLabelBrightness, setSatelliteLabelBrightness, satelliteLabelOutlineWidth, setSatelliteLabelOutlineWidth,
+    headlightConfig, setHeadlightConfig, progressBarHeight, setProgressBarHeight,
+    progressBarVerticalOffset, setProgressBarVerticalOffset, playButtonScale, setPlayButtonScale,
+    skipButtonScale, setSkipButtonScale
+  } = useUIConfig();
   const {
     timeOverride,
     setTimeOverride,

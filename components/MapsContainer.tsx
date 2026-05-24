@@ -1078,37 +1078,32 @@ if(window.pendingNavMsg){var pm=window.pendingNavMsg;window.pendingNavMsg=null;v
 
 `
 
+import { useUIConfig } from '../context/UIConfigContext';
+
 const MapsContainer = React.memo(({ 
     isOpen, 
     onClose,
-    searchPanelTop,
+    onDragProgress,
+    onInteractionStart,
+}: { 
+    isOpen: boolean; 
+    onClose: () => void;
+    onDragProgress?: (progress: number | null) => void;
+    onInteractionStart?: () => void;
+}) => {
+  const {
+    mapsSearchPanelTop: searchPanelTop,
     spotifyPlayerTop,
     spotifyPlayerBottom,
     satelliteLabelBrightness,
     satelliteLabelOutlineWidth,
-    onDragProgress,
-    onInteractionStart,
-    width,
+    navigateToolWidth: width,
     widgetBgColor,
     dayPlayerButtonColor,
     nightPlayerButtonColor,
     darkNavigateInputBg,
-}: { 
-    isOpen: boolean; 
-    onClose: () => void;
-    searchPanelTop: number;
-    spotifyPlayerTop: number;
-    spotifyPlayerBottom: number;
-    satelliteLabelBrightness: number;
-    satelliteLabelOutlineWidth: number;
-    onDragProgress?: (progress: number | null) => void;
-    onInteractionStart?: () => void;
-    width: number;
-    widgetBgColor: string;
-    dayPlayerButtonColor: string;
-    nightPlayerButtonColor: string;
-    darkNavigateInputBg: string;
-}) => {
+  } = useUIConfig();
+
   const {
     navigationTarget,
     currentPosition,
@@ -1319,9 +1314,11 @@ const MapsContainer = React.memo(({
   return (
     <div 
         ref={panelRef}
-        className={`fixed top-0 right-0 bottom-20 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel`}
+        className={`fixed top-0 right-0 bottom-0 w-2/3 text-white shadow-2xl z-20 flex spotify-app-panel`}
         style={{ 
             willChange: 'transform',
+            top: '0px',
+            bottom: '0px',
         }}
         aria-hidden={!isOpen}
         role="dialog"
