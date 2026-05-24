@@ -356,13 +356,20 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (newState.track_window.current_track) {
                 localStorage.setItem("cached_track_data", JSON.stringify(newState.track_window.current_track));
                 localStorage.setItem("spotify_last_track", newState.track_window.current_track.uri);
+                localStorage.setItem("last_track_uri", newState.track_window.current_track.uri);
             }
             
             localStorage.setItem("last_is_playing", String(!newState.paused));
             localStorage.setItem("spotify_last_position", String(newState.position));
+            localStorage.setItem("last_progress_ms", String(newState.position));
             
-            if (newState.context && newState.context.uri) localStorage.setItem("spotify_last_context", newState.context.uri);
-            else localStorage.removeItem("spotify_last_context");
+            if (newState.context && newState.context.uri) {
+                localStorage.setItem("spotify_last_context", newState.context.uri);
+                localStorage.setItem("last_context_uri", newState.context.uri);
+            } else {
+                localStorage.removeItem("spotify_last_context");
+                localStorage.removeItem("last_context_uri");
+            }
         }
     }, [setNowPlaying, checkRemotePlayerState]);
     
@@ -545,8 +552,16 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             try { localStorage.setItem('last_optimistic_item', JSON.stringify(itemForOptimisticUpdate)); } catch (e) {}
             setContinueListeningItems(prevItems => [itemForOptimisticUpdate, ...prevItems.filter(i => i.uri !== itemForOptimisticUpdate.uri)].slice(0, 10));
         }
-        if (options.context_uri) localStorage.setItem("last_context_uri", options.context_uri);
-        else if (options.uris?.[0]) { localStorage.setItem("last_track_uri", options.uris[0]); localStorage.removeItem("last_context_uri"); }
+        if (options.context_uri) {
+            localStorage.setItem("spotify_last_context", options.context_uri);
+            localStorage.setItem("last_context_uri", options.context_uri);
+        } else if (options.uris?.[0]) {
+            localStorage.setItem("spotify_last_track", options.uris[0]);
+            localStorage.setItem("last_track_uri", options.uris[0]);
+            localStorage.removeItem("spotify_last_context");
+            localStorage.removeItem("last_context_uri");
+        }
+        localStorage.setItem("spotify_last_position", "0");
         localStorage.setItem("last_progress_ms", "0");
         localStorage.setItem("last_is_playing", "true");
         setLastPlayInitiated(Date.now());
@@ -639,20 +654,28 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (!success && isResume) {
                 const { getDeviceId } = await import('../lib/spotify-player');
                 const deviceId = getDeviceId();
-                const lastCtx = localStorage.getItem("last_context_uri");
-                const lastUr = localStorage.getItem("last_track_uri");
-                const lastPos = localStorage.getItem("last_progress_ms");
+                const lastSavedContextUri = localStorage.getItem("spotify_last_context") || localStorage.getItem("last_context_uri");
+                const lastSavedTrackUri = localStorage.getItem("spotify_last_track") || localStorage.getItem("last_track_uri");
+                const lastSavedPositionMs = localStorage.getItem("spotify_last_position") || localStorage.getItem("last_progress_ms");
                 
-                if (deviceId && (lastCtx || lastUr)) {
+                if (deviceId && (lastSavedContextUri || lastSavedTrackUri)) {
                     console.log("Device not active, attempting fallback play recovery from local storage...");
                     const body: any = {};
-                    if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
-                    else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
-                    if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
+                    const posNumber = lastSavedPositionMs && lastSavedPositionMs !== "undefined" ? parseInt(lastSavedPositionMs, 10) : 0;
+                    
+                    if (lastSavedContextUri && lastSavedContextUri !== "undefined") {
+                        body.context_uri = lastSavedContextUri;
+                        if (lastSavedTrackUri && lastSavedTrackUri !== "undefined") {
+                            body.offset = { uri: lastSavedTrackUri };
+                        }
+                        body.position_ms = posNumber;
+                    } else if (lastSavedTrackUri && lastSavedTrackUri !== "undefined") {
+                        body.uris = [lastSavedTrackUri];
+                        body.position_ms = posNumber;
+                    }
                     
                     try {
-                        const res = await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
-                        // If no exception, consider it successful
+                        await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
                         console.log("Fallback recovery play explicit succeeded.");
                         success = true;
                     } catch (recErr) {
@@ -795,6 +818,44 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => { pauseSpotify(); setNowPlaying(prev => ({ ...prev, source: 'youtube', youtubeTrack: track, youtubePlaylist: playlist, radioStation: null, isLoading: prev.source !== 'youtube' })); }, [pauseSpotify]);
     const clearError = useCallback(() => { setState(s => ({...s, error: null})); }, []);
     const unlockAutoplay = useCallback(() => { getPlayerInstance()?.resume().then(() => setAutoplayBlocked(false)).catch(() => {}); }, []);
+
+    // --- INTERCETTORE GLOBALE INTERATTIVO (USER INTERACTION WAKE UP) ---
+    const hasWokenUpRef = useRef(false);
+    useEffect(() => {
+        const handleUserWakeUpClick = async () => {
+            const deviceId = getDeviceId();
+            if (isPlayerSdkReady && deviceId && !hasWokenUpRef.current) {
+                hasWokenUpRef.current = true;
+                const currentSessionId = getSessionId();
+                if (currentSessionId) {
+                    console.log('[AuthContext] Global User Interaction Wake Up: Transferring play:false in background');
+                    
+                    // Remove listeners immediately
+                    window.removeEventListener('click', handleUserWakeUpClick, true);
+                    window.removeEventListener('pointerdown', handleUserWakeUpClick, true);
+
+                    fetch('/api/transfer-player', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId })
+                    }).then(() => {
+                        console.log('[AuthContext] Background wake-up transfer done.');
+                    }).catch((e) => {
+                        console.error('[AuthContext] Background wake-up transfer failed', e);
+                    });
+                }
+            }
+        };
+
+        window.addEventListener('click', handleUserWakeUpClick, true);
+        window.addEventListener('pointerdown', handleUserWakeUpClick, true);
+
+        return () => {
+            window.removeEventListener('click', handleUserWakeUpClick, true);
+            window.removeEventListener('pointerdown', handleUserWakeUpClick, true);
+        };
+    }, [isPlayerSdkReady]);
+
     const isPlayerReady = isPlayerSdkReady && !!getDeviceId();
     
     return (
