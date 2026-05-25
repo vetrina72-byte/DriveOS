@@ -4,6 +4,7 @@ import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { YouTubeMusicProvider } from './context/YouTubeMusicContext';
 import { UIConfigProvider, useUIConfig } from './context/UIConfigContext';
+import { GlobalMediaProvider } from './context/GlobalMediaContext';
 import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyApp from './components/SpotifyPlayer';
@@ -573,7 +574,9 @@ export default function App() {
           <NavigationProvider>
             <YouTubeMusicProvider>
               <UIConfigProvider>
-                <AppContent />
+                <GlobalMediaProvider>
+                  <AppContent />
+                </GlobalMediaProvider>
               </UIConfigProvider>
             </YouTubeMusicProvider>
           </NavigationProvider>

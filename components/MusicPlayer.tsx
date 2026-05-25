@@ -17,6 +17,7 @@ import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
+import { useGlobalMedia } from '../context/GlobalMediaContext';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -505,16 +506,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const playerState = nowPlaying.spotifyState;
     const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
 
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const hlsRef = useRef<any>(null);
-    const [isRadioPlaying, setIsRadioPlaying] = useState(false);
-    const youtubePlayerRef = useRef<any>(null);
-    const [isYouTubePlaying, setIsYouTubePlaying] = useState(false);
-    const [youTubeProgress, setYouTubeProgress] = useState({ position: 0, duration: 1 });
-    const progressIntervalRef = useRef<number | null>(null);
-    const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
-    const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
-    const hasEndedRef = useRef(false);
+    const { 
+        globalTogglePlay, globalNextTrack, globalPrevTrack,
+        isRadioPlaying, isYouTubePlaying, youTubeProgress, isYouTubeSeeking,
+        handleSeekYouTube, handleYouTubeSeekStart, handleYouTubeSeekEnd
+    } = useGlobalMedia();
+
     const prevPositionRef = useRef(0);
 
     // --- ANIMATION LOGIC FOR PLAYER SIZE/POSITION ---
@@ -650,180 +647,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [currentTrackUri, visibleQueue]);
     
     useEffect(() => {
-        if (audioRef.current) {
-            audioRef.current.volume = volume;
-        }
-        if (youtubePlayerRef.current) {
-            youtubePlayerRef.current.setVolume(volume * 100);
-        }
-    }, [volume]);
-    
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        const cleanup = () => {
-            if (hlsRef.current) {
-                hlsRef.current.destroy();
-                hlsRef.current = null;
-            }
-            audio.pause();
-            audio.removeAttribute('src');
-            audio.load();
-        };
-        
-        const handleCanPlay = () => {
-            if (nowPlaying.source === 'radio') {
-                setNowPlaying(s => ({ ...s, isLoading: false }));
-            }
-        };
-
-        if (source === 'radio' && radioStation?.url_resolved) {
-            const streamUrl = radioStation.url_resolved;
-            cleanup();
-
-            if (window.Hls.isSupported() && streamUrl.includes('.m3u8')) {
-                const hls = new window.Hls();
-                hlsRef.current = hls;
-                hls.loadSource(streamUrl);
-                hls.attachMedia(audio);
-                hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-                    audio.play().catch(e => console.error("Radio autoplay failed:", e));
-                });
-                hls.on(window.Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal) {
-                        console.error('Fatal HLS error, destroying instance.', data);
-                        cleanup();
-                    }
-                });
-            } else {
-                audio.src = streamUrl;
-                audio.play().catch(e => console.error("Radio autoplay failed:", e));
-            }
-        } else {
-            cleanup();
-        }
-
-        const handlePlay = () => setIsRadioPlaying(true);
-        const handlePause = () => setIsRadioPlaying(false);
-
-        audio.addEventListener('play', handlePlay);
-        audio.addEventListener('pause', handlePause);
-        audio.addEventListener('canplay', handleCanPlay);
-
-        return () => {
-            audio.removeEventListener('play', handlePlay);
-            audio.removeEventListener('pause', handlePause);
-            audio.removeEventListener('canplay', handleCanPlay);
-            cleanup();
-        };
-    }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
-    
-    useEffect(() => {
-        if (source === 'youtube' && youtubeTrack?.videoId) {
-            setCurrentYouTubeVideoId(youtubeTrack.videoId);
-        }
-    }, [source, youtubeTrack]);
-    
-    useEffect(() => {
-        const player = youtubePlayerRef.current;
-        if (player && typeof player.pauseVideo === 'function') {
-            if (source !== 'youtube') {
-                player.pauseVideo();
-            }
-        }
-    }, [source]);
-
-    const handleYouTubeEnd = useCallback(() => {
-        if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) {
-            return;
-        }
-    
-        const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
-            track => track.videoId === nowPlaying.youtubeTrack?.videoId
-        );
-    
-        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
-            return;
-        }
-    
-        const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
-        playYouTube(nextTrack, nowPlaying.youtubePlaylist);
-    }, [nowPlaying, playYouTube]);
-
-    useEffect(() => {
-        if (progressIntervalRef.current) {
-            clearInterval(progressIntervalRef.current);
-        }
-
-        if (source === 'youtube' && youtubePlayerRef.current) {
-            progressIntervalRef.current = window.setInterval(() => {
-                const player = youtubePlayerRef.current;
-                if (!player || typeof player.getPlayerState !== 'function' || typeof player.getCurrentTime !== 'function') return;
-
-                const playerState = player.getPlayerState();
-                const position = player.getCurrentTime();
-                const duration = player.getDuration();
-                
-                if (playerState === 1 && !isYouTubeSeeking) {
-                    if (duration > 0) {
-                        setYouTubeProgress({ position, duration });
-                    }
-                }
-                
-                const hasFinished = playerState === 0 || (duration > 0 && position >= duration - 0.6);
-
-                if (hasFinished && !hasEndedRef.current) {
-                    hasEndedRef.current = true;
-                    handleYouTubeEnd();
-                }
-            }, 500);
-        }
-
-        return () => {
-            if (progressIntervalRef.current) {
-                clearInterval(progressIntervalRef.current);
-            }
-        };
-    }, [source, isYouTubePlaying, isYouTubeSeeking, handleYouTubeEnd]);
-    
-    useEffect(() => {
-        if (source === 'youtube') {
-            setYouTubeProgress({ position: 0, duration: 1 });
-        }
-    }, [youtubeTrack?.videoId, source]);
-    
-    useEffect(() => {
-        const playerEl = playerContainerRef.current;
-        const buttonRef = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
-        if (!visibleQueue || !playerEl || !buttonRef) return;
-
-        let animationFrameId: number;
-
-        const calculatePosition = () => {
-            const playerRect = playerEl.getBoundingClientRect();
-            setPopoverPosition({
-                bottom: window.innerHeight - playerRect.top + queuePopoverBottomOffset,
-                left: playerRect.left + playerRect.width / 2,
-                transform: 'translateX(-50%)',
-            });
-        };
-        
-        const updateLoop = () => {
-            calculatePosition();
-            animationFrameId = requestAnimationFrame(updateLoop);
-        };
-
-        animationFrameId = requestAnimationFrame(updateLoop);
-        window.addEventListener('resize', calculatePosition);
-        
-        return () => {
-            cancelAnimationFrame(animationFrameId);
-            window.removeEventListener('resize', calculatePosition);
-        };
-    }, [visibleQueue, queuePopoverBottomOffset]);
-    
-    useEffect(() => {
         const checkIsLiked = async () => {
             const trackId = playerState?.track_window?.current_track?.id;
             if (!trackId) return;
@@ -838,130 +661,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         checkIsLiked();
     }, [playerState?.track_window?.current_track?.id]);
 
-    const handleYoutubeReady = (event: { target: any }) => {
-        youtubePlayerRef.current = event.target;
-        youtubePlayerRef.current.setVolume(volume * 100);
-    };
-
-    const handleYoutubeStateChange = (event: { data: number }) => {
-        const playerState = event.data;
-        const playerIsPlaying = playerState === 1;
-        setIsYouTubePlaying(playerIsPlaying);
-    
-        if (playerIsPlaying) {
-            hasEndedRef.current = false;
-            setNowPlaying(s => ({ ...s, isLoading: false }));
-        }
-    };
-
-    const handleTogglePlay = async () => {
-        if (source === 'spotify') {
-            if (playerState?.paused || !isPlayerActive) {
-                // Resume
-                try {
-                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
-                    play({});
-                } catch (e) {
-                    console.warn("Local play failed or device inactive, applying FALLBACK play...");
-                    const deviceId = getDeviceId();
-                    if (deviceId) {
-                        const lastCtx = localStorage.getItem("spotify_last_context");
-                        const lastUr = localStorage.getItem("spotify_last_track");
-                        const lastPos = localStorage.getItem("spotify_last_position");
-
-                        const body: any = {};
-                        if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
-                        else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
-                        if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
-                        
-                        try {
-                            await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
-                            console.log("REST API Fallback Play succeeded.");
-                        } catch (err) {
-                            console.error("REST API Fallback Play failed:", err);
-                        }
-                    }
-                }
-            } else {
-                // Pause
-                try {
-                    pauseSpotify();
-                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
-                } catch (e) {
-                    const deviceId = getDeviceId();
-                    if (deviceId) {
-                        apiClient.put(`/me/player/pause?device_id=${deviceId}`).catch(console.error);
-                    }
-                }
-            }
-        } else if (source === 'radio') {
-            const audio = audioRef.current;
-            if (audio) {
-                if (audio.paused) {
-                    audio.play().catch(e => console.error("Failed to play radio stream:", e));
-                } else {
-                    audio.pause();
-                }
-            }
-        } else if (source === 'youtube' && youtubePlayerRef.current) {
-            const playerState = youtubePlayerRef.current.getPlayerState();
-            if (playerState === 1) {
-                youtubePlayerRef.current.pauseVideo();
-            } else {
-                youtubePlayerRef.current.playVideo();
-            }
-        }
-    };
-
-    const handleNextTrack = async () => {
-        if (source === 'spotify') {
-            try {
-                if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
-                await player?.nextTrack();
-            } catch (e) {
-                const deviceId = getDeviceId();
-                if (deviceId) {
-                    console.log("Fallback nextTrack via REST API");
-                    apiClient.post(`/me/player/next?device_id=${deviceId}`).catch(console.error);
-                }
-            }
-        } else if (source === 'radio') {
-            onStationChange('next');
-        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
-             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
-                track => track.videoId === nowPlaying.youtubeTrack?.videoId
-            );
-            if (currentTrackIndex > -1 && currentTrackIndex < nowPlaying.youtubePlaylist.length - 1) {
-                const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
-                playYouTube(nextTrack, nowPlaying.youtubePlaylist);
-            }
-        }
-    };
-    
-    const handlePrevTrack = async () => {
-        if (source === 'spotify') {
-            try {
-                if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
-                await player?.previousTrack();
-            } catch (e) {
-                const deviceId = getDeviceId();
-                if (deviceId) {
-                    console.log("Fallback previousTrack via REST API");
-                    apiClient.post(`/me/player/previous?device_id=${deviceId}`).catch(console.error);
-                }
-            }
-        } else if (source === 'radio') {
-            onStationChange('prev');
-        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
-             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
-                track => track.videoId === nowPlaying.youtubeTrack?.videoId
-            );
-            if (currentTrackIndex > 0) {
-                const prevTrack = nowPlaying.youtubePlaylist[currentTrackIndex - 1];
-                playYouTube(prevTrack, nowPlaying.youtubePlaylist);
-            }
-        }
-    };
+    const handleTogglePlay = globalTogglePlay;
+    const handleNextTrack = globalNextTrack;
+    const handlePrevTrack = globalPrevTrack;
 
     const handleToggleLike = async () => {
         const trackId = playerState?.track_window?.current_track?.id;
@@ -991,25 +693,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
-    
-    const handleSeekYouTube = useCallback((position: number) => {
-        if (youtubePlayerRef.current) {
-            youtubePlayerRef.current.seekTo(position, true);
-        }
-    }, []);
-    
-    const handleYouTubeSeekStart = useCallback(() => {
-        setIsYouTubeSeeking(true);
-    }, []);
-    
-    const handleYouTubeSeekEnd = useCallback(() => {
-        setIsYouTubeSeeking(false);
-        if (youtubePlayerRef.current) {
-            const position = youtubePlayerRef.current.getCurrentTime();
-            const duration = youtubePlayerRef.current.getDuration();
-            setYouTubeProgress({ position, duration });
-        }
-    }, []);
 
     const themeClasses = isNight 
         ? 'border-zinc-700/80' 
@@ -1299,26 +982,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     )}
                     {isAutoplayBlocked && <AutoplayUnlockOverlay />}
                     {renderPlayerContent()}
-                    <audio ref={audioRef} playsInline crossOrigin="anonymous" />
-                    <div style={{ display: 'none' }}>
-                        <YouTube
-                            videoId={currentYouTubeVideoId}
-                            opts={{
-                                height: '195',
-                                width: '320',
-                                playerVars: {
-                                    autoplay: 1,
-                                    controls: 0,
-                                    disablekb: 1,
-                                    modestbranding: 1,
-                                    playsinline: 1,
-                                },
-                            }}
-                            onReady={handleYoutubeReady}
-                            onStateChange={handleYoutubeStateChange}
-                            onEnd={handleYouTubeEnd}
-                        />
-                    </div>
                 </div>
             </div>
             {visibleQueue && (
