@@ -376,7 +376,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
     );
 };
 
-const DisabledPlayerView = ({ 
+const DisabledPlayerView = ({
     isNight, 
     playerControlsSize, 
     playerControlsGap, 
@@ -388,7 +388,7 @@ const DisabledPlayerView = ({
     playButtonScale,
     skipButtonScale
 }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft' | 'dragProgress'>) => {
-    const isReady = false; // Always disabled
+    const { globalTogglePlay, globalNextTrack, globalPrevTrack } = useGlobalMedia();
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
 
@@ -408,11 +408,11 @@ const DisabledPlayerView = ({
                 {/* Shuffle/Repeat etc. */}
                 <div className="flex items-center gap-5">
                      <div className="flex items-center">
-                        <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
+                        <button disabled className="transition opacity-40 cursor-not-allowed" style={{ color: inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
                     </div>
-                    <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
+                    <button disabled className="transition opacity-40 cursor-not-allowed" style={{ color: inactiveButtonColor }}>
                         <PiRepeatBold className="w-5 h-5" />
                     </button>
                 </div>
@@ -426,19 +426,19 @@ const DisabledPlayerView = ({
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
                 <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                    <button onClick={globalPrevTrack} className="transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                     </button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                    <button onClick={globalTogglePlay} className="transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                     </button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                    <button onClick={globalNextTrack} className="transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                     </button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                    <button disabled className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
                 </div>
                 <div className="flex-1 flex justify-end items-center">
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
+                    <button disabled className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
                         <BsList style={{ width: '20px', height: '20px'}} />
                     </button>
                 </div>

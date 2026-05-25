@@ -39,7 +39,7 @@ export const GlobalMediaProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const isPlayerActive = spotifyState && spotifyState.track_window.current_track;
 
     const globalNextTrack = useCallback(async () => {
-        if (source === 'spotify') {
+        if (source === 'spotify' || !source) {
             try {
                 if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
                 await getPlayerInstance()?.nextTrack();
@@ -65,7 +65,7 @@ export const GlobalMediaProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }, [source, isPlayerActive, radioContext, radioStation, setNowPlaying, youtubePlaylist, youtubeTrack, playYouTube]);
 
     const globalPrevTrack = useCallback(async () => {
-        if (source === 'spotify') {
+        if (source === 'spotify' || !source) {
             try {
                 if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
                 await getPlayerInstance()?.previousTrack();
@@ -91,10 +91,13 @@ export const GlobalMediaProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }, [source, isPlayerActive, radioContext, radioStation, setNowPlaying, youtubePlaylist, youtubeTrack, playYouTube]);
 
     const globalTogglePlay = useCallback(async () => {
-        if (source === 'spotify') {
-            if (spotifyState?.paused || !isPlayerActive) {
+        if (source === 'spotify' || !source) {
+            if (spotifyState?.paused || !isPlayerActive || !source) {
                 try {
                     if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                    if (!source) {
+                        setNowPlaying(s => ({ ...s, source: 'spotify' }));
+                    }
                     play({});
                 } catch (e) {
                     const deviceId = getDeviceId();
@@ -108,6 +111,7 @@ export const GlobalMediaProvider: React.FC<{ children: React.ReactNode }> = ({ c
                         if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
                         
                         apiClient.put(`/me/player/play?device_id=${deviceId}`, body).catch(console.error);
+                        if (!source) setNowPlaying(s => ({ ...s, source: 'spotify' }));
                     }
                 }
             } else {
