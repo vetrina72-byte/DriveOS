@@ -270,7 +270,7 @@ function SceneController({
       onInteractionChange?.(false);
       
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
-      // Iniziamo il contatore per ripristinare la home (10 secondi)
+      // Iniziamo il contatore per ripristinare la home (3 secondi)
       interactTimeout.current = window.setTimeout(() => {
         if (!isAppOpen) {
             snapshotHomePos.current.copy(camera.position);
@@ -278,7 +278,7 @@ function SceneController({
             isRestoringHome.current = true;
             restoreAnimProgress.current = 0;
         }
-      }, 10000);
+      }, 3000);
     };
     
     ctrl.addEventListener('start', onStart);

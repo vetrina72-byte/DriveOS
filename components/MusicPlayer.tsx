@@ -17,7 +17,6 @@ import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
-import { useGlobalMedia } from '../context/GlobalMediaContext';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -376,7 +375,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
     );
 };
 
-const DisabledPlayerView = ({
+const DisabledPlayerView = ({ 
     isNight, 
     playerControlsSize, 
     playerControlsGap, 
@@ -388,7 +387,7 @@ const DisabledPlayerView = ({
     playButtonScale,
     skipButtonScale
 }: Omit<MusicPlayerProps, 'onStationChange' | 'activeApp' | 'favoriteStationUUIDs' | 'onToggleFavorite' | 'queuePopoverHeight' | 'queuePopoverBottomOffset' | 'queuePopoverScale' | 'queuePopoverWidth' | 'queuePopoverOffsetX' | 'dockedConfig' | 'floatingConfig' | 'isAnyAppOpen' | 'widgetBgColor' | 'spinnerSize' | 'spinnerShuffleGap' | 'debugSpinner' | 'spinnerTop' | 'spinnerRight' | 'spinnerBottom' | 'spinnerLeft' | 'dragProgress'>) => {
-    const { globalTogglePlay, globalNextTrack, globalPrevTrack } = useGlobalMedia();
+    const isReady = false; // Always disabled
     const buttonColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
 
@@ -408,11 +407,11 @@ const DisabledPlayerView = ({
                 {/* Shuffle/Repeat etc. */}
                 <div className="flex items-center gap-5">
                      <div className="flex items-center">
-                        <button disabled className="transition opacity-40 cursor-not-allowed" style={{ color: inactiveButtonColor }}>
+                        <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
                     </div>
-                    <button disabled className="transition opacity-40 cursor-not-allowed" style={{ color: inactiveButtonColor }}>
+                    <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
                         <PiRepeatBold className="w-5 h-5" />
                     </button>
                 </div>
@@ -426,19 +425,19 @@ const DisabledPlayerView = ({
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
                 <div className="flex-1 flex justify-start"></div>
                 <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
-                    <button onClick={globalPrevTrack} className="transition" style={{ color: buttonColor }}>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                     </button>
-                    <button onClick={globalTogglePlay} className="transition" style={{ color: buttonColor }}>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                     </button>
-                    <button onClick={globalNextTrack} className="transition" style={{ color: buttonColor }}>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                     </button>
-                    <button disabled className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
                 </div>
                 <div className="flex-1 flex justify-end items-center">
-                    <button disabled className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
                         <BsList style={{ width: '20px', height: '20px'}} />
                     </button>
                 </div>
@@ -506,12 +505,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const playerState = nowPlaying.spotifyState;
     const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
 
-    const { 
-        globalTogglePlay, globalNextTrack, globalPrevTrack,
-        isRadioPlaying, isYouTubePlaying, youTubeProgress, isYouTubeSeeking,
-        handleSeekYouTube, handleYouTubeSeekStart, handleYouTubeSeekEnd
-    } = useGlobalMedia();
-
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const hlsRef = useRef<any>(null);
+    const [isRadioPlaying, setIsRadioPlaying] = useState(false);
+    const youtubePlayerRef = useRef<any>(null);
+    const [isYouTubePlaying, setIsYouTubePlaying] = useState(false);
+    const [youTubeProgress, setYouTubeProgress] = useState({ position: 0, duration: 1 });
+    const progressIntervalRef = useRef<number | null>(null);
+    const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
+    const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
+    const hasEndedRef = useRef(false);
     const prevPositionRef = useRef(0);
 
     // --- ANIMATION LOGIC FOR PLAYER SIZE/POSITION ---
@@ -647,6 +650,180 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [currentTrackUri, visibleQueue]);
     
     useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume;
+        }
+        if (youtubePlayerRef.current) {
+            youtubePlayerRef.current.setVolume(volume * 100);
+        }
+    }, [volume]);
+    
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const cleanup = () => {
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
+            }
+            audio.pause();
+            audio.removeAttribute('src');
+            audio.load();
+        };
+        
+        const handleCanPlay = () => {
+            if (nowPlaying.source === 'radio') {
+                setNowPlaying(s => ({ ...s, isLoading: false }));
+            }
+        };
+
+        if (source === 'radio' && radioStation?.url_resolved) {
+            const streamUrl = radioStation.url_resolved;
+            cleanup();
+
+            if (window.Hls.isSupported() && streamUrl.includes('.m3u8')) {
+                const hls = new window.Hls();
+                hlsRef.current = hls;
+                hls.loadSource(streamUrl);
+                hls.attachMedia(audio);
+                hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+                    audio.play().catch(e => console.error("Radio autoplay failed:", e));
+                });
+                hls.on(window.Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        console.error('Fatal HLS error, destroying instance.', data);
+                        cleanup();
+                    }
+                });
+            } else {
+                audio.src = streamUrl;
+                audio.play().catch(e => console.error("Radio autoplay failed:", e));
+            }
+        } else {
+            cleanup();
+        }
+
+        const handlePlay = () => setIsRadioPlaying(true);
+        const handlePause = () => setIsRadioPlaying(false);
+
+        audio.addEventListener('play', handlePlay);
+        audio.addEventListener('pause', handlePause);
+        audio.addEventListener('canplay', handleCanPlay);
+
+        return () => {
+            audio.removeEventListener('play', handlePlay);
+            audio.removeEventListener('pause', handlePause);
+            audio.removeEventListener('canplay', handleCanPlay);
+            cleanup();
+        };
+    }, [source, radioStation?.url_resolved, nowPlaying.source, setNowPlaying]);
+    
+    useEffect(() => {
+        if (source === 'youtube' && youtubeTrack?.videoId) {
+            setCurrentYouTubeVideoId(youtubeTrack.videoId);
+        }
+    }, [source, youtubeTrack]);
+    
+    useEffect(() => {
+        const player = youtubePlayerRef.current;
+        if (player && typeof player.pauseVideo === 'function') {
+            if (source !== 'youtube') {
+                player.pauseVideo();
+            }
+        }
+    }, [source]);
+
+    const handleYouTubeEnd = useCallback(() => {
+        if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) {
+            return;
+        }
+    
+        const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
+            track => track.videoId === nowPlaying.youtubeTrack?.videoId
+        );
+    
+        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
+            return;
+        }
+    
+        const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
+        playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+    }, [nowPlaying, playYouTube]);
+
+    useEffect(() => {
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+        }
+
+        if (source === 'youtube' && youtubePlayerRef.current) {
+            progressIntervalRef.current = window.setInterval(() => {
+                const player = youtubePlayerRef.current;
+                if (!player || typeof player.getPlayerState !== 'function' || typeof player.getCurrentTime !== 'function') return;
+
+                const playerState = player.getPlayerState();
+                const position = player.getCurrentTime();
+                const duration = player.getDuration();
+                
+                if (playerState === 1 && !isYouTubeSeeking) {
+                    if (duration > 0) {
+                        setYouTubeProgress({ position, duration });
+                    }
+                }
+                
+                const hasFinished = playerState === 0 || (duration > 0 && position >= duration - 0.6);
+
+                if (hasFinished && !hasEndedRef.current) {
+                    hasEndedRef.current = true;
+                    handleYouTubeEnd();
+                }
+            }, 500);
+        }
+
+        return () => {
+            if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+            }
+        };
+    }, [source, isYouTubePlaying, isYouTubeSeeking, handleYouTubeEnd]);
+    
+    useEffect(() => {
+        if (source === 'youtube') {
+            setYouTubeProgress({ position: 0, duration: 1 });
+        }
+    }, [youtubeTrack?.videoId, source]);
+    
+    useEffect(() => {
+        const playerEl = playerContainerRef.current;
+        const buttonRef = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
+        if (!visibleQueue || !playerEl || !buttonRef) return;
+
+        let animationFrameId: number;
+
+        const calculatePosition = () => {
+            const playerRect = playerEl.getBoundingClientRect();
+            setPopoverPosition({
+                bottom: window.innerHeight - playerRect.top + queuePopoverBottomOffset,
+                left: playerRect.left + playerRect.width / 2,
+                transform: 'translateX(-50%)',
+            });
+        };
+        
+        const updateLoop = () => {
+            calculatePosition();
+            animationFrameId = requestAnimationFrame(updateLoop);
+        };
+
+        animationFrameId = requestAnimationFrame(updateLoop);
+        window.addEventListener('resize', calculatePosition);
+        
+        return () => {
+            cancelAnimationFrame(animationFrameId);
+            window.removeEventListener('resize', calculatePosition);
+        };
+    }, [visibleQueue, queuePopoverBottomOffset]);
+    
+    useEffect(() => {
         const checkIsLiked = async () => {
             const trackId = playerState?.track_window?.current_track?.id;
             if (!trackId) return;
@@ -661,9 +838,130 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         checkIsLiked();
     }, [playerState?.track_window?.current_track?.id]);
 
-    const handleTogglePlay = globalTogglePlay;
-    const handleNextTrack = globalNextTrack;
-    const handlePrevTrack = globalPrevTrack;
+    const handleYoutubeReady = (event: { target: any }) => {
+        youtubePlayerRef.current = event.target;
+        youtubePlayerRef.current.setVolume(volume * 100);
+    };
+
+    const handleYoutubeStateChange = (event: { data: number }) => {
+        const playerState = event.data;
+        const playerIsPlaying = playerState === 1;
+        setIsYouTubePlaying(playerIsPlaying);
+    
+        if (playerIsPlaying) {
+            hasEndedRef.current = false;
+            setNowPlaying(s => ({ ...s, isLoading: false }));
+        }
+    };
+
+    const handleTogglePlay = async () => {
+        if (source === 'spotify') {
+            if (playerState?.paused || !isPlayerActive) {
+                // Resume
+                try {
+                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                    play({});
+                } catch (e) {
+                    console.warn("Local play failed or device inactive, applying FALLBACK play...");
+                    const deviceId = getDeviceId();
+                    if (deviceId) {
+                        const lastCtx = localStorage.getItem("spotify_last_context");
+                        const lastUr = localStorage.getItem("spotify_last_track");
+                        const lastPos = localStorage.getItem("spotify_last_position");
+
+                        const body: any = {};
+                        if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
+                        else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
+                        if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
+                        
+                        try {
+                            await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+                            console.log("REST API Fallback Play succeeded.");
+                        } catch (err) {
+                            console.error("REST API Fallback Play failed:", err);
+                        }
+                    }
+                }
+            } else {
+                // Pause
+                try {
+                    pauseSpotify();
+                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                } catch (e) {
+                    const deviceId = getDeviceId();
+                    if (deviceId) {
+                        apiClient.put(`/me/player/pause?device_id=${deviceId}`).catch(console.error);
+                    }
+                }
+            }
+        } else if (source === 'radio') {
+            const audio = audioRef.current;
+            if (audio) {
+                if (audio.paused) {
+                    audio.play().catch(e => console.error("Failed to play radio stream:", e));
+                } else {
+                    audio.pause();
+                }
+            }
+        } else if (source === 'youtube' && youtubePlayerRef.current) {
+            const playerState = youtubePlayerRef.current.getPlayerState();
+            if (playerState === 1) {
+                youtubePlayerRef.current.pauseVideo();
+            } else {
+                youtubePlayerRef.current.playVideo();
+            }
+        }
+    };
+
+    const handleNextTrack = async () => {
+        if (source === 'spotify') {
+            try {
+                if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                await player?.nextTrack();
+            } catch (e) {
+                const deviceId = getDeviceId();
+                if (deviceId) {
+                    console.log("Fallback nextTrack via REST API");
+                    apiClient.post(`/me/player/next?device_id=${deviceId}`).catch(console.error);
+                }
+            }
+        } else if (source === 'radio') {
+            onStationChange('next');
+        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
+             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
+                track => track.videoId === nowPlaying.youtubeTrack?.videoId
+            );
+            if (currentTrackIndex > -1 && currentTrackIndex < nowPlaying.youtubePlaylist.length - 1) {
+                const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
+                playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+            }
+        }
+    };
+    
+    const handlePrevTrack = async () => {
+        if (source === 'spotify') {
+            try {
+                if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                await player?.previousTrack();
+            } catch (e) {
+                const deviceId = getDeviceId();
+                if (deviceId) {
+                    console.log("Fallback previousTrack via REST API");
+                    apiClient.post(`/me/player/previous?device_id=${deviceId}`).catch(console.error);
+                }
+            }
+        } else if (source === 'radio') {
+            onStationChange('prev');
+        } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
+             const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
+                track => track.videoId === nowPlaying.youtubeTrack?.videoId
+            );
+            if (currentTrackIndex > 0) {
+                const prevTrack = nowPlaying.youtubePlaylist[currentTrackIndex - 1];
+                playYouTube(prevTrack, nowPlaying.youtubePlaylist);
+            }
+        }
+    };
 
     const handleToggleLike = async () => {
         const trackId = playerState?.track_window?.current_track?.id;
@@ -693,6 +991,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         apiClient.put(`/me/player/repeat?state=${repeatMode}`);
     };
+    
+    const handleSeekYouTube = useCallback((position: number) => {
+        if (youtubePlayerRef.current) {
+            youtubePlayerRef.current.seekTo(position, true);
+        }
+    }, []);
+    
+    const handleYouTubeSeekStart = useCallback(() => {
+        setIsYouTubeSeeking(true);
+    }, []);
+    
+    const handleYouTubeSeekEnd = useCallback(() => {
+        setIsYouTubeSeeking(false);
+        if (youtubePlayerRef.current) {
+            const position = youtubePlayerRef.current.getCurrentTime();
+            const duration = youtubePlayerRef.current.getDuration();
+            setYouTubeProgress({ position, duration });
+        }
+    }, []);
 
     const themeClasses = isNight 
         ? 'border-zinc-700/80' 
@@ -982,6 +1299,26 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     )}
                     {isAutoplayBlocked && <AutoplayUnlockOverlay />}
                     {renderPlayerContent()}
+                    <audio ref={audioRef} playsInline crossOrigin="anonymous" />
+                    <div style={{ display: 'none' }}>
+                        <YouTube
+                            videoId={currentYouTubeVideoId}
+                            opts={{
+                                height: '195',
+                                width: '320',
+                                playerVars: {
+                                    autoplay: 1,
+                                    controls: 0,
+                                    disablekb: 1,
+                                    modestbranding: 1,
+                                    playsinline: 1,
+                                },
+                            }}
+                            onReady={handleYoutubeReady}
+                            onStateChange={handleYoutubeStateChange}
+                            onEnd={handleYouTubeEnd}
+                        />
+                    </div>
                 </div>
             </div>
             {visibleQueue && (
