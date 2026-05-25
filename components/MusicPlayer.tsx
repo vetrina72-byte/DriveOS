@@ -16,7 +16,7 @@ import {
 import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
-import { getPlayerInstance } from '../lib/spotify-player';
+import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -854,14 +854,45 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     };
 
-    const handleTogglePlay = () => {
+    const handleTogglePlay = async () => {
         if (source === 'spotify') {
-            if (playerState?.paused) {
+            if (playerState?.paused || !isPlayerActive) {
                 // Resume
-                play({});
+                try {
+                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                    play({});
+                } catch (e) {
+                    console.warn("Local play failed or device inactive, applying FALLBACK play...");
+                    const deviceId = getDeviceId();
+                    if (deviceId) {
+                        const lastCtx = localStorage.getItem("spotify_last_context");
+                        const lastUr = localStorage.getItem("spotify_last_track");
+                        const lastPos = localStorage.getItem("spotify_last_position");
+
+                        const body: any = {};
+                        if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
+                        else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
+                        if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
+                        
+                        try {
+                            await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+                            console.log("REST API Fallback Play succeeded.");
+                        } catch (err) {
+                            console.error("REST API Fallback Play failed:", err);
+                        }
+                    }
+                }
             } else {
                 // Pause
-                pauseSpotify();
+                try {
+                    pauseSpotify();
+                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                } catch (e) {
+                    const deviceId = getDeviceId();
+                    if (deviceId) {
+                        apiClient.put(`/me/player/pause?device_id=${deviceId}`).catch(console.error);
+                    }
+                }
             }
         } else if (source === 'radio') {
             const audio = audioRef.current;
@@ -882,9 +913,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     };
 
-    const handleNextTrack = () => {
+    const handleNextTrack = async () => {
         if (source === 'spotify') {
-            player?.nextTrack();
+            try {
+                if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                await player?.nextTrack();
+            } catch (e) {
+                const deviceId = getDeviceId();
+                if (deviceId) {
+                    console.log("Fallback nextTrack via REST API");
+                    apiClient.post(`/me/player/next?device_id=${deviceId}`).catch(console.error);
+                }
+            }
         } else if (source === 'radio') {
             onStationChange('next');
         } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
@@ -897,9 +937,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         }
     };
-    const handlePrevTrack = () => {
+    
+    const handlePrevTrack = async () => {
         if (source === 'spotify') {
-            player?.previousTrack();
+            try {
+                if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                await player?.previousTrack();
+            } catch (e) {
+                const deviceId = getDeviceId();
+                if (deviceId) {
+                    console.log("Fallback previousTrack via REST API");
+                    apiClient.post(`/me/player/previous?device_id=${deviceId}`).catch(console.error);
+                }
+            }
         } else if (source === 'radio') {
             onStationChange('prev');
         } else if (source === 'youtube' && youtubePlayerRef.current && nowPlaying.youtubePlaylist) {
