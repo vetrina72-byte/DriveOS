@@ -733,26 +733,15 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             const deviceId = getDeviceId();
             if (deviceId) {
                 const currentSessionId = getSessionId();
-                apiClient.get('/me/player').then(res => {
-                    const wasPlaying = res.data && res.data.is_playing;
-                    
-                    fetch('/api/transfer-player', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId, play: false })
-                    }).then(() => {
-                        if (wasPlaying) {
-                            setTimeout(() => {
-                                const resumeAudio = () => {
-                                    getPlayerInstance()?.resume().catch(() => {});
-                                    window.removeEventListener('pointerdown', resumeAudio, { capture: true });
-                                    window.removeEventListener('keydown', resumeAudio, { capture: true });
-                                };
-                                window.addEventListener('pointerdown', resumeAudio, { capture: true });
-                                window.addEventListener('keydown', resumeAudio, { capture: true });
-                            }, 500); // Give Spotify a moment to transfer playback
-                        }
-                    }).catch(() => {});
+                fetch('/api/transfer-player', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId, play: false })
+                }).then(() => {
+                    const resumeAudio = () => {
+                        getPlayerInstance()?.resume().catch(() => {});
+                    };
+                    window.addEventListener('pointerdown', resumeAudio, { once: true, capture: true });
                 }).catch(() => {});
             }
         }

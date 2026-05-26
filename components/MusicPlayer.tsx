@@ -497,7 +497,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(true);
     
     const [isLiked, setIsLiked] = useState(false);
-    const [isTogglePending, setIsTogglePending] = useState(false);
 
     const spotifyQueueButtonRef = useRef<HTMLButtonElement>(null);
     const youTubeQueueButtonRef = useRef<HTMLButtonElement>(null);
@@ -855,54 +854,66 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     };
 
-    const handleTogglePlay = async () => {
-        if (isTogglePending) return;
-        
-        setIsTogglePending(true);
+    const handleTogglePlay = () => {
         if (source === 'spotify') {
-            if (playerState?.paused || !isPlayerActive) {
-                // Resume
-                try {
-                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
-                    await play({});
-                } catch (e) {
-                    console.warn("Local play failed or device inactive, applying FALLBACK play...");
-                    const deviceId = getDeviceId();
-                    if (deviceId) {
-                        const lastCtx = localStorage.getItem("spotify_last_context");
-                        const lastUr = localStorage.getItem("spotify_last_track");
-                        const lastPos = localStorage.getItem("spotify_last_position");
+            const isCurrentlyPaused = playerState?.paused || !isPlayerActive;
 
-                        const body: any = {};
-                        if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
-                        else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
-                        if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
-                        
-                        try {
-                            await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
-                            console.log("REST API Fallback Play succeeded.");
-                        } catch (err) {
-                            console.error("REST API Fallback Play failed:", err);
+            // OPTIMISTIC UI: Aggiorniamo istantaneamente il contesto
+            setNowPlaying(prev => prev.spotifyState ? {
+                ...prev,
+                spotifyState: {
+                    ...prev.spotifyState,
+                    paused: !isCurrentlyPaused
+                }
+            } : prev);
+
+            if (isCurrentlyPaused) {
+                // Resume
+                (async () => {
+                    try {
+                        if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                        await play({});
+                    } catch (e) {
+                        console.warn("Local play failed or device inactive, applying FALLBACK play...");
+                        const deviceId = getDeviceId();
+                        if (deviceId) {
+                            const lastCtx = localStorage.getItem("spotify_last_context");
+                            const lastUr = localStorage.getItem("spotify_last_track");
+                            const lastPos = localStorage.getItem("spotify_last_position");
+
+                            const body: any = {};
+                            if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
+                            else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
+                            if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
+                            
+                            try {
+                                await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+                                console.log("REST API Fallback Play succeeded.");
+                            } catch (err) {
+                                console.error("REST API Fallback Play failed:", err);
+                            }
                         }
                     }
-                }
+                })();
             } else {
                 // Pause
-                try {
-                    await pauseSpotify();
-                    if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
-                } catch (e) {
-                    const deviceId = getDeviceId();
-                    if (deviceId) {
-                        try { await apiClient.put(`/me/player/pause?device_id=${deviceId}`); } catch (err) { console.error(err); }
+                (async () => {
+                    try {
+                        await pauseSpotify();
+                        if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                    } catch (e) {
+                        const deviceId = getDeviceId();
+                        if (deviceId) {
+                            try { await apiClient.put(`/me/player/pause?device_id=${deviceId}`); } catch (err) { console.error(err); }
+                        }
                     }
-                }
+                })();
             }
         } else if (source === 'radio') {
             const audio = audioRef.current;
             if (audio) {
                 if (audio.paused) {
-                    try { await audio.play(); } catch(e) { console.error("Failed to play radio stream:", e); }
+                    try { audio.play(); } catch(e) { console.error("Failed to play radio stream:", e); }
                 } else {
                     audio.pause();
                 }
@@ -915,9 +926,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 youtubePlayerRef.current.playVideo();
             }
         }
-        
-        // Sblocca lo stato dopo un breve intervallo per permettere a Spotify di aggiornare il listener `player_state_changed`
-        setTimeout(() => setIsTogglePending(false), 500);
     };
 
     const handleNextTrack = async () => {
@@ -1078,7 +1086,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
-                            <button onClick={handleTogglePlay} className="transition" style={{ color: buttonActiveColor }}>
+                            <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {isYouTubePlaying
                                     ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
@@ -1130,7 +1138,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
-                            <button onClick={handleTogglePlay} className={`transition`} style={{ color: buttonActiveColor }}>
+                            <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {isRadioPlaying
                                     ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
@@ -1205,7 +1213,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
-                            <button onClick={handleTogglePlay} disabled={isTogglePending} style={{ color: buttonActiveColor }}>
+                            <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
                                     ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
