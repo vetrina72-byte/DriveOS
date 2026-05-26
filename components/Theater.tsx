@@ -372,7 +372,7 @@ const Theater = ({
             aria-labelledby="theater-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="theater-container relative">
+            <div className="theater-container relative rounded-t-[32px]">
                 {/* --- DRAG HANDLE --- */}
                 <div
                     className={handleContainerClass}

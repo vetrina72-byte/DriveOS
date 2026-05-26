@@ -1297,7 +1297,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             <div className="spinner-visual" style={spinnerVisualDivStyle}></div>
                         </div>
                     )}
-                    {isAutoplayBlocked && <AutoplayUnlockOverlay />}
                     {renderPlayerContent()}
                     <audio ref={audioRef} playsInline crossOrigin="anonymous" />
                     <div style={{ display: 'none' }}>

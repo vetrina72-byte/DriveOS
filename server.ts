@@ -246,7 +246,7 @@ async function startServer() {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ device_ids: [device_id], play: false })
+        body: JSON.stringify({ device_ids: [device_id], play: req.body.play !== undefined ? req.body.play : true })
       });
 
       if (spotifyRes.status === 204) {

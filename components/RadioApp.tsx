@@ -572,7 +572,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative backdrop-blur-lg`}
+              className={`w-full h-full flex flex-col relative backdrop-blur-lg rounded-t-[32px]`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
                 {/* --- DRAG HANDLE --- */}

@@ -472,7 +472,7 @@ export default function DebugControls({
             <div className={handlePillClass} />
         </div>
       )}
-      <div className={isAppView ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start relative" : "w-full"}>
+      <div className={isAppView ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start relative rounded-t-[32px]" : "w-full"}>
         {!isAppView && (
         <div className="flex justify-between items-center mb-4">
           <h2 id="debug-panel-title" className="font-bold text-lg">Debug Controls</h2>

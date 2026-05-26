@@ -504,8 +504,42 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             const expiresAt = Number(localStorage.getItem('expiresAt') || '0');
             if (token && expiresAt > Date.now()) {
                 const user = await fetchUserInfo();
-                if (user) setState(s => ({ ...s, user, isAuthenticated: true, isLoading: false }));
-                else logout();
+                if (user) {
+                    setState(s => ({ ...s, user, isAuthenticated: true, isLoading: false }));
+                    
+                    // Aggressive initialization: fetch current player state immediately
+                    apiClient.get('/me/player').then(res => {
+                        if (res.data && res.data.item) {
+                            setNowPlaying(prev => {
+                                // Prefer local hydrated state if it exists, otherwise use remote
+                                if (prev.spotifyState && prev.spotifyState.track_window.current_track?.uri === res.data.item.uri) {
+                                    return { ...prev, activeDevice: res.data.device, source: 'spotify' };
+                                }
+                                return {
+                                    ...prev,
+                                    source: 'spotify',
+                                    activeDevice: res.data.device,
+                                    spotifyState: {
+                                        paused: !res.data.is_playing,
+                                        position: res.data.progress_ms || 0,
+                                        duration: res.data.item.duration_ms || 0,
+                                        track_window: {
+                                            current_track: res.data.item as any,
+                                            next_tracks: [],
+                                            previous_tracks: []
+                                        },
+                                        context: res.data.context || { uri: null, metadata: null },
+                                        disallows: {},
+                                        shuffle: res.data.shuffle_state || false,
+                                        repeat_mode: res.data.repeat_state === 'off' ? 0 : 1,
+                                        timestamp: Date.now()
+                                    } as any
+                                };
+                            });
+                        }
+                    }).catch(() => {});
+                    
+                } else logout();
             } else { setState(s => ({ ...s, isLoading: false })); }
         };
         initFromStorage();
@@ -702,7 +736,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 fetch('/api/transfer-player', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId })
+                    body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId, play: true })
                 }).catch(() => {});
             }
         }
@@ -795,6 +829,23 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const playYouTube = useCallback((track: YouTubeTrackInfo, playlist?: YouTubeTrackInfo[]) => { pauseSpotify(); setNowPlaying(prev => ({ ...prev, source: 'youtube', youtubeTrack: track, youtubePlaylist: playlist, radioStation: null, isLoading: prev.source !== 'youtube' })); }, [pauseSpotify]);
     const clearError = useCallback(() => { setState(s => ({...s, error: null})); }, []);
     const unlockAutoplay = useCallback(() => { getPlayerInstance()?.resume().then(() => setAutoplayBlocked(false)).catch(() => {}); }, []);
+
+    useEffect(() => {
+        if (!isAutoplayBlocked) return;
+        
+        const unlock = () => {
+            unlockAutoplay();
+        };
+
+        window.addEventListener('pointerdown', unlock, { once: true, capture: true });
+        window.addEventListener('keydown', unlock, { once: true, capture: true });
+        
+        return () => {
+            window.removeEventListener('pointerdown', unlock, { capture: true });
+            window.removeEventListener('keydown', unlock, { capture: true });
+        };
+    }, [isAutoplayBlocked, unlockAutoplay]);
+
     const isPlayerReady = isPlayerSdkReady && !!getDeviceId();
     
     return (
