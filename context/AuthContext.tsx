@@ -733,21 +733,26 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             const deviceId = getDeviceId();
             if (deviceId) {
                 const currentSessionId = getSessionId();
-                fetch('/api/transfer-player', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId, play: false })
-                }).then(() => {
-                    setTimeout(() => {
-                        getPlayerInstance()?.getCurrentState().then(state => {
-                            if (state && state.track_window?.current_track) {
-                                getPlayerInstance()?.resume().catch(() => {});
-                            } else {
-                                // Se non abbiamo contesto locale agganciato, proviamo un play di fallback usando l'API per forzare la ripresa dell'ultimo brano
-                                apiClient.put(`/me/player/play`, { device_id: deviceId }).catch(() => {});
-                            }
-                        });
-                    }, 500); // Give Spotify a moment to transfer playback
+                apiClient.get('/me/player').then(res => {
+                    const wasPlaying = res.data && res.data.is_playing;
+                    
+                    fetch('/api/transfer-player', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId, play: false })
+                    }).then(() => {
+                        if (wasPlaying) {
+                            setTimeout(() => {
+                                const resumeAudio = () => {
+                                    getPlayerInstance()?.resume().catch(() => {});
+                                    window.removeEventListener('pointerdown', resumeAudio, { capture: true });
+                                    window.removeEventListener('keydown', resumeAudio, { capture: true });
+                                };
+                                window.addEventListener('pointerdown', resumeAudio, { capture: true });
+                                window.addEventListener('keydown', resumeAudio, { capture: true });
+                            }, 500); // Give Spotify a moment to transfer playback
+                        }
+                    }).catch(() => {});
                 }).catch(() => {});
             }
         }
