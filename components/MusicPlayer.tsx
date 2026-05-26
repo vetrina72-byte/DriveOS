@@ -60,93 +60,60 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
     const progressContainerRef = useRef<HTMLDivElement>(null);
     const [isSeeking, setIsSeeking] = useState(false);
 
-    // The absolute truth of what is currently rendered on screen
+    // The absolute truth of what is currently rendered on screen explicitly for seeking
     const visualPosRef = useRef<number>(state.position);
-    
-    // State tracking
-    const lastTrackIdRef = useRef<string | null>(state.track_window.current_track?.id || null);
-    const prevPausedRef = useRef<boolean>(state.paused);
-    
-    // Performance timer
-    const lastFrameTimeRef = useRef<number>(0);
 
-    // --- SYNC LOGIC (The Brain) ---
+    // --- PAGE VISIBILITY API ---
     useEffect(() => {
-        const currentTrackId = state.track_window.current_track?.id || null;
-        const trackChanged = currentTrackId !== lastTrackIdRef.current;
-        const isPaused = state.paused;
-        const wasPaused = prevPausedRef.current;
-
-        // Calculate where the server thinks we are
-        const timeSinceUpdate = Date.now() - state.timestamp;
-        const estimatedServerPos = isPaused ? state.position : state.position + timeSinceUpdate;
-        const diff = Math.abs(estimatedServerPos - visualPosRef.current);
-
-        // 1. TRACK CHANGE: Hard Reset
-        if (trackChanged) {
-            visualPosRef.current = state.position;
-            lastTrackIdRef.current = currentTrackId;
-            // Force immediate render update
-            if (barFillRef.current) {
-                const duration = state.duration || 1;
-                const percent = Math.max(0, Math.min(100, (visualPosRef.current / duration) * 100));
-                barFillRef.current.style.width = `${percent}%`;
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // Fetch latest state immediately when tab is in focus again
+                player?.getCurrentState().catch(() => {});
             }
-        } 
-        // 2. PAUSE TRANSITION (Playing -> Paused)
-        else if (isPaused && !wasPaused) {
-            // STOP! Freeze visualPosRef exactly where it is.
-        }
-        // 3. RESUME TRANSITION (Paused -> Playing)
-        else if (!isPaused && wasPaused) {
-            // GO! We will start extrapolating from the current visualPosRef in the animation loop.
-        }
-        // 4. SEEK / DRIFT CORRECTION
-        else if (diff > 1500) {
-            visualPosRef.current = estimatedServerPos;
-        }
+        };
 
-        prevPausedRef.current = isPaused;
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [player]);
 
-    }, [state.position, state.paused, state.duration, state.timestamp, state.track_window.current_track?.id]);
-
-    // --- ANIMATION LOOP (The Heart) ---
+    // --- DYNAMIC UPDATE LOOP ---
     useEffect(() => {
         let animationFrameId: number;
 
-        const loop = (now: number) => {
-            if (state.paused || isSeeking) return;
+        const loop = () => {
+            if (!barFillRef.current) return;
 
-            if (lastFrameTimeRef.current === 0) {
-                lastFrameTimeRef.current = now;
+            const duration = state.duration || 1;
+            let currentPos = state.position;
+
+            if (!state.paused && !isSeeking) {
+                // Calcolo dinamico basato sull'orologio di sistema reale
+                const timeSinceUpdate = Date.now() - state.timestamp;
+                currentPos += timeSinceUpdate;
+            } else if (isSeeking) {
+                currentPos = visualPosRef.current;
             }
+
+            if (currentPos > duration) currentPos = duration;
+            const percent = (currentPos / duration) * 100;
             
-            const dt = now - lastFrameTimeRef.current;
-            lastFrameTimeRef.current = now;
-
-            // Advance visual position locally
-            visualPosRef.current += dt;
-
-            // Render to DOM
-            if (barFillRef.current) {
-                const duration = state.duration || 1;
-                if (visualPosRef.current > duration) visualPosRef.current = duration;
-                
-                const percent = (visualPosRef.current / duration) * 100;
-                barFillRef.current.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+            barFillRef.current.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+            
+            if (!isSeeking) {
+                visualPosRef.current = currentPos;
             }
 
             animationFrameId = requestAnimationFrame(loop);
         };
 
-        if (!state.paused) {
-            // Reset timer so we don't jump by the duration of the pause
-            lastFrameTimeRef.current = 0;
-            animationFrameId = requestAnimationFrame(loop);
-        }
+        animationFrameId = requestAnimationFrame(loop);
 
-        return () => cancelAnimationFrame(animationFrameId);
-    }, [state.paused, state.duration, isSeeking]);
+        return () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        };
+    }, [state.position, state.paused, state.timestamp, state.duration, isSeeking]);
 
     // --- USER INTERACTION ---
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
