@@ -736,7 +736,18 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 fetch('/api/transfer-player', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId, play: true })
+                    body: JSON.stringify({ sessionId: currentSessionId, device_id: deviceId, play: false })
+                }).then(() => {
+                    setTimeout(() => {
+                        getPlayerInstance()?.getCurrentState().then(state => {
+                            if (state && state.track_window?.current_track) {
+                                getPlayerInstance()?.resume().catch(() => {});
+                            } else {
+                                // Se non abbiamo contesto locale agganciato, proviamo un play di fallback usando l'API per forzare la ripresa dell'ultimo brano
+                                apiClient.put(`/me/player/play`, { device_id: deviceId }).catch(() => {});
+                            }
+                        });
+                    }, 500); // Give Spotify a moment to transfer playback
                 }).catch(() => {});
             }
         }
