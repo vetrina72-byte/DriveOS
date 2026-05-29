@@ -423,8 +423,8 @@ export default function DebugControls({
     return (
         <div className="mt-2">
             <div className="flex items-center gap-2">
-                <input type="checkbox" checked={isEnabled} onChange={handleToggle} id={`toggle-${label.toLowerCase().replace(/\s/g, '-')}`} />
-                <label htmlFor={`toggle-${label.toLowerCase().replace(/\s/g, '-')}`} className="font-medium text-zinc-300 capitalize">
+                <input type="checkbox" checked={isEnabled} onChange={handleToggle} id={`toggle-${label?.toLowerCase()?.replace(/\s/g, '-')}`} />
+                <label htmlFor={`toggle-${label?.toLowerCase()?.replace(/\s/g, '-')}`} className="font-medium text-zinc-300 capitalize">
                     {label}: {isEnabled ? `${value}px` : 'auto'}
                 </label>
             </div>

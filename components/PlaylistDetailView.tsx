@@ -228,7 +228,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
         ? `${(details as AlbumDetails).artists?.[0].name} • ${new Date((details as AlbumDetails).release_date).getFullYear()}`
         : details.description);
         
-    const sanitizedSubText = subText?.replace(/<[^>]*>?/gm, '');
+    const sanitizedSubText = subText?.replace(/<[^>]*>?/gm, '') || '';
 
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">

@@ -66,7 +66,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   };
 
   const descriptionText = getContextualDescription();
-  const sanitizedDescription = descriptionText.replace(/<[^>]*>?/gm, '');
+  const sanitizedDescription = descriptionText?.replace(/<[^>]*>?/gm, '') || '';
 
   const imageUrl = item.images?.[0]?.url || item.album?.images?.[0]?.url || item.icons?.[0]?.url;
 

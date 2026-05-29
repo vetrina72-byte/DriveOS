@@ -78,74 +78,42 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         };
     }, [player]);
 
-    const isSeekingRef = useRef(isSeeking);
+    // --- DYNAMIC UPDATE LOOP ---
     useEffect(() => {
-        isSeekingRef.current = isSeeking;
-    }, [isSeeking]);
+        let animationFrameId: number;
 
-    const workerRef = useRef<Worker | null>(null);
+        const loop = () => {
+            if (!barFillRef.current) return;
 
-    // --- BACKGROUND WORKER TIMER ---
-    useEffect(() => {
-        const workerCode = `
-            let timer = null;
-            let position = 0;
-            let duration = 1;
-            let timestamp = 0;
-            let paused = true;
+            const duration = state.duration || 1;
+            let currentPos = state.position;
 
-            self.onmessage = function(e) {
-                if (e.data.type === 'SYNC') {
-                    position = e.data.position;
-                    duration = e.data.duration;
-                    timestamp = e.data.timestamp;
-                    paused = e.data.paused;
-                    
-                    if (timer) {
-                        clearInterval(timer);
-                        timer = null;
-                    }
-                    
-                    if (!paused) {
-                        timer = setInterval(() => {
-                            let currentPos = position + (Date.now() - timestamp);
-                            if (currentPos > duration) currentPos = duration;
-                            self.postMessage({ percent: (currentPos / duration) * 100, currentPos });
-                        }, 50); // Manda aggiornamenti molto frequenti per fluidita'
-                    } else {
-                        let currentPos = position;
-                        if (currentPos > duration) currentPos = duration;
-                        self.postMessage({ percent: (currentPos / duration) * 100, currentPos });
-                    }
-                }
-            };
-        `;
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const worker = new Worker(URL.createObjectURL(blob));
-        workerRef.current = worker;
+            if (!state.paused && !isSeeking) {
+                // Calcolo dinamico basato sull'orologio di sistema reale
+                const timeSinceUpdate = Date.now() - state.timestamp;
+                currentPos += timeSinceUpdate;
+            } else if (isSeeking) {
+                currentPos = visualPosRef.current;
+            }
 
-        worker.onmessage = (e) => {
-            if (!isSeekingRef.current && barFillRef.current) {
-                const { percent, currentPos } = e.data;
-                barFillRef.current.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+            if (currentPos > duration) currentPos = duration;
+            const percent = (currentPos / duration) * 100;
+            
+            barFillRef.current.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+            
+            if (!isSeeking) {
                 visualPosRef.current = currentPos;
             }
+
+            animationFrameId = requestAnimationFrame(loop);
         };
 
-        return () => worker.terminate();
-    }, []);
+        animationFrameId = requestAnimationFrame(loop);
 
-    useEffect(() => {
-        if (workerRef.current) {
-            workerRef.current.postMessage({
-                type: 'SYNC',
-                position: state.position,
-                duration: state.duration || 1,
-                timestamp: state.timestamp,
-                paused: state.paused
-            });
-        }
-    }, [state.position, state.duration, state.timestamp, state.paused]);
+        return () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        };
+    }, [state.position, state.paused, state.timestamp, state.duration, isSeeking]);
 
     // --- USER INTERACTION ---
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -175,8 +143,6 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         const handleMouseUp = (e: MouseEvent) => {
             setIsSeeking(false);
             if (player && state.duration) {
-                // Reset frame timer to prevent jumps after seek
-                lastFrameTimeRef.current = 0; 
                 player.seek(visualPosRef.current).catch(() => {});
             }
         };

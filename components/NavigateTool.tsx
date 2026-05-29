@@ -105,7 +105,7 @@ const NavigateTool = ({
             return text;
         }
         const queryParts = query.trim().split(/\s+/).map(part =>
-            part.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+            part?.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') || ''
         ).filter(part => part.length > 0);
 
         if (queryParts.length === 0) return text;

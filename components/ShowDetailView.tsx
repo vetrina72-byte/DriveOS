@@ -169,7 +169,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         }
     };
     
-    const sanitizedShowDescription = show.description.replace(/<[^>]*>?/gm, '');
+    const sanitizedShowDescription = show.description?.replace(/<[^>]*>?/gm, '') || '';
 
     const PaginationControls = () => {
         const buttonClasses = `px-4 py-2 rounded-md font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isNight ? 'bg-white/10 hover:bg-white/20' : 'bg-black/10 hover:bg-black/20'}`;
