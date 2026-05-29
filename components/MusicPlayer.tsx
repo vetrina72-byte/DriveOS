@@ -62,6 +62,7 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
 
     // The absolute truth of what is currently rendered on screen explicitly for seeking
     const visualPosRef = useRef<number>(state.position);
+    const optimisticSeekRef = useRef<{ pos: number, ts: number } | null>(null);
 
     // --- PAGE VISIBILITY API ---
     useEffect(() => {
@@ -87,13 +88,26 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
 
             const duration = state.duration || 1;
             let currentPos = state.position;
+            
+            // Se lo stato dal SDK è più recente del nostro seek ottimistico, lo annulliamo
+            if (optimisticSeekRef.current && state.timestamp > optimisticSeekRef.current.ts) {
+                optimisticSeekRef.current = null;
+            }
 
-            if (!state.paused && !isSeeking) {
-                // Calcolo dinamico basato sull'orologio di sistema reale
-                const timeSinceUpdate = Date.now() - state.timestamp;
-                currentPos += timeSinceUpdate;
-            } else if (isSeeking) {
+            if (isSeeking) {
                 currentPos = visualPosRef.current;
+            } else {
+                if (optimisticSeekRef.current) {
+                    if (!state.paused) {
+                        currentPos = optimisticSeekRef.current.pos + (Date.now() - optimisticSeekRef.current.ts);
+                    } else {
+                        currentPos = optimisticSeekRef.current.pos;
+                    }
+                } else {
+                    if (!state.paused) {
+                        currentPos = state.position + (Date.now() - state.timestamp);
+                    }
+                }
             }
 
             if (currentPos > duration) currentPos = duration;
@@ -143,6 +157,7 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         const handleMouseUp = (e: MouseEvent) => {
             setIsSeeking(false);
             if (player && state.duration) {
+                optimisticSeekRef.current = { pos: visualPosRef.current, ts: Date.now() };
                 player.seek(visualPosRef.current).catch(() => {});
             }
         };
@@ -824,13 +839,20 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const isCurrentlyPaused = playerState?.paused || !isPlayerActive;
 
             // OPTIMISTIC UI: Aggiorniamo istantaneamente il contesto
-            setNowPlaying(prev => prev.spotifyState ? {
-                ...prev,
-                spotifyState: {
-                    ...prev.spotifyState,
-                    paused: !isCurrentlyPaused
-                }
-            } : prev);
+            setNowPlaying(prev => {
+                if (!prev.spotifyState) return prev;
+                const timeSinceUpdate = Date.now() - prev.spotifyState.timestamp;
+                const newPos = prev.spotifyState.paused ? prev.spotifyState.position : prev.spotifyState.position + timeSinceUpdate;
+                return {
+                    ...prev,
+                    spotifyState: {
+                        ...prev.spotifyState,
+                        paused: !isCurrentlyPaused,
+                        position: newPos,
+                        timestamp: Date.now()
+                    }
+                };
+            });
 
             if (isCurrentlyPaused) {
                 // Resume
@@ -962,14 +984,34 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleToggleShuffle = () => {
         if (!playerState || !player) return;
-        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`);
+        
+        // Optimistic UI update
+        setNowPlaying(prev => prev.spotifyState ? {
+            ...prev,
+            spotifyState: {
+                ...prev.spotifyState,
+                shuffle: !prev.spotifyState.shuffle
+            }
+        } : prev);
+        
+        apiClient.put(`/me/player/shuffle?state=${!playerState.shuffle}`).catch(e => console.error("Failed to toggle shuffle", e));
     };
 
     const handleToggleRepeat = () => {
         if (!playerState || !player) return;
         const nextState = (playerState.repeat_mode + 1) % 3;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
-        apiClient.put(`/me/player/repeat?state=${repeatMode}`);
+        
+        // Optimistic UI update
+        setNowPlaying(prev => prev.spotifyState ? {
+            ...prev,
+            spotifyState: {
+                ...prev.spotifyState,
+                repeat_mode: nextState
+            }
+        } : prev);
+        
+        apiClient.put(`/me/player/repeat?state=${repeatMode}`).catch(e => console.error("Failed to toggle repeat", e));
     };
     
     const handleSeekYouTube = useCallback((position: number) => {
