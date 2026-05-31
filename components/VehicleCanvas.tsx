@@ -14,6 +14,7 @@ import {
   Environment,
   MeshReflectorMaterial,
   Html,
+  ContactShadows,
 } from "@react-three/drei";
 import * as THREE from "three";
 import { VolumetricHeadlight } from "./VolumetricHeadlight";
@@ -27,6 +28,7 @@ const Group = "group" as any;
 const Mesh = "mesh" as any;
 const PlaneGeometry = "planeGeometry" as any;
 const ShadowMaterial = "shadowMaterial" as any;
+const MeshBasicMaterial = "meshBasicMaterial" as any;
 const AmbientLight = "ambientLight" as any;
 const SpotLight = "spotLight" as any;
 const DirectionalLight = "directionalLight" as any;
@@ -120,6 +122,43 @@ const Model = forwardRef<
   const { scene } = useGLTF(MODEL_URL);
   const lightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
 
+  const modelBounds = useMemo(() => {
+    if (!scene) return { bottomY: 0, centerX: 0, centerZ: 0 };
+    // Detach temporarily and reset transforms to get the absolute, unscaled, local bounding box
+    const originalParent = scene.parent;
+    if (originalParent) scene.parent = null;
+
+    const origPos = scene.position.clone();
+    const origRot = scene.rotation.clone();
+    const origScale = scene.scale.clone();
+
+    scene.position.set(0, 0, 0);
+    scene.rotation.set(0, 0, 0);
+    scene.scale.set(1, 1, 1);
+    scene.updateMatrixWorld(true);
+
+    const box = new THREE.Box3();
+    box.setFromObject(scene);
+
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+
+    const bottomY = box.min.y;
+
+    // Restore original transforms
+    scene.position.copy(origPos);
+    scene.rotation.copy(origRot);
+    scene.scale.copy(origScale);
+    if (originalParent) originalParent.add(scene);
+    scene.updateMatrixWorld(true);
+
+    return {
+      bottomY,
+      centerX: center.x,
+      centerZ: center.z,
+    };
+  }, [scene]);
+
   useEffect(() => {
     lightMats.current = {};
     scene.traverse((child: any) => {
@@ -202,7 +241,11 @@ const Model = forwardRef<
     <Primitive
       ref={ref}
       object={scene}
-      position={[position.x, position.y, position.z]}
+      position={[
+        position.x - modelBounds.centerX * scale,
+        position.y - modelBounds.bottomY * scale,
+        position.z - modelBounds.centerZ * scale,
+      ]}
       rotation={[rotation.x, rotation.y, rotation.z]}
       scale={scale}
     />
@@ -219,6 +262,9 @@ function SceneController({
   frontLightTarget,
   onInteractionChange,
   dragProgress,
+  frontLightRef,
+  directionalLightRef,
+  directionalLightTarget,
 }: {
   isAppOpen: boolean;
   activeConfig: SceneConfig; // This is primarily used when NO drag is happening (auto mode)
@@ -228,8 +274,11 @@ function SceneController({
   frontLightTarget: THREE.Object3D;
   onInteractionChange?: (isInteracting: boolean) => void;
   dragProgress: React.MutableRefObject<number | null>;
+  frontLightRef?: React.RefObject<THREE.SpotLight>;
+  directionalLightRef?: React.RefObject<THREE.DirectionalLight>;
+  directionalLightTarget?: THREE.Object3D;
 }) {
-  const { camera, controls, gl, size } = useThree();
+  const { camera, controls, gl, size = { width: 0, height: 0 } } = useThree();
   const [interacting, setInteracting] = useState(false);
   const interactTimeout = useRef<number | null>(null);
 
@@ -824,6 +873,26 @@ function SceneController({
       if (!isAppOpen && ctrl) ctrl.enableRotate = true;
     }
 
+    // Real-time smooth tracking of spotlights and directional shadow maps to keep them stable and focused centered on the car
+    if (modelRef.current) {
+      const carPos = modelRef.current.position;
+
+      // Zenith spotlight follows the car on X & Z for clean contact shadow proyection
+      if (frontLightRef && frontLightRef.current) {
+        frontLightRef.current.position.set(carPos.x, 8.0, carPos.z);
+      }
+
+      // Directional solar light keeps constant diagonal offset preventing shadow projection distortion or clipping
+      if (directionalLightRef && directionalLightRef.current) {
+        directionalLightRef.current.position.set(carPos.x - 7.0, 12.0, carPos.z + 7.0);
+      }
+
+      // Directional target moves to the middle of the vehicle
+      if (directionalLightTarget) {
+        directionalLightTarget.position.copy(carPos);
+      }
+    }
+
     // 4. Viewport & Aspect Ratio dinamico dal DOM - Forza gl.setSize esattamente alla larghezza corrente frame-per-frame
     const canvas = gl.domElement;
     const container = canvas.parentElement;
@@ -905,9 +974,9 @@ function EnvironmentController({
   const currentEnvColor = useRef(new THREE.Color("#ffffff")).current;
 
   // Default Day Values
-  const dayAmbientIntensity = 0.5;
-  const dayFrontLightIntensity = 0.6;
-  const dayDirectionalIntensity = 1.5;
+  const dayAmbientIntensity = 0.42;
+  const dayFrontLightIntensity = 0.63;
+  const dayDirectionalIntensity = 1.6;
   const dayEnvironmentIntensity = 2.8;
 
   useEffect(() => {
@@ -1155,6 +1224,7 @@ export default function VehicleCanvas({
   const frontLightRef = useRef<THREE.SpotLight>(null!);
   const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
+  const directionalLightTarget = useMemo(() => new THREE.Object3D(), []);
 
   const {
     x,
@@ -1215,9 +1285,15 @@ export default function VehicleCanvas({
     }
   }, [appOpenConfigFromProps, isAppOpen]);
 
-  useEffect(() => {
+   useEffect(() => {
     if (frontLightRef.current) frontLightRef.current.target = frontLightTarget;
   }, [frontLightTarget]);
+
+  useEffect(() => {
+    if (directionalLightRef.current) {
+      directionalLightRef.current.target = directionalLightTarget;
+    }
+  }, [directionalLightTarget]);
 
   const activeConfig = isAppOpen ? runtimeAppOpenConfig : initialConfig;
 
@@ -1320,25 +1396,8 @@ export default function VehicleCanvas({
                 isNight={isNight}
               />
 
-              {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
-              <Mesh
-                receiveShadow
-                rotation={[-Math.PI / 2, 0, 0]}
-                position={[
-                  shadowPosition.x,
-                  shadowPosition.y,
-                  shadowPosition.z,
-                ]}
-              >
-                <PlaneGeometry args={[20, 20]} />
-                <ShadowMaterial transparent opacity={shadowOpacity} />
-              </Mesh>
-
               {/* Linked headlights follow the model's group rotation */}
               {linked && renderHeadlights()}
-
-              {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
-              <Primitive object={frontLightTarget} position={[0, 0, 10]} />
             </Group>
 
             {/* Unlinked headlights stay fixed in world rotation while car spins */}
@@ -1374,27 +1433,22 @@ export default function VehicleCanvas({
 
         {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
         <AmbientLight ref={ambientLightRef} intensity={0.5} />
+
+        {/* Top-level light targets to completely avoid nested parent-child double-translations! */}
+        <Primitive object={frontLightTarget} />
+        <Primitive object={directionalLightTarget} />
+
         <SpotLight
           ref={frontLightRef}
-          position={[0, 5, 0]}
-          angle={0.5}
-          penumbra={0.5}
-          intensity={1}
-          castShadow
-          shadow-bias={-0.0001}
+          position={[0, 8, 0]}
+          angle={0.6}
+          penumbra={0.8}
+          intensity={1.2}
         />
         <DirectionalLight
           ref={directionalLightRef}
-          position={[-5, 10, 5]}
-          intensity={1}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-far={50}
-          shadow-camera-left={-10}
-          shadow-camera-right={10}
-          shadow-camera-top={10}
-          shadow-camera-bottom={-10}
+          position={[-7, 12, 7]}
+          intensity={1.2}
         />
 
         {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
@@ -1412,7 +1466,7 @@ export default function VehicleCanvas({
             mixStrength={1.5}
             roughness={0.5}
             depthScale={1}
-            minDepthThreshold={0.4}
+            minDepthThreshold={0.4} // original split threshold restored exactly per requests!
             maxDepthThreshold={1.4}
             color="#101010"
             metalness={0.2}
@@ -1444,6 +1498,9 @@ export default function VehicleCanvas({
           frontLightTarget={frontLightTarget}
           onInteractionChange={onInteractionChange}
           dragProgress={dragProgress}
+          frontLightRef={frontLightRef}
+          directionalLightRef={directionalLightRef}
+          directionalLightTarget={directionalLightTarget}
         />
       </Canvas>
     </>

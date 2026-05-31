@@ -12,9 +12,9 @@ const DEFAULT_HOME_CONFIG: SceneConfig = {
 };
 
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
-  cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
-  cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
-  modelPos: { x: -4.90, y: -0.15, z: -0.40 }, 
+  cameraPos: { x: 5.40, y: 4.50, z: 4.75 },
+  cameraTarget: { x: -4.90, y: -0.45, z: -0.40 },
+  modelPos: { x: -4.90, y: -1.05, z: -0.40 }, 
   modelRot: { x: 0.01, y: -1.19, z: 0.01 },
   modelScale: 1.57,
 };
