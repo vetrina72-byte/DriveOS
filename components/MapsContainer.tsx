@@ -244,7 +244,6 @@ const MapsContainer = React.memo(({
                 if (visualX > 99.9) visualX = 100;
             }
             panel.style.transform = `translateX(${visualX}%)`;
-            panel.style.display = visualX >= 100 ? 'none' : 'flex';
         }
 
         state.animationId = requestAnimationFrame(update);
@@ -1027,9 +1026,18 @@ const MapsContainer = React.memo(({
     };
   }, []);
 
-  // Render WebGL maps frame layers when containers Mount
+  // Refs to avoid stale closures in Map events
+  const startTrackingRef = useRef(startTracking);
+  const smoothRecRef = useRef(smoothRec);
+
   useEffect(() => {
-    if (!mapContainerRef.current || !isOpen) return;
+    startTrackingRef.current = startTracking;
+    smoothRecRef.current = smoothRec;
+  });
+
+  // Render WebGL maps frame layers when containers Mount (Persistent in background)
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
 
     const th = isNight ? 'dark' : 'light';
     const map = new maplibregl.Map({
@@ -1074,73 +1082,91 @@ const MapsContainer = React.memo(({
     }).setLngLat([12.4964, 41.9028]);
     vmRef.current = vmObj;
 
-    map.on('load', () => {
-      map.setProjection({ type: 'globe' } as any);
-
-      // Add routing trace sources/layers
-      map.addSource('route', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
-      });
-
-      map.addLayer({
-        id: 'r-glow',
-        type: 'line',
-        source: 'route',
-        filter: ['==', ['get', 'consumed'], false],
-        paint: {
-          'line-color': 'rgba(59,130,246,.3)',
-          'line-width': 14,
-          'line-blur': 6
-        },
-        layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
-
-      map.addLayer({
-        id: 'r-line',
-        type: 'line',
-        source: 'route',
-        filter: ['==', ['get', 'consumed'], false],
-        paint: {
-          'line-color': '#3B82F6',
-          'line-width': 7
-        },
-        layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
-
-      map.addLayer({
-        id: 'r-cons',
-        type: 'line',
-        source: 'route',
-        filter: ['==', ['get', 'consumed'], true],
-        paint: {
-          'line-color': 'rgba(100,105,115,.55)',
-          'line-width': 7
-        },
-        layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
-
-      // Add weather timeline layers wl-A and wl-B matching OSRM precisely
-      ['A', 'B'].forEach((s) => {
-        const si = `w-${s}`;
-        const li = `wl-${s}`;
-        map.addSource(si, {
-          type: 'raster',
-          tiles: [],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 24
+    const addLayers = () => {
+      if (!map.getSource('route')) {
+        map.addSource('route', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] }
         });
-        map.addLayer({
-          id: li,
-          type: 'raster',
-          source: si,
-          paint: { 'raster-opacity': 0, 'raster-fade-duration': 400 }
-        }, 'r-glow');
-      });
 
-      vmObj.addTo(map);
+        map.addLayer({
+          id: 'r-glow',
+          type: 'line',
+          source: 'route',
+          filter: ['==', ['get', 'consumed'], false],
+          paint: {
+            'line-color': 'rgba(59,130,246,.3)',
+            'line-width': 14,
+            'line-blur': 6
+          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' }
+        });
+
+        map.addLayer({
+          id: 'r-line',
+          type: 'line',
+          source: 'route',
+          filter: ['==', ['get', 'consumed'], false],
+          paint: {
+            'line-color': '#3B82F6',
+            'line-width': 7
+          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' }
+        });
+
+        map.addLayer({
+          id: 'r-cons',
+          type: 'line',
+          source: 'route',
+          filter: ['==', ['get', 'consumed'], true],
+          paint: {
+            'line-color': 'rgba(100,105,115,.55)',
+            'line-width': 7
+          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' }
+        });
+
+        // Add weather timeline layers wl-A and wl-B matching OSRM precisely
+        ['A', 'B'].forEach((s) => {
+          const si = `w-${s}`;
+          const li = `wl-${s}`;
+          if (!map.getSource(si)) {
+            map.addSource(si, {
+              type: 'raster',
+              tiles: [],
+              tileSize: 256,
+              minzoom: 0,
+              maxzoom: 24
+            });
+            map.addLayer({
+              id: li,
+              type: 'raster',
+              source: si,
+              paint: { 'raster-opacity': 0, 'raster-fade-duration': 400 }
+            }, 'r-glow');
+          }
+        });
+      }
+    };
+
+    map.on('style.load', () => {
+      map.setProjection({ type: 'globe' } as any);
+      addLayers();
+      if (geoRef.current && map.getSource('route')) {
+        (map.getSource('route') as any).setData({
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: { consumed: false },
+              geometry: { type: 'LineString', coordinates: geoRef.current }
+            }
+          ]
+        });
+      }
     });
+
+    vmObj.addTo(map);
 
     const handleStartInt = () => {
       flyingRef.current = false;
@@ -1174,7 +1200,7 @@ const MapsContainer = React.memo(({
 
       if (isPendingStartRef.current) {
          startTrackTimerRef.current = setTimeout(() => {
-           startTracking();
+           if (startTrackingRef.current) startTrackingRef.current();
          }, 3000);
          return;
       }
@@ -1190,7 +1216,7 @@ const MapsContainer = React.memo(({
           cmodeRef.current = 'north-up';
           setCmode('north-up');
         }
-        smoothRec();
+        if (smoothRecRef.current) smoothRecRef.current();
       }, 5000);
     };
 
@@ -1219,7 +1245,24 @@ const MapsContainer = React.memo(({
       if (recTimerRef.current) clearTimeout(recTimerRef.current);
       if (startTrackTimerRef.current) clearTimeout(startTrackTimerRef.current);
     };
-  }, [isOpen, isNight, smoothRec, startTracking]);
+  }, []);
+
+  // Dynamics styling synchronization for theme changes (avoid map recreation)
+  useEffect(() => {
+    if (mapRef.current && !isSatellite) {
+      mapRef.current.setStyle(buildMapStyle(isNight ? 'dark' : 'light'));
+    }
+  }, [isNight, isSatellite]);
+
+  // Triggers map.resize() on visibility toggle
+  useEffect(() => {
+    if (isOpen && mapRef.current) {
+      const timer = setTimeout(() => {
+        mapRef.current?.resize();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
 
   const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
 
@@ -1267,7 +1310,7 @@ const MapsContainer = React.memo(({
             />
 
             {/* Float Overlay Panels Top-Left */}
-            <div className="absolute top-5 left-5 z-10 w-[340px] max-w-[calc(100vw-50px)] flex flex-col gap-3 pointer-events-none">
+            <div className="absolute top-5 left-5 z-[1002] w-[340px] max-w-[calc(100vw-50px)] flex flex-col gap-3 pointer-events-none">
                 {/* Searching card overlay display */}
                 <SearchPanel 
                   rpos={rposRef.current}
@@ -1325,7 +1368,7 @@ const MapsContainer = React.memo(({
             {currentStreet && (
               <div 
                 id="street-box" 
-                className="absolute bottom-6 right-6 z-10 bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-2"
+                className="absolute bottom-6 right-6 z-[1001] bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-2"
               >
                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                 <span>{currentStreet}</span>
@@ -1336,7 +1379,7 @@ const MapsContainer = React.memo(({
             {toastVisible && (
               <div 
                 id="toast" 
-                className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 bg-zinc-950/95 border border-white/10 text-white rounded-xl py-3 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl flex items-center gap-2.5 max-w-[90%] font-medium text-xs md:text-sm tracking-tight pointer-events-none animate-slide-up duration-300"
+                className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[10000] bg-zinc-950/95 border border-white/10 text-white rounded-xl py-3 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl flex items-center gap-2.5 max-w-[90%] font-medium text-xs md:text-sm tracking-tight pointer-events-none animate-slide-up duration-300"
               >
                 <svg className="w-5 h-5 text-blue-400 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                 <span>{toastText}</span>
@@ -1344,7 +1387,7 @@ const MapsContainer = React.memo(({
             )}
 
             {/* Anchor container for floating overlay assets */}
-            <div id="maps-anchored-container" className="absolute inset-0 z-40 pointer-events-none"></div>
+            <div id="maps-anchored-container" className="absolute inset-0 z-[5000] pointer-events-none"></div>
         </div>
     </div>
   );

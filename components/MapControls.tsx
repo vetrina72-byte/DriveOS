@@ -138,7 +138,7 @@ export default function MapControls({
   return (
     <>
       {/* Floating control buttons Column on the right */}
-      <div id="map-ctrls" className="absolute top-6 right-6 z-10 flex flex-col gap-4 items-end pointer-events-none">
+      <div id="map-ctrls" className="absolute top-6 right-6 z-[1001] flex flex-col gap-4 items-end pointer-events-none">
         
         {/* Bussola 3D (#btn-compass) */}
         <button
@@ -254,7 +254,7 @@ export default function MapControls({
       {isWeatherActive && wTs.length > 0 && (
         <div 
           id="tl-ctrl"
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[340px] px-4 py-3.5 border border-white/10 rounded-[30px] flex flex-col pointer-events-auto select-none touch-none bg-zinc-950/95 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl text-white outline-none"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1002] w-[340px] px-4 py-3.5 border border-white/10 rounded-[30px] flex flex-col pointer-events-auto select-none touch-none bg-zinc-950/95 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl text-white outline-none"
         >
           <div className="flex items-center gap-4">
             <button 
