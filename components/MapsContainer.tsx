@@ -244,6 +244,7 @@ const MapsContainer = React.memo(({
                 if (visualX > 99.9) visualX = 100;
             }
             panel.style.transform = `translateX(${visualX}%)`;
+            panel.style.display = visualX >= 100 ? 'none' : 'flex';
         }
 
         state.animationId = requestAnimationFrame(update);
@@ -1266,7 +1267,7 @@ const MapsContainer = React.memo(({
             />
 
             {/* Float Overlay Panels Top-Left */}
-            <div className="absolute top-5 left-5 z-[1002] w-[340px] max-w-[calc(100vw-50px)] flex flex-col gap-3 pointer-events-none">
+            <div className="absolute top-5 left-5 z-10 w-[340px] max-w-[calc(100vw-50px)] flex flex-col gap-3 pointer-events-none">
                 {/* Searching card overlay display */}
                 <SearchPanel 
                   rpos={rposRef.current}
@@ -1324,7 +1325,7 @@ const MapsContainer = React.memo(({
             {currentStreet && (
               <div 
                 id="street-box" 
-                className="absolute bottom-6 right-6 z-[1001] bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-2"
+                className="absolute bottom-6 right-6 z-10 bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-2"
               >
                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                 <span>{currentStreet}</span>
@@ -1335,7 +1336,7 @@ const MapsContainer = React.memo(({
             {toastVisible && (
               <div 
                 id="toast" 
-                className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[10000] bg-zinc-950/95 border border-white/10 text-white rounded-xl py-3 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl flex items-center gap-2.5 max-w-[90%] font-medium text-xs md:text-sm tracking-tight pointer-events-none animate-slide-up duration-300"
+                className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 bg-zinc-950/95 border border-white/10 text-white rounded-xl py-3 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl flex items-center gap-2.5 max-w-[90%] font-medium text-xs md:text-sm tracking-tight pointer-events-none animate-slide-up duration-300"
               >
                 <svg className="w-5 h-5 text-blue-400 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                 <span>{toastText}</span>
@@ -1343,7 +1344,7 @@ const MapsContainer = React.memo(({
             )}
 
             {/* Anchor container for floating overlay assets */}
-            <div id="maps-anchored-container" className="absolute inset-0 z-50 pointer-events-none"></div>
+            <div id="maps-anchored-container" className="absolute inset-0 z-40 pointer-events-none"></div>
         </div>
     </div>
   );

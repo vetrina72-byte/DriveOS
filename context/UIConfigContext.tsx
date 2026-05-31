@@ -65,7 +65,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
-  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(2);
+  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(3.2);
   const [spinnerSize, setSpinnerSize] = useState(18);
   const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
   const [debugSpinner, setDebugSpinner] = useState(false);

@@ -327,8 +327,20 @@ function SceneController({
       interactTimeout.current = window.setTimeout(() => {
         if (!isAppOpen) {
           snapshotHomePos.current.copy(camera.position);
-          if (controls)
+          if (controls) {
             snapshotHomeTarget.current.copy((controls as any).target);
+             const currentAzimuth = (controls as any).getAzimuthalAngle();
+             const currentPolar = (controls as any).getPolarAngle();
+             (controls as any).minAzimuthAngle = currentAzimuth;
+             (controls as any).maxAzimuthAngle = currentAzimuth;
+             (controls as any).minPolarAngle = currentPolar;
+             (controls as any).maxPolarAngle = currentPolar;
+             (controls as any).update();
+             (controls as any).minAzimuthAngle = -Infinity;
+             (controls as any).maxAzimuthAngle = Infinity;
+             (controls as any).minPolarAngle = -Infinity;
+             (controls as any).maxPolarAngle = Infinity;
+          }
           isRestoringHome.current = true;
           restoreAnimProgress.current = 0;
         }
@@ -374,25 +386,25 @@ function SceneController({
     // 1. Camera Target (Lineare)
     vec3C.lerpVectors(startCamTarget, endCamTarget, t);
 
-    // 2. Camera Pos (Sferica)
+    // 2. Camera Pos (Quaternion Slerp: Shortest Path Garantito)
     vec3A.copy(endCamPos).sub(endCamTarget);
     vec3B.copy(startCamPos).sub(startCamTarget);
 
-    sphA.setFromVector3(vec3B); // Start
-    sphB.setFromVector3(vec3A); // End
+    const rStart = vec3B.length();
+    const rEnd = vec3A.length();
+    const rCurrent = THREE.MathUtils.lerp(rStart, rEnd, t);
 
-    let thetaA = sphA.theta;
-    let thetaB = sphB.theta;
+    vec3B.normalize(); // Direzione start
+    vec3A.normalize(); // Direzione end
 
-    let diff = thetaB - thetaA;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
+    const baseVec = new THREE.Vector3(0, 0, 1);
+    const qStartCam = new THREE.Quaternion().setFromUnitVectors(baseVec, vec3B);
+    const qEndCam = new THREE.Quaternion().setFromUnitVectors(baseVec, vec3A);
 
-    const r = THREE.MathUtils.lerp(sphA.radius, sphB.radius, t);
-    const t_path = thetaA + diff * t;
-    const ph_path = THREE.MathUtils.lerp(sphA.phi, sphB.phi, t);
+    const qCurrent = new THREE.Quaternion().slerpQuaternions(qStartCam, qEndCam, t);
+    const currentDir = baseVec.clone().applyQuaternion(qCurrent);
 
-    camera.position.setFromSphericalCoords(r, ph_path, t_path).add(vec3C);
+    camera.position.copy(currentDir).multiplyScalar(rCurrent).add(vec3C);
 
     if (ctrl) {
       ctrl.target.copy(vec3C);
@@ -401,11 +413,9 @@ function SceneController({
 
     // 3. Modello 3D
     if (modelRef.current) {
-      // Scala
       const s = THREE.MathUtils.lerp(startScale, endScale, t);
       modelRef.current.scale.set(s, s, s);
 
-      // Posizione
       vec3A.set(
         localAppOpenConfig.modelPos.x,
         localAppOpenConfig.modelPos.y,
@@ -421,7 +431,7 @@ function SceneController({
       if (isRestoringHome.current) rawP = 1;
       modelRef.current.position.lerpVectors(vec3A, vec3B, rawP);
 
-      // Rotazione
+      // Interpolazione slerp quaternioni nativa per percorsi più brevi del modello 3D
       modelRef.current.quaternion.slerpQuaternions(startQuat, endQuat, t);
 
       frontLightTarget.position
@@ -527,16 +537,48 @@ function SceneController({
 
       // Congela istantaneamente la posizione reale prima di muoversi
       frozenCamPos.current.copy(camera.position);
-      if (ctrl) frozenCamTarget.current.copy(ctrl.target);
+      if (ctrl) {
+         frozenCamTarget.current.copy(ctrl.target);
+         // FORZA IL RESET DELL'AZIMUTH INTERNO DI ORBITCONTROLS PER EVITARE 360 SPINS
+         // Se l'utente ha ruotato oltre i 360 gradi, orbitcontrols ha in memoria angoli multipli di PI.
+         // Chiamando setAzimuthalAngle lo confiniamo al range normativo, prevenendo spin indesiderati all'update
+         const currentAzimuth = ctrl.getAzimuthalAngle();
+         const currentPolar = ctrl.getPolarAngle();
+         ctrl.minAzimuthAngle = currentAzimuth;
+         ctrl.maxAzimuthAngle = currentAzimuth;
+         ctrl.minPolarAngle = currentPolar;
+         ctrl.maxPolarAngle = currentPolar;
+         ctrl.update();
+         ctrl.minAzimuthAngle = -Infinity;
+         ctrl.maxAzimuthAngle = Infinity;
+         ctrl.minPolarAngle = -Infinity;
+         ctrl.maxPolarAngle = Infinity;
+      }
       if (modelRef.current) {
         frozenModelScale.current = modelRef.current.scale.x;
         frozenModelRot.current.copy(modelRef.current.quaternion);
       }
     } else if (dragActive) {
       // CANALE 2: TRANSIZIONE DA HANDLE (Drag)
-      transitionMode.current = "drag";
-      isRestoringHome.current = false;
-      if (ctrl) ctrl.enableRotate = false;
+      if (transitionMode.current !== "drag") {
+          transitionMode.current = "drag";
+          isRestoringHome.current = false;
+          if (ctrl) {
+             ctrl.enableRotate = false;
+             // Reset orbit controls internal azimuthal tracking memory
+             const currentAzimuth = ctrl.getAzimuthalAngle();
+             const currentPolar = ctrl.getPolarAngle();
+             ctrl.minAzimuthAngle = currentAzimuth;
+             ctrl.maxAzimuthAngle = currentAzimuth;
+             ctrl.minPolarAngle = currentPolar;
+             ctrl.maxPolarAngle = currentPolar;
+             ctrl.update();
+             ctrl.minAzimuthAngle = -Infinity;
+             ctrl.maxAzimuthAngle = Infinity;
+             ctrl.minPolarAngle = -Infinity;
+             ctrl.maxPolarAngle = Infinity;
+          }
+      }
     } else if (
       !clickOccurred &&
       !dragActive &&

@@ -45,7 +45,7 @@ export default function TripStatsHUD({
   return (
     <div 
       id="nav-bottom"
-      className="absolute bottom-6 left-6 z-[1003] w-[360px] max-w-[calc(100vw-48px)] bg-zinc-950/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-5 text-white animate-fade-in transition-all duration-500 pointer-events-auto"
+      className="absolute bottom-6 left-6 z-10 w-[360px] max-w-[calc(100vw-48px)] bg-zinc-950/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-5 text-white animate-fade-in transition-all duration-500 pointer-events-auto"
     >
       <div className="flex justify-between items-baseline mb-1.5">
         <div id="nb-eta" className="text-3xl font-extrabold tracking-tight text-white">

@@ -101,7 +101,7 @@ export default function NavigationHUD({
       : `${Math.floor(durationMinutes / 60)}h ${Math.round(durationMinutes % 60)}m`;
 
   return (
-    <div className="w-full flex flex-col gap-3 relative z-30 pointer-events-none">
+    <div className="w-full flex flex-col gap-3 relative pointer-events-none">
       {/* Upper Panel direction steps HUD */}
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
