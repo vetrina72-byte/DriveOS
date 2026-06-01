@@ -12,9 +12,9 @@ const DEFAULT_HOME_CONFIG: SceneConfig = {
 };
 
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
-  cameraPos: { x: 5.40, y: 4.50, z: 4.75 },
-  cameraTarget: { x: -4.90, y: -0.45, z: -0.40 },
-  modelPos: { x: -4.90, y: -1.05, z: -0.40 }, 
+  cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
+  cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
+  modelPos: { x: -4.90, y: -0.15, z: -0.40 }, 
   modelRot: { x: 0.01, y: -1.19, z: 0.01 },
   modelScale: 1.57,
 };
@@ -53,6 +53,30 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
   const [dayFogNear, setDayFogNear] = useState(13);
   const [dayFogFar, setDayFogFar] = useState(800);
+  const [nightFogNear, setNightFogNear] = useState(15);
+  const [nightFogFar, setNightFogFar] = useState(800);
+
+  const [carShadowOpacity, setCarShadowOpacity] = useState(0.40);
+  const [carShadowWidth, setCarShadowWidth] = useState(20);
+  const [carShadowLength, setCarShadowLength] = useState(20);
+  const [carShadowOffsetY, setCarShadowOffsetY] = useState(0.02);
+  const [carShadowOffsetX, setCarShadowOffsetX] = useState(0.0);
+  const [carShadowOffsetZ, setCarShadowOffsetZ] = useState(0.0);
+  const [dirLightPosX, setDirLightPosX] = useState(-0.30);
+  const [dirLightPosY, setDirLightPosY] = useState(40.00);
+  const [dirLightPosZ, setDirLightPosZ] = useState(7.70);
+  const [dirLightIntensity, setDirLightIntensity] = useState(2.40);
+  const [spotLightPosX, setSpotLightPosX] = useState(0.0);
+  const [spotLightPosY, setSpotLightPosY] = useState(5.0);
+  const [spotLightPosZ, setSpotLightPosZ] = useState(0.0);
+  const [spotLightIntensity, setSpotLightIntensity] = useState(1.0);
+  const [carReflectionOffsetY, setCarReflectionOffsetY] = useState(0.0);
+  const [carReflectionOpacity, setCarReflectionOpacity] = useState(2.59);
+  const [carReflectionRoughness, setCarReflectionRoughness] = useState(0.27);
+  const [carReflectionBlur, setCarReflectionBlur] = useState(50);
+  const [carReflectionMixStrength, setCarReflectionMixStrength] = useState(1.6);
+  const [carReflectionMetalness, setCarReflectionMetalness] = useState(0.00);
+  const [forceManualFog, setForceManualFog] = useState(false);
 
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(80);
@@ -150,6 +174,29 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     nightEnvironmentIntensity, setNightEnvironmentIntensity,
     dayFogNear, setDayFogNear,
     dayFogFar, setDayFogFar,
+    nightFogNear, setNightFogNear,
+    nightFogFar, setNightFogFar,
+    carShadowOpacity, setCarShadowOpacity,
+    carShadowWidth, setCarShadowWidth,
+    carShadowLength, setCarShadowLength,
+    carShadowOffsetY, setCarShadowOffsetY,
+    carShadowOffsetX, setCarShadowOffsetX,
+    carShadowOffsetZ, setCarShadowOffsetZ,
+    dirLightPosX, setDirLightPosX,
+    dirLightPosY, setDirLightPosY,
+    dirLightPosZ, setDirLightPosZ,
+    dirLightIntensity, setDirLightIntensity,
+    spotLightPosX, setSpotLightPosX,
+    spotLightPosY, setSpotLightPosY,
+    spotLightPosZ, setSpotLightPosZ,
+    spotLightIntensity, setSpotLightIntensity,
+    carReflectionOffsetY, setCarReflectionOffsetY,
+    carReflectionOpacity, setCarReflectionOpacity,
+    carReflectionRoughness, setCarReflectionRoughness,
+    carReflectionBlur, setCarReflectionBlur,
+    carReflectionMixStrength, setCarReflectionMixStrength,
+    carReflectionMetalness, setCarReflectionMetalness,
+    forceManualFog, setForceManualFog,
     spotifyPlayerTop, setSpotifyPlayerTop,
     spotifyPlayerBottom, setSpotifyPlayerBottom,
     playerDockedWidth, setPlayerDockedWidth,

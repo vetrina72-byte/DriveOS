@@ -186,7 +186,12 @@ function AppContent() {
     uiScale, appBarWidth, minOrbitDistance, maxOrbitDistance,
     homeConfig, appOpenConfig, headlightConfig, sceneColors,
     nightAmbientIntensity, nightFrontLightIntensity, nightEnvironmentIntensity,
-    dayFogNear, dayFogFar, spotifyPlayerTop, spotifyPlayerBottom,
+    dayFogNear, dayFogFar, nightFogNear, nightFogFar, carShadowOpacity, carShadowWidth, carShadowLength, carShadowOffsetY,
+    carShadowOffsetX, carShadowOffsetZ,
+    dirLightPosX, dirLightPosY, dirLightPosZ, dirLightIntensity,
+    spotLightPosX, spotLightPosY, spotLightPosZ, spotLightIntensity,
+    carReflectionOffsetY, carReflectionOpacity,
+    carReflectionRoughness, carReflectionBlur, carReflectionMixStrength, carReflectionMetalness, forceManualFog, spotifyPlayerTop, spotifyPlayerBottom,
     playerDockedWidth, playerDockedLeft, playerDockedHeight,
     playerFloatingWidth, playerFloatingBottom, playerFloatingHeight, navigateToolWidth,
     playerControlsSize, playerControlsGap, playerControlsVerticalPosition,
@@ -509,7 +514,49 @@ function AppContent() {
 
   return (
     <div id="main-app-container" className="absolute top-0 left-0 w-full h-full select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
-      <VehicleCanvas isAppOpen={activeApp !== null} isNight={isNight} minOrbitDistance={minOrbitDistance} maxOrbitDistance={maxOrbitDistance} appOpenConfig={appOpenConfig} homeConfig={homeConfig} sceneColors={sceneColors} nightAmbientIntensity={nightAmbientIntensity} nightFrontLightIntensity={nightFrontLightIntensity} nightEnvironmentIntensity={nightEnvironmentIntensity} onInteractionChange={setIsCanvasInteracting} effectiveWeatherCondition={effectiveWeatherCondition} dayFogNear={dayFogNear} dayFogFar={dayFogFar} targetWeatherParams={targetWeatherParams} uiScale={uiScale ?? 1.0} headlightConfig={headlightConfig} dragProgress={dragProgressRef}/>
+      <VehicleCanvas
+        isAppOpen={activeApp !== null}
+        isNight={isNight}
+        minOrbitDistance={minOrbitDistance}
+        maxOrbitDistance={maxOrbitDistance}
+        appOpenConfig={appOpenConfig}
+        homeConfig={homeConfig}
+        sceneColors={sceneColors}
+        nightAmbientIntensity={nightAmbientIntensity}
+        nightFrontLightIntensity={nightFrontLightIntensity}
+        nightEnvironmentIntensity={nightEnvironmentIntensity}
+        onInteractionChange={setIsCanvasInteracting}
+        effectiveWeatherCondition={effectiveWeatherCondition}
+        dayFogNear={dayFogNear}
+        dayFogFar={dayFogFar}
+        nightFogNear={nightFogNear}
+        nightFogFar={nightFogFar}
+        targetWeatherParams={targetWeatherParams}
+        uiScale={uiScale ?? 1.0}
+        headlightConfig={headlightConfig}
+        dragProgress={dragProgressRef}
+        carShadowOpacity={carShadowOpacity}
+        carShadowWidth={carShadowWidth}
+        carShadowLength={carShadowLength}
+        carShadowOffsetY={carShadowOffsetY}
+        carShadowOffsetX={carShadowOffsetX}
+        carShadowOffsetZ={carShadowOffsetZ}
+        dirLightPosX={dirLightPosX}
+        dirLightPosY={dirLightPosY}
+        dirLightPosZ={dirLightPosZ}
+        dirLightIntensity={dirLightIntensity}
+        spotLightPosX={spotLightPosX}
+        spotLightPosY={spotLightPosY}
+        spotLightPosZ={spotLightPosZ}
+        spotLightIntensity={spotLightIntensity}
+        carReflectionOffsetY={carReflectionOffsetY}
+        carReflectionOpacity={carReflectionOpacity}
+        carReflectionRoughness={carReflectionRoughness}
+        carReflectionBlur={carReflectionBlur}
+        carReflectionMixStrength={carReflectionMixStrength}
+        carReflectionMetalness={carReflectionMetalness}
+        forceManualFog={forceManualFog}
+      />
       <TopStatusBar tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} isMapVisible={shouldShowMap}/>
       <WeatherModal tempUnit={tempUnit}/>
       <MiniMap isVisible={activeApp === null && !isCanvasInteracting} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>

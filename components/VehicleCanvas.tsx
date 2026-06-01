@@ -14,7 +14,6 @@ import {
   Environment,
   MeshReflectorMaterial,
   Html,
-  ContactShadows,
 } from "@react-three/drei";
 import * as THREE from "three";
 import { VolumetricHeadlight } from "./VolumetricHeadlight";
@@ -28,7 +27,6 @@ const Group = "group" as any;
 const Mesh = "mesh" as any;
 const PlaneGeometry = "planeGeometry" as any;
 const ShadowMaterial = "shadowMaterial" as any;
-const MeshBasicMaterial = "meshBasicMaterial" as any;
 const AmbientLight = "ambientLight" as any;
 const SpotLight = "spotLight" as any;
 const DirectionalLight = "directionalLight" as any;
@@ -122,43 +120,6 @@ const Model = forwardRef<
   const { scene } = useGLTF(MODEL_URL);
   const lightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
 
-  const modelBounds = useMemo(() => {
-    if (!scene) return { bottomY: 0, centerX: 0, centerZ: 0 };
-    // Detach temporarily and reset transforms to get the absolute, unscaled, local bounding box
-    const originalParent = scene.parent;
-    if (originalParent) scene.parent = null;
-
-    const origPos = scene.position.clone();
-    const origRot = scene.rotation.clone();
-    const origScale = scene.scale.clone();
-
-    scene.position.set(0, 0, 0);
-    scene.rotation.set(0, 0, 0);
-    scene.scale.set(1, 1, 1);
-    scene.updateMatrixWorld(true);
-
-    const box = new THREE.Box3();
-    box.setFromObject(scene);
-
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-
-    const bottomY = box.min.y;
-
-    // Restore original transforms
-    scene.position.copy(origPos);
-    scene.rotation.copy(origRot);
-    scene.scale.copy(origScale);
-    if (originalParent) originalParent.add(scene);
-    scene.updateMatrixWorld(true);
-
-    return {
-      bottomY,
-      centerX: center.x,
-      centerZ: center.z,
-    };
-  }, [scene]);
-
   useEffect(() => {
     lightMats.current = {};
     scene.traverse((child: any) => {
@@ -241,11 +202,7 @@ const Model = forwardRef<
     <Primitive
       ref={ref}
       object={scene}
-      position={[
-        position.x - modelBounds.centerX * scale,
-        position.y - modelBounds.bottomY * scale,
-        position.z - modelBounds.centerZ * scale,
-      ]}
+      position={[position.x, position.y, position.z]}
       rotation={[rotation.x, rotation.y, rotation.z]}
       scale={scale}
     />
@@ -253,34 +210,97 @@ const Model = forwardRef<
 });
 Model.displayName = "Model";
 
+
+function ContactShadow({
+  shadowRef,
+  carShadowWidth,
+  carShadowLength,
+  shadowPosition,
+  shadowOpacity,
+}: {
+  shadowRef: React.RefObject<THREE.Mesh>;
+  carShadowWidth: number;
+  carShadowLength: number;
+  shadowPosition: { x: number; y: number; z: number };
+  shadowOpacity: number;
+}) {
+  const { scene, camera: mainCamera } = useThree();
+
+  useEffect(() => {
+    const originalOnBeforeRender = scene.onBeforeRender;
+
+    scene.onBeforeRender = (renderer, s, camera, renderTarget) => {
+      if (originalOnBeforeRender) {
+        originalOnBeforeRender(renderer, s, camera, renderTarget);
+      }
+
+      if (shadowRef.current) {
+        // Safe check: hide the shadow if we are rendering for any camera other than the main viewport camera
+        if (camera !== mainCamera) {
+          shadowRef.current.visible = false;
+        } else {
+          shadowRef.current.visible = true;
+        }
+      }
+    };
+
+    return () => {
+      scene.onBeforeRender = originalOnBeforeRender;
+    };
+  }, [scene, mainCamera, shadowRef]);
+
+  return (
+    <Mesh
+      ref={shadowRef}
+      receiveShadow
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}
+    >
+      <PlaneGeometry args={[carShadowWidth, carShadowLength]} />
+      <ShadowMaterial
+        transparent
+        opacity={shadowOpacity}
+        polygonOffset={true}
+        polygonOffsetFactor={-1}
+        polygonOffsetUnits={-4}
+      />
+    </Mesh>
+  );
+}
+
+
 function SceneController({
   isAppOpen,
   activeConfig,
   homeConfig,
   appOpenConfig,
   modelRef,
+  floorRef,
   frontLightTarget,
   onInteractionChange,
   dragProgress,
-  frontLightRef,
-  directionalLightRef,
-  directionalLightTarget,
+  carReflectionOffsetY = 0.0,
 }: {
   isAppOpen: boolean;
-  activeConfig: SceneConfig; // This is primarily used when NO drag is happening (auto mode)
+  activeConfig: SceneConfig;
   homeConfig: SceneConfig;
   appOpenConfig: SceneConfig;
   modelRef: React.RefObject<THREE.Group>;
+  floorRef: React.RefObject<THREE.Mesh>;
   frontLightTarget: THREE.Object3D;
   onInteractionChange?: (isInteracting: boolean) => void;
   dragProgress: React.MutableRefObject<number | null>;
-  frontLightRef?: React.RefObject<THREE.SpotLight>;
-  directionalLightRef?: React.RefObject<THREE.DirectionalLight>;
-  directionalLightTarget?: THREE.Object3D;
+  carReflectionOffsetY?: number;
 }) {
-  const { camera, controls, gl, size = { width: 0, height: 0 } } = useThree();
+  const { camera, controls, gl, size } = useThree();
   const [interacting, setInteracting] = useState(false);
   const interactTimeout = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (camera) {
+      camera.layers.enable(1);
+    }
+  }, [camera]);
 
   // Velocità di animazione fisse (Smooth 0.4 - 0.5s ease-out)
   const openingCameraSpeed = 6.0;
@@ -873,26 +893,6 @@ function SceneController({
       if (!isAppOpen && ctrl) ctrl.enableRotate = true;
     }
 
-    // Real-time smooth tracking of spotlights and directional shadow maps to keep them stable and focused centered on the car
-    if (modelRef.current) {
-      const carPos = modelRef.current.position;
-
-      // Zenith spotlight follows the car on X & Z for clean contact shadow proyection
-      if (frontLightRef && frontLightRef.current) {
-        frontLightRef.current.position.set(carPos.x, 8.0, carPos.z);
-      }
-
-      // Directional solar light keeps constant diagonal offset preventing shadow projection distortion or clipping
-      if (directionalLightRef && directionalLightRef.current) {
-        directionalLightRef.current.position.set(carPos.x - 7.0, 12.0, carPos.z + 7.0);
-      }
-
-      // Directional target moves to the middle of the vehicle
-      if (directionalLightTarget) {
-        directionalLightTarget.position.copy(carPos);
-      }
-    }
-
     // 4. Viewport & Aspect Ratio dinamico dal DOM - Forza gl.setSize esattamente alla larghezza corrente frame-per-frame
     const canvas = gl.domElement;
     const container = canvas.parentElement;
@@ -934,6 +934,17 @@ function SceneController({
       gl.setViewport(0, 0, visibleWidth, ch);
       gl.setScissorTest(false);
     }
+
+    if (floorRef.current && modelRef.current) {
+      // Preserva l'offset verticale di -carReflectionOffsetY per incollare il riflesso alle ruote
+      floorRef.current.position.y = modelRef.current.position.y - carReflectionOffsetY;
+      
+      // Force immediate update of matrices so that MeshReflectorMaterial uses up-to-date world coordinates in the same frame render
+      modelRef.current.updateMatrix();
+      modelRef.current.updateMatrixWorld(true);
+      floorRef.current.updateMatrix();
+      floorRef.current.updateMatrixWorld(true);
+    }
   });
 
   return null;
@@ -951,8 +962,14 @@ function EnvironmentController({
   weatherCondition,
   dayFogNear,
   dayFogFar,
+  nightFogNear,
+  nightFogFar,
   sceneColors,
   targetWeatherParams,
+  carReflectionOpacity = 0.75,
+  forceManualFog = false,
+  dirLightIntensity = 1.0,
+  spotLightIntensity = 1.0,
 }: {
   isNight: boolean;
   floorRef: React.RefObject<THREE.Mesh>;
@@ -965,23 +982,33 @@ function EnvironmentController({
   weatherCondition: string;
   dayFogNear: number;
   dayFogFar: number;
+  nightFogNear: number;
+  nightFogFar: number;
   sceneColors: SceneColors;
   targetWeatherParams: WeatherParams;
+  carReflectionOpacity?: number;
+  forceManualFog?: boolean;
+  dirLightIntensity?: number;
+  spotLightIntensity?: number;
 }) {
   const { scene, gl } = useThree();
   const targetSky = useRef(new THREE.Color()).current;
   const targetFloor = useRef(new THREE.Color()).current;
   const currentEnvColor = useRef(new THREE.Color("#ffffff")).current;
+  const currentFloorColor = useRef(new THREE.Color("#101010")).current;
+  const nightFloorColor = useRef(new THREE.Color("#101010")).current;
 
   // Default Day Values
-  const dayAmbientIntensity = 0.42;
-  const dayFrontLightIntensity = 0.63;
-  const dayDirectionalIntensity = 1.6;
+  const dayAmbientIntensity = 0.5;
+  const dayFrontLightIntensity = 0.6;
+  const dayDirectionalIntensity = 1.5;
   const dayEnvironmentIntensity = 2.8;
 
   useEffect(() => {
-    scene.background = null; // Disable scene background so clearColor and transparent canvas shows HTML background correctly when scissor is false
-  }, [scene]);
+    // Sincronizziamo lo sfondo della scena dinamicamente in useFrame per nascondere i bordi del piano e garantire l'effetto di spazio infinito.
+    // Inizializziamo subito scene.background con il colore corretto per evitare flash o ritardi al caricamento
+    scene.background = new THREE.Color(isNight ? "#101010" : "#ffffff");
+  }, [scene, isNight]);
 
   const getWeatherKey = useCallback((condition: string): string => {
     const lowerCond = condition.toLowerCase();
@@ -1010,9 +1037,19 @@ function EnvironmentController({
     targetFloor.set(colors.floor);
 
     currentEnvColor.lerp(targetSky, t);
+    
+    const targetFloorColorVal = isNight ? nightFloorColor : targetFloor;
+    currentFloorColor.lerp(targetFloorColorVal, t);
 
-    // Usa gl.setClearColor con clearAlpha = 0 (trasparente) in modo che il gradiente CSS nello sfondo mostri le sfumature in modo continuo
-    gl.setClearColor(currentEnvColor, 0);
+    // Sincronizza lo sfondo della scena con il colore del pavimento per fondere ed eliminare totalmente i bordi del piano (orizzonte infinito)
+    if (scene.background instanceof THREE.Color) {
+      scene.background.copy(currentFloorColor);
+    } else {
+      scene.background = currentFloorColor.clone();
+    }
+
+    // Usa gl.setClearColor con il colore del pavimento
+    gl.setClearColor(currentFloorColor, 1);
 
     // Costruisci il gradiente CSS che copia esattamente gli stessi identici colori e sfumature usati per il cielo 3D
     const hexColor = "#" + currentEnvColor.getHexString();
@@ -1072,8 +1109,8 @@ function EnvironmentController({
       targetFrontLightIntensity = nightFrontLightIntensity;
       targetDirectionalIntensity = 0;
       targetEnvIntensity = nightEnvironmentIntensity;
-      targetMirror = 0;
-      targetFog = { near: 15, far: 800 };
+      targetMirror = 0.35;
+      targetFog = { near: nightFogNear, far: nightFogFar };
     } else {
       // Default DAY values
       targetAmbientIntensity = dayAmbientIntensity;
@@ -1082,8 +1119,8 @@ function EnvironmentController({
       targetEnvIntensity = dayEnvironmentIntensity;
       targetMirror = 0.8;
 
-      const fogNear = isOvercast ? targetWeatherParams.fogNear : dayFogNear;
-      const fogFar = isOvercast ? targetWeatherParams.fogFar : dayFogFar;
+      const fogNear = (isOvercast && !forceManualFog) ? targetWeatherParams.fogNear : dayFogNear;
+      const fogFar = (isOvercast && !forceManualFog) ? targetWeatherParams.fogFar : dayFogFar;
       targetFog = { near: fogNear, far: fogFar };
 
       if (weatherKey === "Temporale") {
@@ -1114,12 +1151,13 @@ function EnvironmentController({
       }
     }
 
-    if (scene.background instanceof THREE.Color) {
-      scene.background.lerp(targetSky, t);
-    }
+    targetDirectionalIntensity *= dirLightIntensity;
+    targetFrontLightIntensity *= spotLightIntensity;
+
+    targetMirror *= carReflectionOpacity;
 
     const floorMat = floorRef.current!.material as any;
-    floorMat.color.lerp(targetFloor, t);
+    floorMat.color.copy(currentFloorColor);
     floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror, targetMirror, t);
 
     if (ambientLightRef.current) {
@@ -1158,13 +1196,13 @@ function EnvironmentController({
     if (targetFog) {
       if (!scene.fog) {
         scene.fog = new THREE.Fog(
-          currentEnvColor,
+          currentFloorColor,
           targetFog.near,
           targetFog.far,
         );
       }
       const fog = scene.fog as THREE.Fog;
-      fog.color.copy(currentEnvColor);
+      fog.color.copy(currentFloorColor);
       fog.near = THREE.MathUtils.lerp(fog.near, targetFog.near, t);
       fog.far = THREE.MathUtils.lerp(fog.far, targetFog.far, t);
     } else {
@@ -1192,10 +1230,33 @@ interface VehicleCanvasProps {
   effectiveWeatherCondition: string;
   dayFogNear: number;
   dayFogFar: number;
+  nightFogNear: number;
+  nightFogFar: number;
   targetWeatherParams: WeatherParams;
   uiScale: number;
   headlightConfig: HeadlightConfig;
   dragProgress: React.MutableRefObject<number | null>;
+  carShadowOpacity?: number;
+  carShadowWidth?: number;
+  carShadowLength?: number;
+  carShadowOffsetY?: number;
+  carShadowOffsetX?: number;
+  carShadowOffsetZ?: number;
+  dirLightPosX?: number;
+  dirLightPosY?: number;
+  dirLightPosZ?: number;
+  dirLightIntensity?: number;
+  spotLightPosX?: number;
+  spotLightPosY?: number;
+  spotLightPosZ?: number;
+  spotLightIntensity?: number;
+  carReflectionOffsetY?: number;
+  carReflectionOpacity?: number;
+  carReflectionRoughness?: number;
+  carReflectionBlur?: number;
+  carReflectionMixStrength?: number;
+  carReflectionMetalness?: number;
+  forceManualFog?: boolean;
 }
 
 export default function VehicleCanvas({
@@ -1213,10 +1274,33 @@ export default function VehicleCanvas({
   effectiveWeatherCondition,
   dayFogNear,
   dayFogFar,
+  nightFogNear,
+  nightFogFar,
   targetWeatherParams,
   uiScale,
   headlightConfig,
   dragProgress,
+  carShadowOpacity = 0.40,
+  carShadowWidth = 20,
+  carShadowLength = 20,
+  carShadowOffsetY = 0.02,
+  carShadowOffsetX = 0.0,
+  carShadowOffsetZ = 0.0,
+  dirLightPosX = -0.30,
+  dirLightPosY = 40.00,
+  dirLightPosZ = 7.70,
+  dirLightIntensity = 2.40,
+  spotLightPosX = 0.0,
+  spotLightPosY = 5.0,
+  spotLightPosZ = 0.0,
+  spotLightIntensity = 1.0,
+  carReflectionOffsetY = 0.0,
+  carReflectionOpacity = 2.59,
+  carReflectionRoughness = 0.27,
+  carReflectionBlur = 50,
+  carReflectionMixStrength = 1.6,
+  carReflectionMetalness = 0.00,
+  forceManualFog = false,
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -1224,7 +1308,40 @@ export default function VehicleCanvas({
   const frontLightRef = useRef<THREE.SpotLight>(null!);
   const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
-  const directionalLightTarget = useMemo(() => new THREE.Object3D(), []);
+  const shadowRef = useRef<THREE.Mesh>(null!);
+
+  // Generate a procedural noise/grain texture to break up the perfect glass reflections
+  const noiseTexture = useMemo(() => {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const imgData = ctx.createImageData(size, size);
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        // High-frequency noise: val describes local surface roughness deviation
+        const val = Math.floor(120 + Math.random() * 135);
+        imgData.data[i] = val;     // R
+        imgData.data[i + 1] = val; // G
+        imgData.data[i + 2] = val; // B
+        imgData.data[i + 3] = 255; // A
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    // Repeat many times to create a very fine micro-grain (e.g., asphalt/stone/satin resin)
+    texture.repeat.set(150, 150);
+    return texture;
+  }, []);
+
+  useEffect(() => {
+    if (shadowRef.current) {
+      shadowRef.current.layers.set(1);
+    }
+  }, []);
 
   const {
     x,
@@ -1247,8 +1364,8 @@ export default function VehicleCanvas({
 
   const beamRoll = 0;
 
-  const shadowPosition = { x: 0, y: 0.02, z: 0 };
-  const shadowOpacity = 0.8;
+  const shadowPosition = { x: carShadowOffsetX, y: carShadowOffsetY, z: carShadowOffsetZ };
+  const shadowOpacity = carShadowOpacity;
 
   const initialConfig = useMemo(() => {
     if (uiScale === 1.0) {
@@ -1285,15 +1402,9 @@ export default function VehicleCanvas({
     }
   }, [appOpenConfigFromProps, isAppOpen]);
 
-   useEffect(() => {
+  useEffect(() => {
     if (frontLightRef.current) frontLightRef.current.target = frontLightTarget;
   }, [frontLightTarget]);
-
-  useEffect(() => {
-    if (directionalLightRef.current) {
-      directionalLightRef.current.target = directionalLightTarget;
-    }
-  }, [directionalLightTarget]);
 
   const activeConfig = isAppOpen ? runtimeAppOpenConfig : initialConfig;
 
@@ -1363,7 +1474,8 @@ export default function VehicleCanvas({
         shadows={{ type: THREE.PCFSoftShadowMap }}
         camera={{
           fov: 48,
-          far: 8000,
+          near: 0.5,
+          far: 200,
           position: [
             initialConfig.cameraPos.x,
             initialConfig.cameraPos.y,
@@ -1371,6 +1483,18 @@ export default function VehicleCanvas({
           ],
         }}
       >
+        <SceneController
+          isAppOpen={isAppOpen}
+          activeConfig={activeConfig}
+          homeConfig={initialConfig}
+          appOpenConfig={runtimeAppOpenConfig}
+          modelRef={modelRef}
+          floorRef={floorRef}
+          frontLightTarget={frontLightTarget}
+          onInteractionChange={onInteractionChange}
+          dragProgress={dragProgress}
+          carReflectionOffsetY={carReflectionOffsetY}
+        />
         <Suspense fallback={null}>
           <MemoizedEnvironment />
           <WeatherEffects
@@ -1396,8 +1520,20 @@ export default function VehicleCanvas({
                 isNight={isNight}
               />
 
+              {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+              <ContactShadow
+                shadowRef={shadowRef}
+                carShadowWidth={carShadowWidth}
+                carShadowLength={carShadowLength}
+                shadowPosition={shadowPosition}
+                shadowOpacity={shadowOpacity}
+              />
+
               {/* Linked headlights follow the model's group rotation */}
               {linked && renderHeadlights()}
+
+              {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
+              <Primitive object={frontLightTarget} position={[0, 0, 10]} />
             </Group>
 
             {/* Unlinked headlights stay fixed in world rotation while car spins */}
@@ -1422,7 +1558,7 @@ export default function VehicleCanvas({
           enablePan={false}
           target={defaultOrbitTarget}
           minPolarAngle={Math.PI / 2.8}
-          maxPolarAngle={Math.PI / 2.1}
+          maxPolarAngle={Math.PI / 2 - 0.035}
           minDistance={minOrbitDistance}
           maxDistance={maxOrbitDistance}
           enableDamping={true}
@@ -1433,44 +1569,49 @@ export default function VehicleCanvas({
 
         {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
         <AmbientLight ref={ambientLightRef} intensity={0.5} />
-
-        {/* Top-level light targets to completely avoid nested parent-child double-translations! */}
-        <Primitive object={frontLightTarget} />
-        <Primitive object={directionalLightTarget} />
-
         <SpotLight
           ref={frontLightRef}
-          position={[0, 8, 0]}
-          angle={0.6}
-          penumbra={0.8}
-          intensity={1.2}
+          position={[spotLightPosX, spotLightPosY, spotLightPosZ]}
+          angle={0.5}
+          penumbra={0.5}
+          intensity={1}
         />
         <DirectionalLight
           ref={directionalLightRef}
-          position={[-7, 12, 7]}
-          intensity={1.2}
+          position={[dirLightPosX, dirLightPosY, dirLightPosZ]}
+          intensity={1}
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-far={50}
+          shadow-camera-left={-10}
+          shadow-camera-right={10}
+          shadow-camera-top={10}
+          shadow-camera-bottom={-10}
         />
 
         {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
         <Mesh
           ref={floorRef}
           rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, -1.05, 0]}
+          position={[0, -carReflectionOffsetY, 0]}
           receiveShadow
         >
-          <PlaneGeometry args={[8000, 8000]} />
+          {/* Dimensione ideale per precisione e ampiezza visiva senza distruggere lo Z-buffer */}
+          <PlaneGeometry args={[250, 250]} />
           <MeshReflectorMaterial
-            blur={[400, 400]}
+            blur={[carReflectionBlur, carReflectionBlur]}
             resolution={1024}
             mixBlur={1}
-            mixStrength={1.5}
-            roughness={0.5}
-            depthScale={1}
-            minDepthThreshold={0.4} // original split threshold restored exactly per requests!
-            maxDepthThreshold={1.4}
+            mixStrength={carReflectionMixStrength}
+            roughness={carReflectionRoughness}
+            roughnessMap={noiseTexture}
+            depthScale={0} // Mantiene stabile il riflesso ed evita l'effetto TV vecchia raso terra
+            minDepthThreshold={0.2}
+            maxDepthThreshold={1.2}
             color="#101010"
-            metalness={0.2}
-            mirror={0.7}
+            metalness={carReflectionMetalness}
+            mirror={carReflectionOpacity} // Rende il riflesso nitido e presente vicino al punto di contatto
           />
         </Mesh>
 
@@ -1486,21 +1627,14 @@ export default function VehicleCanvas({
           weatherCondition={effectiveWeatherCondition}
           dayFogNear={dayFogNear}
           dayFogFar={dayFogFar}
+          nightFogNear={nightFogNear}
+          nightFogFar={nightFogFar}
           sceneColors={sceneColors}
           targetWeatherParams={targetWeatherParams}
-        />
-        <SceneController
-          isAppOpen={isAppOpen}
-          activeConfig={activeConfig}
-          homeConfig={initialConfig}
-          appOpenConfig={runtimeAppOpenConfig}
-          modelRef={modelRef}
-          frontLightTarget={frontLightTarget}
-          onInteractionChange={onInteractionChange}
-          dragProgress={dragProgress}
-          frontLightRef={frontLightRef}
-          directionalLightRef={directionalLightRef}
-          directionalLightTarget={directionalLightTarget}
+          carReflectionOpacity={carReflectionOpacity}
+          forceManualFog={forceManualFog}
+          dirLightIntensity={dirLightIntensity}
+          spotLightIntensity={spotLightIntensity}
         />
       </Canvas>
     </>

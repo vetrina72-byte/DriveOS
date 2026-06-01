@@ -88,6 +88,7 @@ export default function DebugControls({
     volumeSliderPopupHeight, setVolumeSliderPopupHeight, volumeControlZIndex, setVolumeControlZIndex,
     appLauncherWidth, setAppLauncherWidth, appLauncherHeight, setAppLauncherHeight,
     dayFogNear, setDayFogNear, dayFogFar, setDayFogFar,
+    nightFogNear, setNightFogNear, nightFogFar, setNightFogFar,
     virtualKeyboardKeySize, setVirtualKeyboardKeySize, virtualKeyboardHeight, setVirtualKeyboardHeight,
     virtualKeyboardPaddingX, setVirtualKeyboardPaddingX, virtualKeyboardKeyGapX, setVirtualKeyboardKeyGapX,
     virtualKeyboardKeyGapY, setVirtualKeyboardKeyGapY, virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight,
@@ -102,7 +103,26 @@ export default function DebugControls({
     satelliteLabelBrightness, setSatelliteLabelBrightness, satelliteLabelOutlineWidth, setSatelliteLabelOutlineWidth,
     headlightConfig, setHeadlightConfig, progressBarHeight, setProgressBarHeight,
     progressBarVerticalOffset, setProgressBarVerticalOffset, playButtonScale, setPlayButtonScale,
-    skipButtonScale, setSkipButtonScale
+    skipButtonScale, setSkipButtonScale, carShadowOpacity, setCarShadowOpacity,
+    carShadowWidth, setCarShadowWidth, carShadowLength, setCarShadowLength,
+    carShadowOffsetY, setCarShadowOffsetY,
+    carShadowOffsetX, setCarShadowOffsetX,
+    carShadowOffsetZ, setCarShadowOffsetZ,
+    dirLightPosX, setDirLightPosX,
+    dirLightPosY, setDirLightPosY,
+    dirLightPosZ, setDirLightPosZ,
+    dirLightIntensity, setDirLightIntensity,
+    spotLightPosX, setSpotLightPosX,
+    spotLightPosY, setSpotLightPosY,
+    spotLightPosZ, setSpotLightPosZ,
+    spotLightIntensity, setSpotLightIntensity,
+    carReflectionOffsetY, setCarReflectionOffsetY,
+    carReflectionOpacity, setCarReflectionOpacity,
+    carReflectionRoughness, setCarReflectionRoughness,
+    carReflectionBlur, setCarReflectionBlur,
+    carReflectionMixStrength, setCarReflectionMixStrength,
+    carReflectionMetalness, setCarReflectionMetalness,
+    forceManualFog, setForceManualFog
   } = useUIConfig();
   const {
     timeOverride,
@@ -306,7 +326,7 @@ export default function DebugControls({
       : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
 
   const containerClass = isAppView 
-    ? `spotify-app-panel shadow-2xl flex flex-col ${renderLayered ? 'absolute w-full right-0 pointer-events-auto border-t border-zinc-800' : 'fixed w-2/3 border-l border-zinc-800'}`
+    ? `spotify-app-panel shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute w-full right-0 border-t border-zinc-800' : 'fixed w-2/3 border-l border-zinc-800'}`
     : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
 
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
@@ -365,6 +385,8 @@ export default function DebugControls({
     setVolumeControlZIndex(5000);
     setDayFogNear(13);
     setDayFogFar(52);
+    setNightFogNear(15);
+    setNightFogFar(800);
     setAppLauncherWidth(30);
     setAppLauncherHeight(286);
     setVirtualKeyboardKeySize(41);
@@ -394,6 +416,13 @@ export default function DebugControls({
     setSpinnerLeft(undefined);
     setSatelliteLabelBrightness(2.3);
     setSatelliteLabelOutlineWidth(1.2);
+    setCarReflectionOffsetY(0.0);
+    setCarReflectionOpacity(2.59);
+    setCarReflectionRoughness(0.27);
+    setCarReflectionBlur(50);
+    setCarReflectionMixStrength(1.6);
+    setCarReflectionMetalness(0.00);
+    setForceManualFog(false);
     setHeadlightConfig({ x: -0.05, y: 0.77, z: -1.55, angle: 0.06, yaw: 0.01, assemblyYaw: -1.588, intensity: 0.75, startWidth: 0.30, endWidth: 0.10, length: 7.00, startHeight: 0.03, endHeight: 0.01, fade: 7.40, separation: 1.25, circular: true, linked: true });
   };
   
@@ -453,7 +482,9 @@ export default function DebugControls({
           top: `${spotifyPlayerTop}px`,
           bottom: renderLayered ? 0 : `${spotifyPlayerBottom}px`,
           willChange: 'transform',
-          transform: 'translateX(100%)'
+          transform: renderLayered 
+              ? `translateY(${physics.current.currentPercent}%)` 
+              : `translateX(${physics.current.currentPercent}%)`
       } : undefined}
       onClick={stopPropagation}
       role="dialog"
@@ -667,6 +698,32 @@ export default function DebugControls({
             
             <div><label className="block font-medium text-zinc-300">Day Fog Near: {dayFogNear}m</label><input type="range" min="0" max="100" value={dayFogNear} onChange={(e) => setDayFogNear(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Day Fog Far: {dayFogFar}m</label><input type="range" min="0" max="200" value={dayFogFar} onChange={(e) => setDayFogFar(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
+            
+            <div className="flex items-center justify-between bg-zinc-800/40 p-2 rounded border border-zinc-700/40 my-2">
+              <label htmlFor="toggle-force-manual-fog" className="font-semibold text-zinc-300 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                Forza Nebbia Manuale <span className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.5 rounded uppercase font-bold">New</span>:
+              </label>
+              <input 
+                id="toggle-force-manual-fog"
+                type="checkbox" 
+                checked={forceManualFog} 
+                onChange={(e) => setForceManualFog(e.target.checked)} 
+                className="w-4 h-4 text-emerald-600 bg-zinc-700 border-zinc-600 rounded cursor-pointer focus:ring-zinc-600 focus:ring-offset-zinc-900"
+              />
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 font-medium text-zinc-300">
+                Night Fog Near <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>: {nightFogNear}m
+              </label>
+              <input type="range" min="0" max="100" value={nightFogNear} onChange={(e) => setNightFogNear(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 font-medium text-zinc-300">
+                Night Fog Far <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>: {nightFogFar}m
+              </label>
+              <input type="range" min="0" max="2000" value={nightFogFar} onChange={(e) => setNightFogFar(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
 
             {/* Headlight Configuration */}
             <h4 className="text-sm font-semibold text-zinc-400 mt-2">Headlight Configuration</h4>
@@ -697,6 +754,157 @@ export default function DebugControls({
             <div><label className="block font-medium text-zinc-300">Start Height: {headlightConfig.startHeight.toFixed(2)}</label><input type="range" min="0.01" max="0.5" step="0.01" value={headlightConfig.startHeight} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, startHeight: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">End Height: {headlightConfig.endHeight.toFixed(2)}</label><input type="range" min="0.01" max="0.5" step="0.01" value={headlightConfig.endHeight} onChange={(e) => setHeadlightConfig(prev => ({ ...prev, endHeight: Number(e.target.value) }))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
 
+            {/* Shadow Configuration */}
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-2 font-sans text-amber-500 uppercase tracking-wider">
+              Ombra - Posizionamento e Dimensioni <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+            </h4>
+            <div>
+              <label className="block font-medium text-zinc-300">Opacità Ombra: {carShadowOpacity?.toFixed(2)}</label>
+              <input type="range" min="0" max="1" step="0.05" value={carShadowOpacity ?? 0.8} onChange={(e) => setCarShadowOpacity(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300">Altezza Ombra Y (Offset Y): {carShadowOffsetY?.toFixed(3)}</label>
+              <input type="range" min="-1" max="1" step="0.01" value={carShadowOffsetY ?? 0.02} onChange={(e) => setCarShadowOffsetY(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300">Posizione Ombra X (Offset X): {carShadowOffsetX?.toFixed(3)}</label>
+              <input type="range" min="-15" max="15" step="0.05" value={carShadowOffsetX ?? 0.0} onChange={(e) => setCarShadowOffsetX(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300">Posizione Ombra Z (Offset Z): {carShadowOffsetZ?.toFixed(3)}</label>
+              <input type="range" min="-15" max="15" step="0.05" value={carShadowOffsetZ ?? 0.0} onChange={(e) => setCarShadowOffsetZ(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300">Lunghezza Ombra: {carShadowLength?.toFixed(1)}</label>
+              <input type="range" min="1" max="50" step="0.5" value={carShadowLength ?? 20} onChange={(e) => setCarShadowLength(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300">Larghezza Ombra: {carShadowWidth?.toFixed(1)}</label>
+              <input type="range" min="1" max="50" step="0.5" value={carShadowWidth ?? 20} onChange={(e) => setCarShadowWidth(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+
+            {/* Light Sources for Dynamic Shadows */}
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans text-amber-500 uppercase tracking-wider">
+              Controllo Luci - Forma Ombra Proiettata <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+            </h4>
+            <p className="text-[11px] text-zinc-400 leading-tight">Posiziona le sorgenti luminose per modellare, inclinare e sfumare l'ombra dinamica dell'auto:</p>
+            
+            <div className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800 space-y-3 mt-1">
+              <span className="text-[12px] font-bold text-zinc-300 block">💡 LUCE DIREZIONALE (Sole / Luce Principale)</span>
+              <div>
+                <label className="block font-medium text-xs text-zinc-400">Inclinazione Luce X (Direzione): {dirLightPosX?.toFixed(2)}</label>
+                <input type="range" min="-30" max="30" step="0.1" value={dirLightPosX ?? -0.30} onChange={(e) => setDirLightPosX(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
+              </div>
+              <div>
+                <label className="block font-medium text-xs text-zinc-400 font-sans">Altezza Sorgente Y (Lunghezza / Sfumatura): {dirLightPosY?.toFixed(2)}</label>
+                <input type="range" min="1" max="40" step="0.1" value={dirLightPosY ?? 40.00} onChange={(e) => setDirLightPosY(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer font-sans" />
+              </div>
+              <div>
+                <label className="block font-medium text-xs text-zinc-400">Inclinazione Luce Z (Direzione): {dirLightPosZ?.toFixed(2)}</label>
+                <input type="range" min="-30" max="30" step="0.1" value={dirLightPosZ ?? 7.70} onChange={(e) => setDirLightPosZ(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
+              </div>
+              <div>
+                <label className="block font-medium text-xs text-zinc-400">Moltiplicatore Intensità Luce: {dirLightIntensity?.toFixed(2)}</label>
+                <input type="range" min="0" max="5" step="0.05" value={dirLightIntensity ?? 2.40} onChange={(e) => setDirLightIntensity(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
+              </div>
+            </div>
+
+            {/* Reflection Floor Offset Configuration */}
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-2 font-sans">
+              Distanza Riflesso (Pavimento) <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+            </h4>
+            <div><label className="block font-medium text-zinc-300">Valore Offset (Minore = Più vicino): {carReflectionOffsetY?.toFixed(3)}</label><input type="range" min="0.0" max="2.0" step="0.001" value={carReflectionOffsetY ?? 0.0} onChange={(e) => setCarReflectionOffsetY(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" /></div>
+
+            {/* Material Presets */}
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans">
+              Preset Materiale Pavimento <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">Presets</span>
+            </h4>
+            <p className="text-[11px] text-zinc-400 leading-tight">Seleziona un materiale per cambiare istantaneamente l'aspetto del pavimento:</p>
+            <div className="grid grid-cols-2 gap-2 mt-2 select-none">
+              <button
+                type="button"
+                id="preset-glass-btn"
+                onClick={() => {
+                  setCarReflectionRoughness(0.08);
+                  setCarReflectionBlur(80);
+                  setCarReflectionMixStrength(3.5);
+                  setCarReflectionMetalness(0.05);
+                  setCarReflectionOpacity(0.85);
+                }}
+                className="py-2 px-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 rounded font-medium transition-colors text-center active:scale-95"
+              >
+                💎 Vetro / Plexiglass
+              </button>
+              <button
+                type="button"
+                id="preset-asphalt-btn"
+                onClick={() => {
+                  setCarReflectionRoughness(0.38);
+                  setCarReflectionBlur(450);
+                  setCarReflectionMixStrength(2.5);
+                  setCarReflectionMetalness(0.02);
+                  setCarReflectionOpacity(0.55);
+                }}
+                className="py-2 px-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 rounded font-medium transition-colors text-center active:scale-95"
+              >
+                🏁 Asfalto Bagnato
+              </button>
+              <button
+                type="button"
+                id="preset-concrete-btn"
+                onClick={() => {
+                  setCarReflectionRoughness(0.68);
+                  setCarReflectionBlur(900);
+                  setCarReflectionMixStrength(1.2);
+                  setCarReflectionMetalness(0.15);
+                  setCarReflectionOpacity(0.25);
+                }}
+                className="py-2 px-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 rounded font-medium transition-colors text-center active:scale-95"
+              >
+                🪵 Cemento Opaco
+              </button>
+              <button
+                type="button"
+                id="preset-metal-btn"
+                onClick={() => {
+                  setCarReflectionRoughness(0.22);
+                  setCarReflectionBlur(200);
+                  setCarReflectionMixStrength(4.5);
+                  setCarReflectionMetalness(0.85);
+                  setCarReflectionOpacity(0.65);
+                }}
+                className="py-2 px-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 rounded font-medium transition-colors text-center active:scale-95"
+              >
+                ⚙️ Metallo Satinato
+              </button>
+            </div>
+
+            {/* Reflection Opacity Configuration */}
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans">
+              Opacità Riflesso <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+            </h4>
+            <div><label className="block font-medium text-zinc-300">Opacità del modello riflesso (0 - 5): {carReflectionOpacity?.toFixed(2)}</label><input type="range" min="0.0" max="5.0" step="0.01" value={carReflectionOpacity ?? 0.75} onChange={(e) => setCarReflectionOpacity(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" /></div>
+
+            {/* Advanced Reflection Material Properties */}
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-2 font-sans font-medium">
+              Proprietà Avanzate Riflesso <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+            </h4>
+            <div>
+              <label className="block font-medium text-zinc-300 font-sans">Rugosità Riflesso (Roughness: 0 = Specchio, 1 = Opaco): {carReflectionRoughness?.toFixed(2)}</label>
+              <input type="range" min="0.0" max="1.0" step="0.01" value={carReflectionRoughness ?? 0.12} onChange={(e) => setCarReflectionRoughness(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300 font-sans">Sfocatura Riflesso (Blur: 0 = Nitido, 2000 = Sfocato): {carReflectionBlur}</label>
+              <input type="range" min="0" max="2000" step="10" value={carReflectionBlur ?? 100} onChange={(e) => setCarReflectionBlur(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300 font-sans">Forza Miscelazione (Mix Strength: riflesso marcato): {carReflectionMixStrength?.toFixed(1)}</label>
+              <input type="range" min="0.1" max="25.0" step="0.1" value={carReflectionMixStrength ?? 3.0} onChange={(e) => setCarReflectionMixStrength(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300 font-sans">Metallicità Pavimento (Metalness: riflettività metallic): {carReflectionMetalness?.toFixed(2)}</label>
+              <input type="range" min="0.0" max="1.0" step="0.01" value={carReflectionMetalness ?? 0.1} onChange={(e) => setCarReflectionMetalness(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" />
+            </div>
         </div>
 
         {/* --- SECTION: MODEL PLACEMENT (APP OPEN) --- */}

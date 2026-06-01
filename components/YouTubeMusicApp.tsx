@@ -397,7 +397,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${renderLayered ? 'absolute w-full right-0 pointer-events-auto' : 'fixed w-2/3'}`}
+            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute w-full right-0' : 'fixed w-2/3'}`}
             style={{
                 // Transform managed by physics loop
                 top: `${spotifyPlayerTop}px`,
