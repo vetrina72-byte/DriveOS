@@ -122,7 +122,16 @@ export default function DebugControls({
     carReflectionBlur, setCarReflectionBlur,
     carReflectionMixStrength, setCarReflectionMixStrength,
     carReflectionMetalness, setCarReflectionMetalness,
-    forceManualFog, setForceManualFog
+    forceManualFog, setForceManualFog,
+    showRedPanel, setShowRedPanel,
+    redPanelLength, setRedPanelLength,
+    redPanelHeight, setRedPanelHeight,
+    redPanelWidth, setRedPanelWidth,
+    redPanelOffsetY, setRedPanelOffsetY,
+    redPanelOffsetX, setRedPanelOffsetX,
+    redPanelOpacity, setRedPanelOpacity,
+    redPanelColor, setRedPanelColor,
+    redPanelOrientation, setRedPanelOrientation
   } = useUIConfig();
   const {
     timeOverride,
@@ -808,6 +817,89 @@ export default function DebugControls({
                 <input type="range" min="0" max="5" step="0.05" value={dirLightIntensity ?? 2.40} onChange={(e) => setDirLightIntensity(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
               </div>
             </div>
+
+            {/* Longitudinal Slice Panel Configuration */}
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans text-amber-500 uppercase tracking-wider">
+              Pannello Rosso di Sezione <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+            </h4>
+            <p className="text-[11px] text-zinc-400 leading-tight">Visualizza e sposta un pannello olografico/taglio rosso semi-transparente attraverso la vettura (orientamento ruotato):</p>
+            
+            <div className="flex items-center justify-between py-1">
+              <label className="text-zinc-300 font-medium text-xs">Mostra Pannello Rosso:</label>
+              <input 
+                type="checkbox" 
+                checked={showRedPanel ?? true} 
+                onChange={(e) => setShowRedPanel(e.target.checked)} 
+                className="w-4 h-4 rounded text-red-500 focus:ring-opacity-0 focus:ring-0 bg-zinc-700 border-zinc-600 outline-none cursor-pointer"
+              />
+            </div>
+
+            {showRedPanel && (
+              <div className="space-y-3 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
+                <div>
+                  <label className="block font-medium text-[11px] text-zinc-400 mb-1">Rotazione / Orientamento Sezione:</label>
+                  <div className="grid grid-cols-3 gap-1 bg-zinc-800/80 p-1 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setRedPanelOrientation('horizontal')}
+                      className={`text-[10px] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'horizontal' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                    >
+                      Orizzontale (90°)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRedPanelOrientation('longitudinal')}
+                      className={`text-[10px] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'longitudinal' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                    >
+                      Verticale L.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRedPanelOrientation('transverse')}
+                      className={`text-[10px] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'transverse' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                    >
+                      Verticale T.
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-xs text-zinc-400">Spostamento Laterale X: {redPanelOffsetX?.toFixed(2)}</label>
+                  <input type="range" min="-3" max="3" step="0.05" value={redPanelOffsetX ?? 0.0} onChange={(e) => setRedPanelOffsetX(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
+                </div>
+                <div>
+                  <label className="block font-medium text-xs text-zinc-400 font-sans">Altezza Centrale Offset Y: {redPanelOffsetY?.toFixed(2)}</label>
+                  <input type="range" min="-1" max="3" step="0.05" value={redPanelOffsetY ?? 0.7} onChange={(e) => setRedPanelOffsetY(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer font-sans" />
+                </div>
+                <div>
+                  <label className="block font-medium text-xs text-zinc-400">Lunghezza Pannello (Z): {redPanelLength?.toFixed(1)}</label>
+                  <input type="range" min="1" max="10" step="0.1" value={redPanelLength ?? 4.8} onChange={(e) => setRedPanelLength(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
+                </div>
+                {redPanelOrientation !== 'longitudinal' && (
+                  <div>
+                    <label className="block font-medium text-xs text-zinc-400 font-sans">Larghezza Pannello (X): {redPanelWidth?.toFixed(1)}</label>
+                    <input type="range" min="0.1" max="5" step="0.1" value={redPanelWidth ?? 2.2} onChange={(e) => setRedPanelWidth(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer font-sans" />
+                  </div>
+                )}
+                {redPanelOrientation !== 'horizontal' && (
+                  <div>
+                    <label className="block font-medium text-xs text-zinc-400 font-sans">Altezza Pannello (Y): {redPanelHeight?.toFixed(1)}</label>
+                    <input type="range" min="0.1" max="5" step="0.1" value={redPanelHeight ?? 1.4} onChange={(e) => setRedPanelHeight(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer font-sans" />
+                  </div>
+                )}
+                <div>
+                  <label className="block font-medium text-xs text-zinc-400">Opacità Pannello: {redPanelOpacity?.toFixed(2)}</label>
+                  <input type="range" min="0.05" max="1" step="0.05" value={redPanelOpacity ?? 0.45} onChange={(e) => setRedPanelOpacity(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
+                </div>
+                <div>
+                  <label className="block font-medium text-xs text-zinc-400">Colore Taglio:</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <input type="color" value={redPanelColor ?? '#ff0000'} onChange={(e) => setRedPanelColor(e.target.value)} className="w-8 h-8 rounded border-none cursor-pointer bg-transparent" />
+                    <span className="text-xs font-mono text-zinc-300">{redPanelColor ?? '#ff0000'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Reflection Floor Offset Configuration */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-2 font-sans">

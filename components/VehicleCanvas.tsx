@@ -30,6 +30,8 @@ const ShadowMaterial = "shadowMaterial" as any;
 const AmbientLight = "ambientLight" as any;
 const SpotLight = "spotLight" as any;
 const DirectionalLight = "directionalLight" as any;
+const BoxGeometry = "boxGeometry" as any;
+const MeshStandardMaterial = "meshStandardMaterial" as any;
 
 // Simple Error Boundary for the 3D model
 interface ModelErrorBoundaryProps {
@@ -280,6 +282,11 @@ function SceneController({
   onInteractionChange,
   dragProgress,
   carReflectionOffsetY = 0.0,
+  redPanelOffsetX = -0.40,
+  redPanelOffsetY = 2.70,
+  redPanelLength = 10.0,
+  redPanelWidth = 4.3,
+  redPanelHeight = 5.0,
 }: {
   isAppOpen: boolean;
   activeConfig: SceneConfig;
@@ -291,6 +298,11 @@ function SceneController({
   onInteractionChange?: (isInteracting: boolean) => void;
   dragProgress: React.MutableRefObject<number | null>;
   carReflectionOffsetY?: number;
+  redPanelOffsetX?: number;
+  redPanelOffsetY?: number;
+  redPanelLength?: number;
+  redPanelWidth?: number;
+  redPanelHeight?: number;
 }) {
   const { camera, controls, gl, size } = useThree();
   const [interacting, setInteracting] = useState(false);
@@ -456,6 +468,25 @@ function SceneController({
     let diff = thetaB - thetaA;
     while (diff > Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
+
+    // TIE BREAKER: The user requested an absolute direction switch based on the red panel X coordinate.
+    const borderX = redPanelOffsetX ?? -0.40;
+    const startsOnRight = startCamPos.x > borderX;
+    const endsOnRight = endCamPos.x > borderX;
+
+    // Calculate default shortest path
+    diff = thetaB - thetaA;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+
+    // Check if the shortest path crosses the rear axis (theta = +/- PI)
+    const crossesRear = (thetaA + diff > Math.PI) || (thetaA + diff < -Math.PI);
+
+    // If changing sides, we must NOT cross the rear panel (which functions as an absolute wall)
+    if (crossesRear && startsOnRight !== endsOnRight) {
+       // Force the long path around the front to switch sides
+       diff = diff > 0 ? diff - 2 * Math.PI : diff + 2 * Math.PI;
+    }
 
     const r = THREE.MathUtils.lerp(sphA.radius, sphB.radius, t);
     const t_path = thetaA + diff * t;
@@ -1257,6 +1288,15 @@ interface VehicleCanvasProps {
   carReflectionMixStrength?: number;
   carReflectionMetalness?: number;
   forceManualFog?: boolean;
+  showRedPanel?: boolean;
+  redPanelLength?: number;
+  redPanelHeight?: number;
+  redPanelWidth?: number;
+  redPanelOffsetY?: number;
+  redPanelOffsetX?: number;
+  redPanelOpacity?: number;
+  redPanelColor?: string;
+  redPanelOrientation?: 'longitudinal' | 'transverse' | 'horizontal';
 }
 
 export default function VehicleCanvas({
@@ -1301,6 +1341,15 @@ export default function VehicleCanvas({
   carReflectionMixStrength = 1.6,
   carReflectionMetalness = 0.00,
   forceManualFog = false,
+  showRedPanel = true,
+  redPanelLength = 10.0,
+  redPanelHeight = 5.0,
+  redPanelWidth = 4.3,
+  redPanelOffsetY = 2.70,
+  redPanelOffsetX = -0.40,
+  redPanelOpacity = 0.0,
+  redPanelColor = '#ff0000',
+  redPanelOrientation = 'transverse',
 }: VehicleCanvasProps) {
   const modelRef = useRef<THREE.Group>(null!);
   const floorRef = useRef<THREE.Mesh>(null!);
@@ -1494,6 +1543,11 @@ export default function VehicleCanvas({
           onInteractionChange={onInteractionChange}
           dragProgress={dragProgress}
           carReflectionOffsetY={carReflectionOffsetY}
+          redPanelOffsetX={redPanelOffsetX}
+          redPanelOffsetY={redPanelOffsetY}
+          redPanelLength={redPanelLength}
+          redPanelWidth={redPanelWidth}
+          redPanelHeight={redPanelHeight}
         />
         <Suspense fallback={null}>
           <MemoizedEnvironment />
@@ -1519,6 +1573,26 @@ export default function VehicleCanvas({
                 scale={1}
                 isNight={isNight}
               />
+
+              {showRedPanel && (
+                <Mesh position={[redPanelOffsetX, redPanelOffsetY, 0]} castShadow={false} receiveShadow={false}>
+                  {redPanelOrientation === 'horizontal' ? (
+                    <BoxGeometry args={[redPanelWidth, 0.02, redPanelLength]} />
+                  ) : redPanelOrientation === 'transverse' ? (
+                    <BoxGeometry args={[redPanelWidth, redPanelHeight, 0.02]} />
+                  ) : (
+                    <BoxGeometry args={[redPanelWidth, redPanelHeight, redPanelLength]} />
+                  )}
+                  <MeshStandardMaterial 
+                    color={redPanelColor} 
+                    transparent 
+                    opacity={redPanelOpacity} 
+                    roughness={0.1}
+                    metalness={0.1}
+                    side={THREE.DoubleSide} 
+                  />
+                </Mesh>
+              )}
 
               {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
               <ContactShadow

@@ -53,8 +53,8 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
   const [dayFogNear, setDayFogNear] = useState(13);
   const [dayFogFar, setDayFogFar] = useState(800);
-  const [nightFogNear, setNightFogNear] = useState(15);
-  const [nightFogFar, setNightFogFar] = useState(800);
+  const [nightFogNear, setNightFogNear] = useState(0);
+  const [nightFogFar, setNightFogFar] = useState(63);
 
   const [carShadowOpacity, setCarShadowOpacity] = useState(0.40);
   const [carShadowWidth, setCarShadowWidth] = useState(20);
@@ -77,6 +77,16 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [carReflectionMixStrength, setCarReflectionMixStrength] = useState(1.6);
   const [carReflectionMetalness, setCarReflectionMetalness] = useState(0.00);
   const [forceManualFog, setForceManualFog] = useState(false);
+
+  const [showRedPanel, setShowRedPanel] = useState(true);
+  const [redPanelLength, setRedPanelLength] = useState(10.0);
+  const [redPanelHeight, setRedPanelHeight] = useState(5.0);
+  const [redPanelWidth, setRedPanelWidth] = useState(4.3);
+  const [redPanelOffsetY, setRedPanelOffsetY] = useState(2.70);
+  const [redPanelOffsetX, setRedPanelOffsetX] = useState(-0.40);
+  const [redPanelOpacity, setRedPanelOpacity] = useState(0.0);
+  const [redPanelColor, setRedPanelColor] = useState('#ff0000');
+  const [redPanelOrientation, setRedPanelOrientation] = useState<'longitudinal' | 'transverse' | 'horizontal'>('transverse');
 
   const [spotifyPlayerTop, setSpotifyPlayerTop] = useState(50);
   const [spotifyPlayerBottom, setSpotifyPlayerBottom] = useState(80);
@@ -254,6 +264,15 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     virtualKeyboardKeyGapX, setVirtualKeyboardKeyGapX,
     virtualKeyboardKeyGapY, setVirtualKeyboardKeyGapY,
     virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight,
+    showRedPanel, setShowRedPanel,
+    redPanelLength, setRedPanelLength,
+    redPanelHeight, setRedPanelHeight,
+    redPanelWidth, setRedPanelWidth,
+    redPanelOffsetY, setRedPanelOffsetY,
+    redPanelOffsetX, setRedPanelOffsetX,
+    redPanelOpacity, setRedPanelOpacity,
+    redPanelColor, setRedPanelColor,
+    redPanelOrientation, setRedPanelOrientation,
   };
 
   return <UIConfigContext.Provider value={value}>{children}</UIConfigContext.Provider>;

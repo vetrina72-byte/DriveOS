@@ -205,7 +205,8 @@ function AppContent() {
     virtualKeyboardKeyGapX, virtualKeyboardKeyGapY, virtualKeyboardKeyFontWeight,
     volumeIconSize, volumeSliderOffsetY, volumeSliderOffsetX, volumeControlMarginRight,
     volumeSliderWidth, volumeSliderThickness, volumeSliderThumbOffsetY,
-    volumeSliderPopupWidth, volumeSliderPopupHeight, volumeControlZIndex
+    volumeSliderPopupWidth, volumeSliderPopupHeight, volumeControlZIndex,
+    showRedPanel, redPanelLength, redPanelHeight, redPanelWidth, redPanelOffsetY, redPanelOffsetX, redPanelOpacity, redPanelColor, redPanelOrientation
   } = useUIConfig();
 
   const [isCustomizing, setIsCustomizing] = useState(false);
@@ -556,6 +557,15 @@ function AppContent() {
         carReflectionMixStrength={carReflectionMixStrength}
         carReflectionMetalness={carReflectionMetalness}
         forceManualFog={forceManualFog}
+        showRedPanel={showRedPanel}
+        redPanelLength={redPanelLength}
+        redPanelHeight={redPanelHeight}
+        redPanelWidth={redPanelWidth}
+        redPanelOffsetY={redPanelOffsetY}
+        redPanelOffsetX={redPanelOffsetX}
+        redPanelOpacity={redPanelOpacity}
+        redPanelColor={redPanelColor}
+        redPanelOrientation={redPanelOrientation}
       />
       <TopStatusBar tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} isMapVisible={shouldShowMap}/>
       <WeatherModal tempUnit={tempUnit}/>
