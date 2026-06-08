@@ -2,3 +2,24 @@
 @source "./*.{tsx,ts,html,js}";
 @source "./components/**/*.{tsx,ts,html,js}";
 @source "./context/**/*.{tsx,ts,html,js}";
+
+@media screen and (orientation: landscape) {
+  html {
+    /* Reference resolution: 1280px wide. 16px default font-size. 
+       16 / 1280 = 0.0125 -> 1.25vw */
+    font-size: 1.25vw;
+  }
+}
+
+@media screen and (orientation: portrait) {
+  html {
+    /* If forced into portrait, we scale based on height to maintain landscape-like proportions or max-width */
+    font-size: 1.25vh;
+  }
+}
+
+body {
+  /* Prevent scrolling if somehow content escapes */
+  overflow: hidden;
+  touch-action: none;
+}

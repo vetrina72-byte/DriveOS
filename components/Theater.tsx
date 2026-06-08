@@ -2,6 +2,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, Variants } from 'framer-motion';
+import { useUIConfig } from '../context/UIConfigContext';
 
 // A self-contained component for the service button with 3D hover effects.
 const ServiceButton = ({ service, isNight, onClick }: { 
@@ -30,8 +31,8 @@ const ServiceButton = ({ service, isNight, onClick }: {
         const mouseY = y - rect.top;
 
         // Update CSS variables for glare effect
-        cardRef.current.style.setProperty('--mouse-x', `${mouseX}px`);
-        cardRef.current.style.setProperty('--mouse-y', `${mouseY}px`);
+        cardRef.current.style.setProperty('--mouse-x', `${(mouseX) / 16}rem`);
+        cardRef.current.style.setProperty('--mouse-y', `${(mouseY) / 16}rem`);
 
         // Calculate and apply 3D rotation
         const rotateX = (mouseY / rect.height - 0.5) * -20; // -10 to 10 degrees
@@ -109,7 +110,7 @@ const driveOsHeaderVariant: Variants = {
     initial: { opacity: 0, y: 'calc(50vh - 150px)', scale: 1.5 },
     animate: {
         opacity: [0, 1, 1],
-        y: ['calc(50vh - 150px)', 'calc(50vh - 150px)', '0px'],
+        y: ['calc(50vh - 150px)', 'calc(50vh - 150px)', '0rem'],
         scale: [1.5, 1.5, 1],
         transition: { duration: 1.2, times: [0, 0.5, 1], delay: 0.5 }
     },
@@ -146,6 +147,7 @@ const Theater = ({
     spotifyPlayerBottom,
     onDragProgress,
     isMapsLayered,
+    layeredAppTopOffset = 0,
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -154,7 +156,9 @@ const Theater = ({
     spotifyPlayerBottom: number;
     isMapsLayered?: boolean;
     onDragProgress?: (progress: number | null) => void;
+    layeredAppTopOffset?: number;
 }) => {
+    const { sceneTransitionSpeed = 1.10 } = useUIConfig();
     const panelRef = useRef<HTMLDivElement>(null);
 
     const [renderLayered, setRenderLayered] = useState(isMapsLayered);
@@ -194,7 +198,7 @@ const Theater = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = 400; // ms
+                    const duration = sceneTransitionSpeed * 1000; // ms
                     const t = Math.min(elapsed / duration, 1.0);
                     // power4.out easing
                     const easeT = 1 - Math.pow(1 - t, 4);
@@ -359,10 +363,10 @@ const Theater = ({
     const mainContent = (
         <div
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute w-full right-0' : 'fixed w-2/3'}`}
+            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-2/3 md:w-3/4 lg:w-2/3 right-0'}`}
             style={{
-                top: `${spotifyPlayerTop}px`,
-                bottom: `${renderLayered ? 0 : spotifyPlayerBottom}px`,
+                top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+                bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
                 willChange: 'transform',
                 // Start initially closed (physics loop will open it)
                 transform: 'translateX(100%)' 
@@ -372,7 +376,7 @@ const Theater = ({
             aria-labelledby="theater-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="theater-container relative rounded-t-[32px]">
+            <div className="theater-container relative rounded-t-[2rem]">
                 {/* --- DRAG HANDLE --- */}
                 <div
                     className={handleContainerClass}

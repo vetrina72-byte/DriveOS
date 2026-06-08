@@ -122,7 +122,7 @@ const ArrivalToast = () => {
                     animate={{ opacity: 1, y: 0, scale: 1 }} 
                     exit={{ opacity: 0, y: 50, scale: 0.9 }} 
                     className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10" 
-                    style={{ bottom: '230px' }}
+                    style={{ bottom: '14.375rem' }}
                 >
                     {arrivalMessage}
                 </motion.div>
@@ -183,10 +183,10 @@ function AppContent() {
   const {
     topBarScale, topBarOffsetY, setTopBarOffsetY, mapsSearchPanelTop,
     miniMapTop, miniMapRight, miniMapSize, miniMapZoom, miniMapFadeStart, miniMapFadeEnd,
-    uiScale, appBarWidth, minOrbitDistance, maxOrbitDistance,
+    uiScale, appBarWidth, minOrbitDistance, maxOrbitDistance, sceneTransitionSpeed,
     homeConfig, appOpenConfig, headlightConfig, sceneColors,
     nightAmbientIntensity, nightFrontLightIntensity, nightEnvironmentIntensity,
-    dayFogNear, dayFogFar, nightFogNear, nightFogFar, carShadowOpacity, carShadowWidth, carShadowLength, carShadowOffsetY,
+    dayFogNear, dayFogFar, nightFogNear, nightFogFar, carShadowOpacity, aoMapIntensity, carShadowWidth, carShadowLength, carShadowOffsetY,
     carShadowOffsetX, carShadowOffsetZ,
     dirLightPosX, dirLightPosY, dirLightPosZ, dirLightIntensity,
     spotLightPosX, spotLightPosY, spotLightPosZ, spotLightIntensity,
@@ -206,7 +206,8 @@ function AppContent() {
     volumeIconSize, volumeSliderOffsetY, volumeSliderOffsetX, volumeControlMarginRight,
     volumeSliderWidth, volumeSliderThickness, volumeSliderThumbOffsetY,
     volumeSliderPopupWidth, volumeSliderPopupHeight, volumeControlZIndex,
-    showRedPanel, redPanelLength, redPanelHeight, redPanelWidth, redPanelOffsetY, redPanelOffsetX, redPanelOpacity, redPanelColor, redPanelOrientation
+    showRedPanel, redPanelLength, redPanelHeight, redPanelWidth, redPanelOffsetY, redPanelOffsetX, redPanelOpacity, redPanelColor, redPanelOrientation,
+    layeredAppTopOffset
   } = useUIConfig();
 
   const [isCustomizing, setIsCustomizing] = useState(false);
@@ -295,7 +296,7 @@ function AppContent() {
             const translateX = (1 - visibility) * 50; 
             
             navigateToolRef.current.style.opacity = `${visibility}`;
-            navigateToolRef.current.style.transform = `translateX(${translateX}px)`;
+            navigateToolRef.current.style.transform = `translateX(${(translateX) / 16}rem)`;
             navigateToolRef.current.style.pointerEvents = visibility > 0.9 ? 'auto' : 'none';
         }
 
@@ -496,16 +497,16 @@ function AppContent() {
         const baseStyle: React.CSSProperties = { 
             position: 'fixed', 
             zIndex: 1000, 
-            bottom: `${playerFloatingBottom}px`, 
+            bottom: `${(playerFloatingBottom) / 16}rem`, 
             // Removed transitions/transform/opacity from here to avoid fighting the animation loop
         };
-        const homeLeft = `calc(50% + (${playerFloatingWidth}px / 2) + 8px - (${navigateToolWidth}px / 2))`;
-        const launcherOpenLeft = `calc(100% - ${playerDockedLeft + 90}px - ${navigateToolWidth}px)`;
+        const homeLeft = `calc(50% + ${(playerFloatingWidth / 2 - navigateToolWidth / 2 + 8) / 16}rem)`;
+        const launcherOpenLeft = `calc(100% - ${(playerDockedLeft + 90) / 16}rem - ${(navigateToolWidth) / 16}rem)`;
         
-        if (isAppLauncherOpen) return { ...baseStyle, left: launcherOpenLeft, bottom: `${playerFloatingBottom}px` }; // Don't lift if launcher open (unlikely combo)
+        if (isAppLauncherOpen) return { ...baseStyle, left: launcherOpenLeft, bottom: `${(playerFloatingBottom) / 16}rem` }; // Don't lift if launcher open (unlikely combo)
         
         // Default home position for normal/app closed states, applying lift if needed
-        return { ...baseStyle, left: homeLeft, bottom: `${playerFloatingBottom}px` };
+        return { ...baseStyle, left: homeLeft, bottom: `${(playerFloatingBottom) / 16}rem` };
     }, [isAppLauncherOpen, playerFloatingBottom, playerDockedLeft, playerFloatingWidth, navigateToolWidth]);
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
@@ -518,8 +519,10 @@ function AppContent() {
       <VehicleCanvas
         isAppOpen={activeApp !== null}
         isNight={isNight}
+        aoMapIntensity={aoMapIntensity}
         minOrbitDistance={minOrbitDistance}
         maxOrbitDistance={maxOrbitDistance}
+        sceneTransitionSpeed={sceneTransitionSpeed}
         appOpenConfig={appOpenConfig}
         homeConfig={homeConfig}
         sceneColors={sceneColors}
@@ -578,8 +581,8 @@ function AppContent() {
             onInteractionStart={handleMapsInteractionStart} 
             onDragProgress={handleDragProgress}
         />
-        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered || isMapLayeredBehind} onDragProgress={handleSpotifyDrag} />
-        <TheaterApp isOpen={activeApp === 'theater'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
+        <SpotifyApp isOpen={activeApp === 'spotify'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered || isMapLayeredBehind} onDragProgress={handleSpotifyDrag} layeredAppTopOffset={layeredAppTopOffset} />
+        <TheaterApp isOpen={activeApp === 'theater'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} layeredAppTopOffset={layeredAppTopOffset} />
         <DebugControls
             isOpen={activeApp === 'debug'}
             onClose={handleSubAppClose}
@@ -587,8 +590,8 @@ function AppContent() {
             isMapsLayered={isMapsLayered || isMapLayeredBehind}
             isAppView={true}
         />
-        <RadioApp isOpen={activeApp === 'radio'} onClose={handleSubAppClose} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
-        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} />
+        <RadioApp isOpen={activeApp === 'radio'} onClose={handleSubAppClose} isNight={useDarkTheme} onPlayStation={handlePlayStation} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} favoriteStationUUIDs={favoriteStationUUIDs} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} layeredAppTopOffset={layeredAppTopOffset} />
+        <YouTubeMusicApp isOpen={activeApp === 'youtube-music'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} layeredAppTopOffset={layeredAppTopOffset} />
         <ArrivalToast />
         {/* NAVIGATE TOOL CONTAINER */}
         <NavigationWidget 
@@ -603,7 +606,7 @@ function AppContent() {
         />
         <MusicPlayer activeApp={activeApp} onStationChange={handleStationChange} isAnyAppOpen={isHomeScreenDocked} isNight={useDarkTheme} dockedConfig={{ width: playerDockedWidth, bottom: playerFloatingBottom, left: playerDockedLeft, height: playerDockedHeight }} floatingConfig={{ width: playerFloatingWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: navigateToolWidth }} playerControlsSize={playerControlsSize} playerControlsGap={playerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} spinnerSize={spinnerSize} spinnerShuffleGap={spinnerShuffleGap} debugSpinner={debugSpinner} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} favoriteStationUUIDs={favoriteStationUUIDs} onToggleFavorite={handleToggleFavorite} queuePopoverHeight={queuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} queuePopoverWidth={queuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} spinnerTop={spinnerTop} spinnerRight={spinnerRight} spinnerBottom={spinnerBottom} spinnerLeft={spinnerLeft} dragProgress={dragProgressRef} progressBarHeight={progressBarHeight} progressBarVerticalOffset={progressBarVerticalOffset} playButtonScale={playButtonScale} skipButtonScale={skipButtonScale} />
         <AppLauncher isOpen={isAppLauncherOpen} width={appLauncherWidth} height={appLauncherHeight} apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)} isCustomizing={isCustomizing} onCustomizeClick={moveAppToDock} onAppLaunch={toggleApp} isNight={useDarkTheme}/>
-        {isAppLauncherOpen && <button onClick={(e) => { e.stopPropagation(); setIsCustomizing(prev => !prev); }} className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'} ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} style={{ bottom: `calc(6rem + ${appLauncherHeight}px + 0.75rem)` }}>{isCustomizing ? 'Fine' : 'Personalizza'}</button>}
+        {isAppLauncherOpen && <button onClick={(e) => { e.stopPropagation(); setIsCustomizing(prev => !prev); }} className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'} ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} style={{ bottom: `calc(6rem + ${(appLauncherHeight) / 16}rem + 0.75rem)` }}>{isCustomizing ? 'Fine' : 'Personalizza'}</button>}
         <AnimatePresence>{isKeyboardVisible && <VirtualKeyboard isVisible={isKeyboardVisible} targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null} onClose={handleKeyboardClose} isNight={useDarkTheme} virtualKeyboardKeySize={virtualKeyboardKeySize} virtualKeyboardHeight={virtualKeyboardHeight} virtualKeyboardPaddingX={virtualKeyboardPaddingX} virtualKeyboardKeyGapX={virtualKeyboardKeyGapX} virtualKeyboardKeyGapY={virtualKeyboardKeyGapY} virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}/>}</AnimatePresence>
         <footer className="fixed bottom-0 left-0 right-0 h-20 z-[4500]" aria-label="Application Dock">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 h-full bg-black" style={{ width: `${appBarWidth}%` }}/>
@@ -613,7 +616,7 @@ function AppContent() {
                     <div className="relative flex flex-col items-center"><DockButton icon={ICONS.apps} onClick={toggleLauncher} label="Open App Launcher"/>{isAppLauncherOpen && !isCustomizing && <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />}</div>
                     {recentAppsToShow.length > 0 && <> <div className="w-px h-8 bg-gray-600" /> {recentAppsToShow.map(appId => { const app = ALL_APPS.find(a => a.id === appId); if (!app) return null; return ( <div key={`recent-${app.id}`} className="relative flex flex-col items-center"> <button onClick={(e) => { e.stopPropagation(); toggleApp(app.id); }} className={`flex flex-col items-center justify-center w-24 h-full transition-all duration-200 ease-in-out hover:scale-110 ${app.colorClasses ?? 'text-gray-400 hover:text-white'}`} aria-label={app.label}> <app.icon className="w-8 h-8" /> </button> {activeApp === app.id && <div className="absolute -bottom-2.5 w-6 h-1 bg-zinc-300 rounded-full transition-opacity" />} </div> ); })} </>}
                 </div>
-                <div className="absolute top-0 right-0 h-full flex items-center" style={{ paddingRight: `${volumeControlMarginRight}px` }}><VolumeControl iconSize={volumeIconSize} volumeSliderOffsetY={volumeSliderOffsetY} volumeSliderOffsetX={volumeSliderOffsetX} volumeSliderWidth={volumeSliderWidth} volumeSliderThickness={volumeSliderThickness} volumeSliderPopupWidth={volumeSliderPopupWidth} volumeSliderPopupHeight={volumeSliderPopupHeight} zIndex={volumeControlZIndex} volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}/></div>
+                <div className="absolute top-0 right-0 h-full flex items-center" style={{ paddingRight: `${(volumeControlMarginRight) / 16}rem` }}><VolumeControl iconSize={volumeIconSize} volumeSliderOffsetY={volumeSliderOffsetY} volumeSliderOffsetX={volumeSliderOffsetX} volumeSliderWidth={volumeSliderWidth} volumeSliderThickness={volumeSliderThickness} volumeSliderPopupWidth={volumeSliderPopupWidth} volumeSliderPopupHeight={volumeSliderPopupHeight} zIndex={volumeControlZIndex} volumeSliderThumbOffsetY={volumeSliderThumbOffsetY}/></div>
             </div>
         </footer>
       </div>

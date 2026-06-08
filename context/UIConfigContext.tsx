@@ -23,6 +23,7 @@ export const UIConfigContext = createContext<any>(null);
 
 export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [topBarScale, setTopBarScale] = useState(1.0);
+  const [layeredAppTopOffset, setLayeredAppTopOffset] = useState(18);
   const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
   const [mapsSearchPanelTop, setMapsSearchPanelTop] = useState(61);
   const [miniMapTop, setMiniMapTop] = useState(-57);
@@ -36,6 +37,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
 
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
+  const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(1.10);
   
   const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(DEFAULT_APP_OPEN_CONFIG);
@@ -57,6 +59,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [nightFogFar, setNightFogFar] = useState(63);
 
   const [carShadowOpacity, setCarShadowOpacity] = useState(0.40);
+  const [aoMapIntensity, setAoMapIntensity] = useState(1.0);
   const [carShadowWidth, setCarShadowWidth] = useState(20);
   const [carShadowLength, setCarShadowLength] = useState(20);
   const [carShadowOffsetY, setCarShadowOffsetY] = useState(0.02);
@@ -175,6 +178,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     appBarWidth, setAppBarWidth,
     minOrbitDistance, setMinOrbitDistance,
     maxOrbitDistance, setMaxOrbitDistance,
+    sceneTransitionSpeed, setSceneTransitionSpeed,
     homeConfig, setHomeConfig,
     appOpenConfig, setAppOpenConfig,
     headlightConfig, setHeadlightConfig,
@@ -187,6 +191,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     nightFogNear, setNightFogNear,
     nightFogFar, setNightFogFar,
     carShadowOpacity, setCarShadowOpacity,
+    aoMapIntensity, setAoMapIntensity,
     carShadowWidth, setCarShadowWidth,
     carShadowLength, setCarShadowLength,
     carShadowOffsetY, setCarShadowOffsetY,
@@ -273,6 +278,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     redPanelOpacity, setRedPanelOpacity,
     redPanelColor, setRedPanelColor,
     redPanelOrientation, setRedPanelOrientation,
+    layeredAppTopOffset, setLayeredAppTopOffset,
   };
 
   return <UIConfigContext.Provider value={value}>{children}</UIConfigContext.Provider>;

@@ -174,7 +174,7 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         <div
             ref={progressContainerRef}
             className="spotify-progress-bar w-full rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible flex-shrink-0"
-            style={{ height: `${height}px`, marginTop: `${offset}px` }}
+            style={{ height: `${(height) / 16}rem`, marginTop: `${(offset) / 16}rem` }}
             onMouseDown={handleMouseDown}
         >
             <div 
@@ -257,7 +257,7 @@ const YouTubeProgressBar = ({
         <div
             ref={progressRef}
             className="w-full rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible flex-shrink-0"
-            style={{ height: `${height}px`, marginTop: `${offset}px` }}
+            style={{ height: `${(height) / 16}rem`, marginTop: `${(offset) / 16}rem` }}
             onMouseDown={handleMouseDown}
         >
             <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
@@ -293,8 +293,8 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
                 transform: `${position.transform} scale(${scale})`,
                 transformOrigin: 'bottom center',
                 backgroundColor: 'var(--player-bg)',
-                height: `${height}px`,
-                width: `${width}px`,
+                height: `${(height) / 16}rem`,
+                width: `${(width) / 16}rem`,
             }}
             className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
         >
@@ -320,7 +320,7 @@ const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height
 const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyDevice, isNight: boolean, onTakeControl: () => void }) => {
     const DeviceIcon = () => {
         const type = device.type.toLowerCase();
-        const style = { width: '22px', height: '22px' };
+        const style = { width: '1.375rem', height: '1.375rem' };
         if (type === 'smartphone' || type === 'phone') return <FiSmartphone style={style} />;
         if (type === 'computer' || type === 'desktop' || type === 'laptop') return <FiMonitor style={style} />;
         if (type === 'speaker') return <FiSpeaker style={style} />;
@@ -338,7 +338,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
                     <DeviceIcon />
                 </div>
                 <div className="flex flex-col justify-center overflow-hidden">
-                    <p className={`text-[10px] font-bold uppercase tracking-wider ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>In riproduzione su</p>
+                    <p className={`text-[0.625rem] font-bold uppercase tracking-wider ${isNight ? 'text-zinc-400' : 'text-zinc-600'}`}>In riproduzione su</p>
                     <h3 className={`text-base font-bold truncate ${isNight ? 'text-white' : 'text-zinc-800'}`}>
                         {device.name}
                     </h3>
@@ -399,26 +399,26 @@ const DisabledPlayerView = ({
             {/* Progress bar */}
             <div 
                 className="w-full rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden flex-shrink-0" 
-                style={{ height: `${progressBarHeight}px`, marginTop: `${progressBarVerticalOffset}px` }}
+                style={{ height: `${(progressBarHeight) / 16}rem`, marginTop: `${(progressBarVerticalOffset) / 16}rem` }}
             />
             {/* Controls */}
-            <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+            <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                 <div className="flex-1 flex justify-start"></div>
-                <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                <div className="flex items-center" style={{ gap: `${(playerControlsGap) / 16}rem` }}>
                     <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                     </button>
                     <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                     </button>
                     <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                     </button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} /></button>
+                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem`}} /></button>
                 </div>
                 <div className="flex-1 flex justify-end items-center">
                     <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
-                        <BsList style={{ width: '20px', height: '20px'}} />
+                        <BsList style={{ width: '1.25rem', height: '1.25rem'}} />
                     </button>
                 </div>
             </div>
@@ -527,19 +527,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Interpolate properties
                 // Docked (t=0) -> Floating (t=1)
                 
-                // Calculate Floating Left dynamically (centered horizontally minus half width)
-                // Floating Left: calc(50% - otherWidgetWidth/2 - 8 - width/2)
-                const floatingLeftPx = (window.innerWidth / 2) - (floatingConfig.otherWidgetWidth / 2) - 8 - (floatingConfig.width / 2);
+                // Calculate dynamically with calc so it tracks exactly 50% on window resize
+                const pct = 50 * t;
+                const offsetPx = dockedConfig.left * (1 - t) - (floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) * t;
                 
                 const currentWidth = dockedConfig.width + (floatingConfig.width - dockedConfig.width) * t;
                 const currentHeight = dockedConfig.height + (floatingConfig.height - dockedConfig.height) * t;
                 const currentBottom = dockedConfig.bottom + (floatingConfig.bottom - dockedConfig.bottom) * t;
-                const currentLeft = dockedConfig.left + (floatingLeftPx - dockedConfig.left) * t;
 
-                playerContainerRef.current.style.width = `${currentWidth}px`;
-                playerContainerRef.current.style.height = `${currentHeight}px`;
-                playerContainerRef.current.style.bottom = `${currentBottom}px`;
-                playerContainerRef.current.style.left = `${currentLeft}px`;
+                playerContainerRef.current.style.width = `${(currentWidth) / 16}rem`;
+                playerContainerRef.current.style.height = `${(currentHeight) / 16}rem`;
+                playerContainerRef.current.style.bottom = `${(currentBottom) / 16}rem`;
+                playerContainerRef.current.style.left = `calc(${pct}% + ${(offsetPx) / 16}rem)`;
                 playerContainerRef.current.style.transform = 'none'; // Ensure no transform interferes
             }
 
@@ -1087,25 +1086,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         height={progressBarHeight}
                         offset={progressBarVerticalOffset}
                     />
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                         <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap * 0.8}px` }}>
+                        <div className="flex items-center" style={{ gap: `${(playerControlsGap * 0.8) / 16}rem` }}>
                             <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
                             <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {isYouTubePlaying
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
-                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 -960 960 960" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
+                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
                             <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center">
                             <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
-                                <BsList style={{ width: '20px', height: '20px'}} />
+                                <BsList style={{ width: '1.25rem', height: '1.25rem'}} />
                             </button>
                         </div>
                     </div>
@@ -1137,25 +1136,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     </div>
                     <div 
                         className="w-full rounded-full bg-[var(--progress-bg)] flex-shrink-0"
-                        style={{ height: `${progressBarHeight}px`, marginTop: `${progressBarVerticalOffset}px` }}
+                        style={{ height: `${(progressBarHeight) / 16}rem`, marginTop: `${(progressBarVerticalOffset) / 16}rem` }}
                     />
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                         <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                        <div className="flex items-center" style={{ gap: `${(playerControlsGap) / 16}rem` }}>
                             <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
                             <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {isRadioPlaying
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
-                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 -960 960 960" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
+                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
                             <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
                             <button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
-                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isFavorite ? 'fill-current' : ''}`} />
+                                <FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem`}} className={`${isFavorite ? 'fill-current' : ''}`} />
                             </button>
                         </div>
                         <div className="flex-1 flex justify-end items-center"></div>
@@ -1186,7 +1185,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </div>
                         </div>
                         <div className="flex items-center gap-5">
-                            <div className="flex items-center" style={{ gap: `${spinnerShuffleGap}px`}}>
+                            <div className="flex items-center" style={{ gap: `${(spinnerShuffleGap) / 16}rem`}}>
                                 <button
                                     onClick={handleToggleShuffle}
                                     className="transition"
@@ -1214,32 +1213,32 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         offset={progressBarVerticalOffset} 
                     />
                     
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${playerControlsVerticalPosition}px)`}}>
+                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                          <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${playerControlsGap}px` }}>
+                        <div className="flex items-center" style={{ gap: `${(playerControlsGap) / 16}rem` }}>
                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
                             <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
-                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 2.0}px`} viewBox="0 -960 960 960" width={`${playerControlsSize * 2.0}px`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
+                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 -960 960 960" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
                                 }
                             </button>
                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${playerControlsSize * 1.4}px`} viewBox="0 0 24 24" width={`${playerControlsSize * 1.4}px`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
                             <button
                                 onClick={handleToggleLike}
                                 className="transition"
                                 style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}
                             >
-                                <FiHeart style={{ width: `${playerControlsSize * 0.9}px`, height: `${playerControlsSize * 0.9}px`}} className={`${isLiked ? 'fill-current' : ''}`} />
+                                <FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem`}} className={`${isLiked ? 'fill-current' : ''}`} />
                             </button>
                         </div>
                          <div className="flex-1 flex justify-end items-center">
                             <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
-                                <BsList style={{ width: '20px', height: '20px'}} />
+                                <BsList style={{ width: '1.25rem', height: '1.25rem'}} />
                             </button>
                         </div>
                     </div>
@@ -1286,16 +1285,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [visibleQueue, nextSpotifyTrack, nextYouTubeTrack]);
 
     const spinnerStyle: React.CSSProperties = {
-        top: spinnerTop !== undefined ? `${spinnerTop}px` : 'auto',
-        right: spinnerRight !== undefined ? `${spinnerRight}px` : 'auto',
-        bottom: spinnerBottom !== undefined ? `${spinnerBottom}px` : 'auto',
-        left: spinnerLeft !== undefined ? `${spinnerLeft}px` : 'auto',
+        top: spinnerTop !== undefined ? `${(spinnerTop) / 16}rem` : 'auto',
+        right: spinnerRight !== undefined ? `${(spinnerRight) / 16}rem` : 'auto',
+        bottom: spinnerBottom !== undefined ? `${(spinnerBottom) / 16}rem` : 'auto',
+        left: spinnerLeft !== undefined ? `${(spinnerLeft) / 16}rem` : 'auto',
     };
     
     const spinnerVisualDivStyle: React.CSSProperties = {
-        width: `${spinnerSize}px`,
-        height: `${spinnerSize}px`,
-        borderWidth: `${Math.max(2, spinnerSize / 8)}px`,
+        width: `${(spinnerSize) / 16}rem`,
+        height: `${(spinnerSize) / 16}rem`,
+        borderWidth: `${(Math.max(2, spinnerSize / 8)) / 16}rem`,
     };
 
     return (
@@ -1307,10 +1306,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     // Style is now handled directly by the animation loop in useEffect
                     background: !isNight ? widgetBgColor : 'var(--player-bg)',
                     // Initial styles before JS takes over
-                    width: isAnyAppOpen ? `${dockedConfig.width}px` : `${floatingConfig.width}px`,
-                    height: isAnyAppOpen ? `${dockedConfig.height}px` : `${floatingConfig.height}px`,
-                    bottom: isAnyAppOpen ? `${dockedConfig.bottom}px` : `${floatingConfig.bottom}px`,
-                    left: isAnyAppOpen ? `${dockedConfig.left}px` : `calc(50% - ${floatingConfig.otherWidgetWidth / 2}px - 8px - ${floatingConfig.width / 2}px)`,
+                    width: isAnyAppOpen ? `${(dockedConfig.width) / 16}rem` : `${(floatingConfig.width) / 16}rem`,
+                    height: isAnyAppOpen ? `${(dockedConfig.height) / 16}rem` : `${(floatingConfig.height) / 16}rem`,
+                    bottom: isAnyAppOpen ? `${(dockedConfig.bottom) / 16}rem` : `${(floatingConfig.bottom) / 16}rem`,
+                    left: isAnyAppOpen ? `${(dockedConfig.left) / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
                 }}
             >
                 <div className="relative w-full h-full">

@@ -260,13 +260,13 @@ export default function SearchPanel({
       </div>
 
       {isOpen && (
-        <div className="flex flex-col max-h-[280px] overflow-y-auto px-2 pb-2 scrollbar-thin">
+        <div className="flex flex-col max-h-[17.5rem] overflow-y-auto px-2 pb-2 scrollbar-thin">
           {isLoading && query.length >= 2 ? (
             <div className="text-center p-4 text-zinc-400 text-sm">Ricerca...</div>
           ) : displayList.length > 0 ? (
             <>
               {query.length < 2 && (
-                <div className="px-3 py-1.5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                <div className="px-3 py-1.5 text-[0.6875rem] font-bold text-zinc-500 uppercase tracking-wider">
                   Recenti
                 </div>
               )}
@@ -296,7 +296,7 @@ export default function SearchPanel({
                       {highlight(item.name, query)}
                     </div>
                     {item.address && (
-                      <div className="text-[13px] text-zinc-400 truncate">
+                      <div className="text-[0.8125rem] text-zinc-400 truncate">
                         {highlight(item.address, query)}
                       </div>
                     )}
@@ -307,7 +307,7 @@ export default function SearchPanel({
                         {item.dk.toFixed(1)} km
                       </div>
                       {item.em && (
-                        <div className="text-[12px] text-zinc-400 leading-none mt-1">
+                        <div className="text-[0.75rem] text-zinc-400 leading-none mt-1">
                           ~{Math.round(item.em)} min
                         </div>
                       )}

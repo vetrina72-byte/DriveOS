@@ -237,8 +237,8 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
             <div 
                 className="volume-slider-popup-container"
                 style={{
-                    width: `${volumeSliderPopupWidth}px`,
-                    height: `${volumeSliderPopupHeight}px`,
+                    width: `${(volumeSliderPopupWidth) / 16}rem`,
+                    height: `${(volumeSliderPopupHeight) / 16}rem`,
                 }}
             >
                 <input
@@ -257,10 +257,10 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
                     aria-label="Volume slider"
                     style={{
                         background: `linear-gradient(to right, var(--volume-slider-fill-bg) ${progressPercentage}%, var(--volume-slider-track-bg) ${progressPercentage}%)`,
-                        '--volume-track-height': `${volumeSliderThickness}px`,
-                        '--volume-thumb-size': `${thumbSize}px`,
-                        '--volume-thumb-margin-top': `${thumbMarginTop}px`,
-                        width: `${volumeSliderWidth}px`,
+                        '--volume-track-height': `${(volumeSliderThickness) / 16}rem`,
+                        '--volume-thumb-size': `${(thumbSize) / 16}rem`,
+                        '--volume-thumb-margin-top': `${(thumbMarginTop) / 16}rem`,
+                        width: `${(volumeSliderWidth) / 16}rem`,
                     } as React.CSSProperties}
                 />
             </div>
@@ -276,7 +276,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
             </button>
 
             <button onClick={handleIconClick} className="p-2 hover:text-white transition-colors" aria-label="Open volume slider">
-                <VolumeIcon style={{ width: `${iconSize}px`, height: `${iconSize}px` }} />
+                <VolumeIcon style={{ width: `${(iconSize) / 16}rem`, height: `${(iconSize) / 16}rem` }} />
             </button>
 
             <button {...upHandlers} className="p-2 hover:text-white transition-colors" aria-label="Increase volume">

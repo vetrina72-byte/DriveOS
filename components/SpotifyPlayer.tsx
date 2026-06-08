@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
+import { useUIConfig } from '../context/UIConfigContext';
 import SpotifyLogin from './SpotifyLogin';
 import TopNavBar from './TopNavBar';
 import ContentArea from './ContentArea';
@@ -50,6 +51,7 @@ const SpotifyPlayer = ({
     spotifyPlayerBottom,
     isMapsLayered,
     onDragProgress,
+    layeredAppTopOffset = 0,
 }: { 
     isOpen: boolean; 
     onClose: () => void;
@@ -58,6 +60,7 @@ const SpotifyPlayer = ({
     spotifyPlayerBottom: number;
     isMapsLayered?: boolean;
     onDragProgress?: (progress: number | null) => void;
+    layeredAppTopOffset?: number;
 }) => {
     const { 
         isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, 
@@ -66,6 +69,8 @@ const SpotifyPlayer = ({
         topArtists, chartsPlaylists, genresCategories, recommendedShows,
         partyPlaylists, topTracks, artistRadioTracks, trackRecommendations, savedAlbums, madeForYou
     } = useAuth();
+
+    const { sceneTransitionSpeed = 1.10 } = useUIConfig();
     
     // --- STATE & REFS ---
     const panelRef = useRef<HTMLDivElement>(null);
@@ -115,7 +120,7 @@ const SpotifyPlayer = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = 400; // ms
+                    const duration = sceneTransitionSpeed * 1000; // ms
                     const t = Math.min(elapsed / duration, 1.0);
                     // power4.out easing
                     const easeT = 1 - Math.pow(1 - t, 4);
@@ -181,13 +186,13 @@ const SpotifyPlayer = ({
             }
             
             if (isOpen) {
-                const timer = setTimeout(() => triggerHomeContentFetch(), 400);
+                const timer = setTimeout(() => triggerHomeContentFetch(), sceneTransitionSpeed * 1000);
                 return () => clearTimeout(timer);
             } else {
                 const timer = setTimeout(() => {
                     setView({ type: 'home' });
                     setViewHistory([]);
-                }, 400); // Changed to match 400ms duration
+                }, sceneTransitionSpeed * 1000); // Changed to match transition speed duration
                 return () => clearTimeout(timer);
             }
         }
@@ -344,13 +349,13 @@ const SpotifyPlayer = ({
     const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute w-full right-0' : 'fixed w-2/3'}`}
+            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-2/3 md:w-3/4 lg:w-2/3 right-0'}`}
             style={{
-                top: `${spotifyPlayerTop}px`,
+                top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
                 // FIX: When layered inside Maps, bottom must be 0 to fill the Maps container fully.
                 // Maps container already has a bottom offset (e.g. 80px), so setting bottom:0 here
                 // ensures Spotify ends exactly where Maps ends, avoiding the double-gap issue.
-                bottom: renderLayered ? 0 : `${spotifyPlayerBottom}px`,
+                bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
                 // Note: When portaled, transform is relative to the Maps panel (which is already moving X).
                 // So the transform here is ONLY for the vertical open/close animation.
             }}
@@ -361,7 +366,7 @@ const SpotifyPlayer = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative rounded-t-[32px]`}
+              className={`w-full h-full flex flex-col relative rounded-t-[2rem]`}
               style={{ backgroundColor }}
             >
                 {/* --- DRAG HANDLE (CONDITIONAL POS) --- */}

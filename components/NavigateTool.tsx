@@ -205,7 +205,7 @@ const NavigateTool = ({
         const textarea = inputRef.current;
         if (textarea) {
             textarea.style.height = 'auto'; 
-            textarea.style.height = `${textarea.scrollHeight}px`; 
+            textarea.style.height = `${(textarea.scrollHeight) / 16}rem`; 
         }
     }, [query]);
     
@@ -224,8 +224,8 @@ const NavigateTool = ({
             ref={containerRef}
             className={`relative backdrop-blur-md rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
             style={{ 
-                width: `${width}px`,
-                height: `${isExpanded ? expandedHeight : baseHeight}px`,
+                width: `${(width) / 16}rem`,
+                height: `${(isExpanded ? expandedHeight : baseHeight) / 16}rem`,
                 background: !isNight ? widgetBgColor : theme.bg
             }}
         >

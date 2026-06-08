@@ -117,14 +117,41 @@ const Model = forwardRef<
     rotation: { x: number; y: number; z: number };
     scale: number;
     isNight: boolean;
+    aoMapIntensity?: number;
   }
->(({ position, rotation, scale, isNight }, ref) => {
+>(({ position, rotation, scale, isNight, aoMapIntensity = 1.0 }, ref) => {
   const { scene } = useGLTF(MODEL_URL);
   const lightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
 
   useEffect(() => {
+    scene.traverse((child: any) => {
+      if (child.isMesh) {
+        const mat = child.material as THREE.MeshStandardMaterial;
+        if (mat) {
+          if (Array.isArray(mat)) {
+            mat.forEach(m => {
+              if (m && ('aoMapIntensity' in m || m.type === 'MeshStandardMaterial' || m.isMeshStandardMaterial)) {
+                m.aoMapIntensity = aoMapIntensity;
+              }
+            });
+          } else {
+            if (mat && ('aoMapIntensity' in mat || mat.type === 'MeshStandardMaterial' || mat.isMeshStandardMaterial)) {
+              mat.aoMapIntensity = aoMapIntensity;
+            }
+          }
+        }
+      }
+    });
+  }, [scene, aoMapIntensity]);
+
+  useEffect(() => {
     lightMats.current = {};
     scene.traverse((child: any) => {
+      if (child.isMesh && child.name.toLowerCase().includes("shadow")) {
+        child.visible = false;
+        child.castShadow = false;
+        child.receiveShadow = false;
+      }
       if (child.isLight) child.castShadow = false;
       if (child.isMesh) {
         const mat = child.material as THREE.MeshStandardMaterial;
@@ -212,7 +239,6 @@ const Model = forwardRef<
 });
 Model.displayName = "Model";
 
-
 function ContactShadow({
   shadowRef,
   carShadowWidth,
@@ -270,7 +296,6 @@ function ContactShadow({
   );
 }
 
-
 function SceneController({
   isAppOpen,
   activeConfig,
@@ -279,8 +304,17 @@ function SceneController({
   modelRef,
   floorRef,
   frontLightTarget,
+  frontLightRef,
+  directionalLightRef,
+  spotLightPosX = 0.0,
+  spotLightPosY = 5.0,
+  spotLightPosZ = 0.0,
+  dirLightPosX = -0.30,
+  dirLightPosY = 40.0,
+  dirLightPosZ = 7.70,
   onInteractionChange,
   dragProgress,
+  sceneTransitionSpeed,
   carReflectionOffsetY = 0.0,
   redPanelOffsetX = -0.40,
   redPanelOffsetY = 2.70,
@@ -295,8 +329,17 @@ function SceneController({
   modelRef: React.RefObject<THREE.Group>;
   floorRef: React.RefObject<THREE.Mesh>;
   frontLightTarget: THREE.Object3D;
+  frontLightRef?: React.RefObject<THREE.SpotLight>;
+  directionalLightRef?: React.RefObject<THREE.DirectionalLight>;
+  spotLightPosX?: number;
+  spotLightPosY?: number;
+  spotLightPosZ?: number;
+  dirLightPosX?: number;
+  dirLightPosY?: number;
+  dirLightPosZ?: number;
   onInteractionChange?: (isInteracting: boolean) => void;
   dragProgress: React.MutableRefObject<number | null>;
+  sceneTransitionSpeed: number;
   carReflectionOffsetY?: number;
   redPanelOffsetX?: number;
   redPanelOffsetY?: number;
@@ -339,43 +382,47 @@ function SceneController({
   const snapshotHomeTarget = useRef(new THREE.Vector3());
 
   // Calcolo coefficiente di responsive e configurazioni locali dinamiche per evitare tagli
+  // R3F size.width si riduce asincronamente d'un tratto all'apertura dell'app.
+  // Usiamo window.innerWidth / window.innerHeight per avere un coefficiente stabile durante il resizing del Canvas splittato.
   const responsiveCoeff = useMemo(() => {
-    const aspect = size.width / size.height;
+    const aspect = window.innerWidth / window.innerHeight;
     return Math.min(1.0, Math.max(0.0, (aspect - 1.0) / 0.77));
-  }, [size.width, size.height]);
+  }, [size.height]);
 
   const localHomeConfig = useMemo(() => {
+    const shiftX = homeConfig.modelPos.x * (responsiveCoeff - 1.0);
     return {
       ...homeConfig,
       modelPos: {
         ...homeConfig.modelPos,
-        x: homeConfig.modelPos.x * responsiveCoeff,
+        x: homeConfig.modelPos.x + shiftX,
       },
       cameraTarget: {
         ...homeConfig.cameraTarget,
-        x: homeConfig.cameraTarget.x * responsiveCoeff,
+        x: homeConfig.cameraTarget.x + shiftX,
       },
       cameraPos: {
         ...homeConfig.cameraPos,
-        x: homeConfig.cameraPos.x * responsiveCoeff,
+        x: homeConfig.cameraPos.x + shiftX,
       },
     };
   }, [homeConfig, responsiveCoeff]);
 
   const localAppOpenConfig = useMemo(() => {
+    const shiftX = appOpenConfig.modelPos.x * (responsiveCoeff - 1.0);
     return {
       ...appOpenConfig,
       modelPos: {
         ...appOpenConfig.modelPos,
-        x: appOpenConfig.modelPos.x * responsiveCoeff,
+        x: appOpenConfig.modelPos.x + shiftX,
       },
       cameraTarget: {
         ...appOpenConfig.cameraTarget,
-        x: appOpenConfig.cameraTarget.x * responsiveCoeff,
+        x: appOpenConfig.cameraTarget.x + shiftX,
       },
       cameraPos: {
         ...appOpenConfig.cameraPos,
-        x: appOpenConfig.cameraPos.x * responsiveCoeff,
+        x: appOpenConfig.cameraPos.x + shiftX,
       },
     };
   }, [appOpenConfig, responsiveCoeff]);
@@ -438,6 +485,30 @@ function SceneController({
   const frozenCamTarget = useRef(new THREE.Vector3());
   const frozenModelScale = useRef<number>(1);
   const frozenModelRot = useRef(new THREE.Quaternion());
+
+  const syncLights = () => {
+    if (modelRef.current) {
+      frontLightTarget.position
+        .copy(modelRef.current.position)
+        .add(new THREE.Vector3(0, 0.5, 0));
+        
+      if (frontLightRef && frontLightRef.current !== null) {
+        frontLightRef.current.position.set(
+          modelRef.current.position.x + (spotLightPosX || 0),
+          modelRef.current.position.y + (spotLightPosY || 0),
+          modelRef.current.position.z + (spotLightPosZ || 0)
+        );
+      }
+      
+      if (directionalLightRef && directionalLightRef.current !== null) {
+        directionalLightRef.current.position.set(
+          modelRef.current.position.x + (dirLightPosX || 0),
+          modelRef.current.position.y + (dirLightPosY || 0),
+          modelRef.current.position.z + (dirLightPosZ || 0)
+        );
+      }
+    }
+  };
 
   // Helper per interpolare tutto (Camera e Modello)
   const applyInterpolation = (
@@ -524,9 +595,7 @@ function SceneController({
       // Rotazione
       modelRef.current.quaternion.slerpQuaternions(startQuat, endQuat, t);
 
-      frontLightTarget.position
-        .copy(modelRef.current.position)
-        .add(new THREE.Vector3(0, 0.5, 0));
+      syncLights();
     }
   };
 
@@ -603,9 +672,7 @@ function SceneController({
         initConfig.modelPos.y,
         initConfig.modelPos.z,
       );
-      frontLightTarget.position
-        .copy(modelRef.current.position)
-        .add(new THREE.Vector3(0, 0.5, 0));
+      syncLights();
 
       ctrl.enableRotate = !isAppOpen;
 
@@ -674,9 +741,7 @@ function SceneController({
             localHomeConfig.modelPos.z,
           );
           modelRef.current.position.copy(vec3B);
-          frontLightTarget.position
-            .copy(vec3B)
-            .add(new THREE.Vector3(0, 0.5, 0));
+          syncLights();
         }
         dynamicHomePos.current.set(
           localHomeConfig.cameraPos.x as number,
@@ -721,11 +786,11 @@ function SceneController({
           localHomeConfig.modelPos.z,
         );
         modelRef.current.position.copy(vec3B);
-        frontLightTarget.position.copy(vec3B).add(new THREE.Vector3(0, 0.5, 0));
+        syncLights();
       }
     } else if (transitionMode.current === "auto") {
       animTime.current += delta;
-      let t = Math.min(animTime.current / 0.4, 1.0);
+      let t = Math.min(animTime.current / sceneTransitionSpeed, 1.0);
       const easeT = 1 - Math.pow(1 - t, 4);
 
       if (t >= 1.0) {
@@ -759,9 +824,7 @@ function SceneController({
               localHomeConfig.modelPos.z,
             );
             modelRef.current.position.copy(vec3B);
-            frontLightTarget.position
-              .copy(vec3B)
-              .add(new THREE.Vector3(0, 0.5, 0));
+            syncLights();
           }
           dynamicHomePos.current.set(
             localHomeConfig.cameraPos.x as number,
@@ -1249,8 +1312,10 @@ function EnvironmentController({
 interface VehicleCanvasProps {
   isAppOpen: boolean;
   isNight: boolean;
+  aoMapIntensity?: number;
   minOrbitDistance: number;
   maxOrbitDistance: number;
+  sceneTransitionSpeed: number;
   appOpenConfig: SceneConfig;
   homeConfig: SceneConfig;
   sceneColors: SceneColors;
@@ -1302,8 +1367,10 @@ interface VehicleCanvasProps {
 export default function VehicleCanvas({
   isAppOpen,
   isNight,
+  aoMapIntensity = 1.0,
   minOrbitDistance,
   maxOrbitDistance,
+  sceneTransitionSpeed,
   appOpenConfig: appOpenConfigFromProps,
   homeConfig,
   sceneColors,
@@ -1453,6 +1520,7 @@ export default function VehicleCanvas({
 
   useEffect(() => {
     if (frontLightRef.current) frontLightRef.current.target = frontLightTarget;
+    if (directionalLightRef.current) directionalLightRef.current.target = frontLightTarget;
   }, [frontLightTarget]);
 
   const activeConfig = isAppOpen ? runtimeAppOpenConfig : initialConfig;
@@ -1540,8 +1608,17 @@ export default function VehicleCanvas({
           modelRef={modelRef}
           floorRef={floorRef}
           frontLightTarget={frontLightTarget}
+          frontLightRef={frontLightRef}
+          directionalLightRef={directionalLightRef}
+          spotLightPosX={spotLightPosX}
+          spotLightPosY={spotLightPosY}
+          spotLightPosZ={spotLightPosZ}
+          dirLightPosX={dirLightPosX}
+          dirLightPosY={dirLightPosY}
+          dirLightPosZ={dirLightPosZ}
           onInteractionChange={onInteractionChange}
           dragProgress={dragProgress}
+          sceneTransitionSpeed={sceneTransitionSpeed}
           carReflectionOffsetY={carReflectionOffsetY}
           redPanelOffsetX={redPanelOffsetX}
           redPanelOffsetY={redPanelOffsetY}
@@ -1572,6 +1649,7 @@ export default function VehicleCanvas({
                 rotation={{ x: 0, y: 0, z: 0 }}
                 scale={1}
                 isNight={isNight}
+                aoMapIntensity={aoMapIntensity}
               />
 
               {showRedPanel && (
@@ -1605,10 +1683,11 @@ export default function VehicleCanvas({
 
               {/* Linked headlights follow the model's group rotation */}
               {linked && renderHeadlights()}
-
-              {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
-              <Primitive object={frontLightTarget} position={[0, 0, 10]} />
             </Group>
+            
+            {/* Target marker for lights, moved outside of modelRef so it doesn't double-transform */}
+            {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
+            <Primitive object={frontLightTarget} position={[0, 0, 10]} />
 
             {/* Unlinked headlights stay fixed in world rotation while car spins */}
             {!linked && (
@@ -1655,13 +1734,16 @@ export default function VehicleCanvas({
           position={[dirLightPosX, dirLightPosY, dirLightPosZ]}
           intensity={1}
           castShadow
+          shadow-bias={-0.0001}
+          shadow-normalBias={0.02}
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
+          shadow-camera-near={0.5}
           shadow-camera-far={50}
-          shadow-camera-left={-10}
-          shadow-camera-right={10}
-          shadow-camera-top={10}
-          shadow-camera-bottom={-10}
+          shadow-camera-left={-15}
+          shadow-camera-right={15}
+          shadow-camera-top={15}
+          shadow-camera-bottom={-15}
         />
 
         {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
@@ -1669,7 +1751,6 @@ export default function VehicleCanvas({
           ref={floorRef}
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, -carReflectionOffsetY, 0]}
-          receiveShadow
         >
           {/* Dimensione ideale per precisione e ampiezza visiva senza distruggere lo Z-buffer */}
           <PlaneGeometry args={[250, 250]} />

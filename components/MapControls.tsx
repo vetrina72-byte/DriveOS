@@ -155,9 +155,9 @@ export default function MapControls({
             /* Standalone static north-up state: cn-up */
             <div className="w-full h-full flex flex-col items-center justify-center pointer-events-none select-none">
               <div 
-                className="w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-b-[16px] border-b-[#c00] mb-0.5"
+                className="w-0 h-0 border-l-[0.4375rem] border-l-transparent border-r-[0.4375rem] border-r-transparent border-b-[1rem] border-b-[#c00] mb-0.5"
               />
-              <div className="font-extrabold text-[22px] text-[#222] leading-none select-none">
+              <div className="font-extrabold text-[1.375rem] text-[#222] leading-none select-none">
                 N
               </div>
             </div>
@@ -171,7 +171,7 @@ export default function MapControls({
                     transform: `translate(-50%, -50%) rotate(${-bearing}deg)` 
                   }}
                 >
-                  <div className="absolute inset-0 w-full h-full text-center text-[10px] font-bold text-[#777]">
+                  <div className="absolute inset-0 w-full h-full text-center text-[0.625rem] font-bold text-[#777]">
                     {/* Cardinal letters aligned nicely around the circle */}
                     <div className="absolute inset-0 rotate-[0deg] text-center text-xs font-black text-[#c00] pt-1"><span>N</span></div>
                     <div className="absolute inset-0 rotate-[45deg] text-center pt-1 font-bold"><span>NE</span></div>
@@ -185,7 +185,7 @@ export default function MapControls({
                 </div>
               </div>
               {/* Carr: Static needle pointer pointing outwards at the top center */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[62%] w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[18px] border-b-[#111] z-20" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[62%] w-0 h-0 border-l-[0.5rem] border-l-transparent border-r-[0.5rem] border-r-transparent border-b-[1.125rem] border-b-[#111] z-20" />
             </div>
           )}
         </button>
@@ -201,7 +201,7 @@ export default function MapControls({
                 e.stopPropagation();
                 onRecenter();
               }}
-              className="w-16 h-16 rounded-2xl border border-white/12 bg-zinc-900/95 hover:bg-zinc-800/90 text-[#f0f0f0] flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[15px] p-0 select-none touch-none"
+              className="w-16 h-16 rounded-2xl border border-white/12 bg-zinc-900/95 hover:bg-zinc-800/90 text-[#f0f0f0] flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[0.9375rem] p-0 select-none touch-none"
               title="Ricentra la visuale"
             >
               <svg className="w-8 h-8 fill-current text-[#f0f0f0]" viewBox="0 -960 960 960">
@@ -217,7 +217,7 @@ export default function MapControls({
               e.stopPropagation();
               onToggleSatellite();
             }}
-            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[15px] p-0 select-none touch-none ${
+            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[0.9375rem] p-0 select-none touch-none ${
               isSatellite
                 ? 'bg-blue-600 border-blue-500 text-white'
                 : 'border-white/12 bg-zinc-900/95 hover:bg-zinc-800/90 text-[#f0f0f0]'
@@ -236,7 +236,7 @@ export default function MapControls({
               e.stopPropagation();
               onToggleWeather();
             }}
-            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[15px] p-0 select-none touch-none ${
+            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[0.9375rem] p-0 select-none touch-none ${
               isWeatherActive
                 ? 'bg-blue-600 border-blue-500 text-white'
                 : 'border-white/12 bg-zinc-900/95 hover:bg-zinc-800/90 text-[#f0f0f0]'
@@ -254,7 +254,7 @@ export default function MapControls({
       {isWeatherActive && wTs.length > 0 && (
         <div 
           id="tl-ctrl"
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1002] w-[340px] px-4 py-3.5 border border-white/10 rounded-[30px] flex flex-col pointer-events-auto select-none touch-none bg-zinc-950/95 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl text-white outline-none"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1002] w-[21.25rem] px-4 py-3.5 border border-white/10 rounded-[1.875rem] flex flex-col pointer-events-auto select-none touch-none bg-zinc-950/95 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl text-white outline-none"
         >
           <div className="flex items-center gap-4">
             <button 
@@ -274,7 +274,7 @@ export default function MapControls({
               )}
             </button>
             <div className="flex-grow flex flex-col gap-0.5">
-              <div id="tl-lbl" className="text-[13px] font-semibold text-zinc-100 leading-none flex justify-between items-center pr-1 select-none">
+              <div id="tl-lbl" className="text-[0.8125rem] font-semibold text-zinc-100 leading-none flex justify-between items-center pr-1 select-none">
                 <span>Radar Meteo</span>
                 <span className="font-extrabold tracking-tight text-white">{currentTimeLabel}</span>
               </div>

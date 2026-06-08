@@ -78,7 +78,7 @@ const Key: React.FC<KeyProps> = ({
                 flex, 
                 gridColumn: colSpan, 
                 gridRow: rowSpan,
-                fontSize: `${key === 'Enter' ? fontSize * 0.7 : fontSize}px`,
+                fontSize: `${(key === 'Enter' ? fontSize * 0.7 : fontSize) / 16}rem`,
                 fontWeight,
             }}
         >
@@ -379,7 +379,7 @@ const VirtualKeyboard = ({
                 return (
                     <div className={`relative flex items-center justify-center h-full w-full font-bold ${activeColor}`}>
                         <FiArrowUp style={{ strokeWidth: 3 }} />
-                        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-4 h-[3px] bg-current rounded-full" />
+                        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-4 h-[0.1875rem] bg-current rounded-full" />
                     </div>
                 );
             default: // 'off'
@@ -398,9 +398,9 @@ const VirtualKeyboard = ({
         
     const keyboardStyle = {
         height: `${virtualKeyboardHeight}vh`,
-        minHeight: `${virtualKeyboardHeight * 8}px`,
-        paddingLeft: `${virtualKeyboardPaddingX}px`,
-        paddingRight: `${virtualKeyboardPaddingX}px`,
+        minHeight: `${(virtualKeyboardHeight * 8) / 16}rem`,
+        paddingLeft: `${(virtualKeyboardPaddingX) / 16}rem`,
+        paddingRight: `${(virtualKeyboardPaddingX) / 16}rem`,
     } as React.CSSProperties;
     
     const layoutToggleKey = layoutMode === 'letters'
@@ -447,9 +447,9 @@ const VirtualKeyboard = ({
                         style={keyboardStyle}
                     >
                         <div className="flex h-full w-full gap-6">
-                            <div className="flex flex-col flex-[3.5] h-full" style={{ gap: `${virtualKeyboardKeyGapY}px` }}>
+                            <div className="flex flex-col flex-[3.5] h-full" style={{ gap: `${(virtualKeyboardKeyGapY) / 16}rem` }}>
                                 {currentMainLayout.map((row, rowIndex) => (
-                                    <div key={rowIndex} className="flex justify-center w-full flex-1" style={{ gap: `${virtualKeyboardKeyGapX}px` }}>
+                                    <div key={rowIndex} className="flex justify-center w-full flex-1" style={{ gap: `${(virtualKeyboardKeyGapX) / 16}rem` }}>
                                         {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
                                         {layoutMode === 'letters' && rowIndex === 2 && (
                                              <Key key="left-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
@@ -472,7 +472,7 @@ const VirtualKeyboard = ({
                                                     onTouchStart={handleBackspacePressStart}
                                                     onTouchEnd={handleBackspacePressEnd}
                                                     className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
-                                                    style={{ flex: '1.5', fontSize: `${virtualKeyboardKeySize}px`, fontWeight: virtualKeyboardKeyFontWeight }}
+                                                    style={{ flex: '1.5', fontSize: `${(virtualKeyboardKeySize) / 16}rem`, fontWeight: virtualKeyboardKeyFontWeight }}
                                                     aria-label="Backspace"
                                                 >
                                                     <FiDelete />
@@ -488,7 +488,7 @@ const VirtualKeyboard = ({
                                                 onTouchStart={handleBackspacePressStart}
                                                 onTouchEnd={handleBackspacePressEnd}
                                                 className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
-                                                style={{ flex: '1.5', fontSize: `${virtualKeyboardKeySize}px`, fontWeight: virtualKeyboardKeyFontWeight }}
+                                                style={{ flex: '1.5', fontSize: `${(virtualKeyboardKeySize) / 16}rem`, fontWeight: virtualKeyboardKeyFontWeight }}
                                                 aria-label="Backspace"
                                             >
                                                 <FiDelete />
@@ -496,7 +496,7 @@ const VirtualKeyboard = ({
                                         )}
                                     </div>
                                 ))}
-                                <div className="flex justify-center w-full flex-1" style={{ gap: `${virtualKeyboardKeyGapX}px` }}>
+                                <div className="flex justify-center w-full flex-1" style={{ gap: `${(virtualKeyboardKeyGapX) / 16}rem` }}>
                                     <Key keyConfig={{ key: layoutToggleKey.key, label: layoutToggleKey.label, flex: layoutToggleKey.flex }} onClick={handleKeyPress} isNight={isNight} fontSize={layoutToggleKey.fontSize} fontWeight={virtualKeyboardKeyFontWeight} />
                                     <Key keyConfig={{ key: 'Mic', ...micKeyConfig, flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                     <Key keyConfig={{ key: 'Space', label: '', flex: '8' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
@@ -504,7 +504,7 @@ const VirtualKeyboard = ({
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-3 grid-rows-4 flex-[1] h-full" style={{ gap: `${virtualKeyboardKeyGapY}px ${virtualKeyboardKeyGapX}px` }}>
+                            <div className="grid grid-cols-3 grid-rows-4 flex-[1] h-full" style={{ gap: `${(virtualKeyboardKeyGapY) / 16}rem ${(virtualKeyboardKeyGapX) / 16}rem` }}>
                                 {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(key => (
                                     <Key key={`num-${key}`} keyConfig={key} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                 ))}

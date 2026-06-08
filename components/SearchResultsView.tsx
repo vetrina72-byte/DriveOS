@@ -145,7 +145,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                     <h3 className={`text-3xl font-bold truncate ${isTopResultPlaying ? activeColor : theme.textPrimary}`}>{topResult.name}</h3>
                                 </div>
                                 <p className={`text-sm ${theme.textSecondary}`}>
-                                    {topResult.explicit && <span className="mr-2 bg-zinc-500/50 text-white text-[10px] rounded-sm px-1 py-0.5">E</span>}
+                                    {topResult.explicit && <span className="mr-2 bg-zinc-500/50 text-white text-[0.625rem] rounded-sm px-1 py-0.5">E</span>}
                                     {topResult.artists?.map(a => a.name).join(', ')}
                                 </p>
                             </div>

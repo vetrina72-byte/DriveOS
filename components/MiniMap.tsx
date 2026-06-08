@@ -115,10 +115,10 @@ const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClic
   const containerStyle = useMemo(() => {
     const maskImage = `radial-gradient(circle, rgba(0,0,0,1) ${fadeStart}%, rgba(0,0,0,0) ${fadeEnd}%)`;
     return {
-      top: `${top}px`,
-      right: `${right}px`,
-      width: `${size}px`,
-      height: `${size}px`,
+      top: `${(top) / 16}rem`,
+      right: `${(right) / 16}rem`,
+      width: `${(size) / 16}rem`,
+      height: `${(size) / 16}rem`,
       maskImage: maskImage,
       WebkitMaskImage: maskImage,
       '--minimap-scale': uiScale,

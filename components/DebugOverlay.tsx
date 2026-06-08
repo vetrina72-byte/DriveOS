@@ -22,27 +22,27 @@ export default function DebugOverlay({ navigationTarget, miniMapRoutePropLength 
   return (
     <div style={{
       position: 'fixed',
-      bottom: '10px',
-      left: '10px',
+      bottom: '0.625rem',
+      left: '0.625rem',
       backgroundColor: 'rgba(0, 0, 0, 0.85)',
       color: 'lime',
-      padding: '12px',
-      borderRadius: '8px',
+      padding: '0.75rem',
+      borderRadius: '0.5rem',
       zIndex: 99999,
       fontFamily: 'monospace',
-      fontSize: '14px',
+      fontSize: '0.875rem',
       border: '1px solid lime',
-      maxWidth: '350px',
+      maxWidth: '21.875rem',
       lineHeight: '1.4'
     }}>
-      <h3 style={{ margin: 0, paddingBottom: '5px', borderBottom: '1px solid #555', color: 'white' }}>DEBUGGER DI ROTTA (ON-SCREEN)</h3>
-      <div style={{ marginTop: '8px' }}>
+      <h3 style={{ margin: 0, paddingBottom: '0.3125rem', borderBottom: '1px solid #555', color: 'white' }}>DEBUGGER DI ROTTA (ON-SCREEN)</h3>
+      <div style={{ marginTop: '0.5rem' }}>
         <div><strong style={{ color: 'white' }}>Stato Nav:</strong> {navigationTarget ? <span style={{color: 'yellow'}}>ATTIVA</span> : 'INATTIVA'}</div>
         <div><strong style={{ color: 'white' }}>Destinazione:</strong> {navigationTarget?.name || 'N/D'}</div>
         <hr style={{ margin: '8px 0', borderColor: '#444' }}/>
         
         <div style={{color: 'cyan'}}><strong>&#9679; Route Store (Singleton):</strong></div>
-        <div style={{ paddingLeft: '10px' }}>
+        <div style={{ paddingLeft: '0.625rem' }}>
           <div><strong>Coords:</strong> {storeCoordsLength} punti</div>
           <div><strong>Last Update:</strong> {lastUpdated}</div>
         </div>
@@ -50,12 +50,12 @@ export default function DebugOverlay({ navigationTarget, miniMapRoutePropLength 
         <hr style={{ margin: '8px 0', borderColor: '#444' }}/>
         
         <div style={{color: 'magenta'}}><strong>&#9679; Prop `miniMapRoute` (Legacy):</strong></div>
-        <div style={{ paddingLeft: '10px' }}>
+        <div style={{ paddingLeft: '0.625rem' }}>
           <div><strong>Coords:</strong> {miniMapRoutePropLength} punti</div>
         </div>
 
         <hr style={{ margin: '8px 0', borderColor: '#444' }}/>
-        <div style={{ fontSize: '12px', color: '#888' }}>
+        <div style={{ fontSize: '0.75rem', color: '#888' }}>
           {storeCoordsLength > 0 && miniMapRoutePropLength === 0 ? "⚠️ Store ha dati, ma la prop è vuota. Problema di passaggio dati!" : ""}
           {storeCoordsLength === 0 && miniMapRoutePropLength > 0 ? "⚠️ Prop ha dati, ma lo store è vuoto. Problema di sincronizzazione!" : ""}
           {storeCoordsLength > 0 && miniMapRoutePropLength > 0 && storeCoordsLength !== miniMapRoutePropLength ? "⚠️ Dati non sincronizzati tra Store e Prop!" : ""}

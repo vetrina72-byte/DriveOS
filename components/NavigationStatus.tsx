@@ -148,8 +148,8 @@ export default function NavigationStatus({ width, widgetBgColor }: NavigationSta
     <div 
       className="relative backdrop-blur-md rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0"
       style={{ 
-        width: `${width}px`,
-        height: '113px',
+        width: `${(width) / 16}rem`,
+        height: '7.0625rem',
         background: !isNight ? widgetBgColor : theme.bg
       }}
     >
@@ -190,9 +190,9 @@ export default function NavigationStatus({ width, widgetBgColor }: NavigationSta
             ref={arrowIndicatorRef}
             className="absolute top-1/2 -translate-y-1/2 transition-all duration-150 ease-out z-10"
             style={{ 
-                left: `calc(${percent * 100}% - ${ARROW_SIZE / 2}px)`,
-                width: `${ARROW_SIZE}px`,
-                height: `${ARROW_SIZE}px`,
+                left: `calc(${percent * 100}% - ${(ARROW_SIZE / 2) / 16}rem)`,
+                width: `${(ARROW_SIZE) / 16}rem`,
+                height: `${(ARROW_SIZE) / 16}rem`,
             }}
             aria-label="Vehicle position indicator"
           >

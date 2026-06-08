@@ -33,8 +33,8 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
             `}
             style={{
                 width: `${width}%`,
-                maxWidth: '1200px',
-                minHeight: `${height}px`,
+                maxWidth: '75rem',
+                minHeight: `${(height) / 16}rem`,
                 maxHeight: 'calc(100vh - 8rem)',
             }}
             onClick={stopPropagation}

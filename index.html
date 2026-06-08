@@ -323,25 +323,7 @@
 
     /* Responsive App Panel Styles */
     .spotify-app-panel {
-      position: fixed;
       z-index: 4000;
-      will-change: transform;
-      top: var(--spotify-player-top, var(--header-h));
-      bottom: var(--spotify-player-bottom, var(--footer-h));
-      right: 0;
-    }
-
-    @media (max-width: 768px) {
-      .spotify-app-panel {
-        width: 95vw;
-        right: 2.5vw;
-      }
-    }
-
-    @media (min-width: 769px) and (max-width: 1024px) {
-      .spotify-app-panel {
-        width: 50% !important;
-      }
     }
 
     /* Snake loading spinner */

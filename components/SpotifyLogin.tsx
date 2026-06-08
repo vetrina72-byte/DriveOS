@@ -171,10 +171,10 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }} 
             exit={{ opacity: 0, scale: 0.96, y: -10 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className={`flex items-center gap-12 p-12 rounded-[48px] ${theme.card}`}
+            className={`flex items-center gap-12 p-12 rounded-[3rem] ${theme.card}`}
           >
             {/* QR Container - Reduced size for "airy" feel */}
-            <div className="p-4 bg-white rounded-[28px] shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
+            <div className="p-4 bg-white rounded-[1.75rem] shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
               <img src={qrCodeUrl} alt="QR" className="w-52 h-52 mix-blend-multiply block" />
             </div>
             
@@ -199,7 +199,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className={`flex flex-col items-center text-center px-12 py-10 rounded-[32px] max-w-[560px] w-full ${theme.card}`}
+            className={`flex flex-col items-center text-center px-12 py-10 rounded-[2rem] max-w-[35rem] w-full ${theme.card}`}
           >
             <FeedbackIcon type="error" isNight={isNight} />
             <h2 className={`text-2xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
@@ -222,13 +222,13 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             key="load" 
             initial={{ opacity: 0, scale: 0.95 }} 
             animate={{ opacity: 1, scale: 1 }} 
-            className={`flex flex-col items-center justify-center p-10 rounded-[40px] min-w-[280px] aspect-square ${theme.card}`}
+            className={`flex flex-col items-center justify-center p-10 rounded-[2.5rem] min-w-[17.5rem] aspect-square ${theme.card}`}
           >
             <FeedbackIcon type="success" isNight={isNight} />
             <div className="flex flex-col items-center gap-3 mt-2">
                 <h2 className={`text-xl font-bold tracking-tight ${theme.title}`}>Collegato</h2>
                 <div className="flex items-center gap-2.5">
-                    <div className={`w-5 h-5 border-[2.5px] rounded-full animate-spin ${theme.spinner}`} />
+                    <div className={`w-5 h-5 border-[0.15625rem] rounded-full animate-spin ${theme.spinner}`} />
                     <p className={`text-base font-medium ${theme.subtitle}`}>Caricamento...</p>
                 </div>
             </div>

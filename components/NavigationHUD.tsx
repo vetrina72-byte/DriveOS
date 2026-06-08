@@ -119,7 +119,7 @@ export default function NavigationHUD({
             <div className="text-xl font-bold text-white tracking-tight">
               {formatDist(distanceToNext)}
             </div>
-            <div className="text-[14px] text-zinc-300 font-medium truncate leading-tight mt-0.5">
+            <div className="text-[0.875rem] text-zinc-300 font-medium truncate leading-tight mt-0.5">
               {currentInstruction}
             </div>
           </div>
@@ -130,7 +130,7 @@ export default function NavigationHUD({
 
         {/* Steps Itinerary List expanded drawer */}
         {isExpanded && (
-          <div className="border-t border-white/10 max-h-[290px] overflow-y-auto overflow-x-hidden divide-y divide-white/5 bg-zinc-950/40 scrollbar-thin">
+          <div className="border-t border-white/10 max-h-[18.125rem] overflow-y-auto overflow-x-hidden divide-y divide-white/5 bg-zinc-950/40 scrollbar-thin">
             {steps.map((step, idx) => {
               if (!step || !step.maneuver || step.maneuver.type === 'arrive') return null;
               const isDone = idx < currentStepIndex;
@@ -163,11 +163,11 @@ export default function NavigationHUD({
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
                     {stepDistanceLabel && (
-                      <div className="text-[11px] font-bold text-blue-400 space-x-1 uppercase mb-0.5">
+                      <div className="text-[0.6875rem] font-bold text-blue-400 space-x-1 uppercase mb-0.5">
                         fra {stepDistanceLabel}
                       </div>
                     )}
-                    <div className="text-[13px] text-zinc-200 font-medium truncate">
+                    <div className="text-[0.8125rem] text-zinc-200 font-medium truncate">
                       {instrText}
                     </div>
                   </div>
@@ -181,7 +181,7 @@ export default function NavigationHUD({
                 <MapPin className="w-4 h-4 text-red-400" />
               </div>
               <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <div className="text-[13px] text-red-400 font-bold">{destinationName}</div>
+                <div className="text-[0.8125rem] text-red-400 font-bold">{destinationName}</div>
               </div>
             </div>
           </div>

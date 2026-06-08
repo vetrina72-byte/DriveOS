@@ -226,7 +226,7 @@ export default function WeatherModal({ tempUnit }: WeatherModalProps) {
                             const hourlyFormatted = formatTempWithUnit(convertTemp(hour.temperature, tempUnit), tempUnit);
                             return (
                                 <div key={index} className="flex flex-col items-center gap-0.5 sm:gap-1 w-1/5">
-                                    <span className={`text-[10px] sm:text-xs font-medium ${theme.textSecondary}`}>{hour.time}</span>
+                                    <span className={`text-[0.625rem] sm:text-xs font-medium ${theme.textSecondary}`}>{hour.time}</span>
                                     <div className="relative inline-block">
                                         <WeatherIcon 
                                           condition={hour.condition} 
@@ -251,26 +251,26 @@ export default function WeatherModal({ tempUnit }: WeatherModalProps) {
                         <div className={`flex items-center justify-between py-1.5 md:py-2 border-b ${theme.border}`}>
                             <div className="flex items-center gap-3 sm:gap-4">
                                 <ICONS.rainChance className={`w-4 h-4 ${theme.textSecondary}`} />
-                                <span className={`${theme.textSecondary} font-medium text-[10px] sm:text-xs md:text-sm`}>Probabilità di pioggia</span>
+                                <span className={`${theme.textSecondary} font-medium text-[0.625rem] sm:text-xs md:text-sm`}>Probabilità di pioggia</span>
                             </div>
                             <span className="font-bold text-xs sm:text-sm md:text-base">{data.details.chanceOfRain}%</span>
                         </div>
                         <div className={`flex items-center justify-between py-1.5 md:py-2 border-b ${theme.border}`}>
                             <div className="flex items-center gap-3 sm:gap-4">
                                 <ICONS.humidity className={`w-4 h-4 ${theme.textSecondary}`} />
-                                <span className={`${theme.textSecondary} font-medium text-[10px] sm:text-xs md:text-sm`}>Umidità</span>
+                                <span className={`${theme.textSecondary} font-medium text-[0.625rem] sm:text-xs md:text-sm`}>Umidità</span>
                             </div>
                             <span className="font-bold text-xs sm:text-sm md:text-base">{data.details.humidity}%</span>
                         </div>
                         <div className={`flex items-center justify-between py-1.5 md:py-2`}>
                             <div className="flex items-center gap-3 sm:gap-4">
                                 <ICONS.wind className={`w-4 h-4 ${theme.textSecondary}`} />
-                                <span className={`${theme.textSecondary} font-medium text-[10px] sm:text-xs md:text-sm`}>Vento</span>
+                                <span className={`${theme.textSecondary} font-medium text-[0.625rem] sm:text-xs md:text-sm`}>Vento</span>
                             </div>
                             <span className="font-bold text-xs sm:text-sm md:text-base">{data.details.wind}</span>
                         </div>
                     </div>
-                    <footer className={`text-center text-[9px] sm:text-[10px] ${theme.textSecondary} pt-1 sm:pt-2`}>
+                    <footer className={`text-center text-[0.5625rem] sm:text-[0.625rem] ${theme.textSecondary} pt-1 sm:pt-2`}>
                        Ultimo aggiornamento alle {data.lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                     </footer>
                 </>
@@ -292,7 +292,7 @@ export default function WeatherModal({ tempUnit }: WeatherModalProps) {
             onClick={onClose}
         >
             <div
-                className={`w-11/12 max-w-[240px] sm:max-w-[288px] md:max-w-[336px] ${theme.bg} ${theme.textPrimary} rounded-2xl shadow-xl p-2 sm:p-3 md:p-4 flex flex-col gap-1 sm:gap-2 md:gap-3 transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-12'}`}
+                className={`w-11/12 max-w-[15rem] sm:max-w-[18rem] md:max-w-[21rem] ${theme.bg} ${theme.textPrimary} rounded-2xl shadow-xl p-2 sm:p-3 md:p-4 flex flex-col gap-1 sm:gap-2 md:gap-3 transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-12'}`}
                 onClick={stopPropagation}
                 role="dialog"
                 aria-modal="true"

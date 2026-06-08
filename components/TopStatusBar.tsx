@@ -141,7 +141,7 @@ export default function TopStatusBar({
     <header 
       className="absolute top-2 left-0 right-0 h-16 flex justify-center items-start z-50"
       aria-label="Status Bar"
-      style={{ transform: `translateY(${offsetY}px)` }}
+      style={{ transform: `translateY(${(offsetY) / 16}rem)` }}
     >
       <div
         className={`flex items-center text-lg font-medium transition-colors duration-300 pt-1.5 ${textColor} ${shadowClass} gap-3`}

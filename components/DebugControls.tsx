@@ -70,7 +70,7 @@ export default function DebugControls({
     topBarScale, setTopBarScale, topBarOffsetY, setTopBarOffsetY, mapsSearchPanelTop, setMapsSearchPanelTop,
     miniMapTop, setMiniMapTop, miniMapRight, setMiniMapRight, miniMapSize, setMiniMapSize,
     miniMapZoom, setMiniMapZoom, miniMapFadeStart, setMiniMapFadeStart, miniMapFadeEnd, setMiniMapFadeEnd,
-    minOrbitDistance, setMinOrbitDistance, maxOrbitDistance, setMaxOrbitDistance,
+    minOrbitDistance, setMinOrbitDistance, maxOrbitDistance, setMaxOrbitDistance, sceneTransitionSpeed, setSceneTransitionSpeed,
     appOpenConfig, setAppOpenConfig, homeConfig, setHomeConfig, sceneColors, setSceneColors,
     spotifyPlayerTop, setSpotifyPlayerTop, spotifyPlayerBottom, setSpotifyPlayerBottom,
     playerDockedWidth, setPlayerDockedWidth, playerDockedLeft, setPlayerDockedLeft,
@@ -104,6 +104,7 @@ export default function DebugControls({
     headlightConfig, setHeadlightConfig, progressBarHeight, setProgressBarHeight,
     progressBarVerticalOffset, setProgressBarVerticalOffset, playButtonScale, setPlayButtonScale,
     skipButtonScale, setSkipButtonScale, carShadowOpacity, setCarShadowOpacity,
+    aoMapIntensity, setAoMapIntensity,
     carShadowWidth, setCarShadowWidth, carShadowLength, setCarShadowLength,
     carShadowOffsetY, setCarShadowOffsetY,
     carShadowOffsetX, setCarShadowOffsetX,
@@ -131,7 +132,8 @@ export default function DebugControls({
     redPanelOffsetX, setRedPanelOffsetX,
     redPanelOpacity, setRedPanelOpacity,
     redPanelColor, setRedPanelColor,
-    redPanelOrientation, setRedPanelOrientation
+    redPanelOrientation, setRedPanelOrientation,
+    layeredAppTopOffset, setLayeredAppTopOffset
   } = useUIConfig();
   const {
     timeOverride,
@@ -335,7 +337,7 @@ export default function DebugControls({
       : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
 
   const containerClass = isAppView 
-    ? `spotify-app-panel shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute w-full right-0 border-t border-zinc-800' : 'fixed w-2/3 border-l border-zinc-800'}`
+    ? `spotify-app-panel shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full border-t border-zinc-800' : 'fixed w-2/3 md:w-3/4 lg:w-2/3 right-0 border-l border-zinc-800'}`
     : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
 
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
@@ -351,6 +353,7 @@ export default function DebugControls({
     setTimeOverride(null);
     setWeatherConditionOverride(null);
     setTopBarScale(1.0);
+    setLayeredAppTopOffset(18);
     setTopBarOffsetY(-7);
     setMapsSearchPanelTop(61);
     setMiniMapTop(-57);
@@ -463,7 +466,7 @@ export default function DebugControls({
             <div className="flex items-center gap-2">
                 <input type="checkbox" checked={isEnabled} onChange={handleToggle} id={`toggle-${label?.toLowerCase()?.replace(/\s/g, '-')}`} />
                 <label htmlFor={`toggle-${label?.toLowerCase()?.replace(/\s/g, '-')}`} className="font-medium text-zinc-300 capitalize">
-                    {label}: {isEnabled ? `${value}px` : 'auto'}
+                    {label}: {isEnabled ? `${(value) / 16}rem` : 'auto'}
                 </label>
             </div>
             <input
@@ -488,8 +491,8 @@ export default function DebugControls({
       ref={panelRef}
       className={containerClass}
       style={isAppView ? {
-          top: `${spotifyPlayerTop}px`,
-          bottom: renderLayered ? 0 : `${spotifyPlayerBottom}px`,
+          top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+          bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
           willChange: 'transform',
           transform: renderLayered 
               ? `translateY(${physics.current.currentPercent}%)` 
@@ -512,7 +515,7 @@ export default function DebugControls({
             <div className={handlePillClass} />
         </div>
       )}
-      <div className={isAppView ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start relative rounded-t-[32px]" : "w-full"}>
+      <div className={isAppView ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start relative rounded-t-[2rem]" : "w-full"}>
         {!isAppView && (
         <div className="flex justify-between items-center mb-4">
           <h2 id="debug-panel-title" className="font-bold text-lg">Debug Controls</h2>
@@ -677,6 +680,20 @@ export default function DebugControls({
             <h3 className="text-md font-bold text-zinc-200 border-b border-zinc-700 pb-1">Maps & Satellite</h3>
             
             <div>
+              <label className="flex items-center gap-2 font-medium text-zinc-300">
+                Offset App su Mappe (Top Offset) <span className="bg-emerald-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>: {layeredAppTopOffset}px
+              </label>
+              <input 
+                type="range" 
+                min="-100" 
+                max="300" 
+                value={layeredAppTopOffset} 
+                onChange={(e) => setLayeredAppTopOffset(Number(e.target.value))} 
+                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" 
+              />
+            </div>
+            
+            <div>
               <label className="block font-medium text-zinc-300">Satellite Label Brightness: {satelliteLabelBrightness.toFixed(1)}</label>
               <input type="range" min="1" max="10" step="0.1" value={satelliteLabelBrightness} onChange={(e) => setSatelliteLabelBrightness(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
             </div>
@@ -698,6 +715,7 @@ export default function DebugControls({
         <div className="space-y-4">
             <h3 className="text-md font-bold text-zinc-200 border-b border-zinc-700 pb-1">3D Scene & Lights</h3>
             
+            <div><label className="block font-medium text-zinc-300">Transition Speed: {sceneTransitionSpeed.toFixed(2)}s</label><input type="range" min="0.1" max="3" step="0.05" value={sceneTransitionSpeed} onChange={(e) => setSceneTransitionSpeed(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Min Orbit Dist: {minOrbitDistance}m</label><input type="range" min="1" max="20" step="0.1" value={minOrbitDistance} onChange={(e) => setMinOrbitDistance(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             <div><label className="block font-medium text-zinc-300">Max Orbit Dist: {maxOrbitDistance}m</label><input type="range" min="5" max="50" step="0.1" value={maxOrbitDistance} onChange={(e) => setMaxOrbitDistance(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" /></div>
             
@@ -710,7 +728,7 @@ export default function DebugControls({
             
             <div className="flex items-center justify-between bg-zinc-800/40 p-2 rounded border border-zinc-700/40 my-2">
               <label htmlFor="toggle-force-manual-fog" className="font-semibold text-zinc-300 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                Forza Nebbia Manuale <span className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.5 rounded uppercase font-bold">New</span>:
+                Forza Nebbia Manuale <span className="bg-emerald-600 text-white text-[0.5625rem] px-1.5 py-0.5 rounded uppercase font-bold">New</span>:
               </label>
               <input 
                 id="toggle-force-manual-fog"
@@ -723,13 +741,13 @@ export default function DebugControls({
 
             <div>
               <label className="flex items-center gap-2 font-medium text-zinc-300">
-                Night Fog Near <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>: {nightFogNear}m
+                Night Fog Near <span className="bg-emerald-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>: {nightFogNear}m
               </label>
               <input type="range" min="0" max="100" value={nightFogNear} onChange={(e) => setNightFogNear(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
             </div>
             <div>
               <label className="flex items-center gap-2 font-medium text-zinc-300">
-                Night Fog Far <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>: {nightFogFar}m
+                Night Fog Far <span className="bg-emerald-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>: {nightFogFar}m
               </label>
               <input type="range" min="0" max="2000" value={nightFogFar} onChange={(e) => setNightFogFar(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
             </div>
@@ -765,11 +783,15 @@ export default function DebugControls({
 
             {/* Shadow Configuration */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-2 font-sans text-amber-500 uppercase tracking-wider">
-              Ombra - Posizionamento e Dimensioni <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+              Ombra - Posizionamento e Dimensioni <span className="bg-blue-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
             </h4>
             <div>
-              <label className="block font-medium text-zinc-300">Opacità Ombra: {carShadowOpacity?.toFixed(2)}</label>
+              <label className="block font-medium text-zinc-300">Opacità Ombra (Contact Shadow): {carShadowOpacity?.toFixed(2)}</label>
               <input type="range" min="0" max="1" step="0.05" value={carShadowOpacity ?? 0.8} onChange={(e) => setCarShadowOpacity(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div>
+              <label className="block font-medium text-zinc-300">Intensità Ambient Occlusion (AO Map): {aoMapIntensity?.toFixed(2)}</label>
+              <input type="range" min="0" max="3" step="0.05" value={aoMapIntensity ?? 1.00} onChange={(e) => setAoMapIntensity(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
             </div>
             <div>
               <label className="block font-medium text-zinc-300">Altezza Ombra Y (Offset Y): {carShadowOffsetY?.toFixed(3)}</label>
@@ -794,12 +816,12 @@ export default function DebugControls({
 
             {/* Light Sources for Dynamic Shadows */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans text-amber-500 uppercase tracking-wider">
-              Controllo Luci - Forma Ombra Proiettata <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+              Controllo Luci - Forma Ombra Proiettata <span className="bg-indigo-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
             </h4>
-            <p className="text-[11px] text-zinc-400 leading-tight">Posiziona le sorgenti luminose per modellare, inclinare e sfumare l'ombra dinamica dell'auto:</p>
+            <p className="text-[0.6875rem] text-zinc-400 leading-tight">Posiziona le sorgenti luminose per modellare, inclinare e sfumare l'ombra dinamica dell'auto:</p>
             
             <div className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800 space-y-3 mt-1">
-              <span className="text-[12px] font-bold text-zinc-300 block">💡 LUCE DIREZIONALE (Sole / Luce Principale)</span>
+              <span className="text-[0.75rem] font-bold text-zinc-300 block">💡 LUCE DIREZIONALE (Sole / Luce Principale)</span>
               <div>
                 <label className="block font-medium text-xs text-zinc-400">Inclinazione Luce X (Direzione): {dirLightPosX?.toFixed(2)}</label>
                 <input type="range" min="-30" max="30" step="0.1" value={dirLightPosX ?? -0.30} onChange={(e) => setDirLightPosX(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
@@ -820,9 +842,9 @@ export default function DebugControls({
 
             {/* Longitudinal Slice Panel Configuration */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans text-amber-500 uppercase tracking-wider">
-              Pannello Rosso di Sezione <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+              Pannello Rosso di Sezione <span className="bg-red-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
             </h4>
-            <p className="text-[11px] text-zinc-400 leading-tight">Visualizza e sposta un pannello olografico/taglio rosso semi-transparente attraverso la vettura (orientamento ruotato):</p>
+            <p className="text-[0.6875rem] text-zinc-400 leading-tight">Visualizza e sposta un pannello olografico/taglio rosso semi-transparente attraverso la vettura (orientamento ruotato):</p>
             
             <div className="flex items-center justify-between py-1">
               <label className="text-zinc-300 font-medium text-xs">Mostra Pannello Rosso:</label>
@@ -837,26 +859,26 @@ export default function DebugControls({
             {showRedPanel && (
               <div className="space-y-3 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
                 <div>
-                  <label className="block font-medium text-[11px] text-zinc-400 mb-1">Rotazione / Orientamento Sezione:</label>
+                  <label className="block font-medium text-[0.6875rem] text-zinc-400 mb-1">Rotazione / Orientamento Sezione:</label>
                   <div className="grid grid-cols-3 gap-1 bg-zinc-800/80 p-1 rounded-lg">
                     <button
                       type="button"
                       onClick={() => setRedPanelOrientation('horizontal')}
-                      className={`text-[10px] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'horizontal' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                      className={`text-[0.625rem] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'horizontal' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
                     >
                       Orizzontale (90°)
                     </button>
                     <button
                       type="button"
                       onClick={() => setRedPanelOrientation('longitudinal')}
-                      className={`text-[10px] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'longitudinal' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                      className={`text-[0.625rem] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'longitudinal' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
                     >
                       Verticale L.
                     </button>
                     <button
                       type="button"
                       onClick={() => setRedPanelOrientation('transverse')}
-                      className={`text-[10px] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'transverse' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                      className={`text-[0.625rem] py-1 px-1 rounded transition text-center ${redPanelOrientation === 'transverse' ? 'bg-red-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
                     >
                       Verticale T.
                     </button>
@@ -903,15 +925,15 @@ export default function DebugControls({
 
             {/* Reflection Floor Offset Configuration */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-2 font-sans">
-              Distanza Riflesso (Pavimento) <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+              Distanza Riflesso (Pavimento) <span className="bg-emerald-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
             </h4>
             <div><label className="block font-medium text-zinc-300">Valore Offset (Minore = Più vicino): {carReflectionOffsetY?.toFixed(3)}</label><input type="range" min="0.0" max="2.0" step="0.001" value={carReflectionOffsetY ?? 0.0} onChange={(e) => setCarReflectionOffsetY(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" /></div>
 
             {/* Material Presets */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans">
-              Preset Materiale Pavimento <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">Presets</span>
+              Preset Materiale Pavimento <span className="bg-amber-500 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">Presets</span>
             </h4>
-            <p className="text-[11px] text-zinc-400 leading-tight">Seleziona un materiale per cambiare istantaneamente l'aspetto del pavimento:</p>
+            <p className="text-[0.6875rem] text-zinc-400 leading-tight">Seleziona un materiale per cambiare istantaneamente l'aspetto del pavimento:</p>
             <div className="grid grid-cols-2 gap-2 mt-2 select-none">
               <button
                 type="button"
@@ -973,13 +995,13 @@ export default function DebugControls({
 
             {/* Reflection Opacity Configuration */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-4 border-t border-zinc-800 pt-3 font-sans">
-              Opacità Riflesso <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+              Opacità Riflesso <span className="bg-emerald-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
             </h4>
             <div><label className="block font-medium text-zinc-300">Opacità del modello riflesso (0 - 5): {carReflectionOpacity?.toFixed(2)}</label><input type="range" min="0.0" max="5.0" step="0.01" value={carReflectionOpacity ?? 0.75} onChange={(e) => setCarReflectionOpacity(Number(e.target.value))} className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer font-sans" /></div>
 
             {/* Advanced Reflection Material Properties */}
             <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-400 mt-2 font-sans font-medium">
-              Proprietà Avanzate Riflesso <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
+              Proprietà Avanzate Riflesso <span className="bg-emerald-600 text-white text-[0.625rem] px-1.5 py-0.5 rounded uppercase leading-none font-bold">New</span>
             </h4>
             <div>
               <label className="block font-medium text-zinc-300 font-sans">Rugosità Riflesso (Roughness: 0 = Specchio, 1 = Opaco): {carReflectionRoughness?.toFixed(2)}</label>

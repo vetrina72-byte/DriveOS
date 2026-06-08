@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
+import { useUIConfig } from '../context/UIConfigContext';
 import ContentCarousel from './ContentCarousel';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
 import { FiLoader, FiSearch, FiX } from 'react-icons/fi';
@@ -19,6 +20,7 @@ interface YouTubeMusicAppProps {
     spotifyPlayerBottom: number;
     isMapsLayered?: boolean;
     onDragProgress?: (progress: number | null) => void;
+    layeredAppTopOffset?: number;
 }
 
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
@@ -50,7 +52,9 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     spotifyPlayerBottom,
     onDragProgress,
     isMapsLayered,
+    layeredAppTopOffset = 0,
 }) => {
+    const { sceneTransitionSpeed = 1.10 } = useUIConfig();
     const { playYouTube } = useAuth();
     const {
         youtubeHomeData: homeData,
@@ -108,7 +112,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = 400; // ms
+                    const duration = sceneTransitionSpeed * 1000; // ms
                     const t = Math.min(elapsed / duration, 1.0);
                     // power4.out easing
                     const easeT = 1 - Math.pow(1 - t, 4);
@@ -397,11 +401,11 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute w-full right-0' : 'fixed w-2/3'}`}
+            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-2/3 md:w-3/4 lg:w-2/3 right-0'}`}
             style={{
                 // Transform managed by physics loop
-                top: `${spotifyPlayerTop}px`,
-                bottom: `${renderLayered ? 0 : spotifyPlayerBottom}px`,
+                top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+                bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
                 willChange: 'transform',
             }}
             aria-hidden={!isOpen}
@@ -411,7 +415,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative rounded-t-[32px]`}
+              className={`w-full h-full flex flex-col relative rounded-t-[2rem]`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
                 {/* --- DRAG HANDLE (OUTSIDE LEFT) --- */}

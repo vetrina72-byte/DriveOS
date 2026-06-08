@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { FiRadio, FiAlertTriangle, FiSearch, FiX, FiChevronLeft } from 'react-icons/fi';
+import { useUIConfig } from '../context/UIConfigContext';
 import type { RadioStation } from '../types';
 import RadioCard from './RadioCard';
 import HorizontalCarousel from './HorizontalCarousel';
@@ -64,6 +65,7 @@ interface RadioAppProps {
     spotifyPlayerBottom: number;
     isMapsLayered?: boolean;
     onDragProgress?: (progress: number | null) => void;
+    layeredAppTopOffset?: number;
 }
 
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
@@ -84,7 +86,12 @@ const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     );
 };
 
-const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlayStation, favoriteStationUUIDs, spotifyPlayerTop, spotifyPlayerBottom, onDragProgress, isMapsLayered }) => {
+const RadioApp: React.FC<RadioAppProps> = ({ 
+    isOpen, onClose, isNight, onPlayStation, favoriteStationUUIDs, 
+    spotifyPlayerTop, spotifyPlayerBottom, onDragProgress, isMapsLayered, 
+    layeredAppTopOffset = 0 
+}) => {
+    const { sceneTransitionSpeed = 1.10 } = useUIConfig();
     const panelRef = useRef<HTMLDivElement>(null);
     
     const [renderLayered, setRenderLayered] = useState(isMapsLayered);
@@ -135,7 +142,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = 400; // ms
+                    const duration = sceneTransitionSpeed * 1000; // ms
                     const t = Math.min(elapsed / duration, 1.0);
                     // power4.out easing
                     const easeT = 1 - Math.pow(1 - t, 4);
@@ -558,11 +565,11 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
     const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute w-full right-0' : 'fixed w-2/3'}`}
+            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-2/3 md:w-3/4 lg:w-2/3 right-0'}`}
             style={{
                 // Transform managed by physics loop
-                top: `${spotifyPlayerTop}px`,
-                bottom: `${renderLayered ? 0 : spotifyPlayerBottom}px`,
+                top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+                bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
                 willChange: 'transform',
             }}
             aria-hidden={!isOpen}
@@ -572,7 +579,7 @@ const RadioApp: React.FC<RadioAppProps> = ({ isOpen, onClose, isNight, onPlaySta
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative backdrop-blur-lg rounded-t-[32px]`}
+              className={`w-full h-full flex flex-col relative backdrop-blur-lg rounded-t-[2rem]`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
                 {/* --- DRAG HANDLE --- */}
