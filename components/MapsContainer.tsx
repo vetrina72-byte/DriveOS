@@ -48,6 +48,7 @@ const MapsContainer = React.memo(({
     dayPlayerButtonColor,
     nightPlayerButtonColor,
     darkNavigateInputBg,
+    sceneTransitionSpeed = 1.10,
   } = useUIConfig();
 
   const {
@@ -203,15 +204,15 @@ const MapsContainer = React.memo(({
 
   useEffect(() => {
     if (isOpen) {
-      // Delay map activation by 500ms so transition is completely smooth and finished
+      // Delay map activation by sceneTransitionSpeed so transition is completely smooth and finished
       const timer = setTimeout(() => {
         setMapActive(true);
-      }, 500);
+      }, sceneTransitionSpeed * 1000);
       return () => clearTimeout(timer);
     } else {
       setMapActive(false);
     }
-  }, [isOpen]);
+  }, [isOpen, sceneTransitionSpeed]);
 
   // Sync drawer slides positioning with isOpen state
   useEffect(() => {
@@ -235,7 +236,7 @@ const MapsContainer = React.memo(({
         if (!state.isDragging) {
             if (state.animStartTime > 0) {
                 const elapsed = performance.now() - state.animStartTime;
-                const duration = 400; // ms
+                const duration = sceneTransitionSpeed * 1000; // ms
                 const t = Math.min(elapsed / duration, 1.0);
                 const easeT = 1 - Math.pow(1 - t, 4);
                 state.currentX = state.startX + (state.targetX - state.startX) * easeT;
