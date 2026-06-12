@@ -56,7 +56,7 @@ interface MusicPlayerProps {
 /**
  * SpotifyProgressBar - Visual Dictatorship Version
  */
-const SpotifyProgressBar = ({ player, state, height, offset }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, height: number, offset: number }) => {
+const SpotifyProgressBar = ({ player, state, height, offset, perfTier }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, height: number, offset: number, perfTier: string }) => {
     const barFillRef = useRef<HTMLDivElement>(null);
     const progressContainerRef = useRef<HTMLDivElement>(null);
     const [isSeeking, setIsSeeking] = useState(false);
@@ -120,7 +120,13 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
                 visualPosRef.current = currentPos;
             }
 
-            animationFrameId = requestAnimationFrame(loop);
+            if (perfTier === 'low-end') {
+                setTimeout(() => {
+                    animationFrameId = requestAnimationFrame(loop);
+                }, 500); // Throttle updates heavily in low-end profile
+            } else {
+                animationFrameId = requestAnimationFrame(loop);
+            }
         };
 
         animationFrameId = requestAnimationFrame(loop);
@@ -201,6 +207,7 @@ const YouTubeProgressBar = ({
     onSeekEnd,
     height,
     offset,
+    perfTier,
 }: {
     progress: { position: number; duration: number };
     isSeeking: boolean;
@@ -209,6 +216,7 @@ const YouTubeProgressBar = ({
     onSeekEnd: () => void;
     height: number;
     offset: number;
+    perfTier: string;
 }) => {
     const [localPosition, setLocalPosition] = useState(progress.position);
     const progressRef = useRef<HTMLDivElement>(null);
@@ -346,7 +354,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
                 </div>
             </div>
             
-            <button 
+            <button className="pointer-events-auto" 
                 onClick={onTakeControl}
                 className="flex-shrink-0 ml-4 px-5 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-full text-sm transition-transform active:scale-95 shadow-lg whitespace-nowrap"
             >
@@ -388,11 +396,11 @@ const DisabledPlayerView = ({
                 {/* Shuffle/Repeat etc. */}
                 <div className="flex items-center gap-5">
                      <div className="flex items-center">
-                        <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
+                        <button disabled={!isReady} className="pointer-events-auto transition" style={{ color: inactiveButtonColor }}>
                             <PiShuffleBold className="w-5 h-5" />
                         </button>
                     </div>
-                    <button disabled={!isReady} className="transition" style={{ color: inactiveButtonColor }}>
+                    <button disabled={!isReady} className="pointer-events-auto transition" style={{ color: inactiveButtonColor }}>
                         <PiRepeatBold className="w-5 h-5" />
                     </button>
                 </div>
@@ -403,22 +411,22 @@ const DisabledPlayerView = ({
                 style={{ height: `${(progressBarHeight) / 16}rem`, marginTop: `${(progressBarVerticalOffset) / 16}rem` }}
             />
             {/* Controls */}
-            <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
+            <div className="w-full flex justify-between items-center will-change-transform transform-gpu" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                 <div className="flex-1 flex justify-start"></div>
                 <div className="flex items-center" style={{ gap: `${(playerControlsGap) / 16}rem` }}>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                    <button disabled={!isReady} className="pointer-events-auto disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                     </button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                    <button disabled={!isReady} className="pointer-events-auto disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                     </button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
+                    <button disabled={!isReady} className="pointer-events-auto disabled:opacity-40 cursor-not-allowed transition" style={{ color: buttonColor }}>
                         <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                     </button>
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem`}} /></button>
+                    <button disabled={!isReady} className="pointer-events-auto disabled:opacity-40 cursor-not-allowed transition" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem`}} /></button>
                 </div>
                 <div className="flex-1 flex justify-end items-center">
-                    <button disabled={!isReady} className="disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
+                    <button disabled={!isReady} className="pointer-events-auto disabled:opacity-40 cursor-not-allowed p-1 rounded-full transition-all duration-200" style={{ color: inactiveButtonColor }}>
                         <BsList style={{ width: '1.25rem', height: '1.25rem'}} />
                     </button>
                 </div>
@@ -482,6 +490,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const isMobileOrTablet = windowWidth < 900;
     
     const [isOverflowing, setIsOverflowing] = useState(false);
+    const [observerWidth, setObserverWidth] = useState(0);
+
+    // Performance Emulation State
+    const [perfTier, setPerfTier] = useState<'high' | 'balanced' | 'low-end'>('balanced');
+    const renderCountRef = useRef(0);
+    renderCountRef.current += 1; // Track atomic repaints
+
+    // Modify layout engine styles dynamically based on the active forced performance tier
+    const isLowEndMode = perfTier === 'low-end';
+    const isPlayerNarrow = isMobileOrTablet || isOverflowing;
 
     useEffect(() => {
         const playerEl = playerContainerRef.current;
@@ -490,8 +508,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const width = entry.contentRect.width;
-                // Detect when the music player container width is less than 440px (threshold where items start overflow-clipping)
-                setIsOverflowing(width < 440);
+                setObserverWidth(Math.round(width));
+                // isPlayerNarrow triggers naturally at < 580px
+                setIsOverflowing(width < 580);
             }
         });
 
@@ -499,11 +518,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         return () => observer.disconnect();
     }, []);
 
-    const effectiveControlsGap = isMobileOrTablet 
+    const effectiveControlsGap = isLowEndMode ? 33 : (isMobileOrTablet 
         ? (isAnyAppOpen 
             ? (isOverflowing ? 33 : 18) 
             : 100) 
-        : 100;
+        : 100);
     
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
     const [isQueueClosing, setIsQueueClosing] = useState(false);
@@ -1142,28 +1161,29 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         onSeekEnd={handleYouTubeSeekEnd}
                         height={progressBarHeight}
                         offset={progressBarVerticalOffset}
+                        perfTier={perfTier}
                     />
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
+                    <div className="w-full flex justify-between items-center will-change-transform transform-gpu" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                         <div className={`transition-all duration-300 ${isAnyAppOpen ? 'flex-none w-0 sm:flex-1' : 'flex-1'}`}></div>
                         <div 
                             className={isAnyAppOpen ? "flex items-center shrink" : "flex items-center"} 
                             style={{ gap: `${(effectiveControlsGap) / 16}rem` }}
                         >
-                            <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
+                            <button onClick={handlePrevTrack} className={`pointer-events-auto transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
-                            <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
+                            <button className="pointer-events-auto" onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {isYouTubePlaying
                                     ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 -960 960 960" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
-                            <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
+                            <button onClick={handleNextTrack} className={`pointer-events-auto transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
                         </div>
                         <div className={`flex-1 flex justify-end items-center ${isAnyAppOpen ? 'shrink-0' : ''}`}>
-                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`pointer-events-auto p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
                                 <BsList className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
                             </button>
                         </div>
@@ -1198,25 +1218,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         className="w-full rounded-full bg-[var(--progress-bg)] flex-shrink-0"
                         style={{ height: `${(progressBarHeight) / 16}rem`, marginTop: `${(progressBarVerticalOffset) / 16}rem` }}
                     />
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
+                    <div className="w-full flex justify-between items-center will-change-transform transform-gpu" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                         <div className={`transition-all duration-300 ${isAnyAppOpen ? 'flex-none w-0 sm:flex-1' : 'flex-1'}`}></div>
                         <div 
                             className={isAnyAppOpen ? "flex items-center shrink" : "flex items-center"} 
                             style={{ gap: `${(effectiveControlsGap) / 16}rem` }}
                         >
-                            <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}>
+                            <button onClick={handlePrevTrack} className={`pointer-events-auto transition`} style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
-                            <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
+                            <button className="pointer-events-auto" onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {isRadioPlaying
                                     ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 -960 960 960" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
-                            <button onClick={handleNextTrack} className={`transition`} style={{ color: buttonActiveColor }}>
+                            <button onClick={handleNextTrack} className={`pointer-events-auto transition`} style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
-                            <button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                            <button onClick={() => onToggleFavorite(radioStation)} className={`pointer-events-auto transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
                                 <FiHeart style={{ width: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`, height: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`}} className={`${isFavorite ? 'fill-current' : ''}`} />
                             </button>
                         </div>
@@ -1279,22 +1299,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         offset={progressBarVerticalOffset} 
                     />
                     
-                    <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
+                    <div className="w-full flex justify-between items-center will-change-transform transform-gpu" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                          <div className={`transition-all duration-300 ${isAnyAppOpen ? 'flex-none w-0 sm:flex-1' : 'flex-1'}`}></div>
                         <div 
                             className={isAnyAppOpen ? "flex items-center shrink" : "flex items-center"} 
                             style={{ gap: `${(effectiveControlsGap) / 16}rem` }}
                         >
-                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
+                            <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="pointer-events-auto transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
-                            <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
+                            <button className="pointer-events-auto" onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
                                     ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 -960 960 960" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M601.92-220q-18.51 0-31.94-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q583.41-740 601.92-740h70q18.51 0 31.95 13.44 13.44 13.44 13.44 31.95v429.22q0 18.51-13.44 31.95Q690.43-220 671.92-220h-70Zm-313.84 0q-18.51 0-31.95-13.44-13.44-13.44-13.44-31.95v-429.22q0-18.51 13.44-31.95Q269.57-740 288.08-740h70.38q18.21 0 31.8 13.44t13.59 31.95v429.22q0 18.51-13.59 31.95Q376.67-220 358.46-220h-70.38Z"/></svg>
                                 }
                             </button>
-                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
+                            <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="pointer-events-auto transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
                             <button
@@ -1306,7 +1326,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                         </div>
                          <div className={`flex-1 flex justify-end items-center ${isAnyAppOpen ? 'shrink-0' : ''}`}>
-                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
+                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`pointer-events-auto p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
                                 <BsList className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
                             </button>
                         </div>
@@ -1368,9 +1388,56 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     return (
         <>
+            {/* PERFORMANCE TELEMETRY OVERLAY */}
+            {import.meta.env.DEV && (
+            <div className="fixed top-4 right-4 z-[9999] bg-black/80 backdrop-blur text-green-400 font-mono text-xs p-3 rounded-lg border border-green-500/30 flex flex-col gap-2 w-64 shadow-2xl pointer-events-auto">
+                <div className="flex justify-between border-b border-green-500/30 pb-1 mb-1">
+                    <span className="font-bold">X-RAY TELEMETRY</span>
+                    <span>[v1.0]</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                    <span className="opacity-70">Render Count:</span>
+                    <span>{renderCountRef.current}</span>
+                    
+                    <span className="opacity-70">Observer W:</span>
+                    <span>{observerWidth}px</span>
+                    
+                    <span className="opacity-70">Input Mode:</span>
+                    <span>touch-none</span>
+                    
+                    <span className="opacity-70">Active Gap:</span>
+                    <span>{effectiveControlsGap}px</span>
+                </div>
+
+                <div className="mt-2 border-t border-green-500/30 pt-2 flex flex-col gap-1">
+                    <span className="opacity-70 mb-1">Force Simulator Tier:</span>
+                    <div className="flex flex-col gap-1">
+                        <button 
+                            onClick={() => setPerfTier('high')}
+                            className={`text-left px-2 py-1 rounded ${perfTier === 'high' ? 'bg-green-500/20 text-green-300' : 'hover:bg-white/10'}`}
+                        >
+                            🟢 High (Desktop)
+                        </button>
+                        <button 
+                            onClick={() => setPerfTier('balanced')}
+                            className={`text-left px-2 py-1 rounded ${perfTier === 'balanced' ? 'bg-yellow-500/20 text-yellow-300' : 'hover:bg-white/10'}`}
+                        >
+                            🟡 Balanced (Tablet)
+                        </button>
+                        <button 
+                            onClick={() => setPerfTier('low-end')}
+                            className={`text-left px-2 py-1 rounded ${perfTier === 'low-end' ? 'bg-red-500/20 text-red-300' : 'hover:bg-white/10'}`}
+                        >
+                            🔴 Low-End (Mobile)
+                        </button>
+                    </div>
+                </div>
+            </div>
+            )}
             <div 
                 ref={playerContainerRef}
-                className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg overflow-hidden max-w-[calc(100vw-32px)] transition-all duration-500 ${themeClasses}`}
+                className={`touch-none fixed z-[2000] rounded-xl overflow-hidden max-w-[calc(100vw-32px)] @container transform-gpu ${themeClasses} ${isLowEndMode ? 'bg-[var(--player-bg)] bg-opacity-100 shadow-none border-0' : (perfTier === 'high' ? 'backdrop-blur-md shadow-lg' : (isPlayerNarrow ? 'bg-opacity-95 shadow-md' : 'backdrop-blur-md shadow-lg'))}`}
                 style={{
                     // Style is now handled directly by the animation loop in useEffect
                     background: !isNight ? widgetBgColor : 'var(--player-bg)',
