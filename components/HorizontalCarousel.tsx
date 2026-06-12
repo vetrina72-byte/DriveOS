@@ -47,7 +47,7 @@ const HorizontalCarousel: React.FC<Props> = ({ children, isNight }) => {
       <button onClick={() => scrollBy(-1)} disabled={!canScrollLeft} className={`${buttonClasses} left-2`} aria-label="Scroll left"><FiChevronLeft size={24} /></button>
       <div ref={ref} className="spotify-carousel gap-4 px-6">
         {React.Children.map(children, child => (
-            <div style={{ scrollSnapAlign: 'start' }}>{child}</div>
+            <div style={{ scrollSnapAlign: 'start' }} className="flex-shrink-0 w-44">{child}</div>
         ))}
       </div>
       <button onClick={() => scrollBy(1)} disabled={!canScrollRight} className={`${buttonClasses} right-2`} aria-label="Scroll right"><FiChevronRight size={24} /></button>

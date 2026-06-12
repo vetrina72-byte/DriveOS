@@ -225,6 +225,15 @@ function AppContent() {
   // --- MOVED UP ---
   const [activeApp, setActiveApp] = useState<string | null>(null);
   const [isMapsLayered, setIsMapsLayered] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // --- DRAG INTERPOLATION STATE AS REF ---
   // Using a ref avoids re-rendering the entire App component on every drag frame.
@@ -492,22 +501,68 @@ function AppContent() {
   const toggleLauncher = (e: React.MouseEvent) => { e.stopPropagation(); const newLauncherState = !isAppLauncherOpen; setIsAppLauncherOpen(newLauncherState); if (!newLauncherState) setIsCustomizing(false); };
   const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
   
+    // RESPONSIVE CONFIGURATIONS FOR PLAYER & NAVIGATION WIDGET
+    const isMobileOrTablet = windowWidth < 900;
+
+    const responsiveFloatingPlayerWidth = useMemo(() => {
+        if (isMobileOrTablet) {
+            return Math.min(playerFloatingWidth, windowWidth - 32);
+        }
+        return playerFloatingWidth;
+    }, [playerFloatingWidth, windowWidth, isMobileOrTablet]);
+
+    const responsiveNavigateToolWidth = useMemo(() => {
+        if (isMobileOrTablet) {
+            return Math.min(navigateToolWidth, windowWidth - 32);
+        }
+        return navigateToolWidth;
+    }, [navigateToolWidth, windowWidth, isMobileOrTablet]);
+
+    const responsiveDockedWidth = useMemo(() => {
+        let leftoverPct = 1.0;
+        if (windowWidth < 640) leftoverPct = 0.15; // app takes 85%
+        else if (windowWidth < 768) leftoverPct = 0.25; // app takes 75%
+        else if (windowWidth < 1024) leftoverPct = 0.50; // app takes 50%
+        else if (windowWidth < 1280) leftoverPct = 0.35; // app takes 65%
+        else leftoverPct = 0.40; // app takes 60%
+
+        const leftoverPx = windowWidth * leftoverPct;
+        return Math.min(playerDockedWidth, Math.max(90, leftoverPx - 32));
+    }, [playerDockedWidth, windowWidth]);
+
+    const responsiveDockedLeft = useMemo(() => {
+        if (windowWidth < 768) {
+            return 16;
+        }
+        if (windowWidth < 1024) {
+            return 16;
+        }
+        return playerDockedLeft;
+    }, [playerDockedLeft, windowWidth]);
+
     // Refactored logic to handle animation in JS
     const navigateToolStyle = useMemo(() => {
+        const isStacked = windowWidth < 900;
+        const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, windowWidth - 32) : playerFloatingWidth;
+        const currentNavigateToolWidth = isStacked ? Math.min(navigateToolWidth, windowWidth - 32) : navigateToolWidth;
+
         const baseStyle: React.CSSProperties = { 
             position: 'fixed', 
             zIndex: 1000, 
-            bottom: `${(playerFloatingBottom) / 16}rem`, 
-            // Removed transitions/transform/opacity from here to avoid fighting the animation loop
+            bottom: isStacked
+                ? `${(playerFloatingBottom + playerFloatingHeight + 12) / 16}rem`
+                : `${(playerFloatingBottom) / 16}rem`, 
         };
-        const homeLeft = `calc(50% + ${(playerFloatingWidth / 2 - navigateToolWidth / 2 + 8) / 16}rem)`;
-        const launcherOpenLeft = `calc(100% - ${(playerDockedLeft + 90) / 16}rem - ${(navigateToolWidth) / 16}rem)`;
+        const homeLeft = isStacked
+            ? `calc(50% - ${(currentNavigateToolWidth / 2) / 16}rem)`
+            : `calc(50% + ${(currentFloatingPlayerWidth / 2 - currentNavigateToolWidth / 2 + 8) / 16}rem)`;
+            
+        const launcherOpenLeft = `calc(100% - ${(playerDockedLeft + 90) / 16}rem - ${(currentNavigateToolWidth) / 16}rem)`;
         
-        if (isAppLauncherOpen) return { ...baseStyle, left: launcherOpenLeft, bottom: `${(playerFloatingBottom) / 16}rem` }; // Don't lift if launcher open (unlikely combo)
+        if (isAppLauncherOpen) return { ...baseStyle, left: launcherOpenLeft };
         
-        // Default home position for normal/app closed states, applying lift if needed
-        return { ...baseStyle, left: homeLeft, bottom: `${(playerFloatingBottom) / 16}rem` };
-    }, [isAppLauncherOpen, playerFloatingBottom, playerDockedLeft, playerFloatingWidth, navigateToolWidth]);
+        return { ...baseStyle, left: homeLeft };
+    }, [isAppLauncherOpen, playerFloatingBottom, playerFloatingHeight, playerDockedLeft, playerFloatingWidth, navigateToolWidth, windowWidth]);
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
@@ -604,7 +659,39 @@ function AppContent() {
             darkNavigateInputBg={darkNavigateInputBg}
             isHome={activeApp === null}
         />
-        <MusicPlayer activeApp={activeApp} onStationChange={handleStationChange} isAnyAppOpen={isHomeScreenDocked} isNight={useDarkTheme} dockedConfig={{ width: playerDockedWidth, bottom: playerFloatingBottom, left: playerDockedLeft, height: playerDockedHeight }} floatingConfig={{ width: playerFloatingWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: navigateToolWidth }} playerControlsSize={playerControlsSize} playerControlsGap={playerControlsGap} playerControlsVerticalPosition={playerControlsVerticalPosition} spinnerSize={spinnerSize} spinnerShuffleGap={spinnerShuffleGap} debugSpinner={debugSpinner} widgetBgColor={widgetBgColor} dayPlayerButtonColor={dayPlayerButtonColor} nightPlayerButtonColor={nightPlayerButtonColor} favoriteStationUUIDs={favoriteStationUUIDs} onToggleFavorite={handleToggleFavorite} queuePopoverHeight={queuePopoverHeight} queuePopoverBottomOffset={queuePopoverBottomOffset} queuePopoverScale={queuePopoverScale} queuePopoverWidth={queuePopoverWidth} queuePopoverOffsetX={queuePopoverOffsetX} spinnerTop={spinnerTop} spinnerRight={spinnerRight} spinnerBottom={spinnerBottom} spinnerLeft={spinnerLeft} dragProgress={dragProgressRef} progressBarHeight={progressBarHeight} progressBarVerticalOffset={progressBarVerticalOffset} playButtonScale={playButtonScale} skipButtonScale={skipButtonScale} />
+         <MusicPlayer 
+            activeApp={activeApp} 
+            onStationChange={handleStationChange} 
+            isAnyAppOpen={isHomeScreenDocked} 
+            isNight={useDarkTheme} 
+            dockedConfig={{ width: responsiveDockedWidth, bottom: playerFloatingBottom, left: responsiveDockedLeft, height: playerDockedHeight }} 
+            floatingConfig={{ width: responsiveFloatingPlayerWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: responsiveNavigateToolWidth }} 
+            playerControlsSize={isMobileOrTablet ? Math.max(16, playerControlsSize * 0.8) : playerControlsSize} 
+            playerControlsGap={playerControlsGap} 
+            playerControlsVerticalPosition={playerControlsVerticalPosition} 
+            spinnerSize={spinnerSize} 
+            spinnerShuffleGap={spinnerShuffleGap} 
+            debugSpinner={debugSpinner} 
+            widgetBgColor={widgetBgColor} 
+            dayPlayerButtonColor={dayPlayerButtonColor} 
+            nightPlayerButtonColor={nightPlayerButtonColor} 
+            favoriteStationUUIDs={favoriteStationUUIDs} 
+            onToggleFavorite={handleToggleFavorite} 
+            queuePopoverHeight={queuePopoverHeight} 
+            queuePopoverBottomOffset={queuePopoverBottomOffset} 
+            queuePopoverScale={queuePopoverScale} 
+            queuePopoverWidth={queuePopoverWidth} 
+            queuePopoverOffsetX={queuePopoverOffsetX} 
+            spinnerTop={spinnerTop} 
+            spinnerRight={spinnerRight} 
+            spinnerBottom={spinnerBottom} 
+            spinnerLeft={spinnerLeft} 
+            dragProgress={dragProgressRef} 
+            progressBarHeight={progressBarHeight} 
+            progressBarVerticalOffset={progressBarVerticalOffset} 
+            playButtonScale={isMobileOrTablet ? Math.max(0.8, playButtonScale * 0.8) : playButtonScale} 
+            skipButtonScale={isMobileOrTablet ? Math.max(0.8, skipButtonScale * 0.8) : skipButtonScale} 
+        />
         <AppLauncher isOpen={isAppLauncherOpen} width={appLauncherWidth} height={appLauncherHeight} apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)} isCustomizing={isCustomizing} onCustomizeClick={moveAppToDock} onAppLaunch={toggleApp} isNight={useDarkTheme}/>
         {isAppLauncherOpen && <button onClick={(e) => { e.stopPropagation(); setIsCustomizing(prev => !prev); }} className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'} ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} style={{ bottom: `calc(6rem + ${(appLauncherHeight) / 16}rem + 0.75rem)` }}>{isCustomizing ? 'Fine' : 'Personalizza'}</button>}
         <AnimatePresence>{isKeyboardVisible && <VirtualKeyboard isVisible={isKeyboardVisible} targetElement={keyboardTarget as HTMLInputElement | HTMLTextAreaElement | null} onClose={handleKeyboardClose} isNight={useDarkTheme} virtualKeyboardKeySize={virtualKeyboardKeySize} virtualKeyboardHeight={virtualKeyboardHeight} virtualKeyboardPaddingX={virtualKeyboardPaddingX} virtualKeyboardKeyGapX={virtualKeyboardKeyGapX} virtualKeyboardKeyGapY={virtualKeyboardKeyGapY} virtualKeyboardKeyFontWeight={virtualKeyboardKeyFontWeight}/>}</AnimatePresence>

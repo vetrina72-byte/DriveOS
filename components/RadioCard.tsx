@@ -38,7 +38,7 @@ const RadioCard: React.FC<RadioCardProps> = ({ station, onPlay, isNight }) => {
     const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
 
     return (
-        <div className="w-44 flex-shrink-0">
+        <div className="w-full max-w-[11rem] mx-auto flex-shrink-0">
             <div 
                 className={`p-3 rounded-lg w-full h-full flex flex-col transition-all duration-300 ${bgColor}`}
             >

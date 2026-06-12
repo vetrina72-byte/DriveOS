@@ -389,40 +389,100 @@ function SceneController({
     return Math.min(1.0, Math.max(0.0, (aspect - 1.0) / 0.77));
   }, [size.height]);
 
+  // Aggiornamento dinamico del FOV per schermi stretti (Portrait/Mobile)
+  useEffect(() => {
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const W = window.innerWidth;
+      if (W < 768) {
+        camera.fov = 68;
+      } else if (W < 1024) {
+        camera.fov = 58;
+      } else {
+        camera.fov = 48;
+      }
+      camera.updateProjectionMatrix();
+    }
+  }, [camera, size]);
+
   const localHomeConfig = useMemo(() => {
+    let baseModelScale = homeConfig.modelScale;
+    let baseModelY = homeConfig.modelPos.y;
+    
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    
+    if (W < 1024) {
+      const scaleFactor = Math.max(0.55, W / 1024);
+      baseModelScale = homeConfig.modelScale * scaleFactor;
+      
+      if (W < 768 && H > W) {
+         // Sposta l'auto in alto per non farla coprire dal player musicale alla base
+         baseModelY = homeConfig.modelPos.y + 1.2;
+      }
+    }
+
     const shiftX = homeConfig.modelPos.x * (responsiveCoeff - 1.0);
     return {
       ...homeConfig,
+      modelScale: baseModelScale,
       modelPos: {
         ...homeConfig.modelPos,
         x: homeConfig.modelPos.x + shiftX,
+        y: baseModelY,
       },
       cameraTarget: {
         ...homeConfig.cameraTarget,
         x: homeConfig.cameraTarget.x + shiftX,
+        y: homeConfig.cameraTarget.y + (baseModelY - homeConfig.modelPos.y),
       },
       cameraPos: {
         ...homeConfig.cameraPos,
         x: homeConfig.cameraPos.x + shiftX,
+        y: homeConfig.cameraPos.y + (baseModelY - homeConfig.modelPos.y),
       },
     };
   }, [homeConfig, responsiveCoeff]);
 
   const localAppOpenConfig = useMemo(() => {
-    const shiftX = appOpenConfig.modelPos.x * (responsiveCoeff - 1.0);
+    let baseModelX = appOpenConfig.modelPos.x; // default matches -4.90
+    let baseModelY = appOpenConfig.modelPos.y;
+    let baseModelScale = appOpenConfig.modelScale; // default matches 1.57
+
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    
+    if (W < 1024) {
+      const scaleFactor = Math.max(0.40, W / 1024);
+      baseModelScale = appOpenConfig.modelScale * scaleFactor;
+      
+      if (W < 768) {
+        // Su mobile stretto, spostiamo ancora più a sinistra. L'app prende l'85% dello schermo a destra.
+        // C'è solo un 15% a sinistra. Quindi dobbiamo "spingere" la camera molto a destra per far apparire la macchina a sinistra (oppure spingere la macchina a sinistra).
+        baseModelX = appOpenConfig.modelPos.x - 3.5; 
+        baseModelY = appOpenConfig.modelPos.y + (H > W ? 1.5 : 0); // Sposta leggermente in alto se portrait
+      } else {
+        baseModelX = appOpenConfig.modelPos.x - 1.5;
+      }
+    }
+
+    const shiftX = baseModelX * (responsiveCoeff - 1.0);
     return {
       ...appOpenConfig,
+      modelScale: baseModelScale,
       modelPos: {
         ...appOpenConfig.modelPos,
-        x: appOpenConfig.modelPos.x + shiftX,
+        x: baseModelX + shiftX,
+        y: baseModelY,
       },
       cameraTarget: {
         ...appOpenConfig.cameraTarget,
-        x: appOpenConfig.cameraTarget.x + shiftX,
+        x: baseModelX + shiftX,
+        y: appOpenConfig.cameraTarget.y + (baseModelY - appOpenConfig.modelPos.y),
       },
       cameraPos: {
         ...appOpenConfig.cameraPos,
         x: appOpenConfig.cameraPos.x + shiftX,
+        y: appOpenConfig.cameraPos.y + (baseModelY - appOpenConfig.modelPos.y),
       },
     };
   }, [appOpenConfig, responsiveCoeff]);

@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom';
 import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../spotifyClient';
+import { useUIConfig } from '../context/UIConfigContext';
 import { 
     FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
 } from 'react-icons/fi';
@@ -472,6 +473,38 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   } = useAuth();
     const playerContainerRef = useRef<HTMLDivElement>(null);
     
+    const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+    useEffect(() => {
+        const handleResize = () => setWindowWidth(window.innerWidth);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+    const isMobileOrTablet = windowWidth < 900;
+    
+    const [isOverflowing, setIsOverflowing] = useState(false);
+
+    useEffect(() => {
+        const playerEl = playerContainerRef.current;
+        if (!playerEl) return;
+
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const width = entry.contentRect.width;
+                // Detect when the music player container width is less than 440px (threshold where items start overflow-clipping)
+                setIsOverflowing(width < 440);
+            }
+        });
+
+        observer.observe(playerEl);
+        return () => observer.disconnect();
+    }, []);
+
+    const effectiveControlsGap = isMobileOrTablet 
+        ? (isAnyAppOpen 
+            ? (isOverflowing ? 33 : 18) 
+            : 100) 
+        : 100;
+    
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
     const [isQueueClosing, setIsQueueClosing] = useState(false);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(true);
@@ -497,39 +530,63 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const hasEndedRef = useRef(false);
     const prevPositionRef = useRef(0);
 
+    const { sceneTransitionSpeed = 1.10 } = useUIConfig();
+
     // --- ANIMATION LOGIC FOR PLAYER SIZE/POSITION ---
     const visualState = useRef(isAnyAppOpen ? 0 : 1); // 0 = Docked (App Open), 1 = Floating (App Closed)
+    const wasDraggingRef = useRef(false);
 
+    const lastIsAnyAppOpen = useRef(isAnyAppOpen);
+    const startT = useRef(isAnyAppOpen ? 0 : 1);
+    const animStartTime = useRef(0);
+
+    // Sync isAnyAppOpen changes to start an animation using the exact same power4.out easing/timing as subapps
+    useEffect(() => {
+        if (isAnyAppOpen !== lastIsAnyAppOpen.current) {
+            lastIsAnyAppOpen.current = isAnyAppOpen;
+            startT.current = visualState.current;
+            animStartTime.current = performance.now();
+        }
+    }, [isAnyAppOpen]);
+
+    // Single unified requestAnimationFrame loop that handles BOTH manual dragging AND smooth, beautifully easing transitions in real-time
     useEffect(() => {
         let animationFrameId: number;
 
         const loop = () => {
-            let targetT = isAnyAppOpen ? 0 : 1; // Default target based on app state
+            const duration = (sceneTransitionSpeed || 1.10) * 1000; // ms
 
-            // If user is actively dragging (dragProgress is not null), override the target
             if (dragProgress.current !== null) {
-                // DIRECT SYNC: Force visual state to match drag progress
+                wasDraggingRef.current = true;
                 visualState.current = dragProgress.current;
+                animStartTime.current = 0; // stop autotransition
             } else {
-                // If not dragging, animate smoothly to the target state
-                const diff = targetT - visualState.current;
-                if (Math.abs(diff) > 0.001) {
-                    visualState.current += diff * 0.15; // Smooth interpolation factor
+                const targetT = isAnyAppOpen ? 0 : 1;
+                if (animStartTime.current > 0) {
+                    const elapsed = performance.now() - animStartTime.current;
+                    const normT = Math.min(elapsed / duration, 1.0);
+                    // Match power4.out easing perfectly: 1 - (1 - x)^4
+                    const easeT = 1 - Math.pow(1 - normT, 4);
+                    visualState.current = startT.current + (targetT - startT.current) * easeT;
+                    if (normT >= 1.0) {
+                        animStartTime.current = 0;
+                    }
                 } else {
                     visualState.current = targetT;
                 }
             }
 
-            // Clamp value
             const t = Math.max(0, Math.min(1, visualState.current));
 
             if (playerContainerRef.current) {
-                // Interpolate properties
-                // Docked (t=0) -> Floating (t=1)
-                
-                // Calculate dynamically with calc so it tracks exactly 50% on window resize
+                // Absolutely NO transitions or delays; the layout updates frame-by-frame on RAF in full synchronization
+                playerContainerRef.current.style.transition = 'none';
+
+                const isStacked = window.innerWidth < 900;
                 const pct = 50 * t;
-                const offsetPx = dockedConfig.left * (1 - t) - (floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) * t;
+                const offsetPx = isStacked
+                    ? dockedConfig.left * (1 - t) - (floatingConfig.width / 2) * t
+                    : dockedConfig.left * (1 - t) - (floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) * t;
                 
                 const currentWidth = dockedConfig.width + (floatingConfig.width - dockedConfig.width) * t;
                 const currentHeight = dockedConfig.height + (floatingConfig.height - dockedConfig.height) * t;
@@ -539,7 +596,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerContainerRef.current.style.height = `${(currentHeight) / 16}rem`;
                 playerContainerRef.current.style.bottom = `${(currentBottom) / 16}rem`;
                 playerContainerRef.current.style.left = `calc(${pct}% + ${(offsetPx) / 16}rem)`;
-                playerContainerRef.current.style.transform = 'none'; // Ensure no transform interferes
+                playerContainerRef.current.style.transform = 'none';
             }
 
             animationFrameId = requestAnimationFrame(loop);
@@ -548,7 +605,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         loop();
 
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isAnyAppOpen, dockedConfig, floatingConfig, dragProgress]);
+    }, [dockedConfig, floatingConfig, dragProgress, isAnyAppOpen, sceneTransitionSpeed]);
 
     useEffect(() => {
         const show = nowPlaying.isLoading || debugSpinner;
@@ -1069,11 +1126,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             return (
                  <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <img src={thumbnail} alt={title} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 shadow-lg" />
-                            <div className="overflow-hidden flex-grow">
-                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{title}</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
+                        <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
+                            <img src={thumbnail} alt={title} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg object-cover flex-shrink-0 shadow-lg`} />
+                            <div className={`overflow-hidden flex-grow ${isAnyAppOpen ? 'min-w-0 shrink' : ''}`}>
+                                <div className={`font-semibold truncate ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>{title}</div>
+                                <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
                             </div>
                         </div>
                     </div>
@@ -1087,8 +1144,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         offset={progressBarVerticalOffset}
                     />
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
-                        <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${(playerControlsGap * 0.8) / 16}rem` }}>
+                        <div className={`transition-all duration-300 ${isAnyAppOpen ? 'flex-none w-0 sm:flex-1' : 'flex-1'}`}></div>
+                        <div 
+                            className={isAnyAppOpen ? "flex items-center shrink" : "flex items-center"} 
+                            style={{ gap: `${(effectiveControlsGap) / 16}rem` }}
+                        >
                             <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
@@ -1102,9 +1162,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
                         </div>
-                        <div className="flex-1 flex justify-end items-center">
+                        <div className={`flex-1 flex justify-end items-center ${isAnyAppOpen ? 'shrink-0' : ''}`}>
                             <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
-                                <BsList style={{ width: '1.25rem', height: '1.25rem'}} />
+                                <BsList className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
                             </button>
                         </div>
                     </div>
@@ -1120,17 +1180,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
                             {favicon ? 
-                                <img src={favicon} alt={name} className="w-12 h-12 rounded-lg object-contain bg-zinc-800 flex-shrink-0 shadow-lg" /> 
+                                <img src={favicon} alt={name} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg object-contain bg-zinc-800 flex-shrink-0 shadow-lg`} /> 
                                 : 
-                                <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                                    <FiRadio className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
+                                <div className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg flex-shrink-0 flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                    <FiRadio className={`${isAnyAppOpen ? 'w-6 h-6 sm:w-7 sm:h-7' : 'w-7 h-7'} ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                                 </div>
                             }
-                            <div className="overflow-hidden flex-grow">
-                                <div className={`font-semibold text-sm truncate`} style={{ color: 'var(--text-primary)' }}>{name}</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div>
+                            <div className={`overflow-hidden flex-grow ${isAnyAppOpen ? 'min-w-0 shrink' : ''}`}>
+                                <div className={`font-semibold truncate ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>{name}</div>
+                                <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)'}}>{tags.split(',')[0] || 'Radio'}</div>
                             </div>
                         </div>
                     </div>
@@ -1139,8 +1199,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         style={{ height: `${(progressBarHeight) / 16}rem`, marginTop: `${(progressBarVerticalOffset) / 16}rem` }}
                     />
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
-                        <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${(playerControlsGap) / 16}rem` }}>
+                        <div className={`transition-all duration-300 ${isAnyAppOpen ? 'flex-none w-0 sm:flex-1' : 'flex-1'}`}></div>
+                        <div 
+                            className={isAnyAppOpen ? "flex items-center shrink" : "flex items-center"} 
+                            style={{ gap: `${(effectiveControlsGap) / 16}rem` }}
+                        >
                             <button onClick={handlePrevTrack} className={`transition`} style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
@@ -1154,10 +1217,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
                             <button onClick={() => onToggleFavorite(radioStation)} className={`transition`} style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
-                                <FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem`}} className={`${isFavorite ? 'fill-current' : ''}`} />
+                                <FiHeart style={{ width: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`, height: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`}} className={`${isFavorite ? 'fill-current' : ''}`} />
                             </button>
                         </div>
-                        <div className="flex-1 flex justify-end items-center"></div>
+                        <div className={`flex-1 flex justify-end items-center ${isAnyAppOpen ? 'shrink-0' : ''}`}></div>
                     </div>
                 </div>
             );
@@ -1169,22 +1232,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
             const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
-            
-            return (
+                 return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
                             {imageUrl && (
                                 <div className="flex-shrink-0">
-                                    <img src={imageUrl} alt={album.name} className="w-12 h-12 rounded-lg shadow-lg" />
+                                    <img src={imageUrl} alt={album.name} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg shadow-lg`} />
                                 </div>
                             )}
-                            <div className="overflow-hidden flex-grow">
-                                <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{trackName}</div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div>
+                            <div className={`overflow-hidden flex-grow ${isAnyAppOpen ? 'min-w-0 shrink' : ''}`}>
+                                <div className={`font-semibold truncate ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>{trackName}</div>
+                                <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-5">
+                        <div className={`flex items-center flex-shrink-0 pl-2 ${isAnyAppOpen ? 'gap-2 sm:gap-5' : 'gap-5'}`}>
                             <div className="flex items-center" style={{ gap: `${(spinnerShuffleGap) / 16}rem`}}>
                                 <button
                                     onClick={handleToggleShuffle}
@@ -1192,7 +1254,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                     style={{ color: playerState.shuffle ? buttonActiveColor : inactiveButtonColor }}
                                     aria-label={playerState.shuffle ? "Disable shuffle" : "Enable shuffle"}
                                 >
-                                    <PiShuffleBold className="w-5 h-5" />
+                                    <PiShuffleBold className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
                                 </button>
                             </div>
                             <button
@@ -1201,7 +1263,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 style={{ color: playerState.repeat_mode > 0 ? buttonActiveColor : inactiveButtonColor }}
                                 aria-label={`Set repeat mode. Current: ${playerState.repeat_mode === 0 ? 'off' : playerState.repeat_mode === 1 ? 'context' : 'track'}`}
                             >
-                                {playerState.repeat_mode === 2 ? <PiRepeatOnceBold className="w-5 h-5" /> : <PiRepeatBold className="w-5 h-5" />}
+                                {playerState.repeat_mode === 2 ? (
+                                    <PiRepeatOnceBold className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
+                                ) : (
+                                    <PiRepeatBold className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
+                                )}
                             </button>
                         </div>
                     </div>
@@ -1214,8 +1280,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     />
                     
                     <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
-                         <div className="flex-1 flex justify-start"></div>
-                        <div className="flex items-center" style={{ gap: `${(playerControlsGap) / 16}rem` }}>
+                         <div className={`transition-all duration-300 ${isAnyAppOpen ? 'flex-none w-0 sm:flex-1' : 'flex-1'}`}></div>
+                        <div 
+                            className={isAnyAppOpen ? "flex items-center shrink" : "flex items-center"} 
+                            style={{ gap: `${(effectiveControlsGap) / 16}rem` }}
+                        >
                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="transition disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: buttonActiveColor }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
@@ -1233,12 +1302,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 className="transition"
                                 style={{ color: isLiked ? buttonActiveColor : inactiveButtonColor }}
                             >
-                                <FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem`}} className={`${isLiked ? 'fill-current' : ''}`} />
+                                <FiHeart style={{ width: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`, height: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`}} className={`${isLiked ? 'fill-current' : ''}`} />
                             </button>
                         </div>
-                         <div className="flex-1 flex justify-end items-center">
+                         <div className={`flex-1 flex justify-end items-center ${isAnyAppOpen ? 'shrink-0' : ''}`}>
                             <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
-                                <BsList style={{ width: '1.25rem', height: '1.25rem'}} />
+                                <BsList className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
                             </button>
                         </div>
                     </div>
@@ -1301,7 +1370,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <>
             <div 
                 ref={playerContainerRef}
-                className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg ${themeClasses}`}
+                className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg overflow-hidden max-w-[calc(100vw-32px)] transition-all duration-500 ${themeClasses}`}
                 style={{
                     // Style is now handled directly by the animation loop in useEffect
                     background: !isNight ? widgetBgColor : 'var(--player-bg)',

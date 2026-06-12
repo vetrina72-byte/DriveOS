@@ -401,7 +401,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-2/3 md:w-3/4 lg:w-2/3 right-0'}`}
+            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
                 // Transform managed by physics loop
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,

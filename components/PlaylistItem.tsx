@@ -73,7 +73,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   // Special rendering for the "Liked Songs" playlist
   if (item.id === 'liked-songs') {
       return (
-          <div onClick={() => onSelectItem(item)} className="p-3 rounded-lg transition-all duration-200 cursor-pointer w-44 flex-shrink-0 bg-gradient-to-br from-indigo-800 to-purple-800 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105">
+          <div onClick={() => onSelectItem(item)} className="p-3 rounded-lg transition-all duration-200 cursor-pointer w-full max-w-[11rem] mx-auto bg-gradient-to-br from-indigo-800 to-purple-800 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105">
               <div className="relative w-full aspect-square mb-3 flex items-center justify-center">
                   <FiHeart className="w-16 h-16 text-white/90" />
               </div>
@@ -95,7 +95,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   }
 
   return (
-    <div onClick={() => onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 w-44 flex-shrink-0 ${bgColor} cursor-pointer`}>
+    <div onClick={() => onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 w-full max-w-[11rem] mx-auto ${bgColor} cursor-pointer`}>
       <div className="relative w-full aspect-square mb-3">
         {imageUrl && !imageError ? (
           <img 
