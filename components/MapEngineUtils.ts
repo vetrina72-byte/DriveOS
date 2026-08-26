@@ -12,7 +12,7 @@ export function buildMapStyle(theme: 'light' | 'dark' | 'satellite'): any {
         sprite: 'https://api.protomaps.com/sprites/v4/light/it',
         sources: {
             sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19, attribution: 'Esri' },
-            protomaps: { type: 'vector', url: `https://api.protomaps.com/tiles/v4.json?key=${K}`, maxzoom: 15 }
+            protomaps: { type: 'vector', tiles: [`https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=${K}`], maxzoom: 15 }
         },
         layers: [
             { id: 'sat-layer', type: 'raster', source: 'sat', minzoom: 0, maxzoom: 24 },

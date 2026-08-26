@@ -159,10 +159,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
                 expires_at: data.expires_at || data.tokens?.expires_at
               });
           }, 1000);
-        } else if (data.error === 'premium_required') {
-          console.log(`[SPOTIFY LOGIN] Ricevuto stato errore premium. Stop polling.`);
-          clearInterval(pollTimer.current!);
-          setUiState('PREMIUM_ERROR');
+        } else if (data.error && data.error !== 'pending') {
+          console.warn(`[SPOTIFY LOGIN] Status response:`, data.error);
         }
       } catch (e) {
         console.error("Errore polling:", e);
