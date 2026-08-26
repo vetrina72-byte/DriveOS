@@ -111,7 +111,10 @@ export function initSpotifyPlayerOnce(options: InitOptions) {
             script.id = 'spotify-sdk';
             script.src = 'https://sdk.scdn.co/spotify-player.js';
             script.async = true;
-            document.head.appendChild(script);
+            const targetHead = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
+            if (targetHead) {
+                targetHead.appendChild(script);
+            }
         } else if (window.Spotify) {
             window.onSpotifyWebPlaybackSDKReady();
         }

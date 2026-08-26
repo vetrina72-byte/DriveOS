@@ -272,38 +272,25 @@ export default async function handler(req, res) {
           return sendCallbackPage(res, { success: false, errorType: 'technical' });
       }
 
-      const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-      
-      if (!userRes.ok) {
-          console.error(`[SPOTIFY CALLBACK] User Fetch Failed for session: ${sessionId}. Mapping to Premium Required.`);
-          if (redis) {
-            try {
-              await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600);
-            } catch (e) {}
-          }
-          return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
-      }
-      
-      const userData = await userRes.json().catch(() => ({ product: 'unknown' }));
-
-      // --- CONTROLLO PRODOTTO PREMIUM ---
-      if (!userData.product || userData.product !== 'premium') {
-        console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
-        if (redis) {
-          try {
-            await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600);
-          } catch (e) {}
+      // Soft check user info if available
+      try {
+        const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          console.log(`[SPOTIFY CALLBACK] User fetched successfully for session: ${sessionId}, product: ${userData?.product}`);
         }
-        return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+      } catch (err) {
+        console.warn(`[SPOTIFY CALLBACK] Soft warning: User /me check failed, continuing with granted tokens.`);
       }
       
       if (redis) {
         try {
           await redis.set(`spotify:${sessionId}`, JSON.stringify({
+            authenticated: true,
             access_token: tokenData.access_token,
             refresh_token: tokenData.refresh_token,
             expires_at: Date.now() + (tokenData.expires_in || 3600) * 1000,
-          }), 'EX', 3600);
+          }), 'EX', 3600 * 24 * 30);
         } catch (e) {}
       }
       
@@ -312,17 +299,13 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
       
-      if (cachedState && cachedState.error === 'premium_required') {
-          return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
-      }
-      
       if (sessionId && redis) {
         try {
           await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
         } catch (err) {}
       }
       
-      return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+      return sendCallbackPage(res, { success: false, errorType: 'technical' });
     }
   } catch (fatalError) {
     console.error('[SPOTIFY CALLBACK] Fatal uncaught error:', fatalError);

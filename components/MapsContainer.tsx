@@ -189,9 +189,16 @@ const MapsContainer = React.memo(({
     `;
     const styleEl = document.createElement('style');
     styleEl.innerHTML = styles;
-    document.head.appendChild(styleEl);
+    const targetHead = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
+    if (targetHead) {
+      targetHead.appendChild(styleEl);
+    }
     return () => {
-      document.head.removeChild(styleEl);
+      try {
+        if (targetHead && styleEl.parentNode) {
+          targetHead.removeChild(styleEl);
+        }
+      } catch (e) {}
     };
   }, []);
 
