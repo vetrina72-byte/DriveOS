@@ -129,23 +129,15 @@ const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClic
       return null;
   }
   
-  const nightThemeProps = {
-    url: `https://api.maptiler.com/maps/darkmatter/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`,
-    attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-  };
-
-  const darkThemeProps = {
-    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`,
-  };
-
-  const lightThemeProps = {
-    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`,
-  };
-
-  const themeProps = isNight ? nightThemeProps : (useDarkTheme ? darkThemeProps : lightThemeProps);
+  const tileUrl = isNight 
+    ? `https://api.maptiler.com/maps/darkmatter/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`
+    : (useDarkTheme 
+        ? `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`
+        : `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`);
 
   const AnyMapContainer = MapContainer as any;
   const AnyMarker = Marker as any;
+  const AnyTileLayer = TileLayer as any;
 
   return (
     <div 
@@ -165,9 +157,11 @@ const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClic
         doubleClickZoom={false}
         keyboard={false}
       >
-        <TileLayer
-            key={themeProps.url}
-            {...themeProps}
+        <AnyTileLayer
+          key={tileUrl}
+          url={tileUrl}
+          attribution="&copy; OpenStreetMap contributors"
+          maxZoom={19}
         />
         {position && (
             // @ts-ignore
