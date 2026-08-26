@@ -55,7 +55,28 @@ async function startServer() {
   });
 
   app.get('/api/spotify-callback', async (req, res) => {
-    const { code, state: sessionId, error } = req.query;
+    const { code, state: rawState, error } = req.query;
+
+    let sessionId = String(rawState || '');
+    let codeVerifier: string | null = null;
+    let redirectUriFromState: string | null = null;
+
+    if (rawState) {
+      try {
+        const base64 = String(rawState).replace(/-/g, '+').replace(/_/g, '/');
+        const jsonStr = Buffer.from(base64, 'base64').toString('utf8');
+        if (jsonStr.startsWith('{') && jsonStr.endsWith('}')) {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed.s) {
+            sessionId = String(parsed.s);
+            codeVerifier = parsed.v || null;
+            redirectUriFromState = parsed.r || null;
+          }
+        }
+      } catch (e) {
+        // Raw state fallback
+      }
+    }
 
     if (error) {
       console.error('Spotify callback error:', error);
@@ -80,20 +101,22 @@ async function startServer() {
       } catch (e) {}
     }
 
+    const effectiveCodeVerifier = codeVerifier || storedSession?.codeVerifier || null;
+
     const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
     const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
     const proto = req.headers['x-forwarded-proto'] || (String(host).includes('localhost') ? 'http' : 'https');
     const dynamicRedirectUri = `${proto}://${host}/api/spotify-callback`;
-    const redirectUri = storedSession?.redirectUri || process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
+    const redirectUri = redirectUriFromState || storedSession?.redirectUri || process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
 
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
     params.append('code', code as string);
     params.append('redirect_uri', redirectUri);
     params.append('client_id', clientId);
-    if (storedSession?.codeVerifier) {
-      params.append('code_verifier', storedSession.codeVerifier);
+    if (effectiveCodeVerifier) {
+      params.append('code_verifier', effectiveCodeVerifier);
     }
 
     const headers: Record<string, string> = {

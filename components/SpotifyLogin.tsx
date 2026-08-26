@@ -102,10 +102,21 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
     );
 };
 
+function encodeCompositeState(sessionId: string, codeVerifier: string, redirectUri: string): string {
+  try {
+    const payload = JSON.stringify({ s: sessionId, v: codeVerifier, r: redirectUri });
+    const base64 = btoa(payload);
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch (e) {
+    return sessionId;
+  }
+}
+
 function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, clearError } = useAuth();
   const [uiState, setUiState] = useState<'IDLE' | 'ATTESA' | 'PREMIUM_ERROR' | 'LOADING'>('IDLE');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [directAuthUrl, setDirectAuthUrl] = useState('');
   const sidRef = useRef<string>(getSessionId());
   const pollTimer = useRef<number | null>(null);
 
@@ -120,8 +131,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     // Generate PKCE values
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await generateCodeChallenge(codeVerifier);
+    const compositeState = encodeCompositeState(sidRef.current, codeVerifier, redirectUri);
 
-    // Register session on backend
+    // Register session on backend (as backup and for in-memory/Redis caches)
     try {
       await fetch('/api/register-auth-session', {
         method: 'POST',
@@ -136,8 +148,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
       console.warn('[SpotifyLogin] Registration notice:', err);
     }
 
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(sidRef.current)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(compositeState)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
 
+    setDirectAuthUrl(authUrl);
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
@@ -220,14 +233,24 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
               )}
             </div>
             
-            <div className="max-w-xs flex flex-col justify-center gap-5">
+            <div className="max-w-xs flex flex-col justify-center gap-4">
               <div className="flex items-center gap-3">
                 <FaSpotify className="w-10 h-10 text-[#1DB954]" />
                 <h2 className={`text-3xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
               </div>
-              <p className={`text-xl leading-snug font-medium ${theme.subtitle}`}>
-                Inquadra il codice per collegare il tuo account <strong>Spotify Premium</strong>.
+              <p className={`text-base leading-snug font-medium ${theme.subtitle}`}>
+                Inquadra il codice con lo smartphone per collegare il tuo account <strong>Spotify</strong>.
               </p>
+              {directAuthUrl && (
+                <a
+                  href={directAuthUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 text-xs text-[#1DB954] hover:underline font-semibold flex items-center gap-1"
+                >
+                  Oppure accedi direttamente su questo browser &rarr;
+                </a>
+              )}
             </div>
           </motion.div>
         )}
@@ -244,7 +267,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             <FeedbackIcon type="error" isNight={isNight} />
             <h2 className={`text-2xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
             <p className={`text-lg mb-6 leading-relaxed font-medium px-4 ${theme.subtitle}`}>
-              È necessario un abbonamento Spotify Premium attivo per utilizzare questa integrazione.
+              È necessario un abbonamento Spotify attivo per utilizzare questa integrazione.
             </p>
             <button 
               onClick={handleRetry}
