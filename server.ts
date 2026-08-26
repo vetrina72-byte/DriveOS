@@ -259,8 +259,13 @@ async function startServer() {
       const redis = getRedis();
       const raw = await redis.get(`spotify:${sid}`);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.authenticated && parsed.access_token) {
+        let parsed;
+        if (typeof raw === 'string') {
+          try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+        } else {
+          parsed = raw;
+        }
+        if (parsed && parsed.authenticated && parsed.access_token) {
           authStore.set(sid, { status: 'completed', tokens: parsed, timestamp: Date.now() });
           return res.status(200).json({
             authenticated: true,

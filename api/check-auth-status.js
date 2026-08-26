@@ -20,22 +20,31 @@ export default async function handler(req, res) {
       if (redis) {
         const raw = await redis.get(`spotify:${sessionId}`);
         if (raw) {
-          const p = JSON.parse(raw);
-          console.log(`[POLLING API] Trovata sessione per ${sessionId}:`, p.error ? `Errore: ${p.error}` : 'Successo');
-          
-          if (p.error) {
-              return res.status(200).json({ 
-                authenticated: false, 
-                error: p.error 
-              });
+          let p;
+          if (typeof raw === 'string') {
+            try { p = JSON.parse(raw); } catch (e) { p = null; }
+          } else {
+            p = raw;
           }
 
-          if (p.access_token) {
-            return res.status(200).json({ 
-              authenticated: true, 
-              access_token: p.access_token, 
-              expires_at: p.expires_at 
-            });
+          if (p) {
+            console.log(`[POLLING API] Trovata sessione per ${sessionId}:`, p.error ? `Errore: ${p.error}` : 'Successo');
+            
+            if (p.error) {
+                return res.status(200).json({ 
+                  authenticated: false, 
+                  error: p.error 
+                });
+            }
+
+            if (p.access_token) {
+              return res.status(200).json({ 
+                authenticated: true, 
+                access_token: p.access_token, 
+                expires_at: p.expires_at,
+                expires_in: p.expires_at ? Math.max(60, Math.floor((p.expires_at - Date.now()) / 1000)) : 3600
+              });
+            }
           }
         }
       }

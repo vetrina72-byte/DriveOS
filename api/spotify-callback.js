@@ -357,13 +357,19 @@ export default async function handler(req, res) {
       
       if (redis) {
         try {
-          await redis.set(`spotify:${sessionId}`, JSON.stringify({
+          const payload = JSON.stringify({
             authenticated: true,
             access_token: tokenData.access_token,
             refresh_token: tokenData.refresh_token,
             expires_at: Date.now() + (tokenData.expires_in || 3600) * 1000,
-          }), 'EX', 3600 * 24 * 30);
-        } catch (e) {}
+          });
+          const setResult = await redis.set(`spotify:${sessionId}`, payload, 'EX', 3600 * 24 * 30);
+          console.log(`[SPOTIFY CALLBACK] Token saved in redis for session '${sessionId}' => result:`, setResult);
+        } catch (e) {
+          console.error(`[SPOTIFY CALLBACK] Error saving token to redis for session '${sessionId}':`, e);
+        }
+      } else {
+        console.warn(`[SPOTIFY CALLBACK] Warning: No redis instance available to store session '${sessionId}'`);
       }
       
       return sendCallbackPage(res, { success: true });
