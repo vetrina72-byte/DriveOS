@@ -198,6 +198,14 @@ export default async function handler(req, res) {
       console.warn(`[SPOTIFY CALLBACK] Cache read notice: ${cacheErr?.message || cacheErr}`);
     }
 
+    let storedAuth = null;
+    if (redis && sessionId) {
+      try {
+        const authRaw = await redis.get(`spotify:auth:${sessionId}`);
+        if (authRaw) storedAuth = JSON.parse(authRaw);
+      } catch (e) {}
+    }
+
     const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
     
@@ -205,26 +213,43 @@ export default async function handler(req, res) {
     const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
     const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
     const dynamicRedirectUri = `${proto}://${host}/api/spotify-callback`;
-    const redirectUri = process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
+    const redirectUri = storedAuth?.redirectUri || process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
 
-    if (!clientSecret) {
-      console.error('[SPOTIFY CALLBACK] SPOTIFY_CLIENT_SECRET is not configured.');
-      if (sessionId && redis) {
-        try {
-          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'missing_secret' }), 'EX', 120);
-        } catch (e) {}
-      }
-      return sendCallbackPage(res, { success: false, errorType: 'technical' });
+    const bodyParams = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: String(code),
+      redirect_uri: redirectUri,
+      client_id: clientId
+    });
+
+    if (storedAuth?.codeVerifier) {
+      bodyParams.append('code_verifier', storedAuth.codeVerifier);
     }
 
-    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    };
+
+    if (clientSecret) {
+      headers['Authorization'] = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+    }
     
     try {
-      const tokenRes = await fetch(TOKEN_URL, {
+      let tokenRes = await fetch(TOKEN_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': authHeader },
-        body: new URLSearchParams({ grant_type: 'authorization_code', code: String(code), redirect_uri: redirectUri })
+        headers,
+        body: bodyParams
       });
+
+      // Retry with dynamic URI if first failed and differs
+      if (!tokenRes.ok && redirectUri !== dynamicRedirectUri) {
+        bodyParams.set('redirect_uri', dynamicRedirectUri);
+        tokenRes = await fetch(TOKEN_URL, {
+          method: 'POST',
+          headers,
+          body: bodyParams
+        });
+      }
       
       const tokenData = await tokenRes.json().catch(() => ({ error: 'invalid_json' }));
       

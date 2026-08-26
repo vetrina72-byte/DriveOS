@@ -8,6 +8,33 @@ import { FiRefreshCw } from 'react-icons/fi';
 
 const generateQrUrl = (authUrl: string) => `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(authUrl)}&bgcolor=ffffff&color=000000&qzone=4`;
 
+function generateCodeVerifier(length = 64): string {
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  let text = '';
+  for (let i = 0; i < length; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    const bytes = new Uint8Array(digest);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch (e) {
+    // Fallback in environments where subtle crypto might be restricted
+    return verifier;
+  }
+}
+
 interface SpotifyLoginProps {
     isNight?: boolean;
 }
@@ -15,7 +42,6 @@ interface SpotifyLoginProps {
 // Icon component: High quality, fluid drawing animations
 const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: boolean }) => {
     const isSuccess = type === 'success';
-    // Apple-like colors: Green #32D74B (Dark mode) / #34C759 (Light mode), Red #FF453A (Dark) / #FF3B30 (Light)
     const successColor = isNight ? '#32D74B' : '#34C759';
     const errorColor = isNight ? '#FF453A' : '#FF3B30';
     const color = isSuccess ? successColor : errorColor;
@@ -26,9 +52,8 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
                 width="64" height="64" viewBox="0 0 52 52" fill="none" 
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }} // Apple-like spring/ease
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             >
-                {/* Solid filled circle background */}
                 <motion.circle 
                     cx="26" cy="26" r="26" 
                     fill={color}
@@ -81,11 +106,10 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, clearError } = useAuth();
   const [uiState, setUiState] = useState<'IDLE' | 'ATTESA' | 'PREMIUM_ERROR' | 'LOADING'>('IDLE');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  // Use getSessionId() to ensure the QR code uses the same persistent ID that the rest of the app uses.
   const sidRef = useRef<string>(getSessionId());
   const pollTimer = useRef<number | null>(null);
 
-  const startLogin = useCallback(() => {
+  const startLogin = useCallback(async () => {
     if (pollTimer.current) clearInterval(pollTimer.current);
     clearError();
     
@@ -93,36 +117,57 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     const redirectUri = import.meta.env.VITE_REDIRECT_URI || `${window.location.origin}/api/spotify-callback`;
     const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
     
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${sidRef.current}&show_dialog=true`;
+    // Generate PKCE values
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+    // Register session on backend
+    try {
+      await fetch('/api/register-auth-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sidRef.current,
+          codeVerifier,
+          redirectUri
+        })
+      });
+    } catch (err) {
+      console.warn('[SpotifyLogin] Registration notice:', err);
+    }
+
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(sidRef.current)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
 
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
     pollTimer.current = window.setInterval(async () => {
       try {
-        const res = await fetch(`/api/check-auth-status?sessionId=${sidRef.current}`);
+        const res = await fetch(`/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}`);
+        if (!res.ok) return;
         const data = await res.json();
         
-        if (data.authenticated && data.access_token) {
+        const token = data.access_token || data.tokens?.access_token;
+        if (token && (data.authenticated || data.status === 'completed')) {
           clearInterval(pollTimer.current!);
           setUiState('LOADING');
-          // Short delay to show success state before switching context
+          
           setTimeout(() => {
               login({
-                access_token: data.access_token,
-                expires_in: 3600,
-                expires_at: data.expires_at
+                access_token: token,
+                expires_in: data.expires_in || data.tokens?.expires_in || 3600,
+                expires_at: data.expires_at || data.tokens?.expires_at
               });
-          }, 1500);
-        } else if (data.error) {
-          console.log(`[SPOTIFY LOGIN] Ricevuto stato errore: ${data.error}. Stop polling.`);
+          }, 1000);
+        } else if (data.error === 'premium_required') {
+          console.log(`[SPOTIFY LOGIN] Ricevuto stato errore premium. Stop polling.`);
           clearInterval(pollTimer.current!);
           setUiState('PREMIUM_ERROR');
         }
       } catch (e) {
         console.error("Errore polling:", e);
       }
-    }, 2000);
+    }, 1500);
   }, [login, clearError]);
 
   useEffect(() => {
@@ -131,8 +176,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   }, [startLogin]);
 
   const handleRetry = () => {
-    // Generate a NEW session ID on retry to clear any server-side error state (like premium_required)
-    // and save it to localStorage so the rest of the app picks it up immediately.
     const newSid = generateUUID();
     localStorage.setItem('spotify_session_id', newSid);
     sidRef.current = newSid;
@@ -141,18 +184,14 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     setTimeout(startLogin, 100);
   };
 
-  // --- REFINED THEME CONFIGURATION ---
   const theme = {
-    // Night: Deep, rich dark gray (#1C1C1E) matching iOS system backgrounds
-    // Day: Pure white with subtle shadow
     card: isNight 
         ? 'bg-[#1C1C1E] border border-white/5 shadow-2xl' 
         : 'bg-white border border-black/5 shadow-[0_12px_40px_rgba(0,0,0,0.12)]', 
     
     title: isNight ? 'text-white' : 'text-black',
-    subtitle: isNight ? 'text-[#AEAEB2]' : 'text-[#636366]', // Apple system gray colors
+    subtitle: isNight ? 'text-[#AEAEB2]' : 'text-[#636366]',
     
-    // Buttons
     buttonPrimary: isNight 
         ? 'bg-white text-black hover:bg-[#F2F2F7]' 
         : 'bg-black text-white hover:bg-[#3A3A3C]',
@@ -173,12 +212,16 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             className={`flex items-center gap-12 p-12 rounded-[3rem] ${theme.card}`}
           >
-            {/* QR Container - Reduced size for "airy" feel */}
             <div className="p-4 bg-white rounded-[1.75rem] shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
-              <img src={qrCodeUrl} alt="QR" className="w-52 h-52 mix-blend-multiply block" />
+              {qrCodeUrl ? (
+                <img src={qrCodeUrl} alt="QR" className="w-52 h-52 mix-blend-multiply block" />
+              ) : (
+                <div className="w-52 h-52 flex items-center justify-center">
+                  <div className={`w-8 h-8 border-2 rounded-full animate-spin ${theme.spinner}`} />
+                </div>
+              )}
             </div>
             
-            {/* Text Content */}
             <div className="max-w-xs flex flex-col justify-center gap-5">
               <div className="flex items-center gap-3">
                 <FaSpotify className="w-10 h-10 text-[#1DB954]" />
@@ -191,12 +234,11 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           </motion.div>
         )}
 
-        {/* Error Card - Wider, shorter, more elegant */}
         {uiState === 'PREMIUM_ERROR' && (
           <motion.div 
             key="error"
             initial={{ opacity: 0, scale: 0.95 }} 
-            animate={{ opacity: 1, scale: 1 }}
+            animate={{ opacity: 1, scale: 1 }} 
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className={`flex flex-col items-center text-center px-12 py-10 rounded-[2rem] max-w-[35rem] w-full ${theme.card}`}
@@ -216,7 +258,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           </motion.div>
         )}
 
-        {/* Success/Loading Card - More compact */}
         {uiState === 'LOADING' && (
           <motion.div 
             key="load" 

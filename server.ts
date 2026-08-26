@@ -35,13 +35,32 @@ async function startServer() {
     }
   }, 60 * 1000);
 
+  app.post('/api/register-auth-session', async (req, res) => {
+    const { sessionId, codeVerifier, redirectUri } = req.body || {};
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Missing sessionId' });
+    }
+    const sessionData = {
+      status: 'pending',
+      codeVerifier,
+      redirectUri,
+      timestamp: Date.now()
+    };
+    authStore.set(String(sessionId), sessionData);
+    try {
+      const redis = getRedis();
+      await redis.set(`spotify:auth:${sessionId}`, JSON.stringify(sessionData), 'EX', 900);
+    } catch (e) {}
+    res.json({ ok: true });
+  });
+
   app.get('/api/spotify-callback', async (req, res) => {
     const { code, state: sessionId, error } = req.query;
 
     if (error) {
       console.error('Spotify callback error:', error);
       if (sessionId) {
-        authStore.set(sessionId, { status: 'error', error: String(error), timestamp: Date.now() });
+        authStore.set(String(sessionId), { status: 'error', error: String(error), timestamp: Date.now() });
         const redis = getRedis();
         await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: String(error), timestamp: Date.now() }), 'EX', 3600).catch(() => {});
       }
@@ -51,48 +70,69 @@ async function startServer() {
       return res.sendFile(path.join(__dirname, 'callback.html'));
     }
 
+    const sid = String(sessionId);
+    let storedSession = authStore.get(sid);
+    if (!storedSession) {
+      try {
+        const redis = getRedis();
+        const raw = await redis.get(`spotify:auth:${sid}`);
+        if (raw) storedSession = JSON.parse(raw);
+      } catch (e) {}
+    }
+
     const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
     const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
     const proto = req.headers['x-forwarded-proto'] || (String(host).includes('localhost') ? 'http' : 'https');
     const dynamicRedirectUri = `${proto}://${host}/api/spotify-callback`;
-    const redirectUri = process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
+    const redirectUri = storedSession?.redirectUri || process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
 
-    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
     params.append('code', code as string);
     params.append('redirect_uri', redirectUri);
+    params.append('client_id', clientId);
+    if (storedSession?.codeVerifier) {
+      params.append('code_verifier', storedSession.codeVerifier);
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (clientSecret) {
+      headers['Authorization'] = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+    }
 
     try {
-      const spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': authHeader,
-        },
-      });
+      let spotifyResponse;
+      try {
+        spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, { headers });
+      } catch (firstErr: any) {
+        // Fallback retry with dynamic redirect URI if different
+        if (redirectUri !== dynamicRedirectUri) {
+          console.warn(`[SPOTIFY CALLBACK] Token exchange failed with ${redirectUri}, retrying with ${dynamicRedirectUri}...`);
+          params.set('redirect_uri', dynamicRedirectUri);
+          spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, { headers });
+        } else {
+          throw firstErr;
+        }
+      }
       
       const { access_token, refresh_token, expires_in } = spotifyResponse.data;
       const expires_at = Date.now() + (expires_in * 1000);
 
-      // Check for premium account
-      let isPremium = true;
+      // Check for premium account (soft check, don't fail on rate-limit/network)
       try {
         const userRes = await axios.get('https://api.spotify.com/v1/me', {
-          headers: { 'Authorization': `Bearer ${access_token}` }
+          headers: { 'Authorization': `Bearer ${access_token}` },
+          timeout: 4000
         });
         const userData = userRes.data;
-        
-        if (userData.product && userData.product !== 'premium') {
-          console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
-          isPremium = false;
-          authStore.set(sessionId, { status: 'error', error: 'premium_required', timestamp: Date.now() });
-          const redis = getRedis();
-          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required', timestamp: Date.now() }), 'EX', 3600).catch(() => {});
-          return res.sendFile(path.join(__dirname, 'callback.html'));
+        if (userData?.product && userData.product !== 'premium' && userData.product !== 'open') {
+          console.log(`[SPOTIFY CALLBACK] Account product type for session ${sid}: ${userData.product}`);
         }
       } catch (userErr) {
-        console.warn(`[SPOTIFY CALLBACK] Warning: User check soft error for session ${sessionId}, proceeding.`);
+        console.warn(`[SPOTIFY CALLBACK] Warning: User check soft error for session ${sid}, proceeding.`);
       }
 
       // Securely set the refresh token in an HttpOnly cookie
@@ -105,7 +145,7 @@ async function startServer() {
       }
 
       // Store in memory
-      authStore.set(sessionId, { 
+      authStore.set(sid, { 
         status: 'completed', 
         tokens: { 
           access_token, 
@@ -118,7 +158,7 @@ async function startServer() {
 
       // Store in Redis / session manager
       const redis = getRedis();
-      await redis.set(`spotify:${sessionId}`, JSON.stringify({
+      await redis.set(`spotify:${sid}`, JSON.stringify({
         authenticated: true,
         access_token,
         refresh_token,
@@ -126,13 +166,13 @@ async function startServer() {
         created_at: Date.now()
       }), 'EX', 60 * 60 * 24 * 30).catch(() => {});
       
-      // Send the success page to the user's phone
-      res.sendFile(path.join(__dirname, 'callback.html'));
+      console.log(`[SPOTIFY CALLBACK] Successfully authenticated session: ${sid}`);
+      return res.sendFile(path.join(__dirname, 'callback.html'));
 
     } catch (exchangeError: any) {
       console.error('Error exchanging token:', exchangeError.response ? exchangeError.response.data : exchangeError.message);
-      authStore.set(sessionId, { status: 'error', error: 'auth_failed', timestamp: Date.now() });
-      res.sendFile(path.join(__dirname, 'callback.html'));
+      authStore.set(sid, { status: 'error', error: 'auth_failed', timestamp: Date.now() });
+      return res.sendFile(path.join(__dirname, 'callback.html'));
     }
   });
 
@@ -148,8 +188,10 @@ async function startServer() {
     if (sessionData && sessionData.status === 'completed' && sessionData.tokens?.access_token) {
       return res.status(200).json({ 
         authenticated: true, 
+        status: 'completed',
         access_token: sessionData.tokens.access_token,
-        expires_at: sessionData.tokens.expires_at
+        expires_at: sessionData.tokens.expires_at,
+        tokens: sessionData.tokens
       });
     }
 
@@ -170,8 +212,10 @@ async function startServer() {
           authStore.set(sid, { status: 'completed', tokens: parsed, timestamp: Date.now() });
           return res.status(200).json({
             authenticated: true,
+            status: 'completed',
             access_token: parsed.access_token,
-            expires_at: parsed.expires_at
+            expires_at: parsed.expires_at,
+            tokens: parsed
           });
         }
         if (parsed.error) {
