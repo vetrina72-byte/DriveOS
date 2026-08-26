@@ -38,18 +38,24 @@ async function startServer() {
 
     if (error) {
         console.error('Spotify callback error:', error);
-        return res.status(400).send(`<h1>Authentication Error</h1><p>Spotify returned an error: ${error}</p>`);
+        return res.sendFile(path.join(__dirname, 'callback.html'));
     }
     if (!code || !sessionId) {
-        return res.status(400).send('<h1>Authentication Error</h1><p>Missing required parameters (code or session ID).</p>');
+        return res.sendFile(path.join(__dirname, 'callback.html'));
     }
 
-    const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
-    const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
+    const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
+    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
+    const proto = req.headers['x-forwarded-proto'] || (String(host).includes('localhost') ? 'http' : 'https');
+    const dynamicRedirectUri = `${proto}://${host}/api/spotify-callback`;
+    const redirectUri = process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
+
+    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
     params.append('code', code as string);
-    params.append('redirect_uri', VITE_REDIRECT_URI || 'http://localhost:5173/api/spotify-callback');
+    params.append('redirect_uri', redirectUri);
 
     try {
         const spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, {
@@ -71,7 +77,7 @@ async function startServer() {
             if (!userData.product || userData.product !== 'premium') {
                 console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
                 authStore.set(sessionId, { status: 'error', error: 'premium_required', timestamp: Date.now() });
-                return res.sendFile(path.join(__dirname, 'callback.html')); // Or send a specific error page
+                return res.sendFile(path.join(__dirname, 'callback.html'));
             }
         } catch (userErr) {
             console.error(`[SPOTIFY CALLBACK] User Fetch Failed for session: ${sessionId}. Mapping to Premium Required.`);
@@ -102,7 +108,8 @@ async function startServer() {
 
     } catch (exchangeError: any) {
         console.error('Error exchanging token:', exchangeError.response ? exchangeError.response.data : exchangeError.message);
-        res.status(500).send('<h1>Authentication Failed</h1><p>Could not exchange the authorization code for an access token.</p>');
+        authStore.set(sessionId, { status: 'error', error: 'premium_required', timestamp: Date.now() });
+        res.sendFile(path.join(__dirname, 'callback.html'));
     }
   });
 

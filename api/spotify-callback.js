@@ -155,108 +155,152 @@ const sendCallbackPage = (res, { success = true, errorType = '' }) => {
 };
 
 export default async function handler(req, res) {
-  const { code, state: sessionId, error } = req.query;
-  const redis = getRedis();
-
-  if (error === 'access_denied') {
-    if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'access_denied' }), 'EX', 120);
-    return sendCallbackPage(res, { success: false, errorType: 'access_denied' });
-  }
-
-  if (error || !code || !sessionId) {
-    if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
-    return sendCallbackPage(res, { success: false, errorType: 'technical' });
-  }
-
-  // --- CONTROLLO STATO PRECEDENTE ---
-  let cachedState = null;
   try {
-    const cachedStateRaw = await redis.get(`spotify:${sessionId}`);
-    if (cachedStateRaw) {
-      cachedState = JSON.parse(cachedStateRaw);
+    const { code, state: sessionId, error } = req.query || {};
+    const redis = getRedis();
+
+    if (error === 'access_denied') {
+      if (sessionId && redis) {
+        try {
+          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'access_denied' }), 'EX', 120);
+        } catch (e) {}
+      }
+      return sendCallbackPage(res, { success: false, errorType: 'access_denied' });
+    }
+
+    if (error || !code || !sessionId) {
+      if (sessionId && redis) {
+        try {
+          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
+        } catch (e) {}
+      }
+      return sendCallbackPage(res, { success: false, errorType: 'technical' });
+    }
+
+    // --- CONTROLLO STATO PRECEDENTE ---
+    let cachedState = null;
+    try {
+      if (redis) {
+        const cachedStateRaw = await redis.get(`spotify:${sessionId}`);
+        if (cachedStateRaw) {
+          cachedState = JSON.parse(cachedStateRaw);
+          
+          if (cachedState.error === 'premium_required') {
+            return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+          }
+          
+          if (cachedState.access_token) {
+            return sendCallbackPage(res, { success: true });
+          }
+        }
+      }
+    } catch (cacheErr) {
+      console.warn(`[SPOTIFY CALLBACK] Cache read notice: ${cacheErr?.message || cacheErr}`);
+    }
+
+    const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
+    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
+    
+    // Dynamic redirect URI fallback if environment variable is missing
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
+    const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
+    const dynamicRedirectUri = `${proto}://${host}/api/spotify-callback`;
+    const redirectUri = process.env.VITE_REDIRECT_URI || process.env.REDIRECT_URI || dynamicRedirectUri;
+
+    if (!clientSecret) {
+      console.error('[SPOTIFY CALLBACK] SPOTIFY_CLIENT_SECRET is not configured.');
+      if (sessionId && redis) {
+        try {
+          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'missing_secret' }), 'EX', 120);
+        } catch (e) {}
+      }
+      return sendCallbackPage(res, { success: false, errorType: 'technical' });
+    }
+
+    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+    
+    try {
+      const tokenRes = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': authHeader },
+        body: new URLSearchParams({ grant_type: 'authorization_code', code: String(code), redirect_uri: redirectUri })
+      });
       
-      // Se avevamo già determinato che serve Premium (o user_fetch_failed mappato a premium),
-      // restituiamo SEMPRE quell'errore.
-      if (cachedState.error === 'premium_required') {
+      const tokenData = await tokenRes.json().catch(() => ({ error: 'invalid_json' }));
+      
+      if (!tokenRes.ok) {
+          console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
+          
+          if (cachedState && cachedState.error === 'premium_required') {
+               return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+          }
+
+          if (tokenData.error === 'invalid_grant') {
+               return sendCallbackPage(res, { success: false, errorType: 'session_expired' });
+          }
+
+          if (sessionId && redis) {
+            try {
+              await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'token_exchange_failed' }), 'EX', 120);
+            } catch (e) {}
+          }
+          return sendCallbackPage(res, { success: false, errorType: 'technical' });
+      }
+
+      const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      
+      if (!userRes.ok) {
+          console.error(`[SPOTIFY CALLBACK] User Fetch Failed for session: ${sessionId}. Mapping to Premium Required.`);
+          if (redis) {
+            try {
+              await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600);
+            } catch (e) {}
+          }
+          return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+      }
+      
+      const userData = await userRes.json().catch(() => ({ product: 'unknown' }));
+
+      // --- CONTROLLO PRODOTTO PREMIUM ---
+      if (!userData.product || userData.product !== 'premium') {
+        console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
+        if (redis) {
+          try {
+            await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600);
+          } catch (e) {}
+        }
         return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
       }
       
-      if (cachedState.access_token) {
-        return sendCallbackPage(res, { success: true });
+      if (redis) {
+        try {
+          await redis.set(`spotify:${sessionId}`, JSON.stringify({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+            expires_at: Date.now() + (tokenData.expires_in || 3600) * 1000,
+          }), 'EX', 3600);
+        } catch (e) {}
       }
-    }
-  } catch (cacheErr) {
-    console.error(`[SPOTIFY CALLBACK] Cache read error: ${cacheErr}`);
-  }
+      
+      return sendCallbackPage(res, { success: true });
 
-  const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, VITE_REDIRECT_URI } = process.env;
-  const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
-  
-  try {
-    const tokenRes = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': authHeader },
-      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: VITE_REDIRECT_URI })
-    });
-    
-    const tokenData = await tokenRes.json();
-    
-    if (!tokenRes.ok) {
-        console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
-        
-        if (cachedState && cachedState.error === 'premium_required') {
-             return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
-        }
-
-        if (tokenData.error === 'invalid_grant') {
-             return sendCallbackPage(res, { success: false, errorType: 'session_expired' });
-        }
-
-        if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'token_exchange_failed' }), 'EX', 120);
-        return sendCallbackPage(res, { success: false, errorType: 'technical' });
-    }
-
-    const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-    
-    // CRITICAL FIX: Treat user fetch failure as "Premium Required" / Access Denied
-    if (!userRes.ok) {
-        console.error(`[SPOTIFY CALLBACK] User Fetch Failed for session: ${sessionId}. Mapping to Premium Required.`);
-        // Map user_fetch_failed to premium_required for UX consistency
-        await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600);
-        return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
-    }
-    
-    const userData = await userRes.json();
-
-    // --- CONTROLLO PRODOTTO PREMIUM ---
-    if (!userData.product || userData.product !== 'premium') {
-      console.log(`[SPOTIFY CALLBACK] Account NON premium per session: ${sessionId} (Product: ${userData.product})`);
-      await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'premium_required' }), 'EX', 3600); 
+    } catch (e) {
+      console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
+      
+      if (cachedState && cachedState.error === 'premium_required') {
+          return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+      }
+      
+      if (sessionId && redis) {
+        try {
+          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
+        } catch (err) {}
+      }
+      
       return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
     }
-    
-    await redis.set(`spotify:${sessionId}`, JSON.stringify({
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-      expires_at: Date.now() + tokenData.expires_in * 1000,
-    }), 'EX', 3600); 
-    sendCallbackPage(res, { success: true });
-
-  } catch (e) {
-    console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
-    
-    // If we knew it was premium required, show that.
-    if (cachedState && cachedState.error === 'premium_required') {
-        return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
-    }
-    
-    // If explicit exception, default to premium required message if we want to avoid "Technical Error" at all costs?
-    // User said: "Non deve comparire: nessun Errore tecnico".
-    // We map generic exceptions to 'premium_required' style message in the catch block to be safe.
-    if (sessionId) await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
-    
-    // Using 'premium_required' error type even for generic exceptions to satisfy "Always show... Access Denied"
-    // OR allow the fallback 'technical' in sendCallbackPage which we renamed to generic Error without retry.
-    return sendCallbackPage(res, { success: false, errorType: 'premium_required' });
+  } catch (fatalError) {
+    console.error('[SPOTIFY CALLBACK] Fatal uncaught error:', fatalError);
+    return sendCallbackPage(res, { success: false, errorType: 'technical' });
   }
 }
