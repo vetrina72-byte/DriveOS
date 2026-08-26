@@ -173,7 +173,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 state.startPercent = state.currentPercent;
                 state.targetPercent = newTargetPercent;
                 state.animStartTime = performance.now();
-                // state.isInteracting = true; // REMOVED: Prevent emitting onDragProgress during click transitions
+                state.isInteracting = true; // Enabled for synchronized 3D canvas animation
             }
         }
     }, [isOpen]);

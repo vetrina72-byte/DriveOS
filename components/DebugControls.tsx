@@ -258,7 +258,7 @@ export default function DebugControls({
               state.startPercent = state.currentPercent;
               state.targetPercent = newTargetPercent;
               state.animStartTime = performance.now();
-              // state.isInteracting = true; // REMOVED
+              state.isInteracting = true; // Enabled for synchronized 3D canvas animation
           }
       }
   }, [isOpen, isAppView]);

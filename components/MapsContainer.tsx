@@ -230,6 +230,7 @@ const MapsContainer = React.memo(({
             state.startX = state.currentX;
             state.targetX = newTargetX;
             state.animStartTime = performance.now();
+            state.isInteracting = true; // Enabled for synchronized 3D canvas animation
         }
     }
   }, [isOpen]);

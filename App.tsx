@@ -467,6 +467,11 @@ function AppContent() {
 
   const isSwitchingRef = useRef(false);
   const switchTimeoutRef = useRef<number | null>(null);
+  const activeAppRef = useRef<string | null>(activeApp);
+
+  useEffect(() => {
+    activeAppRef.current = activeApp;
+  }, [activeApp]);
 
   const switchApp = useCallback((newApp: string) => {
       isSwitchingRef.current = true;
@@ -474,39 +479,46 @@ function AppContent() {
       switchTimeoutRef.current = window.setTimeout(() => {
           isSwitchingRef.current = false;
       }, 500);
+      activeAppRef.current = newApp;
       setActiveApp(newApp);
       setIsMapsLayered(false);
   }, []);
 
   const handleSubAppClose = useCallback(() => {
+      activeAppRef.current = 'maps';
       setActiveApp('maps');
       setIsMapsLayered(false);
   }, []);
 
   const toggleApp = useCallback((appName: string) => {
     setIsAppLauncherOpen(false); setIsCustomizing(false);
-    const willBeActive = activeApp !== appName; 
+    const currentActive = activeAppRef.current;
+    const willBeActive = currentActive !== appName; 
     if (willBeActive && !dockApps.includes(appName)) setRecentlyOpened(prev => [appName, ...prev.filter(id => id !== appName)]);
     
     // We generalize the map layering logic to all apps in SPLIT_APPS_WITH_MAP_UNDER
-    if (SPLIT_APPS_WITH_MAP_UNDER.includes(appName) && activeApp === 'maps') { 
+    if (SPLIT_APPS_WITH_MAP_UNDER.includes(appName) && currentActive === 'maps') { 
+        activeAppRef.current = appName;
         setActiveApp(appName); 
         setIsMapsLayered(true); 
         return; 
     }
-    if (SPLIT_APPS_WITH_MAP_UNDER.includes(appName) && activeApp === appName) { 
+    if (SPLIT_APPS_WITH_MAP_UNDER.includes(appName) && currentActive === appName) { 
+        activeAppRef.current = null;
         setActiveApp(null); 
         setIsMapsLayered(false); 
         return; 
     }
     
-    if (activeApp !== null && activeApp !== appName) {
+    if (currentActive !== null && currentActive !== appName) {
         switchApp(appName);
     } else {
         setIsMapsLayered(false); 
-        setActiveApp(prevApp => (prevApp === appName ? null : appName));
+        const nextApp = currentActive === appName ? null : appName;
+        activeAppRef.current = nextApp;
+        setActiveApp(nextApp);
     }
-  }, [activeApp, dockApps, isMapsLayered, switchApp]);
+  }, [dockApps, switchApp]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
