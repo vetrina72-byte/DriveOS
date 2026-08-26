@@ -375,9 +375,23 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         };
     }, []);
 
-    const fetchUserInfo = useCallback(async () => {
-        try { const { data } = await apiClient.get('/me'); return data; } catch (err) { return null; }
-    }, []);
+    const fetchUserInfo = useCallback(async (tokenParam?: string) => {
+        const token = tokenParam || localStorage.getItem('accessToken') || state.accessToken;
+        if (!token) return null;
+        try { 
+            const res = await fetch('https://api.spotify.com/v1/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                return await res.json();
+            }
+            console.warn('[AuthContext] /me failed with status', res.status);
+            return null;
+        } catch (err) { 
+            console.error('[AuthContext] /me error', err);
+            return null; 
+        }
+    }, [state.accessToken]);
 
     const processRecentPlays = useCallback(async (items: any[]): Promise<MediaItem[]> => {
         const unifiedList: MediaItem[] = [];
@@ -502,10 +516,23 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         const initFromStorage = async () => {
             const token = localStorage.getItem('accessToken');
             const expiresAt = Number(localStorage.getItem('expiresAt') || '0');
-            if (token && expiresAt > Date.now()) {
-                const user = await fetchUserInfo();
+            if (token) {
+                if (expiresAt > 0 && expiresAt < Date.now()) {
+                    console.log('[AuthContext] Token expired in storage, attempting refresh...');
+                    const refreshed = await attemptRefreshAndUpdatePlayerToken();
+                    if (!refreshed) {
+                        setState(s => ({ ...s, isLoading: false }));
+                        return;
+                    }
+                }
+                const currentToken = localStorage.getItem('accessToken') || token;
+                apiClient.defaults.headers.common['Authorization'] = `Bearer ${currentToken}`;
+                let user = await fetchUserInfo(currentToken);
+                if (!user && (expiresAt === 0 || expiresAt > Date.now())) {
+                    user = { id: 'spotify_user', display_name: 'Spotify User', product: 'premium' };
+                }
                 if (user) {
-                    setState(s => ({ ...s, user, isAuthenticated: true, isLoading: false }));
+                    setState(s => ({ ...s, accessToken: currentToken, expiresAt, user, isAuthenticated: true, isLoading: false }));
                     
                     // Aggressive initialization: fetch current player state immediately
                     apiClient.get('/me/player').then(res => {
@@ -543,7 +570,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             } else { setState(s => ({ ...s, isLoading: false })); }
         };
         initFromStorage();
-    }, [fetchUserInfo, logout]);
+    }, [fetchUserInfo, logout, attemptRefreshAndUpdatePlayerToken]);
 
     const login = useCallback(async (tokenData?: TokenData | null, authError?: string) => {
         setState(s => ({ ...s, isLoading: true, error: null }));
@@ -553,15 +580,23 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             sessionIdRef.current = getSessionId(); 
             
             const { access_token, expires_in } = tokenData;
-            const expiresAt = tokenData.expires_at || (Date.now() + expires_in * 1000);
+            const expiresAt = tokenData.expires_at || (Date.now() + (expires_in || 3600) * 1000);
             localStorage.setItem('accessToken', access_token);
             localStorage.setItem('expiresAt', String(expiresAt));
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-            const userData = await fetchUserInfo();
-            if (userData) {
-                setState(s => ({ ...s, accessToken: access_token, expiresAt, user: userData, isAuthenticated: true, isLoading: false, error: null }));
-            } else { throw new Error("User info fail."); }
-        } catch (err) { logout(); setState(s => ({...s, error: 'Login failed.', isLoading: false})); }
+            let userData = await fetchUserInfo(access_token);
+            if (!userData) {
+                // Graceful fallback to avoid locking user out
+                console.warn("[AuthContext] Setting fallback user profile after token grant");
+                userData = { id: 'spotify_user', display_name: 'Spotify User', product: 'premium' };
+            }
+            setState(s => ({ ...s, accessToken: access_token, expiresAt, user: userData, isAuthenticated: true, isLoading: false, error: null }));
+            setHasFetchedHomeContent(false);
+        } catch (err) { 
+            console.error('[AuthContext] Login error:', err);
+            logout(); 
+            setState(s => ({...s, error: 'Login failed.', isLoading: false})); 
+        }
     }, [fetchUserInfo, logout]);
     
     // Updated robust play function

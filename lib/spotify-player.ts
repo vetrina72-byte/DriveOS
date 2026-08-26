@@ -230,9 +230,40 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
                 headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
                 body: JSON.stringify(playRequest)
             });
+            if (res.ok) return { ok: true, status: res.status };
+            
+            // Direct API fallback if proxy returns 401 or error
+            const directToken = localStorage.getItem('accessToken');
+            if (directToken) {
+                const directUrl = spotifyDeviceId ? `https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}` : 'https://api.spotify.com/v1/me/player/play';
+                const directRes = await fetch(directUrl, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${directToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(options || {})
+                });
+                if (directRes.ok || directRes.status === 204) {
+                    return { ok: true, status: directRes.status };
+                }
+            }
+
             return { ok: res.ok, status: res.status };
         } catch (e) {
             console.error('[safePlay] Network error during play:', e);
+            // Direct API fallback on network error
+            try {
+                const directToken = localStorage.getItem('accessToken');
+                if (directToken) {
+                    const directUrl = spotifyDeviceId ? `https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}` : 'https://api.spotify.com/v1/me/player/play';
+                    const directRes = await fetch(directUrl, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${directToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(options || {})
+                    });
+                    if (directRes.ok || directRes.status === 204) {
+                        return { ok: true, status: directRes.status };
+                    }
+                }
+            } catch (err) {}
             return { ok: false, status: 500 };
         }
     };
