@@ -14,6 +14,7 @@ import {
   Environment,
   MeshReflectorMaterial,
   Html,
+  Lightformer,
 } from "@react-three/drei";
 import * as THREE from "three";
 import { VolumetricHeadlight } from "./VolumetricHeadlight";
@@ -32,6 +33,28 @@ const SpotLight = "spotLight" as any;
 const DirectionalLight = "directionalLight" as any;
 const BoxGeometry = "boxGeometry" as any;
 const MeshStandardMaterial = "meshStandardMaterial" as any;
+
+// Helper to convert Kelvin color temperature to THREE.Color
+function kelvinToColor(kelvin: number): THREE.Color {
+  const k = Math.max(1000, Math.min(40000, kelvin)) / 100;
+  let r = 0, g = 0, b = 0;
+
+  if (k <= 66) {
+    r = 255;
+    g = Math.max(0, Math.min(255, 99.4708025861 * Math.log(k) - 161.1195681661));
+    if (k <= 19) {
+      b = 0;
+    } else {
+      b = Math.max(0, Math.min(255, 138.5177312231 * Math.log(k - 10) - 305.0447927307));
+    }
+  } else {
+    r = Math.max(0, Math.min(255, 329.698727446 * Math.pow(k - 60, -0.1332047592)));
+    g = Math.max(0, Math.min(255, 288.1221695283 * Math.pow(k - 60, -0.0755148492)));
+    b = 255;
+  }
+
+  return new THREE.Color(r / 255, g / 255, b / 255);
+}
 
 // Simple Error Boundary for the 3D model
 interface ModelErrorBoundaryProps {
@@ -106,8 +129,17 @@ export interface HeadlightConfig {
   linked: boolean; // Toggle rotation link with model
 }
 
-// Memoize Environment per evitare flash sulle riflessioni
-const MemoizedEnvironment = React.memo(() => <Environment preset="city" />);
+// Memoize Environment per evitare flash sulle riflessioni e impostare uno studio di luci professionali
+const MemoizedEnvironment = React.memo(() => (
+  <Environment resolution={512}>
+    {/* Main Overhead Softbox Light Strip */}
+    <Lightformer form="rect" intensity={3} position={[0, 10, 0]} scale={[10, 10, 1]} rotation={[Math.PI / 2, 0, 0]} />
+    {/* Accent Soft Side Box for metallic highlights */}
+    <Lightformer form="rect" intensity={1.5} position={[-10, 5, 5]} scale={[5, 15, 1]} rotation={[0, Math.PI / 4, 0]} />
+    {/* Rim Light for vehicle silhouette highlight */}
+    <Lightformer form="rect" intensity={2} position={[10, 4, -5]} scale={[5, 10, 1]} rotation={[0, -Math.PI / 4, 0]} />
+  </Environment>
+));
 
 // Componente Model con emissive light e ombre
 const Model = forwardRef<
@@ -549,8 +581,7 @@ function SceneController({
   const syncLights = () => {
     if (modelRef.current) {
       frontLightTarget.position
-        .copy(modelRef.current.position)
-        .add(new THREE.Vector3(0, 0.5, 0));
+        .copy(modelRef.current.position);
         
       if (frontLightRef && frontLightRef.current !== null) {
         frontLightRef.current.position.set(
@@ -1090,8 +1121,10 @@ function SceneController({
     }
 
     if (floorRef.current && modelRef.current) {
-      // Preserva l'offset verticale di -carReflectionOffsetY per incollare il riflesso alle ruote
+      // Anchored to the car on the horizontal plane (X and Z) and preserves vertical offset
+      floorRef.current.position.x = modelRef.current.position.x;
       floorRef.current.position.y = modelRef.current.position.y - carReflectionOffsetY;
+      floorRef.current.position.z = modelRef.current.position.z;
       
       // Force immediate update of matrices so that MeshReflectorMaterial uses up-to-date world coordinates in the same frame render
       modelRef.current.updateMatrix();
@@ -1120,7 +1153,7 @@ function EnvironmentController({
   nightFogFar,
   sceneColors,
   targetWeatherParams,
-  carReflectionOpacity = 0.75,
+  carReflectionOpacity = 1.08,
   forceManualFog = false,
   dirLightIntensity = 1.0,
   spotLightIntensity = 1.0,
@@ -1259,10 +1292,10 @@ function EnvironmentController({
     );
 
     if (isNight) {
-      targetAmbientIntensity = nightAmbientIntensity;
+      targetAmbientIntensity = 0.01;
       targetFrontLightIntensity = nightFrontLightIntensity;
       targetDirectionalIntensity = 0;
-      targetEnvIntensity = nightEnvironmentIntensity;
+      targetEnvIntensity = 0.01;
       targetMirror = 0.35;
       targetFog = { near: nightFogNear, far: nightFogFar };
     } else {
@@ -1312,7 +1345,9 @@ function EnvironmentController({
 
     const floorMat = floorRef.current!.material as any;
     floorMat.color.copy(currentFloorColor);
-    floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror, targetMirror, t);
+    if ('mirror' in floorMat || floorMat.mirror !== undefined) {
+      floorMat.mirror = THREE.MathUtils.lerp(floorMat.mirror || 0, targetMirror, t);
+    }
 
     if (ambientLightRef.current) {
       ambientLightRef.current.intensity = THREE.MathUtils.lerp(
@@ -1406,6 +1441,9 @@ interface VehicleCanvasProps {
   spotLightPosY?: number;
   spotLightPosZ?: number;
   spotLightIntensity?: number;
+  spotLightAngle?: number;
+  spotLightPenumbra?: number;
+  spotLightTemperature?: number;
   carReflectionOffsetY?: number;
   carReflectionOpacity?: number;
   carReflectionRoughness?: number;
@@ -1461,11 +1499,14 @@ export default function VehicleCanvas({
   spotLightPosY = 5.0,
   spotLightPosZ = 0.0,
   spotLightIntensity = 1.0,
+  spotLightAngle = 0.6,
+  spotLightPenumbra = 0.5,
+  spotLightTemperature = 6500,
   carReflectionOffsetY = 0.0,
-  carReflectionOpacity = 2.59,
-  carReflectionRoughness = 0.27,
-  carReflectionBlur = 50,
-  carReflectionMixStrength = 1.6,
+  carReflectionOpacity = 1.08,
+  carReflectionRoughness = 0.00,
+  carReflectionBlur = 0,
+  carReflectionMixStrength = 0.1,
   carReflectionMetalness = 0.00,
   forceManualFog = false,
   showRedPanel = true,
@@ -1542,6 +1583,11 @@ export default function VehicleCanvas({
 
   const shadowPosition = { x: carShadowOffsetX, y: carShadowOffsetY, z: carShadowOffsetZ };
   const shadowOpacity = carShadowOpacity;
+
+  const calculatedTemperatureColor = useMemo(
+    () => kelvinToColor(spotLightTemperature),
+    [spotLightTemperature]
+  );
 
   const initialConfig = useMemo(() => {
     if (uiScale === 1.0) {
@@ -1747,7 +1793,7 @@ export default function VehicleCanvas({
             
             {/* Target marker for lights, moved outside of modelRef so it doesn't double-transform */}
             {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
-            <Primitive object={frontLightTarget} position={[0, 0, 10]} />
+            <Primitive object={frontLightTarget} />
 
             {/* Unlinked headlights stay fixed in world rotation while car spins */}
             {!linked && (
@@ -1785,9 +1831,12 @@ export default function VehicleCanvas({
         <SpotLight
           ref={frontLightRef}
           position={[spotLightPosX, spotLightPosY, spotLightPosZ]}
-          angle={0.5}
-          penumbra={0.5}
-          intensity={1}
+          intensity={spotLightIntensity}
+          angle={spotLightAngle}
+          penumbra={spotLightPenumbra}
+          color={calculatedTemperatureColor}
+          distance={25}
+          decay={1.5}
         />
         <DirectionalLight
           ref={directionalLightRef}
@@ -1820,13 +1869,13 @@ export default function VehicleCanvas({
             mixBlur={1}
             mixStrength={carReflectionMixStrength}
             roughness={carReflectionRoughness}
-            roughnessMap={noiseTexture}
             depthScale={0} // Mantiene stabile il riflesso ed evita l'effetto TV vecchia raso terra
             minDepthThreshold={0.2}
             maxDepthThreshold={1.2}
             color="#101010"
             metalness={carReflectionMetalness}
-            mirror={carReflectionOpacity} // Rende il riflesso nitido e presente vicino al punto di contatto
+            envMapIntensity={1.0} // Permette di catturare i riflessi speculari delle luci studio Lightformer
+            mirror={carReflectionOpacity} // Utilizza l'opacità di riflesso configurata per la lucentezza desiderata
           />
         </Mesh>
 

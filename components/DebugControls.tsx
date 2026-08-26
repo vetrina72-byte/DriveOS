@@ -429,11 +429,19 @@ export default function DebugControls({
     setSatelliteLabelBrightness(2.3);
     setSatelliteLabelOutlineWidth(1.2);
     setCarReflectionOffsetY(0.0);
-    setCarReflectionOpacity(2.59);
-    setCarReflectionRoughness(0.27);
-    setCarReflectionBlur(50);
-    setCarReflectionMixStrength(1.6);
-    setCarReflectionMetalness(0.00);
+    if (isNight) {
+      setCarReflectionOpacity(0.00);
+      setCarReflectionRoughness(0.70);
+      setCarReflectionBlur(0);
+      setCarReflectionMixStrength(25.0);
+      setCarReflectionMetalness(0.00);
+    } else {
+      setCarReflectionOpacity(1.08);
+      setCarReflectionRoughness(0.00);
+      setCarReflectionBlur(0);
+      setCarReflectionMixStrength(0.1);
+      setCarReflectionMetalness(0.00);
+    }
     setForceManualFog(false);
     setHeadlightConfig({ x: -0.05, y: 0.77, z: -1.55, angle: 0.06, yaw: 0.01, assemblyYaw: -1.588, intensity: 0.75, startWidth: 0.30, endWidth: 0.10, length: 7.00, startHeight: 0.03, endHeight: 0.01, fade: 7.40, separation: 1.25, circular: true, linked: true });
   };

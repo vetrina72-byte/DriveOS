@@ -53,8 +53,8 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.25);
   const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.60);
   const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(0.55);
-  const [dayFogNear, setDayFogNear] = useState(13);
-  const [dayFogFar, setDayFogFar] = useState(800);
+  const [dayFogNear, setDayFogNear] = useState(0);
+  const [dayFogFar, setDayFogFar] = useState(63);
   const [nightFogNear, setNightFogNear] = useState(0);
   const [nightFogFar, setNightFogFar] = useState(63);
 
@@ -70,14 +70,17 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [dirLightPosZ, setDirLightPosZ] = useState(7.70);
   const [dirLightIntensity, setDirLightIntensity] = useState(2.40);
   const [spotLightPosX, setSpotLightPosX] = useState(0.0);
-  const [spotLightPosY, setSpotLightPosY] = useState(5.0);
+  const [spotLightPosY, setSpotLightPosY] = useState(10.0);
   const [spotLightPosZ, setSpotLightPosZ] = useState(0.0);
   const [spotLightIntensity, setSpotLightIntensity] = useState(1.0);
+  const [spotLightAngle, setSpotLightAngle] = useState(0.6);
+  const [spotLightPenumbra, setSpotLightPenumbra] = useState(0.5);
+  const [spotLightTemperature, setSpotLightTemperature] = useState(6500);
   const [carReflectionOffsetY, setCarReflectionOffsetY] = useState(0.0);
-  const [carReflectionOpacity, setCarReflectionOpacity] = useState(2.59);
-  const [carReflectionRoughness, setCarReflectionRoughness] = useState(0.27);
-  const [carReflectionBlur, setCarReflectionBlur] = useState(50);
-  const [carReflectionMixStrength, setCarReflectionMixStrength] = useState(1.6);
+  const [carReflectionOpacity, setCarReflectionOpacity] = useState(1.08);
+  const [carReflectionRoughness, setCarReflectionRoughness] = useState(0.00);
+  const [carReflectionBlur, setCarReflectionBlur] = useState(0);
+  const [carReflectionMixStrength, setCarReflectionMixStrength] = useState(0.1);
   const [carReflectionMetalness, setCarReflectionMetalness] = useState(0.00);
   const [forceManualFog, setForceManualFog] = useState(false);
 
@@ -205,6 +208,9 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     spotLightPosY, setSpotLightPosY,
     spotLightPosZ, setSpotLightPosZ,
     spotLightIntensity, setSpotLightIntensity,
+    spotLightAngle, setSpotLightAngle,
+    spotLightPenumbra, setSpotLightPenumbra,
+    spotLightTemperature, setSpotLightTemperature,
     carReflectionOffsetY, setCarReflectionOffsetY,
     carReflectionOpacity, setCarReflectionOpacity,
     carReflectionRoughness, setCarReflectionRoughness,

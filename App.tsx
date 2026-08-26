@@ -190,8 +190,9 @@ function AppContent() {
     carShadowOffsetX, carShadowOffsetZ,
     dirLightPosX, dirLightPosY, dirLightPosZ, dirLightIntensity,
     spotLightPosX, spotLightPosY, spotLightPosZ, spotLightIntensity,
-    carReflectionOffsetY, carReflectionOpacity,
-    carReflectionRoughness, carReflectionBlur, carReflectionMixStrength, carReflectionMetalness, forceManualFog, spotifyPlayerTop, spotifyPlayerBottom,
+    spotLightAngle, spotLightPenumbra, spotLightTemperature,
+    carReflectionOffsetY, setCarReflectionOffsetY, carReflectionOpacity, setCarReflectionOpacity,
+    carReflectionRoughness, setCarReflectionRoughness, carReflectionBlur, setCarReflectionBlur, carReflectionMixStrength, setCarReflectionMixStrength, carReflectionMetalness, setCarReflectionMetalness, forceManualFog, spotifyPlayerTop, spotifyPlayerBottom,
     playerDockedWidth, playerDockedLeft, playerDockedHeight,
     playerFloatingWidth, playerFloatingBottom, playerFloatingHeight, navigateToolWidth,
     playerControlsSize, playerControlsGap, playerControlsVerticalPosition,
@@ -209,6 +210,30 @@ function AppContent() {
     showRedPanel, redPanelLength, redPanelHeight, redPanelWidth, redPanelOffsetY, redPanelOffsetX, redPanelOpacity, redPanelColor, redPanelOrientation,
     layeredAppTopOffset
   } = useUIConfig();
+
+  // Syncd reflection parameter defaults when mode changes between day and night
+  useEffect(() => {
+    if (isNight) {
+      setCarReflectionOpacity(0.00);
+      setCarReflectionRoughness(0.70);
+      setCarReflectionBlur(0);
+      setCarReflectionMixStrength(25.0);
+      setCarReflectionMetalness(0.00);
+    } else {
+      setCarReflectionOpacity(1.08);
+      setCarReflectionRoughness(0.00);
+      setCarReflectionBlur(0);
+      setCarReflectionMixStrength(0.1);
+      setCarReflectionMetalness(0.00);
+    }
+  }, [
+    isNight,
+    setCarReflectionOpacity,
+    setCarReflectionRoughness,
+    setCarReflectionBlur,
+    setCarReflectionMixStrength,
+    setCarReflectionMetalness
+  ]);
 
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
@@ -608,6 +633,9 @@ function AppContent() {
         spotLightPosY={spotLightPosY}
         spotLightPosZ={spotLightPosZ}
         spotLightIntensity={spotLightIntensity}
+        spotLightAngle={spotLightAngle}
+        spotLightPenumbra={spotLightPenumbra}
+        spotLightTemperature={spotLightTemperature}
         carReflectionOffsetY={carReflectionOffsetY}
         carReflectionOpacity={carReflectionOpacity}
         carReflectionRoughness={carReflectionRoughness}
