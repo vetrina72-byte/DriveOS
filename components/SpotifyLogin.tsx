@@ -124,7 +124,11 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     clearError();
     
     const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
-    const redirectUri = import.meta.env.VITE_REDIRECT_URI || `${window.location.origin}/api/spotify-callback`;
+    // Use the actual current browser origin dynamically to guarantee it matches the current domain
+    const currentOrigin = typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost:5173')
+      ? window.location.origin
+      : (import.meta.env.VITE_REDIRECT_URI ? new URL(import.meta.env.VITE_REDIRECT_URI).origin : 'https://drive-os-chi.vercel.app');
+    const redirectUri = `${currentOrigin}/api/spotify-callback`;
     const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
     
     // Generate PKCE values
