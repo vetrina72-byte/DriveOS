@@ -176,15 +176,79 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
                 expires_in: data.expires_in || data.tokens?.expires_in || 3600,
                 expires_at: data.expires_at || data.tokens?.expires_at
               });
-          }, 1000);
+          }, 400);
         } else if (data.error && data.error !== 'pending') {
           console.warn(`[SPOTIFY LOGIN] Status response:`, data.error);
         }
       } catch (e) {
         console.error("Errore polling:", e);
       }
-    }, 1500);
+    }, 1200);
   }, [login, clearError]);
+
+  // Instant cross-tab & storage listeners
+  useEffect(() => {
+    const handleAuthData = (token: string, expiresIn?: number, expiresAt?: number) => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+      setUiState('LOADING');
+      setTimeout(() => {
+        login({
+          access_token: token,
+          expires_in: expiresIn || 3600,
+          expires_at: expiresAt || (Date.now() + 3600 * 1000)
+        });
+      }, 300);
+    };
+
+    // 1. Storage Event listener
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'spotify_access_token' && e.newValue) {
+        handleAuthData(e.newValue);
+      } else if (e.key === 'spotify_auth_broadcast' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed.access_token) {
+            handleAuthData(parsed.access_token, parsed.expires_in, parsed.expires_at);
+          }
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // 2. BroadcastChannel listener
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('driveos_spotify_auth');
+      channel.onmessage = (evt) => {
+        if (evt.data?.type === 'AUTH_SUCCESS' && evt.data?.access_token) {
+          handleAuthData(evt.data.access_token, evt.data.expires_in, evt.data.expires_at);
+        }
+      };
+    } catch(e) {}
+
+    // 3. PostMessage listener
+    const onMessage = (evt: MessageEvent) => {
+      if (evt.data?.type === 'SPOTIFY_AUTH_SUCCESS' && evt.data?.access_token) {
+        handleAuthData(evt.data.access_token, evt.data.expires_in, evt.data.expires_at);
+      }
+    };
+    window.addEventListener('message', onMessage);
+
+    // Check if token already arrived in localStorage
+    const existingToken = localStorage.getItem('spotify_access_token');
+    const existingExpiry = localStorage.getItem('spotify_token_expiry');
+    if (existingToken && existingExpiry && Number(existingExpiry) > Date.now()) {
+      handleAuthData(existingToken, 3600, Number(existingExpiry));
+    }
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('message', onMessage);
+      if (channel) {
+        try { channel.close(); } catch(e) {}
+      }
+    };
+  }, [login]);
 
   useEffect(() => {
     startLogin();

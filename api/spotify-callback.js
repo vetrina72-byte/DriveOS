@@ -5,7 +5,7 @@ import { getRedis } from '../lib/redis.js';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_URL = 'https://api.spotify.com/v1/me';
 
-const sendCallbackPage = (res, { success = true, errorType = '', detailMessage = '' }) => {
+const sendCallbackPage = (res, { success = true, errorType = '', detailMessage = '', tokenData = null, sessionId = '' }) => {
   let title = success ? 'Collegato!' : 'Errore';
   let displayMessage = '';
   
@@ -33,6 +33,14 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
            <path class="icon-mark" d="M17 17L35 35"/>
            <path class="icon-mark" d="M35 17L17 35"/>
          </svg>`;
+
+  const tokenPayloadJs = tokenData ? JSON.stringify({
+    access_token: tokenData.access_token,
+    refresh_token: tokenData.refresh_token,
+    expires_in: tokenData.expires_in || 3600,
+    expires_at: Date.now() + ((tokenData.expires_in || 3600) * 1000),
+    sessionId: sessionId || ''
+  }) : 'null';
 
   const html = `
     <!doctype html>
@@ -163,9 +171,32 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
         </div>
         <h1>${title}</h1>
         <p>${displayMessage}</p>
-        <button class="btn" onclick="window.close()">Chiudi Scheda</button>
+        <div style="display:flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+          <a href="/" class="btn" style="background:#1DB954; color:#000;">Vai all'Infotainment</a>
+          <button class="btn" style="background:#2C2C2E; color:#fff;" onclick="window.close()">Chiudi Scheda</button>
+        </div>
       </div>
-      ${success ? '<script>setTimeout(() => { if(window.close) window.close(); }, 4000);</script>' : ''}
+      <script>
+        try {
+          const t = ${tokenPayloadJs};
+          if (t && t.access_token) {
+            localStorage.setItem('spotify_access_token', t.access_token);
+            localStorage.setItem('spotify_token_expiry', String(t.expires_at));
+            if (t.refresh_token) localStorage.setItem('spotify_refresh_token', t.refresh_token);
+            localStorage.setItem('spotify_auth_broadcast', JSON.stringify(t));
+            try {
+              const ch = new BroadcastChannel('driveos_spotify_auth');
+              ch.postMessage({ type: 'AUTH_SUCCESS', ...t });
+            } catch(e) {}
+            try {
+              if (window.opener) {
+                window.opener.postMessage({ type: 'SPOTIFY_AUTH_SUCCESS', ...t }, '*');
+              }
+            } catch(e) {}
+          }
+        } catch(e) {}
+        ${success ? 'setTimeout(() => { try { if (window.opener) window.close(); } catch(e){} }, 3500);' : ''}
+      </script>
     </body>
     </html>`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -372,7 +403,7 @@ export default async function handler(req, res) {
         console.warn(`[SPOTIFY CALLBACK] Warning: No redis instance available to store session '${sessionId}'`);
       }
       
-      return sendCallbackPage(res, { success: true });
+      return sendCallbackPage(res, { success: true, tokenData, sessionId });
 
     } catch (e) {
       console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
