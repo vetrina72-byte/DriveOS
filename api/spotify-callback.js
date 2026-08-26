@@ -172,32 +172,59 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
   res.status(200).send(html);
 };
 
+function parseState(rawState) {
+  if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null };
+  const str = String(rawState).trim();
+  
+  // 1. Direct JSON
+  if (str.startsWith('{') && str.endsWith('}')) {
+    try {
+      const p = JSON.parse(str);
+      return { 
+        sessionId: String(p.s || p.sessionId || ''), 
+        codeVerifier: p.v || p.codeVerifier || null, 
+        redirectUri: p.r || p.redirectUri || null 
+      };
+    } catch (e) {}
+  }
+
+  // 2. URL-encoded JSON
+  if (str.startsWith('%7B') || str.includes('%22')) {
+    try {
+      const decoded = decodeURIComponent(str);
+      const p = JSON.parse(decoded);
+      return { 
+        sessionId: String(p.s || p.sessionId || ''), 
+        codeVerifier: p.v || p.codeVerifier || null, 
+        redirectUri: p.r || p.redirectUri || null 
+      };
+    } catch (e) {}
+  }
+
+  // 3. Base64 or URL-safe Base64
+  try {
+    let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) base64 += '=';
+    const jsonStr = Buffer.from(base64, 'base64').toString('utf8');
+    if (jsonStr.startsWith('{') && jsonStr.endsWith('}')) {
+      const p = JSON.parse(jsonStr);
+      return { 
+        sessionId: String(p.s || p.sessionId || ''), 
+        codeVerifier: p.v || p.codeVerifier || null, 
+        redirectUri: p.r || p.redirectUri || null 
+      };
+    }
+  } catch (e) {}
+
+  return { sessionId: str, codeVerifier: null, redirectUri: null };
+}
+
 export default async function handler(req, res) {
   try {
     const { code, state: rawState, error } = req.query || {};
     const redis = getRedis();
 
-    // Parse state: handles plain sessionId, composite base64, or JSON
-    let sessionId = String(rawState || '');
-    let codeVerifier = null;
-    let redirectUriFromState = null;
-
-    if (rawState) {
-      try {
-        const base64 = String(rawState).replace(/-/g, '+').replace(/_/g, '/');
-        const jsonStr = Buffer.from(base64, 'base64').toString('utf8');
-        if (jsonStr.startsWith('{') && jsonStr.endsWith('}')) {
-          const parsed = JSON.parse(jsonStr);
-          if (parsed.s) {
-            sessionId = String(parsed.s);
-            codeVerifier = parsed.v || null;
-            redirectUriFromState = parsed.r || null;
-          }
-        }
-      } catch (e) {
-        // Raw state fallback
-      }
-    }
+    const { sessionId, codeVerifier, redirectUri: redirectUriFromState } = parseState(rawState);
 
     if (error === 'access_denied') {
       if (sessionId && redis) {
@@ -263,30 +290,57 @@ export default async function handler(req, res) {
         body: bodyParams
       });
 
-      // Retry with dynamic URI if first attempt failed and URIs differ
+      let tokenData = await tokenRes.json().catch(() => ({ error: 'invalid_json' }));
+
+      // If initial attempt failed and clientSecret was used in basic auth, retry with PKCE body params
+      if (!tokenRes.ok && clientSecret) {
+        const retryBody = new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: String(code),
+          redirect_uri: redirectUri,
+          client_id: clientId
+        });
+        if (effectiveCodeVerifier) {
+          retryBody.append('code_verifier', effectiveCodeVerifier);
+        }
+        const retryRes = await fetch(TOKEN_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: retryBody
+        });
+        if (retryRes.ok) {
+          tokenRes = retryRes;
+          tokenData = await retryRes.json();
+        }
+      }
+
+      // Retry with dynamic URI if first attempts failed and URIs differ
       if (!tokenRes.ok && redirectUri !== dynamicRedirectUri) {
         bodyParams.set('redirect_uri', dynamicRedirectUri);
-        tokenRes = await fetch(TOKEN_URL, {
+        const retryDyn = await fetch(TOKEN_URL, {
           method: 'POST',
           headers,
           body: bodyParams
         });
+        if (retryDyn.ok) {
+          tokenRes = retryDyn;
+          tokenData = await retryDyn.json();
+        }
       }
-      
-      const tokenData = await tokenRes.json().catch(() => ({ error: 'invalid_json' }));
       
       if (!tokenRes.ok) {
           console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
           
-          if (tokenData.error === 'invalid_grant') {
-               return sendCallbackPage(res, { success: false, errorType: 'session_expired' });
-          }
-
           if (sessionId && redis) {
             try {
               await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: tokenData.error || 'token_exchange_failed' }), 'EX', 120);
             } catch (e) {}
           }
+
+          if (tokenData.error === 'invalid_grant') {
+               return sendCallbackPage(res, { success: false, errorType: 'session_expired', detailMessage: tokenData.error_description || 'Il codice di autorizzazione è scaduto o è già stato utilizzato.' });
+          }
+
           return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: tokenData.error_description || 'Impossibile completare lo scambio del token con Spotify.' });
       }
 

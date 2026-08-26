@@ -4,6 +4,12 @@ import { ensureSpotifyToken } from '../lib/spotifySessionManager.js';
 import { getRedis } from '../lib/redis.js';
 
 export default async function handler(req, res) {
+  // Prevent any CDN/browser 304 caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
   try {
     const sessionId = req.query?.sessionId;
     if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });

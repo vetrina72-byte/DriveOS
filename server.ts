@@ -54,29 +54,53 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  function parseState(rawState: any) {
+    if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null };
+    const str = String(rawState).trim();
+    
+    if (str.startsWith('{') && str.endsWith('}')) {
+      try {
+        const p = JSON.parse(str);
+        return { 
+          sessionId: String(p.s || p.sessionId || ''), 
+          codeVerifier: p.v || p.codeVerifier || null, 
+          redirectUri: p.r || p.redirectUri || null 
+        };
+      } catch (e) {}
+    }
+
+    if (str.startsWith('%7B') || str.includes('%22')) {
+      try {
+        const decoded = decodeURIComponent(str);
+        const p = JSON.parse(decoded);
+        return { 
+          sessionId: String(p.s || p.sessionId || ''), 
+          codeVerifier: p.v || p.codeVerifier || null, 
+          redirectUri: p.r || p.redirectUri || null 
+        };
+      } catch (e) {}
+    }
+
+    try {
+      let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4 !== 0) base64 += '=';
+      const jsonStr = Buffer.from(base64, 'base64').toString('utf8');
+      if (jsonStr.startsWith('{') && jsonStr.endsWith('}')) {
+        const p = JSON.parse(jsonStr);
+        return { 
+          sessionId: String(p.s || p.sessionId || ''), 
+          codeVerifier: p.v || p.codeVerifier || null, 
+          redirectUri: p.r || p.redirectUri || null 
+        };
+      }
+    } catch (e) {}
+
+    return { sessionId: str, codeVerifier: null, redirectUri: null };
+  }
+
   app.get('/api/spotify-callback', async (req, res) => {
     const { code, state: rawState, error } = req.query;
-
-    let sessionId = String(rawState || '');
-    let codeVerifier: string | null = null;
-    let redirectUriFromState: string | null = null;
-
-    if (rawState) {
-      try {
-        const base64 = String(rawState).replace(/-/g, '+').replace(/_/g, '/');
-        const jsonStr = Buffer.from(base64, 'base64').toString('utf8');
-        if (jsonStr.startsWith('{') && jsonStr.endsWith('}')) {
-          const parsed = JSON.parse(jsonStr);
-          if (parsed.s) {
-            sessionId = String(parsed.s);
-            codeVerifier = parsed.v || null;
-            redirectUriFromState = parsed.r || null;
-          }
-        }
-      } catch (e) {
-        // Raw state fallback
-      }
-    }
+    const { sessionId, codeVerifier, redirectUri: redirectUriFromState } = parseState(rawState);
 
     if (error) {
       console.error('Spotify callback error:', error);
@@ -200,6 +224,11 @@ async function startServer() {
   });
 
   app.get('/api/check-auth-status', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+
     const { sessionId } = req.query;
     if (!sessionId) {
       return res.status(400).json({ error: 'Session ID is required.' });

@@ -105,8 +105,7 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
 function encodeCompositeState(sessionId: string, codeVerifier: string, redirectUri: string): string {
   try {
     const payload = JSON.stringify({ s: sessionId, v: codeVerifier, r: redirectUri });
-    const base64 = btoa(payload);
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return encodeURIComponent(payload);
   } catch (e) {
     return sessionId;
   }
@@ -156,7 +155,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
 
     pollTimer.current = window.setInterval(async () => {
       try {
-        const res = await fetch(`/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}`);
+        const res = await fetch(`/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}&_t=${Date.now()}`, {
+          cache: 'no-store'
+        });
         if (!res.ok) return;
         const data = await res.json();
         
