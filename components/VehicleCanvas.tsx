@@ -575,6 +575,7 @@ function SceneController({
 
   const frozenCamPos = useRef(new THREE.Vector3());
   const frozenCamTarget = useRef(new THREE.Vector3());
+  const frozenModelPos = useRef(new THREE.Vector3());
   const frozenModelScale = useRef<number>(1);
   const frozenModelRot = useRef(new THREE.Quaternion());
 
@@ -605,10 +606,12 @@ function SceneController({
   const applyInterpolation = (
     startCamPos: THREE.Vector3,
     startCamTarget: THREE.Vector3,
+    startModelPos: THREE.Vector3,
     startScale: number,
     startQuat: THREE.Quaternion,
     endCamPos: THREE.Vector3,
     endCamTarget: THREE.Vector3,
+    endModelPos: THREE.Vector3,
     endScale: number,
     endQuat: THREE.Quaternion,
     t: number,
@@ -617,41 +620,19 @@ function SceneController({
     // 1. Camera Target (Lineare)
     vec3C.lerpVectors(startCamTarget, endCamTarget, t);
 
-    // 2. Camera Pos (Sferica)
+    // 2. Camera Pos (Sferica fluida senza scatti)
     vec3A.copy(endCamPos).sub(endCamTarget);
     vec3B.copy(startCamPos).sub(startCamTarget);
 
     sphA.setFromVector3(vec3B); // Start
     sphB.setFromVector3(vec3A); // End
 
-    let thetaA = sphA.theta;
-    let thetaB = sphB.theta;
-
-    let diff = thetaB - thetaA;
+    let diff = sphB.theta - sphA.theta;
     while (diff > Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
-
-    // TIE BREAKER: The user requested an absolute direction switch based on the red panel X coordinate.
-    const borderX = redPanelOffsetX ?? -0.40;
-    const startsOnRight = startCamPos.x > borderX;
-    const endsOnRight = endCamPos.x > borderX;
-
-    // Calculate default shortest path
-    diff = thetaB - thetaA;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-
-    // Check if the shortest path crosses the rear axis (theta = +/- PI)
-    const crossesRear = (thetaA + diff > Math.PI) || (thetaA + diff < -Math.PI);
-
-    // If changing sides, we must NOT cross the rear panel (which functions as an absolute wall)
-    if (crossesRear && startsOnRight !== endsOnRight) {
-       // Force the long path around the front to switch sides
-       diff = diff > 0 ? diff - 2 * Math.PI : diff + 2 * Math.PI;
-    }
 
     const r = THREE.MathUtils.lerp(sphA.radius, sphB.radius, t);
-    const t_path = thetaA + diff * t;
+    const t_path = sphA.theta + diff * t;
     const ph_path = THREE.MathUtils.lerp(sphA.phi, sphB.phi, t);
 
     camera.position.setFromSphericalCoords(r, ph_path, t_path).add(vec3C);
@@ -667,21 +648,8 @@ function SceneController({
       const s = THREE.MathUtils.lerp(startScale, endScale, t);
       modelRef.current.scale.set(s, s, s);
 
-      // Posizione
-      vec3A.set(
-        localAppOpenConfig.modelPos.x,
-        localAppOpenConfig.modelPos.y,
-        localAppOpenConfig.modelPos.z,
-      );
-      vec3B.set(
-        localHomeConfig.modelPos.x,
-        localHomeConfig.modelPos.y,
-        localHomeConfig.modelPos.z,
-      );
-      const pLinear = isAppOpen ? 1 - t : t;
-      let rawP = endScale === localHomeConfig.modelScale ? t : 1 - t;
-      if (isRestoringHome.current) rawP = 1;
-      modelRef.current.position.lerpVectors(vec3A, vec3B, rawP);
+      // Posizione fluida
+      modelRef.current.position.lerpVectors(startModelPos, endModelPos, t);
 
       // Rotazione
       modelRef.current.quaternion.slerpQuaternions(startQuat, endQuat, t);
@@ -776,8 +744,8 @@ function SceneController({
     const dragActive = dragProgress.current !== null;
 
     // SELEZIONE CANALE E GESTIONE TRANSIZIONI
-    if (clickOccurred && !dragActive) {
-      // CANALE 1: TRANSIZIONE DA CLICK
+    if (clickOccurred) {
+      // CANALE 1: TRANSIZIONE DA CLICK (Priorità assoluta su cambi di stato dell'app)
       transitionMode.current = "auto";
       animTime.current = 0;
       isRestoringHome.current = false;
@@ -787,10 +755,11 @@ function SceneController({
       frozenCamPos.current.copy(camera.position);
       if (ctrl) frozenCamTarget.current.copy(ctrl.target);
       if (modelRef.current) {
+        frozenModelPos.current.copy(modelRef.current.position);
         frozenModelScale.current = modelRef.current.scale.x;
         frozenModelRot.current.copy(modelRef.current.quaternion);
       }
-    } else if (dragActive) {
+    } else if (dragActive && transitionMode.current !== "auto") {
       // CANALE 2: TRANSIZIONE DA HANDLE (Drag)
       transitionMode.current = "drag";
       isRestoringHome.current = false;
@@ -880,7 +849,9 @@ function SceneController({
         syncLights();
       }
     } else if (transitionMode.current === "auto") {
-      animTime.current += delta;
+      // Evitiamo salti giganteschi se React blocca il main thread per renderizzare l'app
+      const safeDelta = Math.min(delta, 0.05);
+      animTime.current += safeDelta;
       let t = Math.min(animTime.current / sceneTransitionSpeed, 1.0);
       const easeT = 1 - Math.pow(1 - t, 4);
 
@@ -959,14 +930,21 @@ function SceneController({
         ? localAppOpenConfig.modelScale
         : localHomeConfig.modelScale;
       const endQuat = isAppOpen ? quatTargetAppOpen : quatTargetHome;
+      const endModelPos = new THREE.Vector3(
+        isAppOpen ? localAppOpenConfig.modelPos.x : localHomeConfig.modelPos.x,
+        isAppOpen ? localAppOpenConfig.modelPos.y : localHomeConfig.modelPos.y,
+        isAppOpen ? localAppOpenConfig.modelPos.z : localHomeConfig.modelPos.z,
+      );
 
       applyInterpolation(
         frozenCamPos.current,
         frozenCamTarget.current,
+        frozenModelPos.current,
         frozenModelScale.current,
         frozenModelRot.current,
         endPos,
         endTarget,
+        endModelPos,
         endScale,
         endQuat,
         easeT,
@@ -988,6 +966,11 @@ function SceneController({
         localAppOpenConfig.cameraTarget.y,
         localAppOpenConfig.cameraTarget.z,
       );
+      const sModelPos = new THREE.Vector3(
+        localAppOpenConfig.modelPos.x,
+        localAppOpenConfig.modelPos.y,
+        localAppOpenConfig.modelPos.z,
+      );
 
       const ePos = new THREE.Vector3(
         localHomeConfig.cameraPos.x,
@@ -999,14 +982,21 @@ function SceneController({
         localHomeConfig.cameraTarget.y,
         localHomeConfig.cameraTarget.z,
       );
+      const eModelPos = new THREE.Vector3(
+        localHomeConfig.modelPos.x,
+        localHomeConfig.modelPos.y,
+        localHomeConfig.modelPos.z,
+      );
 
       applyInterpolation(
         sPos,
         sTarget,
+        sModelPos,
         localAppOpenConfig.modelScale,
         quatTargetAppOpen,
         ePos,
         eTarget,
+        eModelPos,
         localHomeConfig.modelScale,
         quatTargetHome,
         rawP,
@@ -1015,7 +1005,8 @@ function SceneController({
 
       p = rawP;
     } else if (isRestoringHome.current) {
-      restoreAnimProgress.current += delta;
+      const safeDelta = Math.min(delta, 0.05);
+      restoreAnimProgress.current += safeDelta;
       if (restoreAnimProgress.current < 1.4) {
         const t = Math.min(restoreAnimProgress.current / 1.4, 1.0);
         const easeT = 1 - Math.pow(1 - t, 4);
@@ -1030,14 +1021,26 @@ function SceneController({
           localHomeConfig.cameraTarget.y,
           localHomeConfig.cameraTarget.z,
         );
+        const sModelPos = new THREE.Vector3(
+          localHomeConfig.modelPos.x,
+          localHomeConfig.modelPos.y,
+          localHomeConfig.modelPos.z,
+        );
+        const eModelPos = new THREE.Vector3(
+          localHomeConfig.modelPos.x,
+          localHomeConfig.modelPos.y,
+          localHomeConfig.modelPos.z,
+        );
 
         applyInterpolation(
           snapshotHomePos.current,
           snapshotHomeTarget.current,
+          sModelPos,
           localHomeConfig.modelScale,
           quatTargetHome,
           ePos,
           eTarget,
+          eModelPos,
           localHomeConfig.modelScale,
           quatTargetHome,
           easeT,
@@ -1607,11 +1610,11 @@ export default function VehicleCanvas({
   const defaultOrbitTarget = useMemo(
     () =>
       [
-        initialConfig.cameraTarget.x,
-        initialConfig.cameraTarget.y,
-        initialConfig.cameraTarget.z,
+        homeConfig.cameraTarget.x,
+        homeConfig.cameraTarget.y,
+        homeConfig.cameraTarget.z,
       ] as [number, number, number],
-    [initialConfig],
+    [],
   );
 
   const [runtimeAppOpenConfig, setRuntimeAppOpenConfig] = useState<SceneConfig>(

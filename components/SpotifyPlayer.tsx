@@ -182,7 +182,6 @@ const SpotifyPlayer = ({
                 state.startPercent = state.currentPercent;
                 state.targetPercent = newTargetPercent;
                 state.animStartTime = performance.now();
-                state.isInteracting = true; // Enabled for synchronized 3D canvas animation
             }
             
             if (isOpen) {
