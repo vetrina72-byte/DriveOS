@@ -1055,7 +1055,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const handleToggleRepeat = () => {
         if (!playerState || !player) return;
-        const nextState = (playerState.repeat_mode + 1) % 3;
+        const nextState = (playerState.repeat_mode + 1) % 3 as 0 | 1 | 2;
         const repeatMode = nextState === 0 ? 'off' : nextState === 1 ? 'context' : 'track';
         
         // Optimistic UI update

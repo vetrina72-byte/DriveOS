@@ -158,10 +158,10 @@ const Model = forwardRef<
   useEffect(() => {
     scene.traverse((child: any) => {
       if (child.isMesh) {
-        const mat = child.material as THREE.MeshStandardMaterial;
+        const mat = child.material as any;
         if (mat) {
           if (Array.isArray(mat)) {
-            mat.forEach(m => {
+            mat.forEach((m: any) => {
               if (m && ('aoMapIntensity' in m || m.type === 'MeshStandardMaterial' || m.isMeshStandardMaterial)) {
                 m.aoMapIntensity = aoMapIntensity;
               }
@@ -289,11 +289,11 @@ function ContactShadow({
   useEffect(() => {
     const originalOnBeforeRender = scene.onBeforeRender;
 
-    scene.onBeforeRender = (renderer, s, camera, renderTarget) => {
+    scene.onBeforeRender = (...args: any[]) => {
       if (originalOnBeforeRender) {
-        originalOnBeforeRender(renderer, s, camera, renderTarget);
+        originalOnBeforeRender.apply(scene, args as any);
       }
-
+      const camera = args[2];
       if (shadowRef.current) {
         // Safe check: hide the shadow if we are rendering for any camera other than the main viewport camera
         if (camera !== mainCamera) {
@@ -404,14 +404,17 @@ function SceneController({
   const eulerA = useMemo(() => new THREE.Euler(), []);
   const eulerB = useMemo(() => new THREE.Euler(), []);
 
-  const dynamicHomePos = useRef(new THREE.Vector3());
-  const dynamicHomeTarget = useRef(new THREE.Vector3());
-  const initializedDynamicHome = useRef(false);
-
+  const initializedCamera = useRef(false);
   const isRestoringHome = useRef(false);
   const restoreAnimProgress = useRef(1.0);
   const snapshotHomePos = useRef(new THREE.Vector3());
   const snapshotHomeTarget = useRef(new THREE.Vector3());
+
+  // Track continuous azimuth for correct path reversal
+  const continuousAzimuth = useRef<number | null>(null);
+  const prevTheta = useRef<number | null>(null);
+  const frozenAzimuth = useRef<number>(0);
+
 
   // Calcolo coefficiente di responsive e configurazioni locali dinamiche per evitare tagli
   // R3F size.width si riduce asincronamente d'un tratto all'apertura dell'app.
@@ -551,6 +554,7 @@ function SceneController({
             snapshotHomeTarget.current.copy((controls as any).target);
           isRestoringHome.current = true;
           restoreAnimProgress.current = 0;
+          frozenAzimuth.current = continuousAzimuth.current || 0;
         }
       }, 3000);
     };
@@ -571,7 +575,12 @@ function SceneController({
 
   const prevIsAppOpen = useRef(isAppOpen);
   const transitionMode = useRef<"idle" | "auto" | "drag">("idle");
-  const animTime = useRef(0);
+  const animStartTime = useRef(performance.now());
+
+  const currentP = useRef<number>(isAppOpen ? 0 : 1);
+  const autoStartP = useRef<number>(isAppOpen ? 0 : 1);
+  const autoTargetP = useRef<number>(isAppOpen ? 0 : 1);
+  const autoAnimDuration = useRef<number>(sceneTransitionSpeed);
 
   const frozenCamPos = useRef(new THREE.Vector3());
   const frozenCamTarget = useRef(new THREE.Vector3());
@@ -616,23 +625,33 @@ function SceneController({
     endQuat: THREE.Quaternion,
     t: number,
     ctrl: any,
+    startThetaParam?: number,
+    endThetaParam?: number
   ) => {
     // 1. Camera Target (Lineare)
     vec3C.lerpVectors(startCamTarget, endCamTarget, t);
 
-    // 2. Camera Pos (Sferica fluida senza scatti)
+    // 2. Camera Pos
     vec3A.copy(endCamPos).sub(endCamTarget);
     vec3B.copy(startCamPos).sub(startCamTarget);
 
     sphA.setFromVector3(vec3B); // Start
     sphB.setFromVector3(vec3A); // End
 
-    let diff = sphB.theta - sphA.theta;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
+    let t_path;
+    if (startThetaParam !== undefined && endThetaParam !== undefined) {
+      // Usa l'interpolazione lineare esatta (preservando il path)
+      t_path = THREE.MathUtils.lerp(startThetaParam, endThetaParam, t);
+    } else {
+      // Fallback a shortest path se non forniti
+      const deltaTheta = THREE.MathUtils.euclideanModulo(
+        sphB.theta - sphA.theta + Math.PI,
+        Math.PI * 2,
+      ) - Math.PI;
+      t_path = sphA.theta + deltaTheta * t;
+    }
 
     const r = THREE.MathUtils.lerp(sphA.radius, sphB.radius, t);
-    const t_path = sphA.theta + diff * t;
     const ph_path = THREE.MathUtils.lerp(sphA.phi, sphB.phi, t);
 
     camera.position.setFromSphericalCoords(r, ph_path, t_path).add(vec3C);
@@ -686,19 +705,8 @@ function SceneController({
   useFrame((_, delta) => {
     const ctrl = typeof controls !== "undefined" ? (controls as any) : null;
 
-    if (!initializedDynamicHome.current && ctrl && modelRef.current) {
+    if (!initializedCamera.current && ctrl && modelRef.current) {
       const initConfig = isAppOpen ? localAppOpenConfig : localHomeConfig;
-
-      dynamicHomePos.current.set(
-        initConfig.cameraPos.x as number,
-        initConfig.cameraPos.y as number,
-        initConfig.cameraPos.z as number,
-      );
-      dynamicHomeTarget.current.set(
-        initConfig.cameraTarget.x as number,
-        initConfig.cameraTarget.y as number,
-        initConfig.cameraTarget.z as number,
-      );
 
       camera.position.set(
         initConfig.cameraPos.x as number,
@@ -735,8 +743,22 @@ function SceneController({
 
       ctrl.enableRotate = !isAppOpen;
 
-      initializedDynamicHome.current = true;
+      initializedCamera.current = true;
     }
+
+    // TRACK CONTINUOUS AZIMUTH
+    const camVecAzimuth = vec3C.copy(camera.position).sub(ctrl ? ctrl.target : vec3B.set(0, 0, 0));
+    const currentTheta = Math.atan2(camVecAzimuth.x, camVecAzimuth.z);
+    
+    if (prevTheta.current !== null) {
+      let diff = currentTheta - prevTheta.current;
+      if (diff > Math.PI) diff -= Math.PI * 2;
+      else if (diff < -Math.PI) diff += Math.PI * 2;
+      continuousAzimuth.current = (continuousAzimuth.current || 0) + diff;
+    } else {
+      continuousAzimuth.current = currentTheta;
+    }
+    prevTheta.current = currentTheta;
 
     // RILEVAMENTO EVENTI
     const clickOccurred = isAppOpen !== prevIsAppOpen.current;
@@ -744,14 +766,19 @@ function SceneController({
     const dragActive = dragProgress.current !== null;
 
     // SELEZIONE CANALE E GESTIONE TRANSIZIONI
-    if (clickOccurred) {
-      // CANALE 1: TRANSIZIONE DA CLICK (Priorità assoluta su cambi di stato dell'app)
+    if (dragActive) {
+      // CANALE 1: DRAG ATTIVO (Priorità assoluta al drag continuo / animazione del drawer)
+      transitionMode.current = "drag";
+      isRestoringHome.current = false;
+      if (ctrl) ctrl.enableRotate = false;
+    } else if (clickOccurred) {
+      // CANALE 2: CAMBIO STATO DA CLICK (Transizione automatica morbida dal valore corrente)
       transitionMode.current = "auto";
-      animTime.current = 0;
+      animStartTime.current = performance.now();
       isRestoringHome.current = false;
       if (ctrl) ctrl.enableRotate = false;
 
-      // Congela istantaneamente la posizione reale prima di muoversi
+      // Congela istantaneamente la posizione reale prima di muoversi (CURRENT VISUAL STATE)
       frozenCamPos.current.copy(camera.position);
       if (ctrl) frozenCamTarget.current.copy(ctrl.target);
       if (modelRef.current) {
@@ -759,18 +786,22 @@ function SceneController({
         frozenModelScale.current = modelRef.current.scale.x;
         frozenModelRot.current.copy(modelRef.current.quaternion);
       }
-    } else if (dragActive && transitionMode.current !== "auto") {
-      // CANALE 2: TRANSIZIONE DA HANDLE (Drag)
-      transitionMode.current = "drag";
-      isRestoringHome.current = false;
-      if (ctrl) ctrl.enableRotate = false;
+      frozenAzimuth.current = continuousAzimuth.current || 0;
+
+      // Il progresso parte esattamente dal frame visivo attuale
+      autoStartP.current = currentP.current;
+      autoTargetP.current = isAppOpen ? 0 : 1;
+      autoAnimDuration.current = sceneTransitionSpeed;
     } else if (
       !clickOccurred &&
       !dragActive &&
       transitionMode.current === "drag"
     ) {
-      // RILASCIO HANDLE (o fine drag auto)
+      // RILASCIO HANDLE / FINE DRAG STABILIZZATA
       transitionMode.current = "idle";
+      const targetP = isAppOpen ? 0 : 1;
+      currentP.current = targetP;
+
       if (!isAppOpen) {
         // FORZATURA DEI VALORI REALI HOME A SCHERMO INTERO E UPDATE DELLA MATRICE
         camera.position.set(
@@ -803,16 +834,6 @@ function SceneController({
           modelRef.current.position.copy(vec3B);
           syncLights();
         }
-        dynamicHomePos.current.set(
-          localHomeConfig.cameraPos.x as number,
-          localHomeConfig.cameraPos.y as number,
-          localHomeConfig.cameraPos.z as number,
-        );
-        dynamicHomeTarget.current.set(
-          localHomeConfig.cameraTarget.x as number,
-          localHomeConfig.cameraTarget.y as number,
-          localHomeConfig.cameraTarget.z as number,
-        );
       }
     }
 
@@ -820,7 +841,7 @@ function SceneController({
     let p = isAppOpen ? 0 : 1;
 
     if (interacting) {
-      // UTENTE MANOVRA A SCHERMO INTERO
+      // UTENTE MANOVRA A SCHERMO INTERO CON ORBIT CONTROLS
       transitionMode.current = "idle";
       if (ctrl) {
         ctrl.target.set(
@@ -830,8 +851,6 @@ function SceneController({
         );
         ctrl.update();
       }
-      dynamicHomePos.current.copy(camera.position);
-      if (ctrl) dynamicHomeTarget.current.copy(ctrl.target);
 
       if (modelRef.current) {
         modelRef.current.scale.set(
@@ -848,15 +867,22 @@ function SceneController({
         modelRef.current.position.copy(vec3B);
         syncLights();
       }
+      p = 1;
+      currentP.current = 1;
     } else if (transitionMode.current === "auto") {
-      // Evitiamo salti giganteschi se React blocca il main thread per renderizzare l'app
-      const safeDelta = Math.min(delta, 0.05);
-      animTime.current += safeDelta;
-      let t = Math.min(animTime.current / sceneTransitionSpeed, 1.0);
-      const easeT = 1 - Math.pow(1 - t, 4);
+      const now = performance.now();
+      const elapsed = (now - animStartTime.current) / 1000;
+      const duration = autoAnimDuration.current || sceneTransitionSpeed || 1.10;
+      const normT = Math.min(elapsed / duration, 1.0);
+      const easeT = 1 - Math.pow(1 - normT, 4);
 
-      if (t >= 1.0) {
+      p = autoStartP.current + (autoTargetP.current - autoStartP.current) * easeT;
+      currentP.current = p;
+
+      if (normT >= 1.0) {
         transitionMode.current = "idle";
+        p = autoTargetP.current;
+        currentP.current = p;
         if (!isAppOpen) {
           camera.position.set(
             localHomeConfig.cameraPos.x as number,
@@ -888,19 +914,6 @@ function SceneController({
             modelRef.current.position.copy(vec3B);
             syncLights();
           }
-          dynamicHomePos.current.set(
-            localHomeConfig.cameraPos.x as number,
-            localHomeConfig.cameraPos.y as number,
-            localHomeConfig.cameraPos.z as number,
-          );
-          dynamicHomeTarget.current.set(
-            localHomeConfig.cameraTarget.x as number,
-            localHomeConfig.cameraTarget.y as number,
-            localHomeConfig.cameraTarget.z as number,
-          );
-        } else {
-          dynamicHomePos.current.copy(camera.position);
-          if (ctrl) dynamicHomeTarget.current.copy(ctrl.target);
         }
       }
 
@@ -936,6 +949,14 @@ function SceneController({
         isAppOpen ? localAppOpenConfig.modelPos.z : localHomeConfig.modelPos.z,
       );
 
+      // Calcola l'angolo target e lo trasla nel winding corretto
+      vec3A.copy(endPos).sub(endTarget);
+      const targetRawTheta = Math.atan2(vec3A.x, vec3A.z);
+      
+      // Calcoliamo quanti giri (2PI) sono stati fatti finora in frozenAzimuth
+      const currentRevolutions = Math.trunc((frozenAzimuth.current - targetRawTheta) / (Math.PI * 2));
+      const targetThetaWrapped = targetRawTheta + currentRevolutions * Math.PI * 2;
+
       applyInterpolation(
         frozenCamPos.current,
         frozenCamTarget.current,
@@ -949,11 +970,14 @@ function SceneController({
         endQuat,
         easeT,
         ctrl,
+        frozenAzimuth.current,
+        targetThetaWrapped
       );
-
-      p = isAppOpen ? 1 - easeT : easeT;
     } else if (transitionMode.current === "drag") {
       let rawP = dragProgress.current as number;
+      if (typeof rawP !== "number" || isNaN(rawP)) {
+        rawP = isAppOpen ? 0 : 1;
+      }
       rawP = Math.max(0, Math.min(1, rawP));
 
       const sPos = new THREE.Vector3(
@@ -1004,6 +1028,7 @@ function SceneController({
       );
 
       p = rawP;
+      currentP.current = p;
     } else if (isRestoringHome.current) {
       const safeDelta = Math.min(delta, 0.05);
       restoreAnimProgress.current += safeDelta;
@@ -1032,6 +1057,13 @@ function SceneController({
           localHomeConfig.modelPos.z,
         );
 
+        // Calcola l'angolo target e lo trasla nel winding corretto
+        vec3A.copy(ePos).sub(eTarget);
+        const targetRawTheta = Math.atan2(vec3A.x, vec3A.z);
+        
+        const currentRevolutions = Math.trunc((frozenAzimuth.current - targetRawTheta) / (Math.PI * 2));
+        const targetThetaWrapped = targetRawTheta + currentRevolutions * Math.PI * 2;
+
         applyInterpolation(
           snapshotHomePos.current,
           snapshotHomeTarget.current,
@@ -1045,6 +1077,8 @@ function SceneController({
           quatTargetHome,
           easeT,
           ctrl,
+          frozenAzimuth.current,
+          targetThetaWrapped
         );
       } else {
         isRestoringHome.current = false;
@@ -1065,16 +1099,6 @@ function SceneController({
           ctrl.enableRotate = true;
           ctrl.update();
         }
-        dynamicHomePos.current.set(
-          localHomeConfig.cameraPos.x as number,
-          localHomeConfig.cameraPos.y as number,
-          localHomeConfig.cameraPos.z as number,
-        );
-        dynamicHomeTarget.current.set(
-          localHomeConfig.cameraTarget.x as number,
-          localHomeConfig.cameraTarget.y as number,
-          localHomeConfig.cameraTarget.z as number,
-        );
       }
       p = 1;
     } else {
@@ -1088,17 +1112,23 @@ function SceneController({
       const cw = container.clientWidth;
       const ch = container.clientHeight;
 
-      // Percentuale minima della larghezza del canvas ad app aperta (p = 0)
-      // Se lo schermo è largo (cw >= 1024px), usiamo 1/3 (0.33)
-      // Se lo schermo è medio (768px <= cw < 1024px), usiamo 1/2 (0.5)
-      // Se lo schermo è stretto (cw < 768px), usiamo 1.0 (100%), per un layout splendido e overlays protettivi
-      let minWidthPercent = 0.3333;
+      // Match perfectly with tailwind classes used by panels:
+      // 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'
+      // sm = 640px, md = 768px, lg = 1024px, xl = 1280px
+      let minWidthPercent = 0.40; // Default for xl (cw >= 1280) (panel is 60%, canvas is 40%)
+      
       if (cw < 768) {
+        // Mobile behavior: come da originale, il canvas rimane a schermo intero (1.0)
+        // e i pannelli lo coprono in overlay (splendido layout e overlays protettivi)
         minWidthPercent = 1.0;
       } else if (cw < 1024) {
-        minWidthPercent = 0.5;
+        // md: panel is 50%, canvas is 50%
+        minWidthPercent = 0.50;
+      } else if (cw < 1280) {
+        // lg: panel is 65%, canvas is 35%
+        minWidthPercent = 0.35;
       }
-
+      
       // Calcola la porzione di schermo visibile in larghezza
       const visibleWidth = Math.round(
         cw * minWidthPercent + cw * (1 - minWidthPercent) * p,

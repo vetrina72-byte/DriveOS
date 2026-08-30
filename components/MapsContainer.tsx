@@ -202,24 +202,9 @@ const MapsContainer = React.memo(({
     };
   }, []);
 
-  const [mapActive, setMapActive] = useState(false);
-  const mapActiveRef = useRef(false);
-
-  useEffect(() => {
-    mapActiveRef.current = mapActive;
-  }, [mapActive]);
-
-  useEffect(() => {
-    if (isOpen) {
-      // Delay map activation by sceneTransitionSpeed so transition is completely smooth and finished
-      const timer = setTimeout(() => {
-        setMapActive(true);
-      }, sceneTransitionSpeed * 1000);
-      return () => clearTimeout(timer);
-    } else {
-      setMapActive(false);
-    }
-  }, [isOpen, sceneTransitionSpeed]);
+  // Map is always active. Optimization screen removed.
+  const mapActive = true;
+  const mapActiveRef = useRef(true);
 
   // Sync drawer slides positioning with isOpen state
   useEffect(() => {
@@ -1335,28 +1320,7 @@ const MapsContainer = React.memo(({
             <div 
               ref={mapContainerRef} 
               className="w-full h-full absolute inset-0 [&_.maplibregl-canvas]:transition-opacity [&_.maplibregl-canvas]:duration-300 [&_.maplibregl-canvas]:ease-in-out [&_.maplibregl-ctrl-logo]:!hidden [&_.maplibregl-ctrl-attrib]:!hidden" 
-              style={{
-                opacity: mapActive ? 1 : 0,
-                visibility: mapActive ? 'visible' : 'hidden',
-                transition: 'opacity 0.4s ease-in-out, visibility 0.4s ease-in-out'
-              }}
             />
-
-            {!mapActive && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#050505] z-[1001] transition-opacity duration-300">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative">
-                    {/* Ring animation */}
-                    <div className="w-12 h-12 rounded-full border-2 border-zinc-800 border-t-amber-500 animate-spin" />
-                    {/* Inner glowing core */}
-                    <div className="absolute inset-2 bg-amber-500/10 rounded-full animate-pulse" />
-                  </div>
-                  <span className="text-zinc-500 text-[0.625rem] font-bold uppercase tracking-[0.2em] font-mono animate-pulse">
-                    Ottimizzazione Mappa...
-                  </span>
-                </div>
-              </div>
-            )}
 
             {/* Float Overlay Panels Top-Left */}
             <div className="absolute top-5 left-5 z-[1002] w-[21.25rem] max-w-[calc(100vw-50px)] flex flex-col gap-3 pointer-events-none">
