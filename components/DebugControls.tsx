@@ -198,7 +198,7 @@ export default function DebugControls({
           if (!state.isDragging) {
               if (state.animStartTime > 0) {
                   const elapsed = performance.now() - state.animStartTime;
-                  const duration = 400; // ms
+                  const duration = (sceneTransitionSpeed || 1.10) * 1000; // ms
                   const t = Math.min(elapsed / duration, 1.0);
                   // power4.out easing
                   const easeT = 1 - Math.pow(1 - t, 4);

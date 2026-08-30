@@ -273,16 +273,26 @@ Model.displayName = "Model";
 
 function ContactShadow({
   shadowRef,
+  modelRef,
+  floorRef,
   carShadowWidth,
   carShadowLength,
-  shadowPosition,
+  carShadowOffsetX = 0,
+  carShadowOffsetY = 0,
+  carShadowOffsetZ = 0,
   shadowOpacity,
+  carReflectionOffsetY = 0,
 }: {
   shadowRef: React.RefObject<THREE.Mesh>;
+  modelRef: React.RefObject<THREE.Group>;
+  floorRef: React.RefObject<THREE.Mesh>;
   carShadowWidth: number;
   carShadowLength: number;
-  shadowPosition: { x: number; y: number; z: number };
+  carShadowOffsetX?: number;
+  carShadowOffsetY?: number;
+  carShadowOffsetZ?: number;
   shadowOpacity: number;
+  carReflectionOffsetY?: number;
 }) {
   const { scene, camera: mainCamera } = useThree();
 
@@ -309,12 +319,25 @@ function ContactShadow({
     };
   }, [scene, mainCamera, shadowRef]);
 
+  useFrame(() => {
+    if (shadowRef.current && modelRef.current) {
+      const floorY = floorRef.current ? floorRef.current.position.y : -carReflectionOffsetY;
+      shadowRef.current.position.set(
+        modelRef.current.position.x + carShadowOffsetX,
+        floorY + 0.005 + carShadowOffsetY,
+        modelRef.current.position.z + carShadowOffsetZ,
+      );
+      // Keep strictly horizontal, never tilt with car's pitch/roll
+      shadowRef.current.rotation.set(-Math.PI / 2, 0, 0);
+    }
+  });
+
   return (
     <Mesh
       ref={shadowRef}
       receiveShadow
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}
+      position={[carShadowOffsetX, 0.005 + carShadowOffsetY, carShadowOffsetZ]}
     >
       <PlaneGeometry args={[carShadowWidth, carShadowLength]} />
       <ShadowMaterial
@@ -1029,6 +1052,9 @@ function SceneController({
 
       p = rawP;
       currentP.current = p;
+      if (ctrl) {
+        ctrl.enableRotate = (p >= 0.999 && !isAppOpen);
+      }
     } else if (isRestoringHome.current) {
       const safeDelta = Math.min(delta, 0.05);
       restoreAnimProgress.current += safeDelta;
@@ -1105,7 +1131,7 @@ function SceneController({
       if (!isAppOpen && ctrl) ctrl.enableRotate = true;
     }
 
-    // 4. Viewport & Aspect Ratio dinamico dal DOM - Forza gl.setSize esattamente alla larghezza corrente frame-per-frame
+    // 4. Viewport & Aspect Ratio dinamico dal DOM - Ridimensiona gl.setSize alla larghezza visibile corrente
     const canvas = gl.domElement;
     const container = canvas.parentElement;
     if (container) {
@@ -1118,14 +1144,10 @@ function SceneController({
       let minWidthPercent = 0.40; // Default for xl (cw >= 1280) (panel is 60%, canvas is 40%)
       
       if (cw < 768) {
-        // Mobile behavior: come da originale, il canvas rimane a schermo intero (1.0)
-        // e i pannelli lo coprono in overlay (splendido layout e overlays protettivi)
         minWidthPercent = 1.0;
       } else if (cw < 1024) {
-        // md: panel is 50%, canvas is 50%
         minWidthPercent = 0.50;
       } else if (cw < 1280) {
-        // lg: panel is 65%, canvas is 35%
         minWidthPercent = 0.35;
       }
       
@@ -1134,12 +1156,12 @@ function SceneController({
         cw * minWidthPercent + cw * (1 - minWidthPercent) * p,
       );
 
-      // Forza il ridimensionamento fisico e l'aggiornamento degli stili CSS del Canvas ad ogni singolo frame
+      // Ridimensionamento fisico del Canvas
       if (canvas.width !== visibleWidth || canvas.height !== ch) {
         gl.setSize(visibleWidth, ch, true);
       }
 
-      // Ricalcolo della matrice con FOV fisso per evitare distorsioni "a step"
+      // Ricalcolo della matrice con FOV fisso per preservare il framing
       if (camera instanceof THREE.PerspectiveCamera) {
         const aspect = visibleWidth / ch;
         if (camera.aspect !== aspect) {
@@ -1811,19 +1833,24 @@ export default function VehicleCanvas({
                 </Mesh>
               )}
 
-              {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
-              <ContactShadow
-                shadowRef={shadowRef}
-                carShadowWidth={carShadowWidth}
-                carShadowLength={carShadowLength}
-                shadowPosition={shadowPosition}
-                shadowOpacity={shadowOpacity}
-              />
-
               {/* Linked headlights follow the model's group rotation */}
               {linked && renderHeadlights()}
             </Group>
             
+            {/* Contact shadow strictly horizontal on floor level, tracking car position */}
+            <ContactShadow
+              shadowRef={shadowRef}
+              modelRef={modelRef}
+              floorRef={floorRef}
+              carShadowWidth={carShadowWidth}
+              carShadowLength={carShadowLength}
+              carShadowOffsetX={carShadowOffsetX}
+              carShadowOffsetY={carShadowOffsetY}
+              carShadowOffsetZ={carShadowOffsetZ}
+              shadowOpacity={shadowOpacity}
+              carReflectionOffsetY={carReflectionOffsetY}
+            />
+
             {/* Target marker for lights, moved outside of modelRef so it doesn't double-transform */}
             {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
             <Primitive object={frontLightTarget} />

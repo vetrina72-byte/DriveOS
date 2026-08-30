@@ -262,13 +262,14 @@ function AppContent() {
 
   // --- DRAG INTERPOLATION STATE AS REF ---
   // Using a ref avoids re-rendering the entire App component on every drag frame.
+  // CRITICAL: MUST be null when not dragging, so VehicleCanvas enables full manual camera OrbitControls.
   const dragProgressRef = useRef<number | null>(null);
 
   // --- REF FOR NAVIGATE TOOL ANIMATION ---
   const navigateToolRef = useRef<HTMLDivElement>(null);
   const navigateToolVisualState = useRef(activeApp !== null ? 0 : 1); // 0 = Hidden/Open App, 1 = Visible/Home
 
-  // Stable callback to update the ref
+  // Stable callbacks for drawer dragging
   const handleDragProgress = useCallback((val: number | null) => {
     if (isSwitchingRef.current) return;
     dragProgressRef.current = val;
@@ -290,17 +291,17 @@ function AppContent() {
 
     const loop = () => {
         // Target is 0 if app is open, 1 if home
-        let target = activeApp !== null ? 0 : 1;
+        const target = activeApp !== null ? 0 : 1;
         
         // Override with drag progress if active
         // dragProgress: 0 (Open) -> 1 (Closed/Home)
         if (dragProgressRef.current !== null) {
             navigateToolVisualState.current = dragProgressRef.current;
         } else {
-            // Lerp towards target
+            // Smooth lerp towards target
             const diff = target - navigateToolVisualState.current;
             if (Math.abs(diff) > 0.001) {
-                navigateToolVisualState.current += diff * 0.25; // Speed up auto-animation
+                navigateToolVisualState.current += diff * 0.2;
             } else {
                 navigateToolVisualState.current = target;
             }
@@ -309,26 +310,14 @@ function AppContent() {
         const current = Math.max(0, Math.min(1, navigateToolVisualState.current));
         
         if (navigateToolRef.current) {
-            // THRESHOLD LOGIC: 
-            // User requested "arrive before the player".
-            // Player closes at 1.0. We want full visibility by 0.85.
-            // Range [0.25, 0.85] -> Fades in and slides from Right to Left.
-            
             const threshold = 0.25;
-            const endPoint = 0.85; // Reach full visibility/position earlier
-            
+            const endPoint = 0.85;
             let visibility = 0;
-            
             if (current > threshold) {
-                // Map [0.25, 0.85] to [0, 1]
                 visibility = (current - threshold) / (endPoint - threshold);
-                // Clamp to max 1.0 (so it stays fully visible from 0.85 to 1.0)
                 visibility = Math.min(1, Math.max(0, visibility));
             }
-            
-            // Translate X: 0 (at visibility=1) to 50px (at visibility=0)
             const translateX = (1 - visibility) * 50; 
-            
             navigateToolRef.current.style.opacity = `${visibility}`;
             navigateToolRef.current.style.transform = `translateX(${(translateX) / 16}rem)`;
             navigateToolRef.current.style.pointerEvents = visibility > 0.9 ? 'auto' : 'none';
@@ -339,7 +328,7 @@ function AppContent() {
 
     loop();
     return () => cancelAnimationFrame(animationFrameId);
-  }, [activeApp]); // Dependency on activeApp determines the resting target
+  }, [activeApp]);
 
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
