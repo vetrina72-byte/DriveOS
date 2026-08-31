@@ -277,13 +277,8 @@ function AppContent() {
 
   const handleSpotifyDrag = useCallback((progress: number | null) => {
     if (isSwitchingRef.current) return;
-    // If maps is layered, OR we are transitioning back to maps, ignore
-    const isMapLayeredBehind = activeApp !== null && ['spotify', 'youtube-music', 'radio', 'theater', 'debug'].includes(activeApp);
-    if ((isMapsLayered || activeApp === 'maps' || isMapLayeredBehind) && progress !== null) {
-        return; 
-    }
     dragProgressRef.current = progress;
-  }, [isMapsLayered, activeApp]);
+  }, []);
 
   // --- NAVIGATE TOOL ANIMATION LOOP ---
   useEffect(() => {

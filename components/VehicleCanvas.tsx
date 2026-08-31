@@ -186,66 +186,101 @@ const Model = forwardRef<
       }
       if (child.isLight) child.castShadow = false;
       if (child.isMesh) {
-        const mat = child.material as THREE.MeshStandardMaterial;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
         child.castShadow = true;
         child.receiveShadow = true;
-        if (mat) {
-          const name = mat.name.toLowerCase();
+
+        materials.forEach((mat: THREE.MeshStandardMaterial) => {
+          if (!mat) return;
+          const matName = (mat.name || "").toLowerCase();
+          const childName = (child.name || "").toLowerCase();
+          const combinedName = `${matName} ${childName}`;
 
           // Boost environment reflections to better reflect the surroundings
-          mat.envMapIntensity = 2.5;
+          mat.envMapIntensity = 2.8;
           if (
-            name.includes("paint") ||
-            name.includes("body") ||
-            name.includes("car") ||
-            name.includes("metal")
+            combinedName.includes("paint") ||
+            combinedName.includes("body") ||
+            combinedName.includes("car") ||
+            combinedName.includes("metal") ||
+            combinedName.includes("hood") ||
+            combinedName.includes("door") ||
+            combinedName.includes("bumper")
           ) {
             mat.metalness = Math.max(mat.metalness || 0, 0.7);
-            mat.roughness = Math.min(mat.roughness || 1, 0.2);
+            mat.roughness = Math.min(mat.roughness || 1, 0.18);
+            mat.envMapIntensity = 3.2;
           }
 
-          // Attempt to handle windows/glass
+          // Lenti / Vetri protettivi dei fari anteriori e posteriori
           if (
-            name.includes("window") ||
-            name.includes("glass") ||
-            name.includes("windshield")
+            combinedName.includes("lens") ||
+            combinedName.includes("cover_light") ||
+            combinedName.includes("light_glass") ||
+            combinedName.includes("lamp_glass") ||
+            combinedName.includes("glass_red")
+          ) {
+            mat.transparent = true;
+            mat.opacity = 0.4;
+            mat.roughness = 0.05;
+            mat.metalness = 0.1;
+            child.castShadow = false;
+          }
+
+          // Windows / Glass
+          if (
+            combinedName.includes("window") ||
+            combinedName.includes("windshield") ||
+            (combinedName.includes("glass") && !combinedName.includes("red") && !combinedName.includes("light"))
           ) {
             mat.transparent = true;
             mat.opacity = 0.5;
             mat.roughness = 0.1;
             mat.metalness = 0.9;
             mat.color.set("#111111");
-            child.castShadow = false; // Usually looks better if glass doesn't cast hard shadows
+            child.castShadow = false;
           }
-          // Attempt to handle lights
-          if (
-            name.includes("light") ||
-            name.includes("lamp") ||
-            name.includes("emission")
-          ) {
-            // Basic heuristic for tail lights vs headlights based on name or position could go here
-            // For now, make them all emissive
-            if (
-              name.includes("red") ||
-              name.includes("tail") ||
-              name.includes("rear") ||
-              name.includes("brake")
-            ) {
-              mat.color.set("#ff0000");
-              mat.emissive = new THREE.Color("#ff0000");
-            } else {
-              mat.emissive = new THREE.Color("#ffffff");
-            }
+
+          // Fari posteriori e anteriori (riconoscimento completo di fari superiori e inferiori)
+          const isRearLight =
+            combinedName.includes("red") ||
+            combinedName.includes("tail") ||
+            combinedName.includes("rear") ||
+            combinedName.includes("brake") ||
+            combinedName.includes("stop") ||
+            combinedName.includes("backlight");
+
+          const isFrontLight =
+            combinedName.includes("headlight") ||
+            combinedName.includes("front_light") ||
+            combinedName.includes("drl") ||
+            combinedName.includes("thor") ||
+            combinedName.includes("daytime");
+
+          const isGenericLight =
+            combinedName.includes("light") ||
+            combinedName.includes("lamp") ||
+            combinedName.includes("emission") ||
+            combinedName.includes("led");
+
+          if (isRearLight) {
+            mat.color.set("#ff1a26");
+            mat.emissive = new THREE.Color("#ff0a18");
+            mat.toneMapped = false;
+            lightMats.current[mat.uuid] = mat;
+          } else if (isFrontLight || isGenericLight) {
+            mat.color.set("#ffffff");
+            mat.emissive = new THREE.Color("#ffffff");
             mat.toneMapped = false;
             lightMats.current[mat.uuid] = mat;
           }
-        }
+        });
       }
     });
   }, [scene]);
 
   useFrame((_, delta) => {
-    const target = isNight ? 5.0 : 0.0;
+    const target = isNight ? 9.5 : 0.0;
     const damp = 1 - Math.exp(-2 * delta);
     Object.values(lightMats.current).forEach(
       (mat: THREE.MeshStandardMaterial) => {
@@ -273,26 +308,16 @@ Model.displayName = "Model";
 
 function ContactShadow({
   shadowRef,
-  modelRef,
-  floorRef,
   carShadowWidth,
   carShadowLength,
-  carShadowOffsetX = 0,
-  carShadowOffsetY = 0,
-  carShadowOffsetZ = 0,
+  shadowPosition,
   shadowOpacity,
-  carReflectionOffsetY = 0,
 }: {
   shadowRef: React.RefObject<THREE.Mesh>;
-  modelRef: React.RefObject<THREE.Group>;
-  floorRef: React.RefObject<THREE.Mesh>;
   carShadowWidth: number;
   carShadowLength: number;
-  carShadowOffsetX?: number;
-  carShadowOffsetY?: number;
-  carShadowOffsetZ?: number;
+  shadowPosition: { x: number; y: number; z: number };
   shadowOpacity: number;
-  carReflectionOffsetY?: number;
 }) {
   const { scene, camera: mainCamera } = useThree();
 
@@ -319,25 +344,12 @@ function ContactShadow({
     };
   }, [scene, mainCamera, shadowRef]);
 
-  useFrame(() => {
-    if (shadowRef.current && modelRef.current) {
-      const floorY = floorRef.current ? floorRef.current.position.y : -carReflectionOffsetY;
-      shadowRef.current.position.set(
-        modelRef.current.position.x + carShadowOffsetX,
-        floorY + 0.005 + carShadowOffsetY,
-        modelRef.current.position.z + carShadowOffsetZ,
-      );
-      // Keep strictly horizontal, never tilt with car's pitch/roll
-      shadowRef.current.rotation.set(-Math.PI / 2, 0, 0);
-    }
-  });
-
   return (
     <Mesh
       ref={shadowRef}
       receiveShadow
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[carShadowOffsetX, 0.005 + carShadowOffsetY, carShadowOffsetZ]}
+      position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}
     >
       <PlaneGeometry args={[carShadowWidth, carShadowLength]} />
       <ShadowMaterial
@@ -432,11 +444,6 @@ function SceneController({
   const restoreAnimProgress = useRef(1.0);
   const snapshotHomePos = useRef(new THREE.Vector3());
   const snapshotHomeTarget = useRef(new THREE.Vector3());
-
-  // Track continuous azimuth for correct path reversal
-  const continuousAzimuth = useRef<number | null>(null);
-  const prevTheta = useRef<number | null>(null);
-  const frozenAzimuth = useRef<number>(0);
 
 
   // Calcolo coefficiente di responsive e configurazioni locali dinamiche per evitare tagli
@@ -577,7 +584,6 @@ function SceneController({
             snapshotHomeTarget.current.copy((controls as any).target);
           isRestoringHome.current = true;
           restoreAnimProgress.current = 0;
-          frozenAzimuth.current = continuousAzimuth.current || 0;
         }
       }, 3000);
     };
@@ -634,7 +640,7 @@ function SceneController({
     }
   };
 
-  // Helper per interpolare tutto (Camera e Modello)
+  // Helper per interpolare tutto (Camera e Modello) con rispetto rigoroso dei lati della vettura
   const applyInterpolation = (
     startCamPos: THREE.Vector3,
     startCamTarget: THREE.Vector3,
@@ -647,41 +653,61 @@ function SceneController({
     endScale: number,
     endQuat: THREE.Quaternion,
     t: number,
-    ctrl: any,
-    startThetaParam?: number,
-    endThetaParam?: number
+    ctrl: any
   ) => {
     // 1. Camera Target (Lineare)
     vec3C.lerpVectors(startCamTarget, endCamTarget, t);
 
-    // 2. Camera Pos
-    vec3A.copy(endCamPos).sub(endCamTarget);
+    // 2. Camera Pos (Interpolazione cilindrica con Shortest Path su angolo XZ)
     vec3B.copy(startCamPos).sub(startCamTarget);
+    vec3A.copy(endCamPos).sub(endCamTarget);
 
-    sphA.setFromVector3(vec3B); // Start
-    sphB.setFromVector3(vec3A); // End
+    const startRadius = Math.sqrt(vec3B.x * vec3B.x + vec3B.z * vec3B.z);
+    const endRadius = Math.sqrt(vec3A.x * vec3A.x + vec3A.z * vec3A.z);
+    const curRadius = THREE.MathUtils.lerp(startRadius, endRadius, t);
+    const curY = THREE.MathUtils.lerp(vec3B.y, vec3A.y, t);
 
-    let t_path;
-    if (startThetaParam !== undefined && endThetaParam !== undefined) {
-      // Usa l'interpolazione lineare esatta (preservando il path)
-      t_path = THREE.MathUtils.lerp(startThetaParam, endThetaParam, t);
+    const angleStart = Math.atan2(vec3B.z, vec3B.x);
+    const angleEnd = Math.atan2(vec3A.z, vec3A.x);
+
+    let curAngle: number;
+    if (angleStart >= 0 && angleEnd >= 0) {
+      // Entrambi sul lato destro: l'interpolazione rimane rigorosamente sul lato destro [0, PI]
+      curAngle = angleStart + (angleEnd - angleStart) * t;
+    } else if (angleStart < 0 && angleEnd < 0) {
+      // Entrambi sul lato sinistro: rimane rigorosamente sul lato sinistro [-PI, 0]
+      curAngle = angleStart + (angleEnd - angleStart) * t;
+    } else if (angleStart < 0 && angleEnd >= 0) {
+      // Da lato sinistro a lato destro:
+      if (angleStart < -Math.PI / 2) {
+        // Front-left: passa naturalmente dal davanti (attorno a -PI)
+        const targetAngle = angleEnd - 2 * Math.PI;
+        curAngle = angleStart + (targetAngle - angleStart) * t;
+      } else {
+        // Rear-left: passa naturalmente dal retro (attorno a 0)
+        curAngle = angleStart + (angleEnd - angleStart) * t;
+      }
     } else {
-      // Fallback a shortest path se non forniti
-      const deltaTheta = THREE.MathUtils.euclideanModulo(
-        sphB.theta - sphA.theta + Math.PI,
-        Math.PI * 2,
-      ) - Math.PI;
-      t_path = sphA.theta + deltaTheta * t;
+      // Da lato destro a lato sinistro:
+      if (angleEnd < -Math.PI / 2) {
+        // Verso front-left: passa dal davanti
+        const targetAngle = angleEnd + 2 * Math.PI;
+        curAngle = angleStart + (targetAngle - angleStart) * t;
+      } else {
+        // Verso rear-left: passa dal retro
+        curAngle = angleStart + (angleEnd - angleStart) * t;
+      }
     }
 
-    const r = THREE.MathUtils.lerp(sphA.radius, sphB.radius, t);
-    const ph_path = THREE.MathUtils.lerp(sphA.phi, sphB.phi, t);
+    const curOffsetX = curRadius * Math.cos(curAngle);
+    const curOffsetZ = curRadius * Math.sin(curAngle);
 
-    camera.position.setFromSphericalCoords(r, ph_path, t_path).add(vec3C);
+    camera.position.set(vec3C.x + curOffsetX, vec3C.y + curY, vec3C.z + curOffsetZ);
+    camera.lookAt(vec3C);
 
     if (ctrl) {
       ctrl.target.copy(vec3C);
-      ctrl.update();
+      ctrl.enabled = false;
     }
 
     // 3. Modello 3D
@@ -769,20 +795,6 @@ function SceneController({
       initializedCamera.current = true;
     }
 
-    // TRACK CONTINUOUS AZIMUTH
-    const camVecAzimuth = vec3C.copy(camera.position).sub(ctrl ? ctrl.target : vec3B.set(0, 0, 0));
-    const currentTheta = Math.atan2(camVecAzimuth.x, camVecAzimuth.z);
-    
-    if (prevTheta.current !== null) {
-      let diff = currentTheta - prevTheta.current;
-      if (diff > Math.PI) diff -= Math.PI * 2;
-      else if (diff < -Math.PI) diff += Math.PI * 2;
-      continuousAzimuth.current = (continuousAzimuth.current || 0) + diff;
-    } else {
-      continuousAzimuth.current = currentTheta;
-    }
-    prevTheta.current = currentTheta;
-
     // RILEVAMENTO EVENTI
     const clickOccurred = isAppOpen !== prevIsAppOpen.current;
     prevIsAppOpen.current = isAppOpen;
@@ -809,7 +821,6 @@ function SceneController({
         frozenModelScale.current = modelRef.current.scale.x;
         frozenModelRot.current.copy(modelRef.current.quaternion);
       }
-      frozenAzimuth.current = continuousAzimuth.current || 0;
 
       // Il progresso parte esattamente dal frame visivo attuale
       autoStartP.current = currentP.current;
@@ -867,6 +878,7 @@ function SceneController({
       // UTENTE MANOVRA A SCHERMO INTERO CON ORBIT CONTROLS
       transitionMode.current = "idle";
       if (ctrl) {
+        ctrl.enabled = true;
         ctrl.target.set(
           localHomeConfig.cameraTarget.x as number,
           localHomeConfig.cameraTarget.y as number,
@@ -902,24 +914,29 @@ function SceneController({
       p = autoStartP.current + (autoTargetP.current - autoStartP.current) * easeT;
       currentP.current = p;
 
+      const endTarget = new THREE.Vector3(
+        isAppOpen ? localAppOpenConfig.cameraTarget.x : localHomeConfig.cameraTarget.x,
+        isAppOpen ? localAppOpenConfig.cameraTarget.y : localHomeConfig.cameraTarget.y,
+        isAppOpen ? localAppOpenConfig.cameraTarget.z : localHomeConfig.cameraTarget.z,
+      );
+
+      const endPos = new THREE.Vector3(
+        isAppOpen ? localAppOpenConfig.cameraPos.x : localHomeConfig.cameraPos.x,
+        isAppOpen ? localAppOpenConfig.cameraPos.y : localHomeConfig.cameraPos.y,
+        isAppOpen ? localAppOpenConfig.cameraPos.z : localHomeConfig.cameraPos.z,
+      );
+
       if (normT >= 1.0) {
         transitionMode.current = "idle";
         p = autoTargetP.current;
         currentP.current = p;
         if (!isAppOpen) {
-          camera.position.set(
-            localHomeConfig.cameraPos.x as number,
-            localHomeConfig.cameraPos.y as number,
-            localHomeConfig.cameraPos.z as number,
-          );
+          camera.position.copy(endPos);
           camera.updateProjectionMatrix();
           if (ctrl) {
-            ctrl.target.set(
-              localHomeConfig.cameraTarget.x as number,
-              localHomeConfig.cameraTarget.y as number,
-              localHomeConfig.cameraTarget.z as number,
-            );
+            ctrl.target.copy(endTarget);
             ctrl.enableRotate = true;
+            ctrl.enabled = true;
             ctrl.update();
           }
           if (modelRef.current) {
@@ -940,28 +957,6 @@ function SceneController({
         }
       }
 
-      const endPos = new THREE.Vector3(
-        isAppOpen
-          ? localAppOpenConfig.cameraPos.x
-          : localHomeConfig.cameraPos.x,
-        isAppOpen
-          ? localAppOpenConfig.cameraPos.y
-          : localHomeConfig.cameraPos.y,
-        isAppOpen
-          ? localAppOpenConfig.cameraPos.z
-          : localHomeConfig.cameraPos.z,
-      );
-      const endTarget = new THREE.Vector3(
-        isAppOpen
-          ? localAppOpenConfig.cameraTarget.x
-          : localHomeConfig.cameraTarget.x,
-        isAppOpen
-          ? localAppOpenConfig.cameraTarget.y
-          : localHomeConfig.cameraTarget.y,
-        isAppOpen
-          ? localAppOpenConfig.cameraTarget.z
-          : localHomeConfig.cameraTarget.z,
-      );
       const endScale = isAppOpen
         ? localAppOpenConfig.modelScale
         : localHomeConfig.modelScale;
@@ -971,14 +966,6 @@ function SceneController({
         isAppOpen ? localAppOpenConfig.modelPos.y : localHomeConfig.modelPos.y,
         isAppOpen ? localAppOpenConfig.modelPos.z : localHomeConfig.modelPos.z,
       );
-
-      // Calcola l'angolo target e lo trasla nel winding corretto
-      vec3A.copy(endPos).sub(endTarget);
-      const targetRawTheta = Math.atan2(vec3A.x, vec3A.z);
-      
-      // Calcoliamo quanti giri (2PI) sono stati fatti finora in frozenAzimuth
-      const currentRevolutions = Math.trunc((frozenAzimuth.current - targetRawTheta) / (Math.PI * 2));
-      const targetThetaWrapped = targetRawTheta + currentRevolutions * Math.PI * 2;
 
       applyInterpolation(
         frozenCamPos.current,
@@ -992,9 +979,7 @@ function SceneController({
         endScale,
         endQuat,
         easeT,
-        ctrl,
-        frozenAzimuth.current,
-        targetThetaWrapped
+        ctrl
       );
     } else if (transitionMode.current === "drag") {
       let rawP = dragProgress.current as number;
@@ -1058,9 +1043,10 @@ function SceneController({
     } else if (isRestoringHome.current) {
       const safeDelta = Math.min(delta, 0.05);
       restoreAnimProgress.current += safeDelta;
-      if (restoreAnimProgress.current < 1.4) {
-        const t = Math.min(restoreAnimProgress.current / 1.4, 1.0);
-        const easeT = 1 - Math.pow(1 - t, 4);
+      const restoreDuration = 2.2;
+      if (restoreAnimProgress.current < restoreDuration) {
+        const t = Math.min(restoreAnimProgress.current / restoreDuration, 1.0);
+        const easeT = 1 - Math.pow(1 - t, 3);
 
         const ePos = new THREE.Vector3(
           localHomeConfig.cameraPos.x,
@@ -1083,13 +1069,6 @@ function SceneController({
           localHomeConfig.modelPos.z,
         );
 
-        // Calcola l'angolo target e lo trasla nel winding corretto
-        vec3A.copy(ePos).sub(eTarget);
-        const targetRawTheta = Math.atan2(vec3A.x, vec3A.z);
-        
-        const currentRevolutions = Math.trunc((frozenAzimuth.current - targetRawTheta) / (Math.PI * 2));
-        const targetThetaWrapped = targetRawTheta + currentRevolutions * Math.PI * 2;
-
         applyInterpolation(
           snapshotHomePos.current,
           snapshotHomeTarget.current,
@@ -1102,9 +1081,7 @@ function SceneController({
           localHomeConfig.modelScale,
           quatTargetHome,
           easeT,
-          ctrl,
-          frozenAzimuth.current,
-          targetThetaWrapped
+          ctrl
         );
       } else {
         isRestoringHome.current = false;
@@ -1123,45 +1100,63 @@ function SceneController({
           );
           ctrl.target.copy(vec3B);
           ctrl.enableRotate = true;
+          ctrl.enabled = true;
           ctrl.update();
         }
       }
       p = 1;
     } else {
-      if (!isAppOpen && ctrl) ctrl.enableRotate = true;
+      if (!isAppOpen && ctrl) {
+        ctrl.enableRotate = true;
+        ctrl.enabled = true;
+      }
     }
 
-    // 4. Viewport & Aspect Ratio dinamico dal DOM - Ridimensiona gl.setSize alla larghezza visibile corrente
+    // 4. Viewport & Aspect Ratio dinamico dal DOM - Sincronizzato frame-per-frame con il pannello dell'app
     const canvas = gl.domElement;
     const container = canvas.parentElement;
     if (container) {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
 
-      // Match perfectly with tailwind classes used by panels:
-      // 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'
-      // sm = 640px, md = 768px, lg = 1024px, xl = 1280px
-      let minWidthPercent = 0.40; // Default for xl (cw >= 1280) (panel is 60%, canvas is 40%)
-      
-      if (cw < 768) {
-        minWidthPercent = 1.0;
-      } else if (cw < 1024) {
-        minWidthPercent = 0.50;
-      } else if (cw < 1280) {
-        minWidthPercent = 0.35;
-      }
-      
-      // Calcola la porzione di schermo visibile in larghezza
-      const visibleWidth = Math.round(
-        cw * minWidthPercent + cw * (1 - minWidthPercent) * p,
-      );
+      let visibleWidth = cw;
 
-      // Ridimensionamento fisico del Canvas
+      if (cw >= 768) {
+        // Cerca il pannello attivo/visibile nel DOM
+        const panels = document.querySelectorAll('.spotify-app-panel');
+        let activePanelRect: DOMRect | null = null;
+        
+        for (let i = 0; i < panels.length; i++) {
+          const el = panels[i] as HTMLElement;
+          const rect = el.getBoundingClientRect();
+          // Il pannello è considerato visibile e sul lato destro se ha larghezza > 0 e rect.left < cw
+          if (rect.width > 0 && rect.left < cw && rect.left > 0) {
+            activePanelRect = rect;
+            break;
+          }
+        }
+
+        if (activePanelRect) {
+          visibleWidth = Math.round(activePanelRect.left);
+        } else if (isAppOpen) {
+          // Fallback se il pannello non ha ancora calcolato il rect ma l'app è aperta
+          let minWidthPercent = 0.40;
+          if (cw < 1024) minWidthPercent = 0.50;
+          else if (cw < 1280) minWidthPercent = 0.35;
+          visibleWidth = Math.round(cw * minWidthPercent + cw * (1 - minWidthPercent) * p);
+        } else {
+          visibleWidth = cw;
+        }
+      }
+
+      visibleWidth = Math.max(1, Math.min(cw, visibleWidth));
+
+      // Forza il ridimensionamento fisico e l'aggiornamento degli stili CSS del Canvas ad ogni singolo frame
       if (canvas.width !== visibleWidth || canvas.height !== ch) {
         gl.setSize(visibleWidth, ch, true);
       }
 
-      // Ricalcolo della matrice con FOV fisso per preservare il framing
+      // Ricalcolo della matrice con FOV fisso per evitare distorsioni "a step"
       if (camera instanceof THREE.PerspectiveCamera) {
         const aspect = visibleWidth / ch;
         if (camera.aspect !== aspect) {
@@ -1347,10 +1342,10 @@ function EnvironmentController({
     );
 
     if (isNight) {
-      targetAmbientIntensity = 0.01;
-      targetFrontLightIntensity = nightFrontLightIntensity;
-      targetDirectionalIntensity = 0;
-      targetEnvIntensity = 0.01;
+      targetAmbientIntensity = Math.max(nightAmbientIntensity, 0.42);
+      targetFrontLightIntensity = Math.max(nightFrontLightIntensity, 0.70);
+      targetDirectionalIntensity = 0.45;
+      targetEnvIntensity = Math.max(nightEnvironmentIntensity, 1.45);
       targetMirror = 0.35;
       targetFog = { near: nightFogNear, far: nightFogFar };
     } else {
@@ -1833,24 +1828,19 @@ export default function VehicleCanvas({
                 </Mesh>
               )}
 
+              {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+              <ContactShadow
+                shadowRef={shadowRef}
+                carShadowWidth={carShadowWidth}
+                carShadowLength={carShadowLength}
+                shadowPosition={shadowPosition}
+                shadowOpacity={shadowOpacity}
+              />
+
               {/* Linked headlights follow the model's group rotation */}
               {linked && renderHeadlights()}
             </Group>
             
-            {/* Contact shadow strictly horizontal on floor level, tracking car position */}
-            <ContactShadow
-              shadowRef={shadowRef}
-              modelRef={modelRef}
-              floorRef={floorRef}
-              carShadowWidth={carShadowWidth}
-              carShadowLength={carShadowLength}
-              carShadowOffsetX={carShadowOffsetX}
-              carShadowOffsetY={carShadowOffsetY}
-              carShadowOffsetZ={carShadowOffsetZ}
-              shadowOpacity={shadowOpacity}
-              carReflectionOffsetY={carReflectionOffsetY}
-            />
-
             {/* Target marker for lights, moved outside of modelRef so it doesn't double-transform */}
             {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
             <Primitive object={frontLightTarget} />
@@ -1881,7 +1871,9 @@ export default function VehicleCanvas({
           minDistance={minOrbitDistance}
           maxDistance={maxOrbitDistance}
           enableDamping={true}
-          dampingFactor={0.05}
+          dampingFactor={0.035}
+          rotateSpeed={0.55}
+          zoomSpeed={0.6}
           enableZoom={true}
           enableRotate={!isAppOpen && dragProgress.current === null}
         />
