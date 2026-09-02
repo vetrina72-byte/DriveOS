@@ -5,17 +5,30 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  const authHeader = req.headers['authorization'];
+  let accessToken = null;
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    accessToken = authHeader.substring(7).trim();
+  } else if (req.body?.accessToken) {
+    accessToken = String(req.body.accessToken).trim();
+  }
+
   const { sessionId, device_id } = req.body;
 
-  if (!sessionId) return res.status(400).json({ error: 'missing_session_id' });
   if (!device_id) return res.status(400).json({ error: 'missing_device_id' });
 
-  const session = await ensureSpotifyToken(sessionId);
-  if (!session || !session.access_token) {
+  if (!accessToken && sessionId) {
+    const session = await ensureSpotifyToken(sessionId);
+    if (session && session.access_token) {
+      accessToken = session.access_token;
+    }
+  }
+
+  if (!accessToken) {
     return res.status(401).json({ error: 'no_session_or_invalid_token' });
   }
 
-  const accessToken = session.access_token;
   const url = 'https://api.spotify.com/v1/me/player';
 
   try {

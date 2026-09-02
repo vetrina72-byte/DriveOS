@@ -45,7 +45,7 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
   };
   
   return (
-    <nav className="w-full px-6 pt-6 pb-4 flex-shrink-0 z-20 flex items-center justify-between gap-4">
+    <nav className="w-full px-6 pt-6 pb-4 flex-shrink-0 z-30 relative flex items-center justify-between gap-4">
       {/* Left side: Logo/Back + Search */}
       <div className="flex items-center gap-4 flex-shrink-0">
         {showBackButton ? (
@@ -76,8 +76,8 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
       </div>
       
       {/* Right side: Navigation Links & User Profile */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+      <div className="flex items-center gap-3 ml-auto flex-shrink-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
           {navLinks.map((link) => {
             const linkView = linkToViewMap[link];
             if (!linkView) return null;

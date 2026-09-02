@@ -206,6 +206,7 @@ async function reconnectAndGetDeviceId(player: SpotifyPlayer): Promise<string | 
  */
 export async function safePlay(options: PlayOptions, attemptRefresh: () => Promise<boolean>): Promise<boolean> {
     const sessionId = getSessionId();
+    const getToken = () => localStorage.getItem('accessToken') || localStorage.getItem('spotify_access_token') || '';
     
     // 1. Check if we have a device ID. If not, try to wake up the player.
     if (!spotifyDeviceId) {
@@ -224,24 +225,32 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
-    const playRequest = { deviceId: spotifyDeviceId, body: { ...options } };
-
     const doPlay = async (): Promise<{ ok: boolean, status: number }> => {
+        const token = getToken();
+        const playRequest = { deviceId: spotifyDeviceId, accessToken: token, body: { ...options } };
+
         try {
             const res = await fetch('/api/play', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-session-id': sessionId || '',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify(playRequest)
             });
-            if (res.ok) return { ok: true, status: res.status };
+
+            if (res.ok || res.status === 204) return { ok: true, status: res.status };
             
-            // Direct API fallback if proxy returns 401 or error
-            const directToken = localStorage.getItem('accessToken');
-            if (directToken) {
+            // Direct API fallback if proxy returns error (other than 401 which will trigger refresh first)
+            if (token && res.status !== 401) {
                 const directUrl = spotifyDeviceId ? `https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}` : 'https://api.spotify.com/v1/me/player/play';
                 const directRes = await fetch(directUrl, {
                     method: 'PUT',
-                    headers: { 'Authorization': `Bearer ${directToken}`, 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Authorization': `Bearer ${token}`, 
+                        'Content-Type': 'application/json' 
+                    },
                     body: JSON.stringify(options || {})
                 });
                 if (directRes.ok || directRes.status === 204) {
@@ -254,12 +263,15 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
             console.error('[safePlay] Network error during play:', e);
             // Direct API fallback on network error
             try {
-                const directToken = localStorage.getItem('accessToken');
+                const directToken = getToken();
                 if (directToken) {
                     const directUrl = spotifyDeviceId ? `https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}` : 'https://api.spotify.com/v1/me/player/play';
                     const directRes = await fetch(directUrl, {
                         method: 'PUT',
-                        headers: { 'Authorization': `Bearer ${directToken}`, 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Authorization': `Bearer ${directToken}`, 
+                            'Content-Type': 'application/json' 
+                        },
                         body: JSON.stringify(options || {})
                     });
                     if (directRes.ok || directRes.status === 204) {
@@ -271,25 +283,51 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     };
 
-    // 2. Attempt playback
+    // 2. Check token expiration before playing
+    const expiresAt = Number(localStorage.getItem('expiresAt') || localStorage.getItem('spotify_token_expiry') || '0');
+    if (expiresAt > 0 && expiresAt <= Date.now() + 5000) {
+        console.log('[safePlay] Token is close to expiring, refreshing prior to play call...');
+        await attemptRefresh().catch(() => false);
+    }
+
+    // 3. Attempt playback
     let result = await doPlay();
 
     if (result.ok) return true;
 
-    // 3. Handle 404 (Device Not Found / Inactive)
+    // 4. Handle 401 (Token Expired or Invalid) -> await refresh Promise and retry immediately
+    if (result.status === 401) {
+        console.log('[safePlay] Token expired (401). Refreshing token and awaiting resolution...');
+        const refreshed = await attemptRefresh();
+        if (refreshed) {
+            console.log('[safePlay] Token refreshed successfully. Retrying play with updated token...');
+            await new Promise(r => setTimeout(r, 150));
+            result = await doPlay();
+            if (result.ok) return true;
+        } else {
+            console.warn('[safePlay] Token refresh attempt returned false.');
+        }
+    }
+
+    // 5. Handle 404 (Device Not Found / Inactive)
     if (result.status === 404) {
         console.log('[safePlay] Device 404 (Inactive). Attempting transfer/wake-up...');
+        const token = getToken();
         
         try {
             const transferRes = await fetch('/api/transfer-player', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId, device_id: spotifyDeviceId })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-session-id': sessionId || '',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ sessionId, device_id: spotifyDeviceId, accessToken: token })
             });
 
             if (transferRes.ok) {
                 // Wait a moment for Spotify backend to register the transfer
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 400));
                 console.log('[safePlay] Transfer successful. Retrying play...');
                 result = await doPlay();
                 if (result.ok) return true;
@@ -301,13 +339,17 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
                     const newId = await reconnectAndGetDeviceId(spotifyPlayer);
                     if (newId) {
                         spotifyDeviceId = newId;
-                        playRequest.deviceId = newId;
                         
                         // Force transfer to new ID
+                        const freshToken = getToken();
                         await fetch('/api/transfer-player', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sessionId, device_id: newId })
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'x-session-id': sessionId || '',
+                                ...(freshToken ? { 'Authorization': `Bearer ${freshToken}` } : {})
+                            },
+                            body: JSON.stringify({ sessionId, device_id: newId, accessToken: freshToken })
                         });
                         
                         await new Promise(r => setTimeout(r, 300));
@@ -321,12 +363,11 @@ export async function safePlay(options: PlayOptions, attemptRefresh: () => Promi
         }
     }
 
-    // 4. Handle 401 (Token Expired)
+    // 6. Secondary 401 retry if transfer exposed an expired token
     if (result.status === 401) {
-        console.log('[safePlay] Token expired (401). Refreshing...');
+        console.log('[safePlay] Secondary 401 encountered, refreshing...');
         const refreshed = await attemptRefresh();
         if (refreshed) {
-            await new Promise(r => setTimeout(r, 200)); 
             result = await doPlay();
             if (result.ok) return true;
         }

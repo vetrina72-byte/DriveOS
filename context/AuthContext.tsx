@@ -603,38 +603,98 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 if (user) {
                     setState(s => ({ ...s, accessToken: currentToken, expiresAt, user, isAuthenticated: true, isLoading: false }));
                     
-                    // Aggressive initialization: fetch current player state immediately
-                    apiClient.get('/me/player').then(res => {
-                        if (res.data && res.data.item) {
-                            setNowPlaying(prev => {
-                                // Prefer local hydrated state if it exists, otherwise use remote
-                                if (prev.spotifyState && prev.spotifyState.track_window.current_track?.uri === res.data.item.uri) {
-                                    return { ...prev, activeDevice: res.data.device, source: 'spotify' };
+                    // Aggressive initialization: fetch current player state immediately or recover last played track
+                    const recoverPreviousSession = async () => {
+                        try {
+                            const res = await apiClient.get('/me/player');
+                            if (res.data && res.data.item) {
+                                const item = res.data.item;
+                                const contextUri = res.data.context?.uri || item.album?.uri;
+                                localStorage.setItem("last_track_uri", item.uri);
+                                if (contextUri) localStorage.setItem("last_context_uri", contextUri);
+                                localStorage.setItem("last_progress_ms", String(res.data.progress_ms || 0));
+
+                                setNowPlaying(prev => {
+                                    if (prev.spotifyState && prev.spotifyState.track_window.current_track?.uri === item.uri) {
+                                        return { ...prev, activeDevice: res.data.device, source: 'spotify' };
+                                    }
+                                    return {
+                                        ...prev,
+                                        source: 'spotify',
+                                        activeDevice: res.data.device,
+                                        spotifyState: {
+                                            paused: !res.data.is_playing,
+                                            position: res.data.progress_ms || 0,
+                                            duration: item.duration_ms || 0,
+                                            track_window: {
+                                                current_track: item as any,
+                                                next_tracks: [],
+                                                previous_tracks: []
+                                            },
+                                            context: res.data.context || { uri: contextUri || null, metadata: null },
+                                            disallows: {},
+                                            shuffle: res.data.shuffle_state || false,
+                                            repeat_mode: res.data.repeat_state === 'off' ? 0 : 1,
+                                            timestamp: Date.now()
+                                        } as any
+                                    };
+                                });
+                                return;
+                            }
+                        } catch (e) {}
+
+                        // If /me/player had no active track, query /me/player/recently-played to recover last song
+                        try {
+                            const recentsRes = await apiClient.get('/me/player/recently-played?limit=10');
+                            if (recentsRes.data?.items?.length > 0) {
+                                const firstRecent = recentsRes.data.items[0];
+                                const track = firstRecent.track;
+                                if (track) {
+                                    const contextUri = firstRecent.context?.uri || track.album?.uri;
+                                    localStorage.setItem("last_track_uri", track.uri);
+                                    if (contextUri) localStorage.setItem("last_context_uri", contextUri);
+                                    localStorage.setItem("last_progress_ms", "0");
+
+                                    setNowPlaying(prev => {
+                                        if (prev.spotifyState?.track_window?.current_track) return prev;
+                                        return {
+                                            ...prev,
+                                            source: 'spotify',
+                                            spotifyState: {
+                                                paused: true,
+                                                position: 0,
+                                                duration: track.duration_ms || 0,
+                                                track_window: {
+                                                    current_track: {
+                                                        id: track.id,
+                                                        uri: track.uri,
+                                                        name: track.name,
+                                                        duration_ms: track.duration_ms,
+                                                        artists: track.artists || [],
+                                                        album: {
+                                                            name: track.album?.name || '',
+                                                            uri: track.album?.uri || '',
+                                                            images: track.album?.images || []
+                                                        },
+                                                        is_playable: true
+                                                    } as any,
+                                                    next_tracks: [],
+                                                    previous_tracks: []
+                                                },
+                                                context: { uri: contextUri || null, metadata: null },
+                                                disallows: {},
+                                                shuffle: false,
+                                                repeat_mode: 0,
+                                                timestamp: Date.now()
+                                            } as any
+                                        };
+                                    });
                                 }
-                                return {
-                                    ...prev,
-                                    source: 'spotify',
-                                    activeDevice: res.data.device,
-                                    spotifyState: {
-                                        paused: !res.data.is_playing,
-                                        position: res.data.progress_ms || 0,
-                                        duration: res.data.item.duration_ms || 0,
-                                        track_window: {
-                                            current_track: res.data.item as any,
-                                            next_tracks: [],
-                                            previous_tracks: []
-                                        },
-                                        context: res.data.context || { uri: null, metadata: null },
-                                        disallows: {},
-                                        shuffle: res.data.shuffle_state || false,
-                                        repeat_mode: res.data.repeat_state === 'off' ? 0 : 1,
-                                        timestamp: Date.now()
-                                    } as any
-                                };
-                            });
-                        }
-                    }).catch(() => {});
-                    
+                            }
+                        } catch (recErr) {}
+                    };
+
+                    recoverPreviousSession();
                 } else logout();
             } else { setState(s => ({ ...s, isLoading: false })); }
         };
@@ -679,6 +739,24 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             }).catch(err => {
                 console.warn('[AuthContext] Background fetchUserInfo warning:', err);
             });
+
+            // Recover active or previous session
+            apiClient.get('/me/player').then(res => {
+                if (res.data?.item) {
+                    const item = res.data.item;
+                    const contextUri = res.data.context?.uri || item.album?.uri;
+                    localStorage.setItem("last_track_uri", item.uri);
+                    if (contextUri) localStorage.setItem("last_context_uri", contextUri);
+                } else {
+                    apiClient.get('/me/player/recently-played?limit=5').then(recents => {
+                        const first = recents.data?.items?.[0];
+                        if (first?.track) {
+                            localStorage.setItem("last_track_uri", first.track.uri);
+                            if (first.context?.uri) localStorage.setItem("last_context_uri", first.context.uri);
+                        }
+                    }).catch(() => {});
+                }
+            }).catch(() => {});
         } catch (err) { 
             console.error('[AuthContext] Login error:', err);
             logout(); 
@@ -686,7 +764,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
     }, [fetchUserInfo, logout]);
     
-    // Updated robust play function
+    // Updated robust play function with automatic recovery of previous track/playlist
     const play = useCallback(async (options: PlayOptions, itemForOptimisticUpdate?: MediaItem) => {
         if (isSwitchingTrack.current) {
             console.log('Skipping play request: already switching');
@@ -707,109 +785,107 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         localStorage.setItem("last_is_playing", "true");
         setLastPlayInitiated(Date.now());
         
-        // --- SPECIAL HANDLER FOR "LISTEN HERE" (TRANSFER) ---
-        // If we are currently showing a remote device (activeDevice is set),
-        // we assume the user wants to bring playback HERE.
-        
         const isResume = Object.keys(options).length === 0 && !options.context_uri && !options.uris;
         const isTransfer = !!nowPlaying.activeDevice;
-        // Only show spinner if transferring or loading a new track/context.
-        // If simply resuming, keep existing loading state (likely false) to avoid spinner flash.
+
+        // Populate options with last played context or track if no track is explicitly passed
+        let effectiveOptions: PlayOptions = { ...options };
+        if (isResume) {
+            const lastCtx = localStorage.getItem("last_context_uri") || localStorage.getItem("spotify_last_context");
+            const lastUr = localStorage.getItem("last_track_uri") || localStorage.getItem("spotify_last_track") || nowPlaying.spotifyState?.track_window?.current_track?.uri || continueListeningItems[0]?.uri;
+            const lastPos = localStorage.getItem("last_progress_ms") || localStorage.getItem("spotify_last_position");
+
+            if (lastCtx && lastCtx !== "undefined" && !lastCtx.startsWith('spotify:track:')) {
+                effectiveOptions.context_uri = lastCtx;
+            } else if (lastUr && lastUr !== "undefined") {
+                effectiveOptions.uris = [lastUr];
+            }
+            if (lastPos && lastPos !== "undefined") {
+                const parsedPos = parseInt(lastPos, 10);
+                if (!isNaN(parsedPos) && parsedPos > 0) {
+                    effectiveOptions.position_ms = parsedPos;
+                }
+            }
+        }
+
         const shouldShowSpinner = isTransfer || !isResume;
 
-        // IMMEDIATELY update state to remove remote UI and show spinner.
+        // IMMEDIATELY update state to remove remote UI and show optimistic state
         setNowPlaying(prev => {
-            // OPTIMISTIC UPDATE: If resuming locally, force paused=false immediately
-            // This updates the UI (Play icon becomes Pause icon) instantly.
             let nextSpotifyState = prev.spotifyState;
             if (isResume && !prev.activeDevice && prev.spotifyState) {
                 nextSpotifyState = {
                     ...prev.spotifyState,
                     paused: false,
-                    // FIX: Update timestamp to now. This is crucial for correct position calculation.
-                    // The position property in `spotifyState` holds the position at the time of `timestamp`.
-                    // When pausing, we stopped at position X. When resuming optimistically, position is still X,
-                    // but we must reset `timestamp` to `Date.now()` so that `Date.now() - timestamp` equals 0 at start.
-                    // Without this, `timestamp` remains old, causing `elapsed` to be huge (e.g. 10s),
-                    // effectively jumping the progress bar forward by 10s instantly.
                     timestamp: Date.now()
                 };
             }
 
             return { 
                 ...prev, 
-                spotifyState: nextSpotifyState, // Apply optimistic state
+                spotifyState: nextSpotifyState,
                 source: 'spotify', 
                 radioStation: null, 
                 youtubeTrack: null, 
-                isLoading: shouldShowSpinner, // Conditionally show spinner based on action type
-                activeDevice: null // Optimistically clear remote device UI
+                isLoading: shouldShowSpinner,
+                activeDevice: null
             };
         });
 
-        // --- FAST PATH: LOCAL RESUME ---
-        // If it's a resume action, and we are NOT casting/remote, use the local SDK directly.
-        if (isResume && !nowPlaying.activeDevice) {
+        // FAST PATH: LOCAL RESUME if player is already active with loaded tracks
+        if (isResume && !nowPlaying.activeDevice && !effectiveOptions.context_uri && !effectiveOptions.uris) {
              const player = getPlayerInstance();
              if (player) {
                  try {
                      await player.resume();
                      isSwitchingTrack.current = false;
-                     // Ensure we fetch recent plays after a bit
                      setLastPlayInitiated(Date.now()); 
-                     return; // Success, skip the API call
+                     return;
                  } catch (e) {
-                     console.warn("Local resume failed, falling back to API", e);
-                     // If fail, proceed to API call below
+                     console.warn("Local resume failed, falling back to safePlay", e);
                  }
              }
         }
 
         if (nowPlaying.activeDevice) {
             console.log('[AuthContext] Taking control from remote device...');
-            isTransferring.current = true; // Block polling updates to prevent UI flickering back
+            isTransferring.current = true;
             
-            // Safety timeout to reset the transfer lock if something goes wrong
             setTimeout(() => {
                 isTransferring.current = false;
             }, 8000);
 
             try {
-                // 1. Force pause on the current remote device (if playing)
                 if (nowPlaying.activeDevice.is_active) {
                     await apiClient.put('/me/player/pause').catch(() => {});
-                    // Wait a bit longer to ensure the backend processes the pause before we ask to play elsewhere
-                    await new Promise(r => setTimeout(r, 500)); 
+                    await new Promise(r => setTimeout(r, 400)); 
                 }
-                // 2. Proceed to safePlay which will wake up the local device.
             } catch (e) {
                 console.error("Error taking control:", e);
-                // Even if remote pause fails, we proceed to try and play locally
             }
         }
 
         try {
-            let success = await safePlay(options, attemptRefreshAndUpdatePlayerToken);
+            let success = await safePlay(effectiveOptions, attemptRefreshAndUpdatePlayerToken);
 
-            // --- RECOVERY LOGIC ON COLD RESUME ---
+            // RECOVERY LOGIC ON COLD RESUME
             if (!success && isResume) {
                 const { getDeviceId } = await import('../lib/spotify-player');
                 const deviceId = getDeviceId();
-                const lastCtx = localStorage.getItem("last_context_uri");
-                const lastUr = localStorage.getItem("last_track_uri");
-                const lastPos = localStorage.getItem("last_progress_ms");
+                const lastCtx = effectiveOptions.context_uri || localStorage.getItem("last_context_uri");
+                const lastUr = effectiveOptions.uris?.[0] || localStorage.getItem("last_track_uri");
+                const lastPos = effectiveOptions.position_ms || localStorage.getItem("last_progress_ms");
                 
                 if (deviceId && (lastCtx || lastUr)) {
-                    console.log("Device not active, attempting fallback play recovery from local storage...");
+                    console.log("Attempting fallback play recovery from local storage...");
                     const body: any = {};
                     if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
                     else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
-                    if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
+                    if (lastPos && lastPos !== "undefined") body.position_ms = typeof lastPos === 'number' ? lastPos : parseInt(String(lastPos), 10);
                     
                     try {
-                        const res = await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
-                        // If no exception, consider it successful
-                        console.log("Fallback recovery play explicit succeeded.");
+                        await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
+                        console.log("Fallback recovery play succeeded.");
                         success = true;
                     } catch (recErr) {
                         console.error('Fallback recovery play failed', recErr);
@@ -818,11 +894,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             }
 
             if (!success) {
-                // Only reset loading if it failed. If it succeeded, we wait for SDK state change to clear loading.
                 setNowPlaying(prev => ({ ...prev, isLoading: false }));
                 console.error("Playback failed or timed out.");
             } else {
-                // Safety timeout: if state doesn't change in 3s, clear loading manually to avoid infinite spinner
                 setTimeout(() => {
                     setNowPlaying(prev => prev.isLoading ? ({ ...prev, isLoading: false }) : prev);
                 }, 3000);
@@ -833,7 +907,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         } finally {
             isSwitchingTrack.current = false;
         }
-    }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice]);
+    }, [attemptRefreshAndUpdatePlayerToken, nowPlaying.activeDevice, continueListeningItems, nowPlaying.spotifyState]);
     
     useEffect(() => {
         if (lastPlayInitiated > 0) {

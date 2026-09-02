@@ -442,14 +442,25 @@ async function startServer() {
   });
 
   app.put('/api/play', async (req, res) => {
-    const sessionId = req.headers['x-session-id'] || req.body?.sessionId;
-    if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });
-
+    const authHeader = req.headers['authorization'];
     let accessToken: string | null = null;
-    const sessionData = authStore.get(String(sessionId));
-    if (sessionData && sessionData.status === 'completed' && sessionData.tokens?.access_token) {
-      accessToken = sessionData.tokens.access_token;
-    } else {
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.substring(7).trim();
+    } else if (req.body?.accessToken) {
+      accessToken = String(req.body.accessToken).trim();
+    }
+
+    const sessionId = req.headers['x-session-id'] || req.body?.sessionId;
+
+    if (!accessToken && sessionId) {
+      const sessionData = authStore.get(String(sessionId));
+      if (sessionData && sessionData.status === 'completed' && sessionData.tokens?.access_token) {
+        accessToken = sessionData.tokens.access_token;
+      }
+    }
+
+    if (!accessToken && sessionId) {
       const session = await ensureSpotifyToken(String(sessionId));
       if (session && session.access_token) {
         accessToken = session.access_token;
@@ -464,9 +475,9 @@ async function startServer() {
     const url = deviceId ? `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}` : `https://api.spotify.com/v1/me/player/play`;
 
     try {
-      console.log(`▶️ [PROXY PLAY] Request to Spotify (${deviceId ? 'Device Specific' : 'Active Device'})`);
+      console.log(`▶️ [PROXY PLAY] Request to Spotify (${deviceId ? 'Device Specific: ' + deviceId : 'Active Device'})`);
       
-      const spotifyRes = await fetch(url, {
+      let spotifyRes = await fetch(url, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -474,6 +485,23 @@ async function startServer() {
         },
         body: JSON.stringify(body || {})
       });
+
+      // If Spotify returns 401 and sessionId exists, attempt token refresh on server and retry
+      if (spotifyRes.status === 401 && sessionId) {
+        console.log(`🔄 [PROXY PLAY] Spotify returned 401. Trying server refresh for session ${sessionId}...`);
+        const session = await ensureSpotifyToken(String(sessionId));
+        if (session && session.access_token && session.access_token !== accessToken) {
+          accessToken = session.access_token;
+          spotifyRes = await fetch(url, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body || {})
+          });
+        }
+      }
 
       if (!spotifyRes.ok) {
         const text = await spotifyRes.text();
@@ -497,16 +525,27 @@ async function startServer() {
   });
 
   app.post('/api/transfer-player', async (req, res) => {
+    const authHeader = req.headers['authorization'];
+    let accessToken: string | null = null;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.substring(7).trim();
+    } else if (req.body?.accessToken) {
+      accessToken = String(req.body.accessToken).trim();
+    }
+
     const { sessionId, device_id } = req.body;
 
-    if (!sessionId) return res.status(400).json({ error: 'missing_session_id' });
     if (!device_id) return res.status(400).json({ error: 'missing_device_id' });
 
-    let accessToken: string | null = null;
-    const sessionData = authStore.get(String(sessionId));
-    if (sessionData && sessionData.status === 'completed' && sessionData.tokens?.access_token) {
-      accessToken = sessionData.tokens.access_token;
-    } else {
+    if (!accessToken && sessionId) {
+      const sessionData = authStore.get(String(sessionId));
+      if (sessionData && sessionData.status === 'completed' && sessionData.tokens?.access_token) {
+        accessToken = sessionData.tokens.access_token;
+      }
+    }
+
+    if (!accessToken && sessionId) {
       const session = await ensureSpotifyToken(String(sessionId));
       if (session && session.access_token) {
         accessToken = session.access_token;
