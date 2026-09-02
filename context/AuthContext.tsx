@@ -428,7 +428,13 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             }
             
             localStorage.setItem("last_is_playing", String(!newState.paused));
-            localStorage.setItem("spotify_last_position", String(newState.position));
+            
+            const lastSeekTs = parseInt(localStorage.getItem("last_seek_ts") || "0", 10);
+            const isRecentSeek = Date.now() - lastSeekTs < 1200;
+            if (!isRecentSeek) {
+                localStorage.setItem("spotify_last_position", String(newState.position));
+                localStorage.setItem("last_progress_ms", String(newState.position));
+            }
             
             if (newState.context && newState.context.uri) localStorage.setItem("spotify_last_context", newState.context.uri);
             else localStorage.removeItem("spotify_last_context");

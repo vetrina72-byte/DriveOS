@@ -90,8 +90,8 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
             const duration = state.duration || 1;
             let currentPos = state.position;
             
-            // Se lo stato dal SDK è più recente del nostro seek ottimistico, lo annulliamo
-            if (optimisticSeekRef.current && state.timestamp > optimisticSeekRef.current.ts) {
+            // Se lo stato dal SDK è più recente del nostro seek ottimistico (dopo almeno 1.2s), lo rilasciamo
+            if (optimisticSeekRef.current && (Date.now() - optimisticSeekRef.current.ts > 1200) && state.timestamp > optimisticSeekRef.current.ts) {
                 optimisticSeekRef.current = null;
             }
 
@@ -171,22 +171,29 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
             setIsSeeking(false);
             if (state.duration) {
                 const targetPos = Math.round(visualPosRef.current);
-                optimisticSeekRef.current = { pos: targetPos, ts: Date.now() };
+                const now = Date.now();
+                optimisticSeekRef.current = { pos: targetPos, ts: now };
                 localStorage.setItem("last_progress_ms", String(targetPos));
                 localStorage.setItem("spotify_last_position", String(targetPos));
+                localStorage.setItem("last_seek_ts", String(now));
                 
+                // Invia ESCLUSIVAMENTE un unico comando di seek per evitare glitch audio/doppio seek
                 if (player) {
                     player.seek(targetPos).catch((err) => {
-                        console.warn('[SpotifyProgressBar] player.seek fallback:', err);
+                        console.warn('[SpotifyProgressBar] player.seek fallback to API:', err);
+                        const deviceId = getDeviceId();
+                        const seekUrl = deviceId 
+                            ? `/me/player/seek?position_ms=${targetPos}&device_id=${deviceId}`
+                            : `/me/player/seek?position_ms=${targetPos}`;
+                        apiClient.put(seekUrl).catch(() => {});
                     });
+                } else {
+                    const deviceId = getDeviceId();
+                    const seekUrl = deviceId 
+                        ? `/me/player/seek?position_ms=${targetPos}&device_id=${deviceId}`
+                        : `/me/player/seek?position_ms=${targetPos}`;
+                    apiClient.put(seekUrl).catch(() => {});
                 }
-                
-                // Keep Spotify backend synchronized immediately (especially if paused)
-                const deviceId = getDeviceId();
-                const seekUrl = deviceId 
-                    ? `/me/player/seek?position_ms=${targetPos}&device_id=${deviceId}`
-                    : `/me/player/seek?position_ms=${targetPos}`;
-                apiClient.put(seekUrl).catch(() => {});
             }
         };
 
@@ -932,17 +939,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleTogglePlay = () => {
-        const now = Date.now();
-        if (now - lastTogglePlayTimeRef.current < 500) {
-            console.log('[MusicPlayer] Throttling rapid play/pause toggle click');
-            return;
-        }
-        lastTogglePlayTimeRef.current = now;
-
         if (source === 'spotify') {
             const isCurrentlyPaused = playerState?.paused || !isPlayerActive;
+            const previousSpotifyState = playerState;
 
-            // OPTIMISTIC UI: Aggiorniamo istantaneamente il contesto
+            // OPTIMISTIC UI: Aggiornamento istantaneo al click (0ms di ritardo)
             setNowPlaying(prev => {
                 if (!prev.spotifyState) return prev;
                 const timeSinceUpdate = Date.now() - prev.spotifyState.timestamp;
@@ -959,7 +960,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             });
 
             if (isCurrentlyPaused) {
-                // Resume
+                // Resume in background
                 (async () => {
                     try {
                         if (player && isPlayerActive && playerState?.track_window?.current_track) {
@@ -968,7 +969,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         }
                         await play({});
                     } catch (e) {
-                        console.warn("Local play failed or device inactive, applying FALLBACK play...");
+                        console.warn("Local play failed or device inactive, applying FALLBACK play...", e);
                         const deviceId = getDeviceId();
                         if (deviceId) {
                             const lastPos = localStorage.getItem("spotify_last_position") || localStorage.getItem("last_progress_ms");
@@ -993,12 +994,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 console.log("REST API Fallback Play succeeded.");
                             } catch (err) {
                                 console.error("REST API Fallback Play failed:", err);
+                                // Rollback optimistic state if failed
+                                if (previousSpotifyState) {
+                                    setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: previousSpotifyState }) : prev);
+                                }
                             }
+                        } else if (previousSpotifyState) {
+                            // Rollback if no device available
+                            setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: previousSpotifyState }) : prev);
                         }
                     }
                 })();
             } else {
-                // Pause
+                // Pause in background
                 (async () => {
                     try {
                         if (player && isPlayerActive) {
@@ -1006,9 +1014,20 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         }
                         await pauseSpotify();
                     } catch (e) {
+                        console.warn("Pause failed, attempting REST API fallback...", e);
                         const deviceId = getDeviceId();
                         if (deviceId) {
-                            try { await apiClient.put(`/me/player/pause?device_id=${deviceId}`); } catch (err) { console.error(err); }
+                            try { 
+                                await apiClient.put(`/me/player/pause?device_id=${deviceId}`); 
+                            } catch (err) { 
+                                console.error("REST API Pause failed:", err);
+                                // Rollback optimistic state if failed
+                                if (previousSpotifyState) {
+                                    setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: previousSpotifyState }) : prev);
+                                }
+                            }
+                        } else if (previousSpotifyState) {
+                            setNowPlaying(prev => prev.spotifyState ? ({ ...prev, spotifyState: previousSpotifyState }) : prev);
                         }
                     }
                 })();
