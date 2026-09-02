@@ -50,12 +50,37 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                 let showsList: SpotifyItem[] = [];
 
                 try {
+                    // 1. Check currently playing episode
+                    const currentRes = await apiClient.get('/me/player/currently-playing', {
+                        params: { _t: Date.now() }
+                    }).catch(() => null);
+
+                    if (currentRes?.data?.item && currentRes.data.item.type === 'episode') {
+                        const ep = currentRes.data.item;
+                        episodesList.push({
+                            id: ep.id,
+                            name: ep.name,
+                            description: ep.description,
+                            uri: ep.uri,
+                            images: ep.images || ep.show?.images,
+                            type: 'episode',
+                            show: ep.show,
+                            duration_ms: ep.duration_ms || 1800000,
+                        });
+                    }
+
+                    // 2. Fetch saved episodes
                     const savedEpRes = await apiClient.get('/me/episodes', {
                         params: { limit: 20, _t: Date.now() }
                     });
                     if (savedEpRes.data?.items) {
-                        episodesList = savedEpRes.data.items
-                            .filter((item: any) => item.episode && item.episode.resume_point?.fully_played !== true)
+                        const savedItems = savedEpRes.data.items
+                            .filter((item: any) => {
+                                if (!item.episode) return false;
+                                const rp = item.episode.resume_point;
+                                if (!rp) return true;
+                                return rp.fully_played !== true;
+                            })
                             .map((item: any) => ({
                                 id: item.episode?.id,
                                 name: item.episode?.name,
@@ -66,9 +91,15 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                 show: item.episode?.show,
                                 duration_ms: item.episode?.duration_ms || 1800000,
                             })).filter((i: any) => i.id);
+                        
+                        for (const item of savedItems) {
+                            if (!episodesList.some(e => e.id === item.id)) {
+                                episodesList.push(item);
+                            }
+                        }
                     }
                 } catch (e) {
-                    console.warn('[PodcastGridView] Could not fetch saved episodes:', e);
+                    console.warn('[PodcastGridView] Could not fetch saved or current episodes:', e);
                 }
 
                 if (episodesList.length === 0) {

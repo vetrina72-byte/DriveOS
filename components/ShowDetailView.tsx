@@ -161,17 +161,26 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Show not found.'}</div>;
     }
     
+    const [playError, setPlayError] = useState<string | null>(null);
+
     const handlePlayEpisode = async (index: number) => {
         if (!isPlayerReady) return;
         const episode = episodes[index];
         if (!episode?.uri) return;
+        setPlayError(null);
         try {
             await apiClient.put('/me/player/play', {
                 uris: [episode.uri]
             });
             onPlay({ uris: [episode.uri] });
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to play episode:", err);
+            const status = err?.response?.status;
+            if (status === 403 || status === 400 || status === 404) {
+                setPlayError('Contenuto non disponibile per il player remoto o Spotify Premium richiesto.');
+            } else {
+                setPlayError('Impossibile avviare la riproduzione dell\'episodio.');
+            }
             const urisToPlay = episodes.slice(index).map(e => e.uri);
             if (urisToPlay.length > 0) {
                 onPlay({ uris: urisToPlay });
@@ -213,6 +222,13 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             </header>
             
             <p className={`mb-6 ${theme.textSecondary}`}>{sanitizedShowDescription}</p>
+
+            {playError && (
+                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center justify-between">
+                    <span>{playError}</span>
+                    <button onClick={() => setPlayError(null)} className="text-xs font-bold px-2 py-1 bg-red-500/20 rounded hover:bg-red-500/30">Chiudi</button>
+                </div>
+            )}
 
             {/* Episode List Header */}
             <div className="flex justify-between items-center mb-4">
