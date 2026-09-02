@@ -430,8 +430,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             localStorage.setItem("last_is_playing", String(!newState.paused));
             
             const lastSeekTs = parseInt(localStorage.getItem("last_seek_ts") || "0", 10);
-            const isRecentSeek = Date.now() - lastSeekTs < 1200;
-            if (!isRecentSeek) {
+            const lastActionTs = parseInt(localStorage.getItem("last_action_ts") || "0", 10);
+            const isRecentSeekOrAction = Date.now() - Math.max(lastSeekTs, lastActionTs) < 1500;
+            if (!isRecentSeekOrAction) {
                 localStorage.setItem("spotify_last_position", String(newState.position));
                 localStorage.setItem("last_progress_ms", String(newState.position));
             }

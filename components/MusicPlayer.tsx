@@ -90,8 +90,8 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
             const duration = state.duration || 1;
             let currentPos = state.position;
             
-            // Se lo stato dal SDK è più recente del nostro seek ottimistico (dopo almeno 1.2s), lo rilasciamo
-            if (optimisticSeekRef.current && (Date.now() - optimisticSeekRef.current.ts > 1200) && state.timestamp > optimisticSeekRef.current.ts) {
+            // Se lo stato dal SDK è più recente del nostro seek ottimistico (dopo almeno 1.5s), lo rilasciamo
+            if (optimisticSeekRef.current && (Date.now() - optimisticSeekRef.current.ts > 1500) && state.timestamp > optimisticSeekRef.current.ts) {
                 optimisticSeekRef.current = null;
             }
 
