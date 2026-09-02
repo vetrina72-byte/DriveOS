@@ -153,31 +153,12 @@ const Model = forwardRef<
   }
 >(({ position, rotation, scale, isNight, aoMapIntensity = 1.0 }, ref) => {
   const { scene } = useGLTF(MODEL_URL);
-  const lightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
+  const rearLightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
+  const frontLightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
 
   useEffect(() => {
-    scene.traverse((child: any) => {
-      if (child.isMesh) {
-        const mat = child.material as any;
-        if (mat) {
-          if (Array.isArray(mat)) {
-            mat.forEach((m: any) => {
-              if (m && ('aoMapIntensity' in m || m.type === 'MeshStandardMaterial' || m.isMeshStandardMaterial)) {
-                m.aoMapIntensity = aoMapIntensity;
-              }
-            });
-          } else {
-            if (mat && ('aoMapIntensity' in mat || mat.type === 'MeshStandardMaterial' || mat.isMeshStandardMaterial)) {
-              mat.aoMapIntensity = aoMapIntensity;
-            }
-          }
-        }
-      }
-    });
-  }, [scene, aoMapIntensity]);
-
-  useEffect(() => {
-    lightMats.current = {};
+    rearLightMats.current = {};
+    frontLightMats.current = {};
     scene.traverse((child: any) => {
       if (child.isMesh && child.name.toLowerCase().includes("shadow")) {
         child.visible = false;
@@ -217,11 +198,10 @@ const Model = forwardRef<
             combinedName.includes("lens") ||
             combinedName.includes("cover_light") ||
             combinedName.includes("light_glass") ||
-            combinedName.includes("lamp_glass") ||
-            combinedName.includes("glass_red")
+            combinedName.includes("lamp_glass")
           ) {
             mat.transparent = true;
-            mat.opacity = 0.4;
+            mat.opacity = 0.3;
             mat.roughness = 0.05;
             mat.metalness = 0.1;
             child.castShadow = false;
@@ -241,7 +221,7 @@ const Model = forwardRef<
             child.castShadow = false;
           }
 
-          // Fari posteriori e anteriori (riconoscimento completo di fari superiori e inferiori)
+          // Fari posteriori (luce rosso fiammante puro e saturo)
           const isRearLight =
             combinedName.includes("red") ||
             combinedName.includes("tail") ||
@@ -250,6 +230,7 @@ const Model = forwardRef<
             combinedName.includes("stop") ||
             combinedName.includes("backlight");
 
+          // Fari anteriori (luce bianca pura)
           const isFrontLight =
             combinedName.includes("headlight") ||
             combinedName.includes("front_light") ||
@@ -264,15 +245,17 @@ const Model = forwardRef<
             combinedName.includes("led");
 
           if (isRearLight) {
-            mat.color.set("#ff1a26");
-            mat.emissive = new THREE.Color("#ff0a18");
-            mat.toneMapped = false;
-            lightMats.current[mat.uuid] = mat;
+            mat.color.set("#cc000a");
+            mat.emissive = new THREE.Color("#ff0014");
+            mat.roughness = 0.1;
+            mat.metalness = 0.0;
+            mat.toneMapped = true; // Mantiene il rosso saturo e fiammante senza slavarsi o bruciarsi in arancione
+            rearLightMats.current[mat.uuid] = mat;
           } else if (isFrontLight || isGenericLight) {
             mat.color.set("#ffffff");
             mat.emissive = new THREE.Color("#ffffff");
-            mat.toneMapped = false;
-            lightMats.current[mat.uuid] = mat;
+            mat.toneMapped = true;
+            frontLightMats.current[mat.uuid] = mat;
           }
         });
       }
@@ -280,13 +263,25 @@ const Model = forwardRef<
   }, [scene]);
 
   useFrame((_, delta) => {
-    const target = isNight ? 9.5 : 0.0;
+    const rearTarget = isNight ? 3.6 : 0.0;
+    const frontTarget = isNight ? 4.0 : 0.0;
     const damp = 1 - Math.exp(-2 * delta);
-    Object.values(lightMats.current).forEach(
+    
+    Object.values(rearLightMats.current).forEach(
       (mat: THREE.MeshStandardMaterial) => {
         mat.emissiveIntensity = THREE.MathUtils.lerp(
           mat.emissiveIntensity,
-          target,
+          rearTarget,
+          damp,
+        );
+      },
+    );
+
+    Object.values(frontLightMats.current).forEach(
+      (mat: THREE.MeshStandardMaterial) => {
+        mat.emissiveIntensity = THREE.MathUtils.lerp(
+          mat.emissiveIntensity,
+          frontTarget,
           damp,
         );
       },
@@ -1232,8 +1227,8 @@ function EnvironmentController({
   const targetSky = useRef(new THREE.Color()).current;
   const targetFloor = useRef(new THREE.Color()).current;
   const currentEnvColor = useRef(new THREE.Color("#ffffff")).current;
-  const currentFloorColor = useRef(new THREE.Color("#101010")).current;
-  const nightFloorColor = useRef(new THREE.Color("#101010")).current;
+  const currentFloorColor = useRef(new THREE.Color("#050608")).current;
+  const nightFloorColor = useRef(new THREE.Color("#030406")).current;
 
   // Default Day Values
   const dayAmbientIntensity = 0.5;
@@ -1244,7 +1239,7 @@ function EnvironmentController({
   useEffect(() => {
     // Sincronizziamo lo sfondo della scena dinamicamente in useFrame per nascondere i bordi del piano e garantire l'effetto di spazio infinito.
     // Inizializziamo subito scene.background con il colore corretto per evitare flash o ritardi al caricamento
-    scene.background = new THREE.Color(isNight ? "#101010" : "#ffffff");
+    scene.background = new THREE.Color(isNight ? "#030406" : "#ffffff");
   }, [scene, isNight]);
 
   const getWeatherKey = useCallback((condition: string): string => {
@@ -1342,10 +1337,10 @@ function EnvironmentController({
     );
 
     if (isNight) {
-      targetAmbientIntensity = Math.max(nightAmbientIntensity, 0.42);
-      targetFrontLightIntensity = Math.max(nightFrontLightIntensity, 0.70);
-      targetDirectionalIntensity = 0.45;
-      targetEnvIntensity = Math.max(nightEnvironmentIntensity, 1.45);
+      targetAmbientIntensity = Math.max(nightAmbientIntensity, 0.20);
+      targetFrontLightIntensity = Math.max(nightFrontLightIntensity, 0.50);
+      targetDirectionalIntensity = 0.0;
+      targetEnvIntensity = Math.max(nightEnvironmentIntensity, 1.55);
       targetMirror = 0.35;
       targetFog = { near: nightFogNear, far: nightFogFar };
     } else {

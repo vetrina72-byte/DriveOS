@@ -50,9 +50,9 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [sceneColors, setSceneColors] = useState<SceneColors>(initialSceneColors);
-  const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.42);
-  const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.70);
-  const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(1.45);
+  const [nightAmbientIntensity, setNightAmbientIntensity] = useState(0.20);
+  const [nightFrontLightIntensity, setNightFrontLightIntensity] = useState(0.50);
+  const [nightEnvironmentIntensity, setNightEnvironmentIntensity] = useState(1.55);
   const [dayFogNear, setDayFogNear] = useState(0);
   const [dayFogFar, setDayFogFar] = useState(63);
   const [nightFogNear, setNightFogNear] = useState(0);

@@ -25,6 +25,16 @@ export default defineConfig(({ mode }) => {
       base: '/',
       server: {
       },
+      build: {
+        rollupOptions: {
+          onwarn(warning, warn) {
+            if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes('use client')) {
+              return;
+            }
+            warn(warning);
+          }
+        }
+      },
       // Vite automatically makes VITE_* variables available on import.meta.env.
       // We define them here to ensure our development default is included.
       define: {

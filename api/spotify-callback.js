@@ -171,8 +171,8 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
         </div>
         <h1>${title}</h1>
         <p>${displayMessage}</p>
+        <p id="close-msg" style="font-size: 13px; color: var(--text-secondary); margin-top: -10px; margin-bottom: 24px;">Chiusura automatica in corso...</p>
         <div style="display:flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-          <a href="/" class="btn" style="background:#1DB954; color:#000;">Vai all'Infotainment</a>
           <button class="btn" style="background:#2C2C2E; color:#fff;" onclick="window.close()">Chiudi Scheda</button>
         </div>
       </div>
@@ -195,7 +195,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
             } catch(e) {}
           }
         } catch(e) {}
-        ${success ? 'setTimeout(() => { try { if (window.opener) window.close(); } catch(e){} }, 3500);' : ''}
+        ${success ? 'setTimeout(() => { try { window.close(); } catch(e){} }, 2000);' : ''}
       </script>
     </body>
     </html>`;

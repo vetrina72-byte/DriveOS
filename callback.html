@@ -115,8 +115,9 @@
 
       <h1>Collegamento Riuscito</h1>
       <p>L'account Spotify è stato collegato con successo all'infotainment della vettura.</p>
+      <p id="close-msg" style="font-size: 13px; color: #a1a1aa; margin-top: -14px; margin-bottom: 24px;">Chiusura automatica in corso...</p>
       
-      <button class="btn-close" onclick="closeWindow()">Chiudi Scheda</button>
+      <button class="btn-close" style="background:#2C2C2E; color:#fff;" onclick="closeWindow()">Chiudi Scheda</button>
     </div>
   </div>
 
@@ -126,12 +127,12 @@
         window.close();
       } catch (e) {}
     }
-    // Attempt automatic window close gracefully after 3 seconds
+    // Attempt automatic window close gracefully after 2 seconds
     setTimeout(() => {
       try {
         window.close();
       } catch (e) {}
-    }, 3000);
+    }, 2000);
   </script>
 </body>
 </html>
