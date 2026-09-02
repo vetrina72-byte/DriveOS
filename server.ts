@@ -560,7 +560,7 @@ async function startServer() {
 
     try {
       console.log('▶️ [PROXY TRANSFER] Calling spotify /v1/me/player for device', device_id);
-      const spotifyRes = await fetch(url, {
+      let spotifyRes = await fetch(url, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -568,6 +568,23 @@ async function startServer() {
         },
         body: JSON.stringify({ device_ids: [device_id], play: req.body.play !== undefined ? req.body.play : false })
       });
+
+      // If 401 Unauthorized and we have a sessionId, attempt token refresh and retry once
+      if (spotifyRes.status === 401 && sessionId) {
+        console.log('🔄 [PROXY TRANSFER] 401 Unauthorized received, attempting token refresh...');
+        const refreshed = await ensureSpotifyToken(String(sessionId));
+        if (refreshed && refreshed.access_token) {
+          accessToken = refreshed.access_token;
+          spotifyRes = await fetch(url, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ device_ids: [device_id], play: req.body.play !== undefined ? req.body.play : false })
+          });
+        }
+      }
 
       if (spotifyRes.status === 204 || spotifyRes.status === 200) {
         return res.status(200).json({ ok: true });

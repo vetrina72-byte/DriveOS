@@ -219,22 +219,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
       console.warn('[SpotifyLogin] Registration notice:', err);
     }
 
-    // 2. Client-side fallback to create zero-config relay object if backend couldn't create one
+    // 2. Client-side fallback to create zero-config relay object if backend couldn't create one (using internal relay if needed)
     if (!relayId) {
-      try {
-        const directRelayRes = await fetch('https://api.restful-api.dev/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: `driveos_${sidRef.current}`, data: { sessionId: sidRef.current, status: 'pending' } })
-        });
-        if (directRelayRes.ok) {
-          const directRelayData = await directRelayRes.json();
-          if (directRelayData.id) {
-            relayId = directRelayData.id;
-            relayIdRef.current = relayId;
-          }
-        }
-      } catch (relayErr) {}
+      relayId = sidRef.current;
     }
 
     const compositeState = encodeCompositeState(sidRef.current, codeVerifier, redirectUri, relayId);
@@ -244,7 +231,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
-    // 3. Ultra-responsive polling loop combining local relative endpoint, backend endpoint, and direct cloud relay
+    // 3. Ultra-responsive polling loop combining local relative endpoint and backend endpoint
     pollTimer.current = window.setInterval(async () => {
       if (isResolvedRef.current) {
         stopPolling();
@@ -297,29 +284,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             }
           }
         } catch (e) {}
-      }
-
-      // C. Direct client-side cloud relay check fallback (guarantees cross-instance sync on Vercel)
-      if (activeRelay) {
-        try {
-          const directRelayCheck = await fetch(`https://api.restful-api.dev/objects/${activeRelay}`, { cache: 'no-store' });
-          if (directRelayCheck.ok) {
-            const rJson = await directRelayCheck.json().catch(() => null);
-            const rData = rJson?.data;
-            if (rData?.status === 'scanned' || rData?.authorizing) {
-              setScanDetected(true);
-            }
-            if (rData && rData.authenticated && rData.access_token) {
-              handleSuccessfulAuth(
-                rData.access_token, 
-                rData.expires_in, 
-                rData.expires_at,
-                rData.refresh_token
-              );
-              return;
-            }
-          }
-        } catch (dErr) {}
       }
     }, 1000);
   }, [clearError, handleSuccessfulAuth, stopPolling]);
