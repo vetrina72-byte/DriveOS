@@ -34,18 +34,36 @@ const NewReleasesView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
             setLoading(true);
             setError(null);
             try {
-                const response = await apiClient.get('/browse/new-releases', {
+                // Dynamic random offset for rotating content
+                const randomOffset = Math.floor(Math.random() * 5) * 4; // 0, 4, 8, 12, 16
+                let response = await apiClient.get('/browse/new-releases', {
                     params: {
                         country: 'IT',
                         limit: 50,
+                        offset: randomOffset,
+                        _t: Date.now()
                     }
                 });
-                // The API can return null items, filter them out to be safe
-                const validAlbums = response.data.albums.items.filter(Boolean);
+
+                let items = response.data?.albums?.items || [];
+                // Fallback to offset 0 if random offset returned too few items
+                if (items.length < 6 && randomOffset > 0) {
+                    const fallbackRes = await apiClient.get('/browse/new-releases', {
+                        params: {
+                            country: 'IT',
+                            limit: 50,
+                            offset: 0,
+                            _t: Date.now()
+                        }
+                    });
+                    items = fallbackRes.data?.albums?.items || items;
+                }
+
+                const validAlbums = items.filter(Boolean);
                 setAlbums(validAlbums);
             } catch (err) {
-                console.error('Failed to fetch new releases', err);
-                setError('Could not load new releases.');
+                console.error('[NewReleases] Failed to fetch fresh new releases', err);
+                setError('Impossibile caricare le nuove uscite.');
             } finally {
                 setLoading(false);
             }

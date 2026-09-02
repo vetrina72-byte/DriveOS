@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../spotifyClient';
-import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiFolder } from 'react-icons/fi';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
 
@@ -50,33 +50,62 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
         const fetchPlaylists = async () => {
             setLoading(true);
             setError(null);
-            // Clear previous results only when fetching the first page of a new category
             if (offset === 0) {
                 setPlaylists([]);
             }
+
             try {
-                // FIX: Switched to the /search endpoint with a genre filter for more robust playlist fetching,
-                // as the /browse/categories/{id}/playlists endpoint was proving unreliable.
-                const response = await apiClient.get('/search', {
-                    params: {
-                        q: `genre:"${title}"`,
-                        type: 'playlist',
-                        market: 'IT',
-                        limit,
-                        offset
+                let items: any[] = [];
+                let next: string | null = null;
+
+                // 1. Primary endpoint: /v1/browse/categories/{category_id}/playlists
+                try {
+                    console.log(`[CategoryPlaylists] Fetching /browse/categories/${categoryId}/playlists...`);
+                    const response = await apiClient.get(`/browse/categories/${encodeURIComponent(categoryId)}/playlists`, {
+                        params: {
+                            country: 'IT',
+                            limit,
+                            offset,
+                            _t: Date.now()
+                        }
+                    });
+
+                    if (response.data?.playlists?.items && response.data.playlists.items.length > 0) {
+                        items = response.data.playlists.items;
+                        next = response.data.playlists.next;
                     }
-                });
-                
-                if (response.data?.playlists?.items) {
-                    setPlaylists(response.data.playlists.items);
-                    setHasNextPage(response.data.playlists.next !== null);
-                } else {
-                    setPlaylists([]);
-                    setHasNextPage(false);
+                } catch (catErr: any) {
+                    console.warn(`[CategoryPlaylists] /browse/categories/${categoryId}/playlists returned status ${catErr?.response?.status || catErr.message}. Attempting search fallback...`, catErr);
                 }
+
+                // 2. Fallback endpoint: Search for playlists by title or categoryId
+                if (items.length === 0) {
+                    const searchQuery = title || categoryId;
+                    console.log(`[CategoryPlaylists] Running fallback search for playlist query: "${searchQuery}"`);
+                    const searchRes = await apiClient.get('/search', {
+                        params: {
+                            q: searchQuery,
+                            type: 'playlist',
+                            market: 'IT',
+                            limit,
+                            offset,
+                            _t: Date.now()
+                        }
+                    });
+
+                    if (searchRes.data?.playlists?.items) {
+                        items = searchRes.data.playlists.items;
+                        next = searchRes.data.playlists.next;
+                    }
+                }
+
+                const validItems = items.filter(Boolean);
+                setPlaylists(validItems);
+                setHasNextPage(next !== null && validItems.length >= limit);
+
             } catch (err: any) {
-                 console.error(`Failed to fetch playlists for category "${categoryId}"`, err);
-                 setError('Could not load playlists for this category.');
+                 console.error(`[CategoryPlaylists] Critical error fetching playlists for category "${categoryId}" (${title}):`, err);
+                 setError('Impossibile caricare le playlist per questa categoria.');
                  setPlaylists([]);
                  setHasNextPage(false);
             } finally {
@@ -100,12 +129,8 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
     const textColor = isNight ? 'text-white' : 'text-black';
 
-    if (loading && offset === 0) { // Only show full loader on initial page load
+    if (loading && offset === 0) {
         return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
-    }
-
-    if (error) {
-        return <div className="flex-grow flex justify-center items-center text-red-400">{error}</div>;
     }
 
     // Filter out any null items from the results to prevent crashes
@@ -132,7 +157,15 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar flex flex-col">
             <h2 className={`text-3xl font-bold mb-6 ${textColor}`}>{title}</h2>
 
-            {validPlaylists.length > 0 ? (
+            {error && validPlaylists.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <FiFolder className={`w-14 h-14 mb-3 opacity-40 ${themeColor}`} />
+                    <p className={`text-base font-semibold ${textColor}`}>Nessuna playlist trovata</p>
+                    <p className={`text-xs mt-1 max-w-sm ${themeColor}`}>
+                        Non sono disponibili playlist per "{title}" al momento.
+                    </p>
+                </div>
+            ) : validPlaylists.length > 0 ? (
                 <>
                     <div className="mb-6">
                         <PaginationControls />
@@ -158,8 +191,12 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
                     </div>
                 </>
             ) : (
-                <div className={`text-center mt-10 text-lg ${themeColor}`}>
-                    {`Nessuna playlist trovata per il genere "${title}".`}
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <FiFolder className={`w-14 h-14 mb-3 opacity-40 ${themeColor}`} />
+                    <p className={`text-base font-semibold ${textColor}`}>Nessuna playlist trovata</p>
+                    <p className={`text-xs mt-1 max-w-sm ${themeColor}`}>
+                        Nessun contenuto disponibile per la categoria "{title}".
+                    </p>
                 </div>
             )}
         </div>

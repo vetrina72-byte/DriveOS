@@ -529,6 +529,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [currentYouTubeVideoId, setCurrentYouTubeVideoId] = useState<string | undefined>();
     const hasEndedRef = useRef(false);
     const prevPositionRef = useRef(0);
+    const lastTogglePlayTimeRef = useRef<number>(0);
 
     const { sceneTransitionSpeed = 1.10 } = useUIConfig();
 
@@ -891,6 +892,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleTogglePlay = () => {
+        const now = Date.now();
+        if (now - lastTogglePlayTimeRef.current < 500) {
+            console.log('[MusicPlayer] Throttling rapid play/pause toggle click');
+            return;
+        }
+        lastTogglePlayTimeRef.current = now;
+
         if (source === 'spotify') {
             const isCurrentlyPaused = playerState?.paused || !isPlayerActive;
 

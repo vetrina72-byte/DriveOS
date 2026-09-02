@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import apiClient from '../spotifyClient';
 import { FiPlay, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
@@ -90,6 +90,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const [isLiked, setIsLiked] = useState(false);
     const { nowPlaying, user, isPlayerReady } = useAuth();
     const playerState = nowPlaying.spotifyState;
+    const lastTrackClickRef = useRef<number>(0);
 
     const isLikedSongs = itemId === 'liked-songs';
     const isPlayingContext = playerState && !playerState.paused && (playerState.context.uri === details?.uri || isLikedSongs);
@@ -200,6 +201,10 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
 
     const handlePlay = () => {
         if (!isPlayerReady) return;
+        const now = Date.now();
+        if (now - lastTrackClickRef.current < 500) return;
+        lastTrackClickRef.current = now;
+
         if (isLikedSongs) {
             onPlay({ uris: tracks.map(t => t.uri) }, details);
         } else if (details?.uri) {
@@ -209,10 +214,14 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     
     const handleTrackPlay = (trackUri: string, index: number) => {
         if (!isPlayerReady) return;
+        const now = Date.now();
+        if (now - lastTrackClickRef.current < 500) return;
+        lastTrackClickRef.current = now;
+
         if (isLikedSongs) {
             onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } }, details);
         } else if (details?.uri) {
-            onPlay({ context_uri: details.uri, offset: { uri: trackUri } }, details);
+            onPlay({ context_uri: details.uri, offset: { position: index } }, details);
         }
     };
 
