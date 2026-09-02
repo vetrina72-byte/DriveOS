@@ -95,18 +95,23 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
                 optimisticSeekRef.current = null;
             }
 
+            const lastActionTs = parseInt(localStorage.getItem("last_action_ts") || "0", 10);
+            const isRecentAction = Date.now() - lastActionTs < 1500;
+
             if (isSeeking) {
                 currentPos = visualPosRef.current;
             } else {
                 if (optimisticSeekRef.current) {
-                    if (!state.paused) {
+                    if (!state.paused && !isRecentAction) {
                         currentPos = optimisticSeekRef.current.pos + (Date.now() - optimisticSeekRef.current.ts);
                     } else {
                         currentPos = optimisticSeekRef.current.pos;
                     }
                 } else {
-                    if (!state.paused) {
+                    if (!state.paused && !isRecentAction) {
                         currentPos = state.position + (Date.now() - state.timestamp);
+                    } else {
+                        currentPos = state.position;
                     }
                 }
             }
@@ -939,6 +944,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleTogglePlay = () => {
+        const now = Date.now();
+        localStorage.setItem("last_action_ts", String(now));
+
         if (source === 'spotify') {
             const isCurrentlyPaused = playerState?.paused || !isPlayerActive;
             const previousSpotifyState = playerState;

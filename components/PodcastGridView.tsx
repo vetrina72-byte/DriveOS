@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../spotifyClient';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
-import { FiMic } from 'react-icons/fi';
+import { FiMic, FiPlayCircle, FiCompass, FiFilter } from 'react-icons/fi';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -26,108 +26,181 @@ const itemVariants = {
 };
 
 const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem: (item: SpotifyItem) => void }) => {
-    const [shows, setShows] = useState<SpotifyItem[]>([]);
+    const [activeTab, setActiveTab] = useState<'in_corso' | 'nuovi'>('in_corso');
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    
+    const [savedEpisodes, setSavedEpisodes] = useState<SpotifyItem[]>([]);
+    const [discoveredShows, setDiscoveredShows] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const categories = [
+        { id: 'all', name: 'Tutti' },
+        { id: 'news', name: 'Notizie' },
+        { id: 'technology', name: 'Tecnologia' },
+        { id: 'comedy', name: 'Intrattenimento' },
+        { id: 'true crime', name: 'True Crime' },
+        { id: 'business', name: 'Business' }
+    ];
+
     useEffect(() => {
-        const fetchShows = async () => {
+        const fetchPodcasts = async () => {
             setLoading(true);
             setError(null);
             try {
-                let showList: SpotifyItem[] = [];
+                let episodesList: SpotifyItem[] = [];
+                let showsList: SpotifyItem[] = [];
 
-                // 1. Fetch user saved shows without aggressive caching
                 try {
-                    const savedShowsResponse = await apiClient.get('/me/shows', {
-                        params: {
-                            limit: 50,
-                            _t: Date.now()
-                        }
+                    const savedEpRes = await apiClient.get('/me/episodes', {
+                        params: { limit: 20, _t: Date.now() }
                     });
-                    const savedItems = savedShowsResponse.data?.items || [];
-                    const showIds = savedItems.map((item: any) => item.show?.id).filter(Boolean);
+                    if (savedEpRes.data?.items) {
+                        episodesList = savedEpRes.data.items.map((item: any) => ({
+                            id: item.episode?.id,
+                            name: item.episode?.name,
+                            description: item.episode?.description,
+                            uri: item.episode?.uri,
+                            images: item.episode?.images || item.episode?.show?.images,
+                            type: 'episode',
+                            show: item.episode?.show
+                        })).filter((i: any) => i.id);
+                    }
+                } catch (e) {
+                    console.warn('[PodcastGridView] Could not fetch saved episodes:', e);
+                }
 
-                    if (showIds.length > 0) {
-                        const fullShowsResponse = await apiClient.get(`/shows`, {
-                            params: {
-                                ids: showIds.slice(0, 50).join(','),
-                                _t: Date.now()
-                            }
+                if (episodesList.length === 0) {
+                    try {
+                        const recentRes = await apiClient.get('/me/player/recently-played', {
+                            params: { limit: 20, _t: Date.now() }
                         });
-                        const fullShows = (fullShowsResponse.data?.shows || []).filter(Boolean);
-                        showList.push(...fullShows);
+                        if (recentRes.data?.items) {
+                            episodesList = recentRes.data.items
+                                .filter((item: any) => item.track?.type === 'episode' || item.context?.type === 'show')
+                                .map((item: any) => ({
+                                    id: item.track?.id || item.context?.uri,
+                                    name: item.track?.name || 'Episodio Recente',
+                                    uri: item.track?.uri || item.context?.uri,
+                                    images: item.track?.album?.images || item.track?.show?.images,
+                                    type: 'episode'
+                                }));
+                        }
+                    } catch (e) {
+                        console.warn('[PodcastGridView] Could not fetch recently played podcasts:', e);
                     }
-                } catch (savedErr) {
-                    console.warn('[PodcastGridView] Could not fetch saved shows:', savedErr);
                 }
 
-                // 2. If saved shows is low or to provide fresh rotated recommendations, fetch popular podcasts
-                const randomOffset = Math.floor(Math.random() * 6) * 5; // 0, 5, 10, 15, 20, 25
-                try {
-                    const popularShowsRes = await apiClient.get('/search', {
-                        params: {
-                            q: 'podcast',
-                            type: 'show',
-                            market: 'IT',
-                            limit: 30,
-                            offset: randomOffset,
-                            _t: Date.now()
-                        }
-                    });
-                    const discoveredShows = popularShowsRes.data?.shows?.items || [];
-                    for (const show of discoveredShows) {
-                        if (show && !showList.some(s => s.id === show.id)) {
-                            showList.push(show);
-                        }
+                const query = selectedCategory === 'all' ? 'podcast' : selectedCategory;
+                const searchRes = await apiClient.get('/search', {
+                    params: {
+                        q: query,
+                        type: 'show',
+                        market: 'IT',
+                        limit: 30,
+                        _t: Date.now()
                     }
-                } catch (discErr) {
-                    console.warn('[PodcastGridView] Could not fetch trending shows:', discErr);
+                });
+                if (searchRes.data?.shows?.items) {
+                    showsList = searchRes.data.shows.items.filter(Boolean);
                 }
 
-                setShows(showList.filter(Boolean));
+                setSavedEpisodes(episodesList);
+                setDiscoveredShows(showsList);
             } catch (err) {
-                console.error('[PodcastGridView] Failed to fetch podcasts/shows', err);
+                console.error('[PodcastGridView] Failed to fetch podcast data', err);
                 setError('Impossibile caricare i podcast.');
             } finally {
                 setLoading(false);
             }
         };
-        fetchShows();
-    }, []);
+
+        fetchPodcasts();
+    }, [selectedCategory]);
 
     const themeColor = isNight ? 'text-[#b3b3b3]' : 'text-zinc-600';
+    const textColor = isNight ? 'text-white' : 'text-black';
 
     if (loading) {
         return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
     }
 
-    if (error && shows.length === 0) {
-        return <div className="flex-grow flex justify-center items-center text-red-400">{error}</div>;
-    }
+    const currentItems = activeTab === 'in_corso' ? savedEpisodes : discoveredShows;
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
-            <h2 className={`text-3xl font-bold mb-6 ${isNight ? 'text-white' : 'text-black'}`}>I tuoi Podcast e Consigliati</h2>
-            {shows.length > 0 ? (
+        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar flex flex-col">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <h2 className={`text-3xl font-bold ${textColor}`}>Podcast</h2>
+                
+                <div className={`flex rounded-lg p-1 ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
+                    <button
+                        onClick={() => setActiveTab('in_corso')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-semibold text-sm transition-all ${
+                            activeTab === 'in_corso'
+                                ? (isNight ? 'bg-white text-black shadow' : 'bg-black text-white shadow')
+                                : themeColor
+                        }`}
+                    >
+                        <FiPlayCircle className="w-4 h-4" />
+                        In Corso / Già Ascoltati ({savedEpisodes.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('nuovi')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-semibold text-sm transition-all ${
+                            activeTab === 'nuovi'
+                                ? (isNight ? 'bg-white text-black shadow' : 'bg-black text-white shadow')
+                                : themeColor
+                        }`}
+                    >
+                        <FiCompass className="w-4 h-4" />
+                        Nuovi da Scoprire
+                    </button>
+                </div>
+            </div>
+
+            {activeTab === 'nuovi' && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-4 hide-scrollbar">
+                    <FiFilter className={`w-4 h-4 shrink-0 ${themeColor}`} />
+                    {categories.map(cat => (
+                        <button
+                            key={cat.id}
+                            onClick={() => setSelectedCategory(cat.id)}
+                            className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                                selectedCategory === cat.id
+                                    ? (isNight ? 'bg-green-500 text-black font-bold' : 'bg-green-600 text-white font-bold')
+                                    : (isNight ? 'bg-white/10 text-white/80 hover:bg-white/20' : 'bg-black/10 text-black/80 hover:bg-black/20')
+                            }`}
+                        >
+                            {cat.name}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {currentItems.length > 0 ? (
                 <motion.div
                   className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"
                   variants={containerVariants}
                   initial="hidden"
                   animate="visible"
+                  key={activeTab + selectedCategory}
                 >
-                    {shows.map((show, index) => (
-                        <motion.div variants={itemVariants} key={`podcast-grid-${show.id}-${index}`}>
-                          <PlaylistItem item={show} isNight={isNight} onSelectItem={onSelectItem} />
+                    {currentItems.map((item, index) => (
+                        <motion.div variants={itemVariants} key={`podcast-${activeTab}-${item.id || index}-${index}`}>
+                          <PlaylistItem item={item} isNight={isNight} onSelectItem={onSelectItem} />
                         </motion.div>
                     ))}
                 </motion.div>
             ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                     <FiMic className={`w-14 h-14 mb-3 opacity-40 ${themeColor}`} />
-                    <p className={`text-base font-semibold ${isNight ? 'text-white' : 'text-black'}`}>Nessun podcast trovato</p>
+                    <p className={`text-base font-semibold ${textColor}`}>
+                        {activeTab === 'in_corso' ? 'Nessun episodio in corso o recente' : 'Nessun podcast trovato per questa categoria'}
+                    </p>
                     <p className={`text-xs mt-1 max-w-sm ${themeColor}`}>
-                        Inizia a seguire i tuoi podcast preferiti su Spotify per vederli qui.
+                        {activeTab === 'in_corso' 
+                            ? 'Ascolta un episodio per vederlo apparire qui con il tuo storico di riproduzione.'
+                            : 'Prova a selezionare un’altra categoria tematica o esplora i nostri consigliati.'}
                     </p>
                 </div>
             )}
