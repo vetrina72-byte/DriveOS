@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { sessionId, codeVerifier, redirectUri } = req.body || {};
+    const { sessionId, codeVerifier, redirectUri, authUrl } = req.body || {};
     if (!sessionId) {
       return res.status(400).json({ error: 'Missing sessionId' });
     }
@@ -18,6 +18,7 @@ export default async function handler(req, res) {
       status: 'pending',
       codeVerifier,
       redirectUri,
+      authUrl,
       timestamp: Date.now()
     };
 

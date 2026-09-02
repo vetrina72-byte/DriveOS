@@ -156,9 +156,20 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
 
     setDirectAuthUrl(authUrl);
     
-    // Genera un URL molto più corto per il QR code (così è meno denso e più facile da scansionare col telefono)
-    const shortUrl = `${window.location.origin}/api/spotify-qr-login?sid=${sidRef.current}`;
-    setQrCodeUrl(generateQrUrl(shortUrl));
+    // Genera un URL più corto usando TinyURL (per rendere il QR meno denso e facilissimo da scansionare).
+    // Se fallisce per qualsiasi motivo, usa l'URL completo come fallback sicuro.
+    try {
+      const tinyRes = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(authUrl)}`);
+      if (tinyRes.ok) {
+        const shortUrl = await tinyRes.text();
+        setQrCodeUrl(generateQrUrl(shortUrl));
+      } else {
+        setQrCodeUrl(generateQrUrl(authUrl));
+      }
+    } catch (e) {
+      setQrCodeUrl(generateQrUrl(authUrl));
+    }
+
     setUiState('ATTESA');
 
     pollTimer.current = window.setInterval(async () => {
@@ -166,7 +177,14 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         const res = await fetch(`/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}&_t=${Date.now()}`, {
           cache: 'no-store'
         });
+        
         if (!res.ok) return;
+        
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            return;
+        }
+
         const data = await res.json();
         
         const token = data.access_token || data.tokens?.access_token;
@@ -185,7 +203,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           console.warn(`[SPOTIFY LOGIN] Status response:`, data.error);
         }
       } catch (e) {
-        console.error("Errore polling:", e);
+        // Silently ignore network/polling errors during restart
       }
     }, 1200);
   }, [login, clearError]);
