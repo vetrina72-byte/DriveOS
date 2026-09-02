@@ -188,7 +188,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         }
     };
     
-    const sanitizedShowDescription = show.description?.replace(/<[^>]*>?/gm, '') || '';
+    const sanitizedShowDescription = show?.description ? show.description.replace(/<[^>]*>?/gm, '') : '';
 
     const PaginationControls = () => {
         const buttonClasses = `px-4 py-2 rounded-md font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isNight ? 'bg-white/10 hover:bg-white/20' : 'bg-black/10 hover:bg-black/20'}`;
@@ -213,11 +213,17 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             {/* Header */}
             <header className="flex items-end gap-6 mb-6 pt-4">
-                <img src={show.images[0].url} alt={show.name} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
+                {show?.images?.[0]?.url ? (
+                    <img src={show.images[0].url} alt={show?.name || 'Show'} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
+                ) : (
+                    <div className={`w-48 h-48 rounded-md flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
+                        <FiMic className={`w-16 h-16 ${theme.placeholderIcon}`} />
+                    </div>
+                )}
                 <div className="flex flex-col gap-3 self-end">
                     <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Podcast</span>
-                    <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{show.name}</h1>
-                    <p className={`text-lg font-semibold ${theme.textPrimary}`}>{show.publisher}</p>
+                    <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{show?.name || ''}</h1>
+                    <p className={`text-lg font-semibold ${theme.textPrimary}`}>{show?.publisher || ''}</p>
                 </div>
             </header>
             
@@ -243,19 +249,23 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
               initial="hidden"
               animate="visible"
             >
-                {episodes.filter(Boolean).map((episode, index) => {
-                    const isPlaying = isPlayingContext && episode.id === currentTrackId;
+                {episodes?.filter(Boolean).map((episode, index) => {
+                    const isPlaying = isPlayingContext && episode?.id === currentTrackId;
                     const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+                    const epName = episode?.name || 'Episodio';
+                    const epDesc = episode?.description ? episode.description.replace(/<[^>]*>?/gm, '') : '';
+                    const epDate = episode?.release_date ? new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                    const epDuration = episode?.duration_ms ? formatDuration(episode.duration_ms) : '';
 
                     return (
                         <motion.div
-                            key={`${episode.id}-${index}`}
+                            key={`${episode?.id || index}-${index}`}
                             variants={itemVariants}
                             onClick={() => handlePlayEpisode(index)}
                             className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                         >
-                            {episode.images?.[0]?.url ? (
-                                <img src={episode.images[0].url} alt={episode.name} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
+                            {episode?.images?.[0]?.url ? (
+                                <img src={episode.images[0].url} alt={epName} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
                             ) : (
                                 <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
                                     <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
@@ -264,13 +274,13 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                             <div className="flex flex-col overflow-hidden">
                                 <div className="flex items-center gap-2 min-w-0">
                                     {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
-                                    <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.name}</span>
+                                    <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{epName}</span>
                                 </div>
-                                <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description?.replace(/<[^>]*>?/gm, '')}</span>
+                                <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{epDesc}</span>
                                 <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
-                                    <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                                    <span>•</span>
-                                    <span>{formatDuration(episode.duration_ms)}</span>
+                                    {epDate && <span>{epDate}</span>}
+                                    {epDate && epDuration && <span>•</span>}
+                                    {epDuration && <span>{epDuration}</span>}
                                 </div>
                             </div>
                             <button

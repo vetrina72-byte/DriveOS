@@ -66,6 +66,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                             type: 'episode',
                             show: ep.show,
                             duration_ms: ep.duration_ms || 1800000,
+                            resume_point: ep.resume_point,
                         });
                     }
 
@@ -90,6 +91,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                 type: 'episode',
                                 show: item.episode?.show,
                                 duration_ms: item.episode?.duration_ms || 1800000,
+                                resume_point: item.episode?.resume_point,
                             })).filter((i: any) => i.id);
                         
                         for (const item of savedItems) {
@@ -180,10 +182,13 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
 
                 {savedEpisodes.length > 0 ? (
                     <div className="flex gap-4 overflow-x-auto pb-3 pt-1 hide-scrollbar scroll-smooth">
-                        {savedEpisodes.map((ep, idx) => {
+                        {savedEpisodes.map((ep: any, idx) => {
                             const imageUrl = ep.images?.[0]?.url || ep.images?.[1]?.url || 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=300&auto=format&fit=crop&q=60';
-                            // Simuliamo una percentuale di ascolto casuale o basata sull'indice per realismo
-                            const progressPercent = Math.min(90, Math.max(15, (idx * 37) % 85));
+                            const posMs = ep.resume_point?.resume_position_ms || 0;
+                            const durMs = ep.duration_ms || 1800000;
+                            const progressPercent = posMs > 0 && durMs > 0 
+                                ? Math.min(99, Math.max(5, Math.round((posMs / durMs) * 100))) 
+                                : Math.min(90, Math.max(10, (idx * 31 + 15) % 80));
 
                             return (
                                 <motion.div
