@@ -113,7 +113,7 @@ function encodeCompositeState(sessionId: string, codeVerifier: string, redirectU
 
 function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, clearError } = useAuth();
-  const [uiState, setUiState] = useState<'IDLE' | 'ATTESA' | 'PREMIUM_ERROR' | 'LOADING'>('IDLE');
+  const [uiState, setUiState] = useState<'IDLE' | 'ATTESA' | 'PREMIUM_ERROR' | 'LOADING' | 'ERRORE_RETE'>('IDLE');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [directAuthUrl, setDirectAuthUrl] = useState('');
   const sidRef = useRef<string>(getSessionId());
@@ -172,7 +172,13 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         });
 
         
-        if (!res.ok) return;
+        if (!res.ok) {
+           if (res.status === 500) {
+             clearInterval(pollTimer.current!);
+             setUiState('ERRORE_RETE');
+           }
+           return;
+        }
         
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
@@ -353,6 +359,30 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             <h2 className={`text-2xl font-bold mb-2 tracking-tight ${theme.title}`}>Richiesto Premium</h2>
             <p className={`text-lg mb-6 leading-relaxed font-medium px-4 ${theme.subtitle}`}>
               È necessario un abbonamento Spotify attivo per utilizzare questa integrazione.
+            </p>
+            <button 
+              onClick={handleRetry}
+              className={`flex items-center justify-center gap-2 px-8 py-3 rounded-full font-bold text-base transition-transform active:scale-95 w-2/3 ${theme.buttonPrimary}`}
+            >
+              <FiRefreshCw className="w-5 h-5" />
+              Riprova
+            </button>
+          </motion.div>
+        )}
+
+        {uiState === 'ERRORE_RETE' && (
+          <motion.div 
+            key="network_error"
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className={`flex flex-col items-center text-center px-12 py-10 rounded-[2rem] max-w-[35rem] w-full ${theme.card}`}
+          >
+            <FeedbackIcon type="error" isNight={isNight} />
+            <h2 className={`text-2xl font-bold mb-2 tracking-tight ${theme.title}`}>Errore di Connessione</h2>
+            <p className={`text-lg mb-6 leading-relaxed font-medium px-4 ${theme.subtitle}`}>
+              Impossibile verificare lo stato dell'accesso (timeout o errore server).
             </p>
             <button 
               onClick={handleRetry}

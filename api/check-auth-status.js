@@ -17,6 +17,11 @@ export default async function handler(req, res) {
     const redis = getRedis();
     
     try {
+      if (!redis) {
+        console.warn("[POLLING API] Database non configurato, fallback assente.");
+        return res.status(500).json({ error: 'redis_missing', details: 'Redis non disponibile' });
+      }
+
       if (redis) {
         const raw = await redis.get(`spotify:${sessionId}`);
         if (raw) {
@@ -50,6 +55,7 @@ export default async function handler(req, res) {
       }
     } catch(e) {
       console.error("[POLLING API] Errore lettura Redis:", e);
+      return res.status(500).json({ error: 'redis_fetch_failed', details: e.message || e });
     }
 
     // Fallback manager

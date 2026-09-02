@@ -396,11 +396,17 @@ export default async function handler(req, res) {
           });
           const setResult = await redis.set(`spotify:${sessionId}`, payload, 'EX', 3600 * 24 * 30);
           console.log(`[SPOTIFY CALLBACK] Token saved in redis for session '${sessionId}' => result:`, setResult);
+          
+          if (!setResult || setResult instanceof Error) {
+             throw new Error('Redis SET fallito o non ha restituito OK');
+          }
         } catch (e) {
           console.error(`[SPOTIFY CALLBACK] Error saving token to redis for session '${sessionId}':`, e);
+          return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: 'Errore di salvataggio sessione nel database (Redis). L\'infotainment non può essere aggiornato.' });
         }
       } else {
         console.warn(`[SPOTIFY CALLBACK] Warning: No redis instance available to store session '${sessionId}'`);
+        return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: 'Configurazione database mancante.' });
       }
       
       return sendCallbackPage(res, { success: true, tokenData, sessionId });
