@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { getRedis } from './lib/redis.js';
+import { getSession, setSession } from './lib/sessionStore.js';
 import { ensureSpotifyToken } from './lib/spotifySessionManager.js';
 
 dotenv.config();
@@ -48,10 +48,7 @@ async function startServer() {
       timestamp: Date.now()
     };
     authStore.set(String(sessionId), sessionData);
-    try {
-      const redis = getRedis();
-      await redis.set(`spotify:auth:${sessionId}`, JSON.stringify(sessionData), 'EX', 900);
-    } catch (e) {}
+    setSession(`spotify:auth:${sessionId}`, sessionData, 900);
     res.json({ ok: true });
   });
 
@@ -61,16 +58,7 @@ async function startServer() {
       return res.status(400).send('Manca il Session ID (sid).');
     }
     
-    let sessionData = authStore.get(String(sid));
-    if (!sessionData) {
-      try {
-        const redis = getRedis();
-        const str = await redis.get(`spotify:auth:${sid}`);
-        if (str) {
-          sessionData = JSON.parse(str);
-        }
-      } catch (e) {}
-    }
+    let sessionData = authStore.get(String(sid)) || getSession(`spotify:auth:${sid}`);
 
     if (!sessionData || !sessionData.authUrl) {
       return res.status(404).send('Sessione scaduta o non trovata. Per favore ricarica la pagina sull\'infotainment per generare un nuovo QR code.');
@@ -131,8 +119,7 @@ async function startServer() {
       console.error('Spotify callback error:', error);
       if (sessionId) {
         authStore.set(String(sessionId), { status: 'error', error: String(error), timestamp: Date.now() });
-        const redis = getRedis();
-        await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: String(error), timestamp: Date.now() }), 'EX', 3600).catch(() => {});
+        setSession(`spotify:${sessionId}`, { authenticated: false, error: String(error), timestamp: Date.now() }, 3600);
       }
       return res.sendFile(path.join(__dirname, 'callback.html'));
     }
@@ -141,14 +128,7 @@ async function startServer() {
     }
 
     const sid = String(sessionId);
-    let storedSession = authStore.get(sid);
-    if (!storedSession) {
-      try {
-        const redis = getRedis();
-        const raw = await redis.get(`spotify:auth:${sid}`);
-        if (raw) storedSession = JSON.parse(raw);
-      } catch (e) {}
-    }
+    let storedSession = authStore.get(sid) || getSession(`spotify:auth:${sid}`);
 
     const effectiveCodeVerifier = codeVerifier || storedSession?.codeVerifier || null;
 
@@ -217,26 +197,23 @@ async function startServer() {
       }
 
       // Store in memory
+      const tokenPayload = { 
+        authenticated: true,
+        access_token, 
+        refresh_token,
+        expires_in,
+        expires_at,
+        created_at: Date.now()
+      };
+
       authStore.set(sid, { 
         status: 'completed', 
-        tokens: { 
-          access_token, 
-          refresh_token,
-          expires_in,
-          expires_at
-        }, 
+        tokens: tokenPayload, 
         timestamp: Date.now() 
       });
 
-      // Store in Redis / session manager
-      const redis = getRedis();
-      await redis.set(`spotify:${sid}`, JSON.stringify({
-        authenticated: true,
-        access_token,
-        refresh_token,
-        expires_at,
-        created_at: Date.now()
-      }), 'EX', 60 * 60 * 24 * 30).catch(() => {});
+      // Store in native session store
+      setSession(`spotify:${sid}`, tokenPayload, 60 * 60 * 24 * 30);
       
       console.log(`[SPOTIFY CALLBACK] Successfully authenticated session: ${sid}`);
       return res.sendFile(path.join(__dirname, 'callback.html'));
@@ -279,36 +256,25 @@ async function startServer() {
       });
     }
 
-    // Check Redis / storage
-    try {
-      const redis = getRedis();
-      const raw = await redis.get(`spotify:${sid}`);
-      if (raw) {
-        let parsed;
-        if (typeof raw === 'string') {
-          try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
-        } else {
-          parsed = raw;
-        }
-        if (parsed && parsed.authenticated && parsed.access_token) {
-          authStore.set(sid, { status: 'completed', tokens: parsed, timestamp: Date.now() });
-          return res.status(200).json({
-            authenticated: true,
-            status: 'completed',
-            access_token: parsed.access_token,
-            expires_at: parsed.expires_at,
-            tokens: parsed
-          });
-        }
-        if (parsed.error) {
-          return res.status(200).json({
-            authenticated: false,
-            error: parsed.error
-          });
-        }
+    // Check sessionStore
+    const stored = getSession(`spotify:${sid}`) || getSession(sid);
+    if (stored) {
+      if (stored.authenticated && stored.access_token) {
+        authStore.set(sid, { status: 'completed', tokens: stored, timestamp: Date.now() });
+        return res.status(200).json({
+          authenticated: true,
+          status: 'completed',
+          access_token: stored.access_token,
+          expires_at: stored.expires_at,
+          tokens: stored
+        });
       }
-    } catch (e) {
-      console.warn('[CHECK-AUTH] Redis check notice:', e);
+      if (stored.error) {
+        return res.status(200).json({
+          authenticated: false,
+          error: stored.error
+        });
+      }
     }
 
     return res.status(200).json({ authenticated: false });

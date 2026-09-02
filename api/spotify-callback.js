@@ -1,6 +1,5 @@
-
 // pages/api/spotify-callback.js
-import { getRedis } from '../lib/redis.js';
+import { getSession, setSession } from '../lib/sessionStore.js';
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_URL = 'https://api.spotify.com/v1/me';
@@ -253,37 +252,24 @@ function parseState(rawState) {
 export default async function handler(req, res) {
   try {
     const { code, state: rawState, error } = req.query || {};
-    const redis = getRedis();
-
     const { sessionId, codeVerifier, redirectUri: redirectUriFromState } = parseState(rawState);
 
     if (error === 'access_denied') {
-      if (sessionId && redis) {
-        try {
-          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'access_denied' }), 'EX', 120);
-        } catch (e) {}
+      if (sessionId) {
+        setSession(`spotify:${sessionId}`, { authenticated: false, error: 'access_denied' }, 120);
       }
       return sendCallbackPage(res, { success: false, errorType: 'access_denied' });
     }
 
     if (error || !code || !sessionId) {
-      if (sessionId && redis) {
-        try {
-          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_error' }), 'EX', 120);
-        } catch (e) {}
+      if (sessionId) {
+        setSession(`spotify:${sessionId}`, { authenticated: false, error: 'callback_error' }, 120);
       }
       return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: 'Parametri di autorizzazione mancanti o non validi.' });
     }
 
     // Check if session was pre-registered in storage
-    let storedAuth = null;
-    if (redis && sessionId) {
-      try {
-        const authRaw = await redis.get(`spotify:auth:${sessionId}`);
-        if (authRaw) storedAuth = JSON.parse(authRaw);
-      } catch (e) {}
-    }
-
+    const storedAuth = getSession(`spotify:auth:${sessionId}`);
     const effectiveCodeVerifier = codeVerifier || storedAuth?.codeVerifier || null;
 
     const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
@@ -360,19 +346,17 @@ export default async function handler(req, res) {
       }
       
       if (!tokenRes.ok) {
-          console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
-          
-          if (sessionId && redis) {
-            try {
-              await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: tokenData.error || 'token_exchange_failed' }), 'EX', 120);
-            } catch (e) {}
-          }
+        console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
+        
+        if (sessionId) {
+          setSession(`spotify:${sessionId}`, { authenticated: false, error: tokenData.error || 'token_exchange_failed' }, 120);
+        }
 
-          if (tokenData.error === 'invalid_grant') {
-               return sendCallbackPage(res, { success: false, errorType: 'session_expired', detailMessage: tokenData.error_description || 'Il codice di autorizzazione è scaduto o è già stato utilizzato.' });
-          }
+        if (tokenData.error === 'invalid_grant') {
+          return sendCallbackPage(res, { success: false, errorType: 'session_expired', detailMessage: tokenData.error_description || 'Il codice di autorizzazione è scaduto o è già stato utilizzato.' });
+        }
 
-          return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: tokenData.error_description || 'Impossibile completare lo scambio del token con Spotify.' });
+        return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: tokenData.error_description || 'Impossibile completare lo scambio del token con Spotify.' });
       }
 
       // Soft verify user info
@@ -386,40 +370,24 @@ export default async function handler(req, res) {
         console.warn(`[SPOTIFY CALLBACK] Soft warning: User /me check notice.`);
       }
       
-      const payload = JSON.stringify({
+      const payload = {
         authenticated: true,
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         expires_at: Date.now() + (tokenData.expires_in || 3600) * 1000,
-      });
+      };
 
-      // 1. Always write to global fallback cache as immediate local backup
-      if (globalThis.__driveos_redis_fallback_cache__) {
-        globalThis.__driveos_redis_fallback_cache__.set(`spotify:${sessionId}`, {
-          value: payload,
-          expiresAt: Date.now() + (3600 * 24 * 30 * 1000)
-        });
-      }
-
-      // 2. Write to persistent Redis / Upstash with try/catch to intercept ENOTFOUND / DNS errors
-      if (redis) {
-        try {
-          const setResult = await redis.set(`spotify:${sessionId}`, payload, 'EX', 3600 * 24 * 30);
-          console.log(`[SPOTIFY CALLBACK] Token saved in redis for session '${sessionId}' => result:`, setResult);
-        } catch (e) {
-          console.warn(`[SPOTIFY CALLBACK] Redis storage notice (saved in in-memory fallback):`, e?.code || e?.message || e);
-        }
-      }
+      // Store in native session store (valid for 30 days)
+      setSession(`spotify:${sessionId}`, payload, 30 * 24 * 3600);
+      console.log(`[SPOTIFY CALLBACK] Token saved in sessionStore for session '${sessionId}'`);
 
       return sendCallbackPage(res, { success: true, tokenData, sessionId });
 
     } catch (e) {
       console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);
       
-      if (sessionId && redis) {
-        try {
-          await redis.set(`spotify:${sessionId}`, JSON.stringify({ authenticated: false, error: 'callback_exception' }), 'EX', 120);
-        } catch (err) {}
+      if (sessionId) {
+        setSession(`spotify:${sessionId}`, { authenticated: false, error: 'callback_exception' }, 120);
       }
       
       return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: 'Si è verificato un errore di rete durante la connessione.' });

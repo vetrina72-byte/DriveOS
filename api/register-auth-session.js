@@ -1,7 +1,5 @@
-import { getRedis } from '../lib/redis.js';
-
-// In-memory fallback map for serverless execution context
-const memoryAuthCache = globalThis._memoryAuthCache || (globalThis._memoryAuthCache = new Map());
+// File: /api/register-auth-session.js
+import { setSession } from '../lib/sessionStore.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -22,16 +20,8 @@ export default async function handler(req, res) {
       timestamp: Date.now()
     };
 
-    memoryAuthCache.set(String(sessionId), sessionData);
-
-    try {
-      const redis = getRedis();
-      if (redis) {
-        await redis.set(`spotify:auth:${sessionId}`, JSON.stringify(sessionData), 'EX', 900);
-      }
-    } catch (e) {
-      console.warn('[register-auth-session] Redis notice:', e?.message || e);
-    }
+    // Save in native session store with 15-minute expiry
+    setSession(`spotify:auth:${sessionId}`, sessionData, 15 * 60);
 
     return res.status(200).json({ ok: true });
   } catch (err) {
