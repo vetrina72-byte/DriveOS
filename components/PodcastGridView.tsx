@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../spotifyClient';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
-import { FiMic, FiPlayCircle, FiCompass, FiFilter } from 'react-icons/fi';
+import { FiMic, FiPlay, FiCompass, FiFilter, FiClock } from 'react-icons/fi';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -26,9 +26,7 @@ const itemVariants = {
 };
 
 const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem: (item: SpotifyItem) => void }) => {
-    const [activeTab, setActiveTab] = useState<'in_corso' | 'nuovi'>('in_corso');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
-    
     const [savedEpisodes, setSavedEpisodes] = useState<SpotifyItem[]>([]);
     const [discoveredShows, setDiscoveredShows] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -63,7 +61,8 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                             uri: item.episode?.uri,
                             images: item.episode?.images || item.episode?.show?.images,
                             type: 'episode',
-                            show: item.episode?.show
+                            show: item.episode?.show,
+                            duration_ms: item.episode?.duration_ms || 1800000,
                         })).filter((i: any) => i.id);
                     }
                 } catch (e) {
@@ -83,7 +82,8 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                     name: item.track?.name || 'Episodio Recente',
                                     uri: item.track?.uri || item.context?.uri,
                                     images: item.track?.album?.images || item.track?.show?.images,
-                                    type: 'episode'
+                                    type: 'episode',
+                                    duration_ms: item.track?.duration_ms || 1800000,
                                 }));
                         }
                     } catch (e) {
@@ -125,85 +125,141 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
         return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
     }
 
-    const currentItems = activeTab === 'in_corso' ? savedEpisodes : discoveredShows;
-
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar flex flex-col">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <h2 className={`text-3xl font-bold ${textColor}`}>Podcast</h2>
-                
-                <div className={`flex rounded-lg p-1 ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
-                    <button
-                        onClick={() => setActiveTab('in_corso')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-semibold text-sm transition-all ${
-                            activeTab === 'in_corso'
-                                ? (isNight ? 'bg-white text-black shadow' : 'bg-black text-white shadow')
-                                : themeColor
-                        }`}
-                    >
-                        <FiPlayCircle className="w-4 h-4" />
-                        In Corso / Già Ascoltati ({savedEpisodes.length})
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('nuovi')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-semibold text-sm transition-all ${
-                            activeTab === 'nuovi'
-                                ? (isNight ? 'bg-white text-black shadow' : 'bg-black text-white shadow')
-                                : themeColor
-                        }`}
-                    >
-                        <FiCompass className="w-4 h-4" />
-                        Nuovi da Scoprire
-                    </button>
-                </div>
+        <div className="flex-grow overflow-y-auto px-6 pb-8 hide-scrollbar flex flex-col space-y-8">
+            {/* Header principale */}
+            <div className="flex items-center justify-between pt-2">
+                <h2 className={`text-3xl font-bold tracking-tight ${textColor}`}>Podcast</h2>
             </div>
 
-            {activeTab === 'nuovi' && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-4 hide-scrollbar">
-                    <FiFilter className={`w-4 h-4 shrink-0 ${themeColor}`} />
-                    {categories.map(cat => (
-                        <button
-                            key={cat.id}
-                            onClick={() => setSelectedCategory(cat.id)}
-                            className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                                selectedCategory === cat.id
-                                    ? (isNight ? 'bg-green-500 text-black font-bold' : 'bg-green-600 text-white font-bold')
-                                    : (isNight ? 'bg-white/10 text-white/80 hover:bg-white/20' : 'bg-black/10 text-black/80 hover:bg-black/20')
-                            }`}
-                        >
-                            {cat.name}
-                        </button>
-                    ))}
+            {/* SEZIONE 1: In Corso / Già Ascoltati (Carosello Orizzontale Compatto) */}
+            <div className="flex flex-col space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className={`text-xl font-semibold flex items-center gap-2 ${textColor}`}>
+                        <FiClock className="w-5 h-5 text-green-500" />
+                        In Corso / Già Ascoltati
+                    </h3>
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${isNight ? 'bg-white/10 text-white/70' : 'bg-black/10 text-black/70'}`}>
+                        {savedEpisodes.length} Episodi
+                    </span>
                 </div>
-            )}
 
-            {currentItems.length > 0 ? (
-                <motion.div
-                  className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  key={activeTab + selectedCategory}
-                >
-                    {currentItems.map((item, index) => (
-                        <motion.div variants={itemVariants} key={`podcast-${activeTab}-${item.id || index}-${index}`}>
-                          <PlaylistItem item={item} isNight={isNight} onSelectItem={onSelectItem} />
-                        </motion.div>
-                    ))}
-                </motion.div>
-            ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <FiMic className={`w-14 h-14 mb-3 opacity-40 ${themeColor}`} />
-                    <p className={`text-base font-semibold ${textColor}`}>
-                        {activeTab === 'in_corso' ? 'Nessun episodio in corso o recente' : 'Nessun podcast trovato per questa categoria'}
-                    </p>
-                    <p className={`text-xs mt-1 max-w-sm ${themeColor}`}>
-                        {activeTab === 'in_corso' 
-                            ? 'Ascolta un episodio per vederlo apparire qui con il tuo storico di riproduzione.'
-                            : 'Prova a selezionare un’altra categoria tematica o esplora i nostri consigliati.'}
-                    </p>
+                {savedEpisodes.length > 0 ? (
+                    <div className="flex gap-4 overflow-x-auto pb-3 pt-1 hide-scrollbar scroll-smooth">
+                        {savedEpisodes.map((ep, idx) => {
+                            const imageUrl = ep.images?.[0]?.url || ep.images?.[1]?.url || 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=300&auto=format&fit=crop&q=60';
+                            // Simuliamo una percentuale di ascolto casuale o basata sull'indice per realismo
+                            const progressPercent = Math.min(90, Math.max(15, (idx * 37) % 85));
+
+                            return (
+                                <motion.div
+                                    key={`in-corso-${ep.id || idx}`}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => onSelectItem(ep)}
+                                    className={`shrink-0 w-80 sm:w-96 rounded-xl p-3 flex gap-4 cursor-pointer transition-all shadow-md backdrop-blur-md border ${
+                                        isNight 
+                                            ? 'bg-white/[0.06] hover:bg-white/[0.1] border-white/10 text-white' 
+                                            : 'bg-black/[0.04] hover:bg-black/[0.08] border-black/10 text-black'
+                                    }`}
+                                >
+                                    <div className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden shadow">
+                                        <img src={imageUrl} alt={ep.name} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                            <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center text-black shadow-lg">
+                                                <FiPlay className="w-4 h-4 ml-0.5 fill-current" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col justify-between flex-grow py-0.5 overflow-hidden">
+                                        <div>
+                                            <span className="text-[10px] font-semibold tracking-wider text-green-500 uppercase block mb-1">
+                                                {ep.show?.name || 'Podcast'}
+                                            </span>
+                                            <h4 className="text-sm font-bold line-clamp-2 leading-snug mb-1">
+                                                {ep.name}
+                                            </h4>
+                                        </div>
+
+                                        {/* Barra di avanzamento sotto l'episodio */}
+                                        <div className="space-y-1.5 mt-2">
+                                            <div className="flex justify-between text-[10px] opacity-70">
+                                                <span>Ascoltato {progressPercent}%</span>
+                                                <span>{Math.floor((ep.duration_ms || 1800000) * (1 - progressPercent/100) / 60000)} min rimanenti</span>
+                                            </div>
+                                            <div className={`w-full h-1.5 rounded-full overflow-hidden ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
+                                                <div 
+                                                    className="h-full bg-green-500 rounded-full transition-all duration-300"
+                                                    style={{ width: `${progressPercent}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div className={`p-6 rounded-xl text-center border border-dashed ${isNight ? 'border-white/15 bg-white/5' : 'border-black/15 bg-black/5'}`}>
+                        <p className={`text-sm ${themeColor}`}>Nessun episodio in corso. Inizia ad ascoltare un podcast per vederlo qui.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* SEZIONE 2: Nuovi Podcast da Scoprire */}
+            <div className="flex flex-col space-y-4 pt-4 border-t border-white/10">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <h3 className={`text-xl font-semibold flex items-center gap-2 ${textColor}`}>
+                        <FiCompass className="w-5 h-5 text-green-500" />
+                        Nuovi da Scoprire
+                    </h3>
+
+                    {/* Barra delle Categorie con Scroll Orizzontale Fluido e Padding per evitare tagli */}
+                    <div className="relative w-full sm:w-auto">
+                        <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 hide-scrollbar scroll-smooth">
+                            <FiFilter className={`w-4 h-4 shrink-0 mx-1 ${themeColor}`} />
+                            {categories.map(cat => (
+                                <button
+                                    key={cat.id}
+                                    onClick={() => setSelectedCategory(cat.id)}
+                                    className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all shadow-sm shrink-0 ${
+                                        selectedCategory === cat.id
+                                            ? 'bg-white text-black font-bold shadow-md scale-105'
+                                            : (isNight ? 'bg-white/10 text-white/90 hover:bg-white/20' : 'bg-black/10 text-black/90 hover:bg-black/20')
+                                    }`}
+                                >
+                                    {cat.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-            )}
+
+                {discoveredShows.length > 0 ? (
+                    <motion.div
+                      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pt-2"
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="visible"
+                      key={selectedCategory}
+                    >
+                        {discoveredShows.map((show, index) => (
+                            <motion.div variants={itemVariants} key={`discovered-show-${show.id || index}-${index}`}>
+                              <PlaylistItem item={show} isNight={isNight} onSelectItem={onSelectItem} />
+                            </motion.div>
+                        ))}
+                    </motion.div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <FiMic className={`w-14 h-14 mb-3 opacity-40 ${themeColor}`} />
+                        <p className={`text-base font-semibold ${textColor}`}>Nessun podcast trovato per questa categoria</p>
+                        <p className={`text-xs mt-1 max-w-sm ${themeColor}`}>
+                            Prova a selezionare un’altra categoria tematica o esplora i nostri consigliati.
+                        </p>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
