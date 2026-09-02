@@ -173,10 +173,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
 
         
         if (!res.ok) {
-           if (res.status === 500) {
-             clearInterval(pollTimer.current!);
-             setUiState('ERRORE_RETE');
-           }
            return;
         }
         

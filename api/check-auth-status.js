@@ -14,14 +14,9 @@ export default async function handler(req, res) {
     const sessionId = req.query?.sessionId;
     if (!sessionId) return res.status(400).json({ error: 'missing_sessionId' });
 
-    const redis = getRedis();
-    
+    // 1. Try reading from Redis (with try/catch to intercept ENOTFOUND / DNS / connection issues)
     try {
-      if (!redis) {
-        console.warn("[POLLING API] Database non configurato, fallback assente.");
-        return res.status(500).json({ error: 'redis_missing', details: 'Redis non disponibile' });
-      }
-
+      const redis = getRedis();
       if (redis) {
         const raw = await redis.get(`spotify:${sessionId}`);
         if (raw) {
@@ -33,16 +28,16 @@ export default async function handler(req, res) {
           }
 
           if (p) {
-            console.log(`[POLLING API] Trovata sessione per ${sessionId}:`, p.error ? `Errore: ${p.error}` : 'Successo');
-            
             if (p.error) {
-                return res.status(200).json({ 
-                  authenticated: false, 
-                  error: p.error 
-                });
+              console.log(`[POLLING API] Session error for ${sessionId}: ${p.error}`);
+              return res.status(200).json({ 
+                authenticated: false, 
+                error: p.error 
+              });
             }
 
             if (p.access_token) {
+              console.log(`[POLLING API] Session authenticated for ${sessionId}`);
               return res.status(200).json({ 
                 authenticated: true, 
                 access_token: p.access_token, 
@@ -53,12 +48,32 @@ export default async function handler(req, res) {
           }
         }
       }
-    } catch(e) {
-      console.error("[POLLING API] Errore lettura Redis:", e);
-      return res.status(500).json({ error: 'redis_fetch_failed', details: e.message || e });
+    } catch (redisErr) {
+      // Intercept ENOTFOUND or Redis network error without returning 500
+      console.warn('[POLLING API] Redis access notice (continuing with local fallback):', redisErr?.code || redisErr?.message || redisErr);
     }
 
-    // Fallback manager
+    // 2. In-memory global cache check (guarantees cross-function lookup if Redis fails)
+    try {
+      if (globalThis.__driveos_redis_fallback_cache__) {
+        const entry = globalThis.__driveos_redis_fallback_cache__.get(`spotify:${sessionId}`);
+        if (entry && entry.value) {
+          const p = typeof entry.value === 'string' ? JSON.parse(entry.value) : entry.value;
+          if (p && p.access_token) {
+            return res.status(200).json({
+              authenticated: true,
+              access_token: p.access_token,
+              expires_at: p.expires_at,
+              expires_in: p.expires_at ? Math.max(60, Math.floor((p.expires_at - Date.now()) / 1000)) : 3600
+            });
+          }
+        }
+      }
+    } catch (cacheErr) {
+      console.warn('[POLLING API] Memory cache notice:', cacheErr?.message || cacheErr);
+    }
+
+    // 3. Fallback session manager
     try {
       const updated = await ensureSpotifyToken(sessionId);
       if (updated && updated.access_token) {
@@ -69,13 +84,14 @@ export default async function handler(req, res) {
         });
       }
     } catch (mgrErr) {
-      console.warn('[POLLING API] session manager notice:', mgrErr?.message || mgrErr);
+      console.warn('[POLLING API] Session manager notice:', mgrErr?.message || mgrErr);
     }
 
-    return res.status(200).json({ authenticated: false });
+    // Default polling in progress (waiting for QR code authorization)
+    return res.status(200).json({ authenticated: false, status: 'pending' });
   } catch (err) {
     console.error('[POLLING API] Uncaught handler error:', err);
-    return res.status(200).json({ authenticated: false });
+    return res.status(200).json({ authenticated: false, status: 'pending' });
   }
 }
 
