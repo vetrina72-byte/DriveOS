@@ -93,7 +93,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const lastTrackClickRef = useRef<number>(0);
 
     const isLikedSongs = itemId === 'liked-songs';
-    const isPlayingContext = playerState && !playerState.paused && (playerState.context.uri === details?.uri || isLikedSongs);
+    const isCurrentContext = Boolean(playerState && (playerState.context?.uri === details?.uri || isLikedSongs || (details?.uri && details.uri.includes(playerState.track_window?.current_track?.id || ''))));
+    const isPlayingContext = isCurrentContext && !playerState?.paused;
     const currentTrackId = playerState?.track_window.current_track?.id;
 
     useEffect(() => {
@@ -205,6 +206,12 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
         if (now - lastTrackClickRef.current < 500) return;
         lastTrackClickRef.current = now;
 
+        // If the current playlist is already active and paused, resume cleanly without restarting track 0
+        if (isCurrentContext && playerState?.paused) {
+            onPlay({});
+            return;
+        }
+
         if (isLikedSongs) {
             onPlay({ uris: tracks.map(t => t.uri) }, details);
         } else if (details?.uri) {
@@ -217,6 +224,12 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
         const now = Date.now();
         if (now - lastTrackClickRef.current < 500) return;
         lastTrackClickRef.current = now;
+
+        // If clicking the track that is ALREADY loaded/active, resume if paused
+        if (trackUri === playerState?.track_window?.current_track?.uri) {
+            onPlay({});
+            return;
+        }
 
         if (isLikedSongs) {
             onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } }, details);
@@ -294,7 +307,9 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     if (!track) return null;
                     const imageUrl = itemType === 'album' ? details.images?.[0]?.url : track.album?.images?.[0]?.url;
                     const albumName = itemType === 'album' ? details.name : track.album.name;
-                    const isPlaying = isPlayingContext && track.id === currentTrackId;
+                    const isCurrentTrack = track.id === currentTrackId && Boolean(playerState?.track_window.current_track);
+                    const isPlaying = isCurrentTrack && !playerState?.paused;
+                    const isPaused = isCurrentTrack && Boolean(playerState?.paused);
                     const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
                     return (
@@ -302,11 +317,13 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                             key={`${track.id}-${index}`}
                             variants={itemVariants}
                             onClick={() => handleTrackPlay(track.uri, index)}
-                            className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
+                            className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`} ${isCurrentTrack ? (isNight ? 'bg-white/5' : 'bg-black/5') : ''}`}
                         >
                             <div className="text-center">
                                 {isPlaying ? (
                                     <AnimatedEqualizer className={`mx-auto ${activeColor}`} />
+                                ) : isPaused ? (
+                                    <span className={`font-bold ${activeColor}`}>{index + 1}</span>
                                 ) : (
                                     <span className={theme.textSecondary}>{index + 1}</span>
                                 )}
@@ -321,7 +338,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                                 )}
                             </div>
                             <div className="flex flex-col min-w-0">
-                                <span className={`truncate font-bold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</span>
+                                <span className={`truncate font-bold ${isCurrentTrack ? activeColor : theme.textPrimary}`}>{track.name}</span>
                                 <span className={`text-sm truncate ${theme.textSecondary}`}>{track.artists.map(a => a.name).join(', ')}</span>
                             </div>
                             <div className={`text-sm truncate ${theme.textSecondary}`}>

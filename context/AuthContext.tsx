@@ -765,7 +765,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [fetchUserInfo, logout]);
     
     // Updated robust play function with automatic recovery of previous track/playlist
-    const play = useCallback(async (options: PlayOptions, itemForOptimisticUpdate?: MediaItem) => {
+    const play = useCallback(async (options: PlayOptions = {}, itemForOptimisticUpdate?: MediaItem) => {
         if (isSwitchingTrack.current) {
             console.log('Skipping play request: already switching');
             return;
@@ -779,36 +779,68 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             try { localStorage.setItem('last_optimistic_item', JSON.stringify(itemForOptimisticUpdate)); } catch (e) {}
             setContinueListeningItems(prevItems => [itemForOptimisticUpdate, ...prevItems.filter(i => i.uri !== itemForOptimisticUpdate.uri)].slice(0, 10));
         }
-        if (options.context_uri) localStorage.setItem("last_context_uri", options.context_uri);
-        else if (options.uris?.[0]) { localStorage.setItem("last_track_uri", options.uris[0]); localStorage.removeItem("last_context_uri"); }
-        localStorage.setItem("last_progress_ms", "0");
+
+        const isExplicitTrackOrContext = Boolean(options.context_uri || (options.uris && options.uris.length > 0));
+
+        if (options.context_uri) {
+            localStorage.setItem("last_context_uri", options.context_uri);
+        } else if (options.uris?.[0]) {
+            localStorage.setItem("last_track_uri", options.uris[0]);
+            localStorage.removeItem("last_context_uri");
+        }
+
+        // Only reset progress_ms if a new track/context is explicitly started without position_ms
+        if (isExplicitTrackOrContext) {
+            if (options.position_ms !== undefined) {
+                localStorage.setItem("last_progress_ms", String(options.position_ms));
+                localStorage.setItem("spotify_last_position", String(options.position_ms));
+            } else {
+                localStorage.setItem("last_progress_ms", "0");
+                localStorage.setItem("spotify_last_position", "0");
+            }
+        }
+
         localStorage.setItem("last_is_playing", "true");
         setLastPlayInitiated(Date.now());
         
-        const isResume = Object.keys(options).length === 0 && !options.context_uri && !options.uris;
+        const isResume = !isExplicitTrackOrContext;
         const isTransfer = !!nowPlaying.activeDevice;
+        const hasLoadedTrack = Boolean(nowPlaying.spotifyState?.track_window?.current_track);
 
-        // Populate options with last played context or track if no track is explicitly passed
         let effectiveOptions: PlayOptions = { ...options };
-        if (isResume) {
-            const lastCtx = localStorage.getItem("last_context_uri") || localStorage.getItem("spotify_last_context");
-            const lastUr = localStorage.getItem("last_track_uri") || localStorage.getItem("spotify_last_track") || nowPlaying.spotifyState?.track_window?.current_track?.uri || continueListeningItems[0]?.uri;
-            const lastPos = localStorage.getItem("last_progress_ms") || localStorage.getItem("spotify_last_position");
 
-            if (lastCtx && lastCtx !== "undefined" && !lastCtx.startsWith('spotify:track:')) {
-                effectiveOptions.context_uri = lastCtx;
-            } else if (lastUr && lastUr !== "undefined") {
-                effectiveOptions.uris = [lastUr];
-            }
-            if (lastPos && lastPos !== "undefined") {
-                const parsedPos = parseInt(lastPos, 10);
-                if (!isNaN(parsedPos) && parsedPos > 0) {
-                    effectiveOptions.position_ms = parsedPos;
+        if (isResume) {
+            if (!hasLoadedTrack) {
+                // Cold start recovery
+                const lastCtx = localStorage.getItem("last_context_uri") || localStorage.getItem("spotify_last_context");
+                const lastUr = localStorage.getItem("last_track_uri") || localStorage.getItem("spotify_last_track") || continueListeningItems[0]?.uri;
+                const lastPos = localStorage.getItem("last_progress_ms") || localStorage.getItem("spotify_last_position");
+
+                if (lastCtx && lastCtx !== "undefined" && !lastCtx.startsWith('spotify:track:')) {
+                    effectiveOptions.context_uri = lastCtx;
+                } else if (lastUr && lastUr !== "undefined") {
+                    effectiveOptions.uris = [lastUr];
+                }
+                if (lastPos && lastPos !== "undefined") {
+                    const parsedPos = parseInt(lastPos, 10);
+                    if (!isNaN(parsedPos) && parsedPos > 0) {
+                        effectiveOptions.position_ms = parsedPos;
+                    }
+                }
+            } else {
+                // Already has active/loaded track: CRITICAL - Keep options empty to preserve exact position and playlist index
+                effectiveOptions = {};
+                const lastPos = localStorage.getItem("last_progress_ms") || localStorage.getItem("spotify_last_position");
+                if (lastPos && lastPos !== "undefined") {
+                    const parsedPos = parseInt(lastPos, 10);
+                    if (!isNaN(parsedPos) && parsedPos >= 0) {
+                        effectiveOptions.position_ms = parsedPos;
+                    }
                 }
             }
         }
 
-        const shouldShowSpinner = isTransfer || !isResume;
+        const shouldShowSpinner = isTransfer || (!isResume && !hasLoadedTrack);
 
         // IMMEDIATELY update state to remove remote UI and show optimistic state
         setNowPlaying(prev => {
@@ -832,11 +864,14 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             };
         });
 
-        // FAST PATH: LOCAL RESUME if player is already active with loaded tracks
-        if (isResume && !nowPlaying.activeDevice && !effectiveOptions.context_uri && !effectiveOptions.uris) {
+        // FAST PATH: Direct player.resume() if player already has track loaded
+        if (isResume && hasLoadedTrack && !nowPlaying.activeDevice) {
              const player = getPlayerInstance();
              if (player) {
                  try {
+                     if (effectiveOptions.position_ms !== undefined) {
+                         await player.seek(effectiveOptions.position_ms).catch(() => {});
+                     }
                      await player.resume();
                      isSwitchingTrack.current = false;
                      setLastPlayInitiated(Date.now()); 
@@ -879,8 +914,10 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 if (deviceId && (lastCtx || lastUr)) {
                     console.log("Attempting fallback play recovery from local storage...");
                     const body: any = {};
-                    if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
-                    else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
+                    if (!hasLoadedTrack) {
+                        if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
+                        else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
+                    }
                     if (lastPos && lastPos !== "undefined") body.position_ms = typeof lastPos === 'number' ? lastPos : parseInt(String(lastPos), 10);
                     
                     try {

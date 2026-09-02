@@ -131,12 +131,6 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
     }, [state.position, state.paused, state.timestamp, state.duration, isSeeking]);
 
     // --- USER INTERACTION ---
-    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (!progressContainerRef.current || !state.duration) return;
-        setIsSeeking(true);
-        updateSeekVisual(e.clientX);
-    }, [state.duration]);
-
     const updateSeekVisual = (clientX: number) => {
         if (!progressContainerRef.current || !state.duration || !barFillRef.current) return;
         const rect = progressContainerRef.current.getBoundingClientRect();
@@ -147,6 +141,18 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         visualPosRef.current = Math.round(state.duration * ratio);
     };
 
+    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (!progressContainerRef.current || !state.duration) return;
+        setIsSeeking(true);
+        updateSeekVisual(e.clientX);
+    }, [state.duration]);
+
+    const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+        if (!progressContainerRef.current || !state.duration || !e.touches[0]) return;
+        setIsSeeking(true);
+        updateSeekVisual(e.touches[0].clientX);
+    }, [state.duration]);
+
     useEffect(() => {
         if (!isSeeking) return;
 
@@ -155,28 +161,62 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
             updateSeekVisual(e.clientX);
         };
 
-        const handleMouseUp = (e: MouseEvent) => {
-            setIsSeeking(false);
-            if (player && state.duration) {
-                optimisticSeekRef.current = { pos: visualPosRef.current, ts: Date.now() };
-                player.seek(visualPosRef.current).catch(() => {});
+        const handleTouchMove = (e: TouchEvent) => {
+            if (e.touches[0]) {
+                updateSeekVisual(e.touches[0].clientX);
             }
+        };
+
+        const finishSeek = () => {
+            setIsSeeking(false);
+            if (state.duration) {
+                const targetPos = Math.round(visualPosRef.current);
+                optimisticSeekRef.current = { pos: targetPos, ts: Date.now() };
+                localStorage.setItem("last_progress_ms", String(targetPos));
+                localStorage.setItem("spotify_last_position", String(targetPos));
+                
+                if (player) {
+                    player.seek(targetPos).catch((err) => {
+                        console.warn('[SpotifyProgressBar] player.seek fallback:', err);
+                    });
+                }
+                
+                // Keep Spotify backend synchronized immediately (especially if paused)
+                const deviceId = getDeviceId();
+                const seekUrl = deviceId 
+                    ? `/me/player/seek?position_ms=${targetPos}&device_id=${deviceId}`
+                    : `/me/player/seek?position_ms=${targetPos}`;
+                apiClient.put(seekUrl).catch(() => {});
+            }
+        };
+
+        const handleMouseUp = (e: MouseEvent) => {
+            finishSeek();
+        };
+
+        const handleTouchEnd = () => {
+            finishSeek();
         };
 
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('touchmove', handleTouchMove);
+        window.addEventListener('touchend', handleTouchEnd);
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('touchmove', handleTouchMove);
+            window.removeEventListener('touchend', handleTouchEnd);
         };
     }, [isSeeking, player, state.duration]);
     
     return (
         <div
             ref={progressContainerRef}
-            className="spotify-progress-bar w-full rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible flex-shrink-0"
+            className="spotify-progress-bar w-full rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible flex-shrink-0 select-none"
             style={{ height: `${(height) / 16}rem`, marginTop: `${(offset) / 16}rem` }}
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
         >
             <div 
                 ref={barFillRef}
@@ -922,20 +962,31 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Resume
                 (async () => {
                     try {
-                        if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
+                        if (player && isPlayerActive && playerState?.track_window?.current_track) {
+                            await player.resume();
+                            return;
+                        }
                         await play({});
                     } catch (e) {
                         console.warn("Local play failed or device inactive, applying FALLBACK play...");
                         const deviceId = getDeviceId();
                         if (deviceId) {
-                            const lastCtx = localStorage.getItem("spotify_last_context");
-                            const lastUr = localStorage.getItem("spotify_last_track");
-                            const lastPos = localStorage.getItem("spotify_last_position");
+                            const lastPos = localStorage.getItem("spotify_last_position") || localStorage.getItem("last_progress_ms");
+                            const hasLoadedTrack = Boolean(playerState?.track_window?.current_track);
 
                             const body: any = {};
-                            if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
-                            else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
-                            if (lastPos && lastPos !== "undefined") body.position_ms = parseInt(lastPos, 10);
+                            if (!hasLoadedTrack) {
+                                const lastCtx = localStorage.getItem("spotify_last_context");
+                                const lastUr = localStorage.getItem("spotify_last_track");
+                                if (lastCtx && lastCtx !== "undefined") body.context_uri = lastCtx;
+                                else if (lastUr && lastUr !== "undefined") body.uris = [lastUr];
+                            }
+                            if (lastPos && lastPos !== "undefined") {
+                                const parsedPos = parseInt(lastPos, 10);
+                                if (!isNaN(parsedPos) && parsedPos >= 0) {
+                                    body.position_ms = parsedPos;
+                                }
+                            }
                             
                             try {
                                 await apiClient.put(`/me/player/play?device_id=${deviceId}`, body);
@@ -950,8 +1001,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Pause
                 (async () => {
                     try {
+                        if (player && isPlayerActive) {
+                            await player.pause().catch(() => {});
+                        }
                         await pauseSpotify();
-                        if (!isPlayerActive) throw new Error("NO_ACTIVE_DEVICE");
                     } catch (e) {
                         const deviceId = getDeviceId();
                         if (deviceId) {
