@@ -146,6 +146,13 @@ async function startServer() {
     const effectiveCodeVerifier = codeVerifier || storedSession?.codeVerifier || null;
     const effectiveRelayId = relayId || storedSession?.relayId || null;
 
+    // Flag session as scanned/authorizing immediately so infotainment polling reacts in realtime
+    authStore.set(sid, { status: 'scanned', authorizing: true, timestamp: Date.now() });
+    setSession(`spotify:${sid}`, { status: 'scanned', authorizing: true, authenticated: false }, 180);
+    if (effectiveRelayId) {
+      updateRelaySession(effectiveRelayId, { status: 'scanned', authorizing: true, sessionId: sid }).catch(() => {});
+    }
+
     const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
     const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
@@ -267,8 +274,17 @@ async function startServer() {
         authenticated: true, 
         status: 'completed',
         access_token: sessionData.tokens.access_token,
+        refresh_token: sessionData.tokens.refresh_token,
         expires_at: sessionData.tokens.expires_at,
         tokens: sessionData.tokens
+      });
+    }
+
+    if (sessionData && (sessionData.status === 'scanned' || (sessionData as any).authorizing)) {
+      return res.status(200).json({
+        authenticated: false,
+        status: 'scanned',
+        message: 'Codice scansionato! Autorizzazione in corso...'
       });
     }
 
@@ -289,6 +305,12 @@ async function startServer() {
       if (relayData && (relayData as any).access_token) {
         stored = relayData;
         if (sid) setSession(`spotify:${sid}`, relayData, 30 * 24 * 3600);
+      } else if (relayData && (relayData.status === 'scanned' || relayData.authorizing)) {
+        return res.status(200).json({
+          authenticated: false,
+          status: 'scanned',
+          message: 'Codice scansionato! Autorizzazione in corso...'
+        });
       }
     }
 
@@ -299,8 +321,16 @@ async function startServer() {
           authenticated: true,
           status: 'completed',
           access_token: stored.access_token,
+          refresh_token: stored.refresh_token,
           expires_at: stored.expires_at,
           tokens: stored
+        });
+      }
+      if (stored.status === 'scanned' || stored.authorizing) {
+        return res.status(200).json({
+          authenticated: false,
+          status: 'scanned',
+          message: 'Codice scansionato! Autorizzazione in corso...'
         });
       }
       if (stored.error) {
@@ -316,14 +346,17 @@ async function startServer() {
   
   app.post('/api/refresh-token', async (req, res) => {
     const sessionId = req.headers['x-session-id'] || req.body?.sessionId || req.query?.sessionId;
+    const directRefreshToken = req.body?.refreshToken || req.query?.refreshToken || req.body?.refresh_token;
     
-    if (sessionId) {
+    if (sessionId || directRefreshToken) {
       try {
-        const updated = await ensureSpotifyToken(String(sessionId));
+        const updated = await ensureSpotifyToken(sessionId ? String(sessionId) : '', directRefreshToken);
         if (updated && updated.access_token) {
           const expires_in = Math.max(0, Math.round(((updated.expires_at || Date.now()) - Date.now()) / 1000));
           return res.status(200).json({
+            authenticated: true,
             access_token: updated.access_token,
+            refresh_token: updated.refresh_token || null,
             expires_at: updated.expires_at,
             expires_in
           });
@@ -334,22 +367,27 @@ async function startServer() {
     }
 
     // Fallback to cookie
-    const refreshToken = req.cookies?.spotify_refresh_token;
+    const refreshToken = directRefreshToken || req.cookies?.spotify_refresh_token;
     if (!refreshToken) {
       return res.status(401).json({ error: 'Refresh token missing' });
     }
     const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env;
-    const authHeader = `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
+    const clientId = SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
+    
     const params = new URLSearchParams();
     params.append('grant_type', 'refresh_token');
     params.append('refresh_token', refreshToken);
+    params.append('client_id', clientId);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (SPOTIFY_CLIENT_SECRET) {
+      headers['Authorization'] = `Basic ${Buffer.from(`${clientId}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`;
+    }
+
     try {
-      const spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': authHeader,
-        },
-      });
+      const spotifyResponse = await axios.post('https://accounts.spotify.com/api/token', params, { headers });
       const { access_token, expires_in, refresh_token: newRefreshToken } = spotifyResponse.data;
       if (newRefreshToken) {
         let cookieString = `spotify_refresh_token=${newRefreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=31536000`;
@@ -358,20 +396,49 @@ async function startServer() {
         }
         res.setHeader('Set-Cookie', cookieString);
       }
-      res.status(200).json({ access_token, expires_in, expires_at: Date.now() + (expires_in * 1000) });
+      res.status(200).json({
+        authenticated: true,
+        access_token,
+        refresh_token: newRefreshToken || refreshToken,
+        expires_in,
+        expires_at: Date.now() + (expires_in * 1000)
+      });
     } catch (error: any) {
       console.error('Error refreshing token:', error.response ? error.response.data : error.message);
       res.status(error.response?.status || 500).json({ error: 'Failed to refresh token' });
     }
   });
 
-  app.post('/api/logout', (req, res) => {
+  app.post('/api/logout', async (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.body?.sessionId || req.query?.sessionId;
+    const relayId = req.body?.relayId || req.query?.relayId;
+
+    if (sessionId) {
+      const sid = String(sessionId);
+      authStore.delete(sid);
+      const existing = getSession(`spotify:${sid}`) || getSession(sid);
+      deleteSession(`spotify:${sid}`);
+      deleteSession(sid);
+      deleteSession(`spotify:auth:${sid}`);
+
+      const targetRelay = relayId || existing?.relayId;
+      if (targetRelay) {
+        await updateRelaySession(targetRelay, {
+          authenticated: false,
+          loggedOut: true,
+          access_token: null,
+          status: 'logged_out',
+          updatedAt: Date.now()
+        }).catch(() => {});
+      }
+    }
+
     let cookieString = 'spotify_refresh_token=; HttpOnly; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
     if (process.env.NODE_ENV === 'production') {
       cookieString += '; Secure';
     }
     res.setHeader('Set-Cookie', cookieString);
-    res.status(200).json({ message: 'Logged out successfully' });
+    res.status(200).json({ success: true, message: 'Logged out successfully' });
   });
 
   app.put('/api/play', async (req, res) => {

@@ -114,6 +114,7 @@ function encodeCompositeState(sessionId: string, codeVerifier: string, redirectU
 function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const { login, clearError } = useAuth();
   const [uiState, setUiState] = useState<'IDLE' | 'ATTESA' | 'PREMIUM_ERROR' | 'LOADING' | 'ERRORE_RETE'>('IDLE');
+  const [scanDetected, setScanDetected] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [directAuthUrl, setDirectAuthUrl] = useState('');
   const sidRef = useRef<string>(getSessionId());
@@ -147,13 +148,15 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     login({
       access_token: token,
       expires_in: expiresIn || 3600,
-      expires_at: expAt
+      expires_at: expAt,
+      refresh_token: refreshToken
     });
   }, [login, stopPolling]);
 
   const startLogin = useCallback(async () => {
     stopPolling();
     isResolvedRef.current = false;
+    setScanDetected(false);
     clearError();
     
     const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
@@ -257,6 +260,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         const res = await fetch(`/api/check-auth-status?${queryStr}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json().catch(() => null);
+          if (data?.status === 'scanned' || data?.authorizing) {
+            setScanDetected(true);
+          }
           const token = data?.access_token || data?.tokens?.access_token;
           if (token && (data.authenticated || data.status === 'completed')) {
             handleSuccessfulAuth(
@@ -276,6 +282,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           const remoteRes = await fetch(`${backendUrl}/api/check-auth-status?${queryStr}`, { cache: 'no-store' });
           if (remoteRes.ok) {
             const data = await remoteRes.json().catch(() => null);
+            if (data?.status === 'scanned' || data?.authorizing) {
+              setScanDetected(true);
+            }
             const token = data?.access_token || data?.tokens?.access_token;
             if (token && (data.authenticated || data.status === 'completed')) {
               handleSuccessfulAuth(
@@ -297,6 +306,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           if (directRelayCheck.ok) {
             const rJson = await directRelayCheck.json().catch(() => null);
             const rData = rJson?.data;
+            if (rData?.status === 'scanned' || rData?.authorizing) {
+              setScanDetected(true);
+            }
             if (rData && rData.authenticated && rData.access_token) {
               handleSuccessfulAuth(
                 rData.access_token, 
@@ -429,10 +441,21 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
               </p>
 
               {/* Enhanced status indicator */}
-              <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-white/5 border border-white/10 w-fit">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#1DB954] shadow-[0_0_8px_#1DB954]" />
-                <span className={`text-xs font-semibold ${theme.subtitle}`}>In attesa di scansione...</span>
-              </div>
+              {scanDetected ? (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-[#1DB954]/15 border border-[#1DB954]/30 w-fit"
+                >
+                  <div className="w-3.5 h-3.5 border-2 border-[#1DB954] border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  <span className="text-xs font-bold text-[#1DB954]">Codice scansionato! Accesso in corso...</span>
+                </motion.div>
+              ) : (
+                <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-white/5 border border-white/10 w-fit">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#1DB954] shadow-[0_0_8px_#1DB954] animate-pulse" />
+                  <span className={`text-xs font-semibold ${theme.subtitle}`}>In attesa di scansione...</span>
+                </div>
+              )}
               
               {directAuthUrl && (
                 <div className="mt-1 flex flex-col gap-2">

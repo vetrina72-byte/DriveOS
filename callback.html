@@ -135,7 +135,19 @@
       <div class="status-pill"><span class="status-dot"></span>Infotainment Sincronizzato</div>
       <p>L'account Spotify è stato collegato con successo all'infotainment della vettura.</p>
       
-      <button class="btn-close" onclick="closeWindow()">Chiudi Scheda</button>
+      <div style="margin-bottom: 24px; padding: 12px 16px; background: rgba(255,255,255,0.05); border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); width: 100%;">
+        <div style="font-size: 14px; font-weight: 500; color: #a1a1aa; margin-bottom: 8px;">
+          Chiusura automatica tra <strong id="countdown-text" style="color: #1DB954;">2</strong> secondi...
+        </div>
+        <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
+          <div id="progress-bar" style="width: 0%; height: 100%; background: #1DB954; transition: width 2s linear;"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; align-items: center;">
+        <button class="btn-close" style="width: 100%; max-width: 240px;" onclick="closeWindow()">Chiudi Scheda</button>
+        <span style="font-size: 12px; color: #71717a;">Puoi tornare all'infotainment della tua auto</span>
+      </div>
     </div>
   </div>
 
@@ -152,6 +164,26 @@
         window.close();
       } catch (e) {}
     }
+
+    // Auto-close countdown
+    (function() {
+      let seconds = 2;
+      const textEl = document.getElementById('countdown-text');
+      const barEl = document.getElementById('progress-bar');
+      
+      if (barEl) {
+        setTimeout(() => { barEl.style.width = '100%'; }, 50);
+      }
+
+      const interval = setInterval(() => {
+        seconds--;
+        if (textEl) textEl.innerText = seconds;
+        if (seconds <= 0) {
+          clearInterval(interval);
+          closeWindow();
+        }
+      }, 1000);
+    })();
   </script>
 </body>
 </html>

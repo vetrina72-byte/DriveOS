@@ -76,6 +76,14 @@ export default async function handler(req, res) {
           expires_in: expiresIn
         });
       }
+
+      if (session.status === 'scanned' || session.authorizing || session.status === 'authorizing') {
+        return res.status(200).json({
+          authenticated: false,
+          status: 'scanned',
+          message: 'Codice scansionato! Autorizzazione in corso...'
+        });
+      }
     }
 
     // 3. Fallback session manager (for automatic token refresh)

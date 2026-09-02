@@ -191,8 +191,19 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
         <h1>${title}</h1>
         ${success ? `<div class="status-pill"><span class="status-dot"></span>Infotainment Sincronizzato</div>` : ''}
         <p>${displayMessage}</p>
-        <div style="display:flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-          <button class="btn" style="background:#2C2C2E; color:#fff;" onclick="window.close()">Chiudi Scheda</button>
+        ${success ? `
+        <div style="margin-bottom: 24px; padding: 12px 16px; background: rgba(255,255,255,0.05); border-radius: 16px; border: 1px solid rgba(255,255,255,0.08);">
+          <div style="font-size: 14px; font-weight: 500; color: #a1a1aa; margin-bottom: 8px;">
+            Chiusura automatica tra <strong id="countdown-text" style="color: #1DB954;">2</strong> secondi...
+          </div>
+          <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
+            <div id="progress-bar" style="width: 0%; height: 100%; background: #1DB954; transition: width 2s linear;"></div>
+          </div>
+        </div>
+        ` : ''}
+        <div style="display:flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center;">
+          <button class="btn" style="background:#2C2C2E; color:#fff; width: 100%; max-width: 240px;" onclick="window.close()">Chiudi Scheda</button>
+          <span style="font-size: 12px; color: #71717a;">Puoi tornare all'infotainment della tua auto</span>
         </div>
       </div>
       <script>
@@ -202,6 +213,30 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         } catch(e) {}
+
+        // Automatic window close countdown
+        ${success ? `
+        (function() {
+          let seconds = 2;
+          const textEl = document.getElementById('countdown-text');
+          const barEl = document.getElementById('progress-bar');
+          
+          if (barEl) {
+            setTimeout(() => { barEl.style.width = '100%'; }, 50);
+          }
+
+          const interval = setInterval(() => {
+            seconds--;
+            if (textEl) textEl.innerText = seconds;
+            if (seconds <= 0) {
+              clearInterval(interval);
+              try {
+                window.close();
+              } catch(e) {}
+            }
+          }, 1000);
+        })();
+        ` : ''}
 
         // Broadcast token to local tabs if on same device
         try {
@@ -313,6 +348,14 @@ export default async function handler(req, res) {
         setSession(`spotify:${sessionId}`, { authenticated: false, error: 'callback_error' }, 120);
       }
       return sendCallbackPage(res, { success: false, errorType: 'technical', detailMessage: 'Parametri di autorizzazione mancanti o non validi.' });
+    }
+
+    // Flag session as scanned/authorizing immediately so infotainment UI updates in realtime
+    if (sessionId) {
+      setSession(`spotify:${sessionId}`, { status: 'scanned', authorizing: true, authenticated: false }, 180);
+    }
+    if (relayId) {
+      updateRelaySession(relayId, { status: 'scanned', authorizing: true, sessionId }).catch(() => {});
     }
 
     // Check if session was pre-registered in storage

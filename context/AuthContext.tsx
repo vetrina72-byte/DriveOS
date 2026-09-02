@@ -11,6 +11,10 @@ export interface SpotifyUser {
     display_name: string;
     images?: { url: string }[];
     id: string;
+    email?: string;
+    product?: string;
+    country?: string;
+    followers?: { total: number };
 }
 
 interface AuthState {
@@ -29,6 +33,7 @@ interface TokenData {
     access_token: string;
     expires_in: number;
     expires_at?: number;
+    refresh_token?: string;
 }
 
 interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
@@ -218,37 +223,101 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, []);
 
     const logout = useCallback(() => {
+        const sessionId = getSessionId();
+        
+        // Notify backend & cloud relay to invalidate session
+        try {
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-session-id': sessionId || '' 
+                },
+                body: JSON.stringify({ sessionId })
+            }).catch(() => {});
+        } catch (e) {}
+
+        // Clear all Spotify token storage
         localStorage.removeItem('accessToken');
         localStorage.removeItem('expiresAt');
+        localStorage.removeItem('spotify_access_token');
+        localStorage.removeItem('spotify_refresh_token');
+        localStorage.removeItem('spotify_token_expiry');
+        localStorage.removeItem('spotify_auth_broadcast');
+        localStorage.removeItem('spotify_session_id');
         localStorage.removeItem('last_context_uri');
         localStorage.removeItem('last_track_uri');
         localStorage.removeItem('last_progress_ms');
         localStorage.removeItem('last_is_playing');
-        localStorage.removeItem('cached_track_data'); // Clear cached track on logout
+        localStorage.removeItem('cached_track_data');
         localStorage.removeItem('continueListeningItems');
         localStorage.removeItem('last_optimistic_item');
+        localStorage.removeItem('spotify_last_track');
+        localStorage.removeItem('spotify_last_position');
+        localStorage.removeItem('spotify_last_context');
+        
         latestOptimisticItem.current = null;
         getPlayerInstance()?.disconnect();
+        
         setState({
-            accessToken: null, expiresAt: null, user: null, isAuthenticated: false, isLoading: false,
-            error: null, volume: 1, isMuted: false, lastVolume: 1,
+            accessToken: null, 
+            expiresAt: null, 
+            user: null, 
+            isAuthenticated: false, 
+            isLoading: false,
+            error: null, 
+            volume: 1, 
+            isMuted: false, 
+            lastVolume: 1,
         });
-        setNowPlaying(prev => ({ ...prev, source: null, spotifyState: null }));
+        
+        setNowPlaying(prev => ({ 
+            ...prev, 
+            source: null, 
+            spotifyState: null,
+            activeDevice: null 
+        }));
     }, []);
     
     const attemptRefreshAndUpdatePlayerToken = useCallback(async (): Promise<boolean> => {
         const sessionId = getSessionId(); 
-        if (!sessionId) { logout(); return false; }
+        const storedRefreshToken = localStorage.getItem('spotify_refresh_token');
+
+        if (!sessionId && !storedRefreshToken) { 
+            logout(); 
+            return false; 
+        }
+
         try {
             const res = await fetch('/api/refresh-token', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId }
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-session-id': sessionId || '' 
+                },
+                body: JSON.stringify({ 
+                    sessionId, 
+                    refreshToken: storedRefreshToken 
+                })
             });
             const data = await res.json();
             if (res.status === 200 && data.access_token) {
                 localStorage.setItem('accessToken', data.access_token);
-                localStorage.setItem('expiresAt', String(data.expires_at));
-                setState(s => ({ ...s, accessToken: data.access_token, expiresAt: data.expires_at, isAuthenticated: true }));
+                localStorage.setItem('spotify_access_token', data.access_token);
+                if (data.expires_at) {
+                    localStorage.setItem('expiresAt', String(data.expires_at));
+                    localStorage.setItem('spotify_token_expiry', String(data.expires_at));
+                }
+                if (data.refresh_token) {
+                    localStorage.setItem('spotify_refresh_token', data.refresh_token);
+                }
+                apiClient.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
+                setState(s => ({ 
+                    ...s, 
+                    accessToken: data.access_token, 
+                    expiresAt: data.expires_at || s.expiresAt, 
+                    isAuthenticated: true 
+                }));
                 return true;
             }
             if (res.status === 401 || data?.error === 'invalid_grant' || data?.error === 'premium_required') {
@@ -578,10 +647,15 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         try {
             sessionIdRef.current = getSessionId(); 
             
-            const { access_token, expires_in } = tokenData;
+            const { access_token, expires_in, refresh_token } = tokenData;
             const expiresAt = tokenData.expires_at || (Date.now() + (expires_in || 3600) * 1000);
             localStorage.setItem('accessToken', access_token);
+            localStorage.setItem('spotify_access_token', access_token);
             localStorage.setItem('expiresAt', String(expiresAt));
+            localStorage.setItem('spotify_token_expiry', String(expiresAt));
+            if (refresh_token) {
+                localStorage.setItem('spotify_refresh_token', refresh_token);
+            }
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
             // Instantly transition UI: set authenticated and provisional user immediately
