@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Account Collegato</title>
+<title>Spotify Collegato</title>
 <style>
   * {
     box-sizing: border-box;
@@ -80,9 +80,27 @@
     line-height: 1.5;
     margin: 0 0 24px;
   }
-  .btn-close {
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(29, 185, 84, 0.12);
+    color: #1DB954;
+    padding: 8px 16px;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
     background: #1DB954;
-    color: #000000;
+  }
+  .btn-close {
+    background: #2C2C2E;
+    color: #ffffff;
     border: none;
     font-size: 15px;
     font-weight: 700;
@@ -114,25 +132,26 @@
       </div>
 
       <h1>Collegamento Riuscito</h1>
+      <div class="status-pill"><span class="status-dot"></span>Infotainment Sincronizzato</div>
       <p>L'account Spotify è stato collegato con successo all'infotainment della vettura.</p>
-      <p id="close-msg" style="font-size: 13px; color: #a1a1aa; margin-top: -14px; margin-bottom: 24px;">Chiusura automatica in corso...</p>
       
-      <button class="btn-close" style="background:#2C2C2E; color:#fff;" onclick="closeWindow()">Chiudi Scheda</button>
+      <button class="btn-close" onclick="closeWindow()">Chiudi Scheda</button>
     </div>
   </div>
 
   <script>
+    // Clean authorization code from URL to prevent duplicate submissions on reload
+    try {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    } catch (e) {}
+
     function closeWindow() {
       try {
         window.close();
       } catch (e) {}
     }
-    // Attempt automatic window close gracefully after 2 seconds
-    setTimeout(() => {
-      try {
-        window.close();
-      } catch (e) {}
-    }, 2000);
   </script>
 </body>
 </html>

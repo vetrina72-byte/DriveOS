@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { getSession, setSession } from './lib/sessionStore.js';
+import { getSession, setSession, createRelaySession, updateRelaySession, getRelaySession } from './lib/sessionStore.js';
 import { ensureSpotifyToken } from './lib/spotifySessionManager.js';
 
 dotenv.config();
@@ -36,20 +36,27 @@ async function startServer() {
   }, 60 * 1000);
 
   app.post('/api/register-auth-session', async (req, res) => {
-    const { sessionId, codeVerifier, redirectUri, authUrl } = req.body || {};
+    const { sessionId, codeVerifier, redirectUri, authUrl, relayId: existingRelayId } = req.body || {};
     if (!sessionId) {
       return res.status(400).json({ error: 'Missing sessionId' });
     }
+
+    let relayId = existingRelayId || null;
+    if (!relayId) {
+      relayId = await createRelaySession(sessionId, { status: 'pending', redirectUri });
+    }
+
     const sessionData = {
       status: 'pending',
       codeVerifier,
       redirectUri,
       authUrl,
+      relayId,
       timestamp: Date.now()
     };
     authStore.set(String(sessionId), sessionData);
     setSession(`spotify:auth:${sessionId}`, sessionData, 900);
-    res.json({ ok: true });
+    res.json({ ok: true, relayId });
   });
 
   app.get('/api/spotify-qr-login', async (req, res) => {
@@ -68,7 +75,7 @@ async function startServer() {
   });
 
   function parseState(rawState: any) {
-    if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null };
+    if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null, relayId: null };
     const str = String(rawState).trim();
     
     if (str.startsWith('{') && str.endsWith('}')) {
@@ -77,7 +84,8 @@ async function startServer() {
         return { 
           sessionId: String(p.s || p.sessionId || ''), 
           codeVerifier: p.v || p.codeVerifier || null, 
-          redirectUri: p.r || p.redirectUri || null 
+          redirectUri: p.r || p.redirectUri || null,
+          relayId: p.k || p.relayId || null
         };
       } catch (e) {}
     }
@@ -89,7 +97,8 @@ async function startServer() {
         return { 
           sessionId: String(p.s || p.sessionId || ''), 
           codeVerifier: p.v || p.codeVerifier || null, 
-          redirectUri: p.r || p.redirectUri || null 
+          redirectUri: p.r || p.redirectUri || null,
+          relayId: p.k || p.relayId || null
         };
       } catch (e) {}
     }
@@ -103,23 +112,27 @@ async function startServer() {
         return { 
           sessionId: String(p.s || p.sessionId || ''), 
           codeVerifier: p.v || p.codeVerifier || null, 
-          redirectUri: p.r || p.redirectUri || null 
+          redirectUri: p.r || p.redirectUri || null,
+          relayId: p.k || p.relayId || null
         };
       }
     } catch (e) {}
 
-    return { sessionId: str, codeVerifier: null, redirectUri: null };
+    return { sessionId: str, codeVerifier: null, redirectUri: null, relayId: null };
   }
 
   app.get('/api/spotify-callback', async (req, res) => {
     const { code, state: rawState, error } = req.query;
-    const { sessionId, codeVerifier, redirectUri: redirectUriFromState } = parseState(rawState);
+    const { sessionId, codeVerifier, redirectUri: redirectUriFromState, relayId } = parseState(rawState);
 
     if (error) {
       console.error('Spotify callback error:', error);
       if (sessionId) {
         authStore.set(String(sessionId), { status: 'error', error: String(error), timestamp: Date.now() });
         setSession(`spotify:${sessionId}`, { authenticated: false, error: String(error), timestamp: Date.now() }, 3600);
+      }
+      if (relayId) {
+        await updateRelaySession(relayId, { authenticated: false, error: String(error) });
       }
       return res.sendFile(path.join(__dirname, 'callback.html'));
     }
@@ -131,6 +144,7 @@ async function startServer() {
     let storedSession = authStore.get(sid) || getSession(`spotify:auth:${sid}`);
 
     const effectiveCodeVerifier = codeVerifier || storedSession?.codeVerifier || null;
+    const effectiveRelayId = relayId || storedSession?.relayId || null;
 
     const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
@@ -214,6 +228,11 @@ async function startServer() {
 
       // Store in native session store
       setSession(`spotify:${sid}`, tokenPayload, 60 * 60 * 24 * 30);
+
+      // Sync with cloud relay for serverless
+      if (effectiveRelayId) {
+        await updateRelaySession(effectiveRelayId, tokenPayload);
+      }
       
       console.log(`[SPOTIFY CALLBACK] Successfully authenticated session: ${sid}`);
       return res.sendFile(path.join(__dirname, 'callback.html'));
@@ -221,6 +240,9 @@ async function startServer() {
     } catch (exchangeError: any) {
       console.error('Error exchanging token:', exchangeError.response ? exchangeError.response.data : exchangeError.message);
       authStore.set(sid, { status: 'error', error: 'auth_failed', timestamp: Date.now() });
+      if (effectiveRelayId) {
+        await updateRelaySession(effectiveRelayId, { authenticated: false, error: 'auth_failed' });
+      }
       return res.sendFile(path.join(__dirname, 'callback.html'));
     }
   });
@@ -231,13 +253,14 @@ async function startServer() {
     res.setHeader('Expires', '0');
     res.setHeader('Surrogate-Control', 'no-store');
 
-    const { sessionId } = req.query;
-    if (!sessionId) {
+    const { sessionId, relayId, k } = req.query as any;
+    if (!sessionId && !relayId && !k) {
       return res.status(400).json({ error: 'Session ID is required.' });
     }
 
-    const sid = String(sessionId);
-    const sessionData = authStore.get(sid);
+    const sid = String(sessionId || '');
+    const targetRelayId = relayId || k;
+    const sessionData = sid ? authStore.get(sid) : null;
 
     if (sessionData && sessionData.status === 'completed' && sessionData.tokens?.access_token) {
       return res.status(200).json({ 
@@ -257,10 +280,21 @@ async function startServer() {
     }
 
     // Check sessionStore
-    const stored = getSession(`spotify:${sid}`) || getSession(sid);
+    let stored = sid ? (getSession(`spotify:${sid}`) || getSession(sid)) : null;
+    
+    // Check cloud relay if not found locally
+    if ((!stored || !stored.access_token) && (targetRelayId || (stored as any)?.relayId)) {
+      const rid = targetRelayId || (stored as any)?.relayId;
+      const relayData = await getRelaySession(rid);
+      if (relayData && (relayData as any).access_token) {
+        stored = relayData;
+        if (sid) setSession(`spotify:${sid}`, relayData, 30 * 24 * 3600);
+      }
+    }
+
     if (stored) {
       if (stored.authenticated && stored.access_token) {
-        authStore.set(sid, { status: 'completed', tokens: stored, timestamp: Date.now() });
+        if (sid) authStore.set(sid, { status: 'completed', tokens: stored, timestamp: Date.now() });
         return res.status(200).json({
           authenticated: true,
           status: 'completed',
@@ -277,7 +311,7 @@ async function startServer() {
       }
     }
 
-    return res.status(200).json({ authenticated: false });
+    return res.status(200).json({ authenticated: false, status: 'pending' });
   });
   
   app.post('/api/refresh-token', async (req, res) => {

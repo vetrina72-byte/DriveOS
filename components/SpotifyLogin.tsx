@@ -102,9 +102,9 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
     );
 };
 
-function encodeCompositeState(sessionId: string, codeVerifier: string, redirectUri: string): string {
+function encodeCompositeState(sessionId: string, codeVerifier: string, redirectUri: string, relayId?: string | null): string {
   try {
-    const payload = JSON.stringify({ s: sessionId, v: codeVerifier, r: redirectUri });
+    const payload = JSON.stringify({ s: sessionId, v: codeVerifier, r: redirectUri, k: relayId || undefined });
     return encodeURIComponent(payload);
   } catch (e) {
     return sessionId;
@@ -117,6 +117,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [directAuthUrl, setDirectAuthUrl] = useState('');
   const sidRef = useRef<string>(getSessionId());
+  const relayIdRef = useRef<string | null>(null);
   const pollTimer = useRef<number | null>(null);
 
   const startLogin = useCallback(async () => {
@@ -125,8 +126,6 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     
     const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     
-    // Per risolvere il "redirect_uri mismatch", dobbiamo usare l'URL ufficiale registrato in Spotify.
-    // In produzione (o nell'anteprima) forziamo l'uso di Vercel se non siamo su localhost.
     const isLocalhost = typeof window !== 'undefined' && (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'));
     const backendUrl = isLocalhost 
         ? 'http://localhost:3000' 
@@ -138,70 +137,111 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     // Generate PKCE values
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await generateCodeChallenge(codeVerifier);
-    const compositeState = encodeCompositeState(sidRef.current, codeVerifier, redirectUri);
 
-    // Register session on backend (as backup and for in-memory/Redis caches)
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(compositeState)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
-
+    // 1. Try to register session on backend and obtain cloud relay ID for cross-instance sync
+    let relayId = relayIdRef.current;
     try {
-      await fetch(`${backendUrl}/api/register-auth-session`, {
+      const regRes = await fetch(`${backendUrl}/api/register-auth-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: sidRef.current,
           codeVerifier,
-          redirectUri,
-          authUrl
+          redirectUri
         })
       });
+      if (regRes.ok) {
+        const regData = await regRes.json();
+        if (regData.relayId) {
+          relayId = regData.relayId;
+          relayIdRef.current = relayId;
+        }
+      }
     } catch (err) {
       console.warn('[SpotifyLogin] Registration notice:', err);
     }
 
+    // 2. Client-side fallback to create zero-config relay object if backend couldn't create one
+    if (!relayId) {
+      try {
+        const directRelayRes = await fetch('https://api.restful-api.dev/objects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: `driveos_${sidRef.current}`, data: { sessionId: sidRef.current, status: 'pending' } })
+        });
+        if (directRelayRes.ok) {
+          const directRelayData = await directRelayRes.json();
+          if (directRelayData.id) {
+            relayId = directRelayData.id;
+            relayIdRef.current = relayId;
+          }
+        }
+      } catch (relayErr) {}
+    }
+
+    const compositeState = encodeCompositeState(sidRef.current, codeVerifier, redirectUri, relayId);
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(compositeState)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
+
     setDirectAuthUrl(authUrl);
-    
-    // Mostriamo il QR code originale (senza passare da servizi esterni di abbreviazione)
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
+    // 3. Fast polling loop combining backend endpoint and direct relay fallback
     pollTimer.current = window.setInterval(async () => {
       try {
-        // Polling diretto al backend corretto (Vercel o localhost) per garantire la sincronizzazione
-        const res = await fetch(`${backendUrl}/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}&_t=${Date.now()}`, {
-          cache: 'no-store'
-        });
-
+        const activeRelay = relayIdRef.current || '';
+        const pollUrl = `${backendUrl}/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}${activeRelay ? `&relayId=${encodeURIComponent(activeRelay)}` : ''}&_t=${Date.now()}`;
         
-        if (!res.ok) {
-           return;
+        const res = await fetch(pollUrl, { cache: 'no-store' });
+        
+        if (res.ok) {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await res.json();
+            const token = data.access_token || data.tokens?.access_token;
+            if (token && (data.authenticated || data.status === 'completed')) {
+              if (pollTimer.current) clearInterval(pollTimer.current);
+              setUiState('LOADING');
+              
+              setTimeout(() => {
+                login({
+                  access_token: token,
+                  expires_in: data.expires_in || data.tokens?.expires_in || 3600,
+                  expires_at: data.expires_at || data.tokens?.expires_at
+                });
+              }, 300);
+              return;
+            }
+          }
         }
-        
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            return;
-        }
 
-        const data = await res.json();
-        
-        const token = data.access_token || data.tokens?.access_token;
-        if (token && (data.authenticated || data.status === 'completed')) {
-          clearInterval(pollTimer.current!);
-          setUiState('LOADING');
-          
-          setTimeout(() => {
-              login({
-                access_token: token,
-                expires_in: data.expires_in || data.tokens?.expires_in || 3600,
-                expires_at: data.expires_at || data.tokens?.expires_at
-              });
-          }, 400);
-        } else if (data.error && data.error !== 'pending') {
-          console.warn(`[SPOTIFY LOGIN] Status response:`, data.error);
+        // Direct client-side relay check fallback
+        if (activeRelay) {
+          try {
+            const directRelayCheck = await fetch(`https://api.restful-api.dev/objects/${activeRelay}`, { cache: 'no-store' });
+            if (directRelayCheck.ok) {
+              const rJson = await directRelayCheck.json();
+              const rData = rJson.data;
+              if (rData && rData.authenticated && rData.access_token) {
+                if (pollTimer.current) clearInterval(pollTimer.current);
+                setUiState('LOADING');
+                
+                setTimeout(() => {
+                  login({
+                    access_token: rData.access_token,
+                    expires_in: rData.expires_in || 3600,
+                    expires_at: rData.expires_at || (Date.now() + 3600 * 1000)
+                  });
+                }, 300);
+                return;
+              }
+            }
+          } catch (dErr) {}
         }
       } catch (e) {
-        // Silently ignore network/polling errors during restart
+        // Silently ignore network hiccup during polling
       }
-    }, 1200);
+    }, 1100);
   }, [login, clearError]);
 
   // Instant cross-tab & storage listeners
@@ -328,15 +368,23 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
               <p className={`text-base leading-snug font-medium ${theme.subtitle}`}>
                 Inquadra il codice con lo smartphone per collegare il tuo account <strong>Spotify</strong>.
               </p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="w-2 h-2 rounded-full bg-[#1DB954] animate-ping inline-block" />
+                <span className={`text-xs font-semibold ${theme.subtitle}`}>In attesa di scansione...</span>
+              </div>
+              
               {directAuthUrl && (
-                <a
-                  href={directAuthUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 text-xs text-[#1DB954] hover:underline font-semibold flex items-center gap-1"
-                >
-                  Oppure accedi direttamente su questo browser &rarr;
-                </a>
+                <div className="mt-2 flex flex-col gap-2">
+                  <a
+                    href={directAuthUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-[#1DB954] text-xs font-bold transition-all border border-[#1DB954]/30"
+                  >
+                    <FaSpotify className="w-3.5 h-3.5" />
+                    Accedi su questo schermo
+                  </a>
+                </div>
               )}
             </div>
           </motion.div>

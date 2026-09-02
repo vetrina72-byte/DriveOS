@@ -1,5 +1,5 @@
 // pages/api/spotify-callback.js
-import { getSession, setSession } from '../lib/sessionStore.js';
+import { getSession, setSession, updateRelaySession, getRelaySession } from '../lib/sessionStore.js';
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const USER_URL = 'https://api.spotify.com/v1/me';
@@ -9,14 +9,14 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
   let displayMessage = '';
   
   if (success) {
-    title = 'Collegato!';
-    displayMessage = 'Il tuo account Spotify è stato collegato correttamente all\'infotainment.';
+    title = 'Spotify Collegato!';
+    displayMessage = 'L\'account Spotify è stato collegato con successo all\'infotainment della tua auto.';
   } else if (errorType === 'access_denied') {
     title = 'Accesso Annullato';
     displayMessage = 'Hai annullato la richiesta di autorizzazione su Spotify.';
   } else if (errorType === 'session_expired') {
     title = 'Sessione Scaduta';
-    displayMessage = 'Il codice di autorizzazione è scaduto o è già stato utilizzato. Inquadra nuovamente il QR code sull\'auto.';
+    displayMessage = 'Il codice di autorizzazione è scaduto. Se l\'infotainment non è ancora connesso, inquadra nuovamente il QR code sullo schermo dell\'auto.';
   } else {
     title = 'Errore di Collegamento';
     displayMessage = detailMessage || 'Non è stato possibile completare il collegamento. Assicurati che l\'applicazione sia configurata correttamente e riprova.';
@@ -146,7 +146,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
         font-size: 15px;
         font-weight: 700;
         border-radius: 9999px;
-        padding: 12px 28px;
+        padding: 14px 32px;
         cursor: pointer;
         transition: transform 0.15s ease, opacity 0.15s ease;
         text-decoration: none;
@@ -156,6 +156,26 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
       .btn:active {
         transform: scale(0.96);
         opacity: 0.9;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(29, 185, 84, 0.12);
+        color: #1DB954;
+        padding: 8px 16px;
+        border-radius: 9999px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 24px;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #1DB954;
       }
 
       @keyframes scaleIn { to { opacity: 1; transform: scale(1); } }
@@ -169,13 +189,21 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
           ${iconSvg}
         </div>
         <h1>${title}</h1>
+        ${success ? `<div class="status-pill"><span class="status-dot"></span>Infotainment Sincronizzato</div>` : ''}
         <p>${displayMessage}</p>
-        <p id="close-msg" style="font-size: 13px; color: var(--text-secondary); margin-top: -10px; margin-bottom: 24px;">Chiusura automatica in corso...</p>
         <div style="display:flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
           <button class="btn" style="background:#2C2C2E; color:#fff;" onclick="window.close()">Chiudi Scheda</button>
         </div>
       </div>
       <script>
+        // Clean URL to prevent re-submission of the authorization code on reload
+        try {
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch(e) {}
+
+        // Broadcast token to local tabs if on same device
         try {
           const t = ${tokenPayloadJs};
           if (t && t.access_token) {
@@ -194,7 +222,6 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
             } catch(e) {}
           }
         } catch(e) {}
-        ${success ? 'setTimeout(() => { try { window.close(); } catch(e){} }, 2000);' : ''}
       </script>
     </body>
     </html>`;
@@ -203,7 +230,7 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
 };
 
 function parseState(rawState) {
-  if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null };
+  if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null, relayId: null };
   const str = String(rawState).trim();
   
   // 1. Direct JSON
@@ -213,7 +240,8 @@ function parseState(rawState) {
       return { 
         sessionId: String(p.s || p.sessionId || ''), 
         codeVerifier: p.v || p.codeVerifier || null, 
-        redirectUri: p.r || p.redirectUri || null 
+        redirectUri: p.r || p.redirectUri || null,
+        relayId: p.k || p.relayId || null
       };
     } catch (e) {}
   }
@@ -226,7 +254,8 @@ function parseState(rawState) {
       return { 
         sessionId: String(p.s || p.sessionId || ''), 
         codeVerifier: p.v || p.codeVerifier || null, 
-        redirectUri: p.r || p.redirectUri || null 
+        redirectUri: p.r || p.redirectUri || null,
+        relayId: p.k || p.relayId || null
       };
     } catch (e) {}
   }
@@ -241,27 +270,45 @@ function parseState(rawState) {
       return { 
         sessionId: String(p.s || p.sessionId || ''), 
         codeVerifier: p.v || p.codeVerifier || null, 
-        redirectUri: p.r || p.redirectUri || null 
+        redirectUri: p.r || p.redirectUri || null,
+        relayId: p.k || p.relayId || null
       };
     }
   } catch (e) {}
 
-  return { sessionId: str, codeVerifier: null, redirectUri: null };
+  return { sessionId: str, codeVerifier: null, redirectUri: null, relayId: null };
 }
 
 export default async function handler(req, res) {
   try {
     const { code, state: rawState, error } = req.query || {};
-    const { sessionId, codeVerifier, redirectUri: redirectUriFromState } = parseState(rawState);
+    const { sessionId, codeVerifier, redirectUri: redirectUriFromState, relayId } = parseState(rawState);
 
     if (error === 'access_denied') {
       if (sessionId) {
         setSession(`spotify:${sessionId}`, { authenticated: false, error: 'access_denied' }, 120);
       }
+      if (relayId) {
+        await updateRelaySession(relayId, { authenticated: false, error: 'access_denied' });
+      }
       return sendCallbackPage(res, { success: false, errorType: 'access_denied' });
     }
 
     if (error || !code || !sessionId) {
+      // Check if session was already completed (e.g. on page reload)
+      if (sessionId) {
+        const existingSession = getSession(`spotify:${sessionId}`) || getSession(sessionId);
+        if (existingSession && existingSession.access_token) {
+          return sendCallbackPage(res, { success: true, tokenData: existingSession, sessionId });
+        }
+      }
+      if (relayId) {
+        const relayData = await getRelaySession(relayId);
+        if (relayData && relayData.access_token) {
+          return sendCallbackPage(res, { success: true, tokenData: relayData, sessionId });
+        }
+      }
+
       if (sessionId) {
         setSession(`spotify:${sessionId}`, { authenticated: false, error: 'callback_error' }, 120);
       }
@@ -271,6 +318,7 @@ export default async function handler(req, res) {
     // Check if session was pre-registered in storage
     const storedAuth = getSession(`spotify:auth:${sessionId}`);
     const effectiveCodeVerifier = codeVerifier || storedAuth?.codeVerifier || null;
+    const effectiveRelayId = relayId || storedAuth?.relayId || null;
 
     const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '';
@@ -348,6 +396,14 @@ export default async function handler(req, res) {
       if (!tokenRes.ok) {
         console.error('[SPOTIFY CALLBACK] Token Exchange Error:', tokenData);
         
+        // If already connected (e.g. previous token exchange succeeded in first request before reload)
+        if (effectiveRelayId) {
+          const relayData = await getRelaySession(effectiveRelayId);
+          if (relayData && relayData.access_token) {
+            return sendCallbackPage(res, { success: true, tokenData: relayData, sessionId });
+          }
+        }
+
         if (sessionId) {
           setSession(`spotify:${sessionId}`, { authenticated: false, error: tokenData.error || 'token_exchange_failed' }, 120);
         }
@@ -364,22 +420,27 @@ export default async function handler(req, res) {
         const userRes = await fetch(USER_URL, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
         if (userRes.ok) {
           const userData = await userRes.json();
-          console.log(`[SPOTIFY CALLBACK] User connected: ${userData?.display_name || userData?.id}, product: ${userData?.product}`);
+          console.log(`[SPOTIFY CALLBACK] User connected: ${userData?.display_name || userData?.id}`);
         }
-      } catch (err) {
-        console.warn(`[SPOTIFY CALLBACK] Soft warning: User /me check notice.`);
-      }
+      } catch (err) {}
       
       const payload = {
         authenticated: true,
+        sessionId,
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
+        expires_in: tokenData.expires_in || 3600,
         expires_at: Date.now() + (tokenData.expires_in || 3600) * 1000,
       };
 
-      // Store in native session store (valid for 30 days)
+      // 1. Store in local memory store
       setSession(`spotify:${sessionId}`, payload, 30 * 24 * 3600);
-      console.log(`[SPOTIFY CALLBACK] Token saved in sessionStore for session '${sessionId}'`);
+      
+      // 2. Synchronize across Vercel Serverless instances via cloud relay
+      if (effectiveRelayId) {
+        await updateRelaySession(effectiveRelayId, payload);
+        console.log(`[SPOTIFY CALLBACK] Token synced to relay '${effectiveRelayId}' for session '${sessionId}'`);
+      }
 
       return sendCallbackPage(res, { success: true, tokenData, sessionId });
 
