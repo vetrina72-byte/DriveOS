@@ -119,19 +119,51 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const sidRef = useRef<string>(getSessionId());
   const relayIdRef = useRef<string | null>(null);
   const pollTimer = useRef<number | null>(null);
+  const isResolvedRef = useRef<boolean>(false);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }, []);
+
+  const handleSuccessfulAuth = useCallback((token: string, expiresIn?: number, expiresAt?: number, refreshToken?: string) => {
+    if (isResolvedRef.current) return;
+    isResolvedRef.current = true;
+    stopPolling();
+
+    setUiState('LOADING');
+
+    const expAt = expiresAt || (Date.now() + (expiresIn || 3600) * 1000);
+    try {
+      localStorage.setItem('spotify_access_token', token);
+      localStorage.setItem('spotify_token_expiry', String(expAt));
+      if (refreshToken) localStorage.setItem('spotify_refresh_token', refreshToken);
+      localStorage.setItem('spotify_auth_broadcast', JSON.stringify({ access_token: token, expires_in: expiresIn || 3600, expires_at: expAt }));
+    } catch (e) {}
+
+    // Instantly transition to authenticated dashboard
+    login({
+      access_token: token,
+      expires_in: expiresIn || 3600,
+      expires_at: expAt
+    });
+  }, [login, stopPolling]);
 
   const startLogin = useCallback(async () => {
-    if (pollTimer.current) clearInterval(pollTimer.current);
+    stopPolling();
+    isResolvedRef.current = false;
     clearError();
     
     const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     
-    const isLocalhost = typeof window !== 'undefined' && (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'));
-    const backendUrl = isLocalhost 
-        ? 'http://localhost:3000' 
-        : (import.meta.env.VITE_REDIRECT_URI ? new URL(import.meta.env.VITE_REDIRECT_URI).origin : 'https://drive-os-chi.vercel.app');
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const isLocalhost = currentOrigin.includes('localhost') || currentOrigin.includes('127.0.0.1');
+    const configuredBackend = import.meta.env.VITE_REDIRECT_URI ? new URL(import.meta.env.VITE_REDIRECT_URI).origin : '';
+    const backendUrl = isLocalhost ? 'http://localhost:3000' : (configuredBackend || currentOrigin || 'https://drive-os-chi.vercel.app');
         
-    const redirectUri = `${backendUrl}/api/spotify-callback`;
+    const redirectUri = import.meta.env.VITE_REDIRECT_URI || `${backendUrl}/api/spotify-callback`;
     const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
     
     // Generate PKCE values
@@ -141,7 +173,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     // 1. Try to register session on backend and obtain cloud relay ID for cross-instance sync
     let relayId = relayIdRef.current;
     try {
-      const regRes = await fetch(`${backendUrl}/api/register-auth-session`, {
+      // Register on local endpoint first
+      const regRes = await fetch('/api/register-auth-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -149,12 +182,34 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           codeVerifier,
           redirectUri
         })
-      });
-      if (regRes.ok) {
+      }).catch(() => null);
+
+      if (regRes && regRes.ok) {
         const regData = await regRes.json();
         if (regData.relayId) {
           relayId = regData.relayId;
           relayIdRef.current = relayId;
+        }
+      }
+
+      // If backendUrl differs and we still don't have relayId, try backendUrl
+      if (!relayId && backendUrl && backendUrl !== currentOrigin) {
+        const remoteRegRes = await fetch(`${backendUrl}/api/register-auth-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: sidRef.current,
+            codeVerifier,
+            redirectUri
+          })
+        }).catch(() => null);
+
+        if (remoteRegRes && remoteRegRes.ok) {
+          const remoteData = await remoteRegRes.json();
+          if (remoteData.relayId) {
+            relayId = remoteData.relayId;
+            relayIdRef.current = relayId;
+          }
         }
       }
     } catch (err) {
@@ -186,87 +241,88 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
-    // 3. Fast polling loop combining backend endpoint and direct relay fallback
+    // 3. Ultra-responsive polling loop combining local relative endpoint, backend endpoint, and direct cloud relay
     pollTimer.current = window.setInterval(async () => {
+      if (isResolvedRef.current) {
+        stopPolling();
+        return;
+      }
+
+      const activeRelay = relayIdRef.current || '';
+      const sid = sidRef.current;
+      const queryStr = `sessionId=${encodeURIComponent(sid)}${activeRelay ? `&relayId=${encodeURIComponent(activeRelay)}` : ''}&_t=${Date.now()}`;
+
+      // A. Check local/relative API endpoint
       try {
-        const activeRelay = relayIdRef.current || '';
-        const pollUrl = `${backendUrl}/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}${activeRelay ? `&relayId=${encodeURIComponent(activeRelay)}` : ''}&_t=${Date.now()}`;
-        
-        const res = await fetch(pollUrl, { cache: 'no-store' });
-        
+        const res = await fetch(`/api/check-auth-status?${queryStr}`, { cache: 'no-store' });
         if (res.ok) {
-          const contentType = res.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const data = await res.json();
-            const token = data.access_token || data.tokens?.access_token;
+          const data = await res.json().catch(() => null);
+          const token = data?.access_token || data?.tokens?.access_token;
+          if (token && (data.authenticated || data.status === 'completed')) {
+            handleSuccessfulAuth(
+              token, 
+              data.expires_in || data.tokens?.expires_in, 
+              data.expires_at || data.tokens?.expires_at,
+              data.refresh_token || data.tokens?.refresh_token
+            );
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // B. If remote backend is configured and different from local, check remote backend
+      if (backendUrl && backendUrl !== currentOrigin) {
+        try {
+          const remoteRes = await fetch(`${backendUrl}/api/check-auth-status?${queryStr}`, { cache: 'no-store' });
+          if (remoteRes.ok) {
+            const data = await remoteRes.json().catch(() => null);
+            const token = data?.access_token || data?.tokens?.access_token;
             if (token && (data.authenticated || data.status === 'completed')) {
-              if (pollTimer.current) clearInterval(pollTimer.current);
-              setUiState('LOADING');
-              
-              setTimeout(() => {
-                login({
-                  access_token: token,
-                  expires_in: data.expires_in || data.tokens?.expires_in || 3600,
-                  expires_at: data.expires_at || data.tokens?.expires_at
-                });
-              }, 300);
+              handleSuccessfulAuth(
+                token, 
+                data.expires_in || data.tokens?.expires_in, 
+                data.expires_at || data.tokens?.expires_at,
+                data.refresh_token || data.tokens?.refresh_token
+              );
               return;
             }
           }
-        }
-
-        // Direct client-side relay check fallback
-        if (activeRelay) {
-          try {
-            const directRelayCheck = await fetch(`https://api.restful-api.dev/objects/${activeRelay}`, { cache: 'no-store' });
-            if (directRelayCheck.ok) {
-              const rJson = await directRelayCheck.json();
-              const rData = rJson.data;
-              if (rData && rData.authenticated && rData.access_token) {
-                if (pollTimer.current) clearInterval(pollTimer.current);
-                setUiState('LOADING');
-                
-                setTimeout(() => {
-                  login({
-                    access_token: rData.access_token,
-                    expires_in: rData.expires_in || 3600,
-                    expires_at: rData.expires_at || (Date.now() + 3600 * 1000)
-                  });
-                }, 300);
-                return;
-              }
-            }
-          } catch (dErr) {}
-        }
-      } catch (e) {
-        // Silently ignore network hiccup during polling
+        } catch (e) {}
       }
-    }, 1100);
-  }, [login, clearError]);
+
+      // C. Direct client-side cloud relay check fallback (guarantees cross-instance sync on Vercel)
+      if (activeRelay) {
+        try {
+          const directRelayCheck = await fetch(`https://api.restful-api.dev/objects/${activeRelay}`, { cache: 'no-store' });
+          if (directRelayCheck.ok) {
+            const rJson = await directRelayCheck.json().catch(() => null);
+            const rData = rJson?.data;
+            if (rData && rData.authenticated && rData.access_token) {
+              handleSuccessfulAuth(
+                rData.access_token, 
+                rData.expires_in, 
+                rData.expires_at,
+                rData.refresh_token
+              );
+              return;
+            }
+          }
+        } catch (dErr) {}
+      }
+    }, 1000);
+  }, [clearError, handleSuccessfulAuth, stopPolling]);
 
   // Instant cross-tab & storage listeners
   useEffect(() => {
-    const handleAuthData = (token: string, expiresIn?: number, expiresAt?: number) => {
-      if (pollTimer.current) clearInterval(pollTimer.current);
-      setUiState('LOADING');
-      setTimeout(() => {
-        login({
-          access_token: token,
-          expires_in: expiresIn || 3600,
-          expires_at: expiresAt || (Date.now() + 3600 * 1000)
-        });
-      }, 300);
-    };
-
     // 1. Storage Event listener
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'spotify_access_token' && e.newValue) {
-        handleAuthData(e.newValue);
+        handleSuccessfulAuth(e.newValue);
       } else if (e.key === 'spotify_auth_broadcast' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (parsed.access_token) {
-            handleAuthData(parsed.access_token, parsed.expires_in, parsed.expires_at);
+            handleSuccessfulAuth(parsed.access_token, parsed.expires_in, parsed.expires_at, parsed.refresh_token);
           }
         } catch (err) {}
       }
@@ -279,7 +335,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
       channel = new BroadcastChannel('driveos_spotify_auth');
       channel.onmessage = (evt) => {
         if (evt.data?.type === 'AUTH_SUCCESS' && evt.data?.access_token) {
-          handleAuthData(evt.data.access_token, evt.data.expires_in, evt.data.expires_at);
+          handleSuccessfulAuth(evt.data.access_token, evt.data.expires_in, evt.data.expires_at, evt.data.refresh_token);
         }
       };
     } catch(e) {}
@@ -287,7 +343,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     // 3. PostMessage listener
     const onMessage = (evt: MessageEvent) => {
       if (evt.data?.type === 'SPOTIFY_AUTH_SUCCESS' && evt.data?.access_token) {
-        handleAuthData(evt.data.access_token, evt.data.expires_in, evt.data.expires_at);
+        handleSuccessfulAuth(evt.data.access_token, evt.data.expires_in, evt.data.expires_at, evt.data.refresh_token);
       }
     };
     window.addEventListener('message', onMessage);
@@ -296,7 +352,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     const existingToken = localStorage.getItem('spotify_access_token');
     const existingExpiry = localStorage.getItem('spotify_token_expiry');
     if (existingToken && existingExpiry && Number(existingExpiry) > Date.now()) {
-      handleAuthData(existingToken, 3600, Number(existingExpiry));
+      handleSuccessfulAuth(existingToken, 3600, Number(existingExpiry));
     }
 
     return () => {
@@ -306,17 +362,19 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         try { channel.close(); } catch(e) {}
       }
     };
-  }, [login]);
+  }, [handleSuccessfulAuth]);
 
   useEffect(() => {
     startLogin();
-    return () => { if (pollTimer.current) clearInterval(pollTimer.current); };
-  }, [startLogin]);
+    return () => { stopPolling(); };
+  }, [startLogin, stopPolling]);
 
   const handleRetry = () => {
     const newSid = generateUUID();
     localStorage.setItem('spotify_session_id', newSid);
     sidRef.current = newSid;
+    relayIdRef.current = null;
+    isResolvedRef.current = false;
     
     setUiState('IDLE');
     setTimeout(startLogin, 100);
@@ -324,7 +382,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
 
   const theme = {
     card: isNight 
-        ? 'bg-[#1C1C1E] border border-white/5 shadow-2xl' 
+        ? 'bg-[#1C1C1E] border border-white/10 shadow-2xl' 
         : 'bg-white border border-black/5 shadow-[0_12px_40px_rgba(0,0,0,0.12)]', 
     
     title: isNight ? 'text-white' : 'text-black',
@@ -347,34 +405,37 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             initial={{ opacity: 0, scale: 0.96, y: 10 }} 
             animate={{ opacity: 1, scale: 1, y: 0 }} 
             exit={{ opacity: 0, scale: 0.96, y: -10 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className={`flex items-center gap-12 p-12 rounded-[3rem] ${theme.card}`}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className={`flex items-center gap-10 p-10 md:p-12 rounded-[2.5rem] ${theme.card} max-w-2xl w-full`}
           >
             <div className="p-4 bg-white rounded-[1.75rem] shadow-sm border border-zinc-100 overflow-hidden flex-shrink-0">
               {qrCodeUrl ? (
-                <img src={qrCodeUrl} alt="QR" className="w-52 h-52 mix-blend-multiply block" />
+                <img src={qrCodeUrl} alt="QR Spotify" className="w-48 h-48 md:w-52 md:h-52 mix-blend-multiply block" />
               ) : (
-                <div className="w-52 h-52 flex items-center justify-center">
+                <div className="w-48 h-48 md:w-52 md:h-52 flex items-center justify-center">
                   <div className={`w-8 h-8 border-2 rounded-full animate-spin ${theme.spinner}`} />
                 </div>
               )}
             </div>
             
-            <div className="max-w-xs flex flex-col justify-center gap-4">
+            <div className="flex-grow flex flex-col justify-center gap-4">
               <div className="flex items-center gap-3">
                 <FaSpotify className="w-10 h-10 text-[#1DB954]" />
-                <h2 className={`text-3xl font-bold tracking-tight ${theme.title}`}>Accedi</h2>
+                <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${theme.title}`}>Connetti Spotify</h2>
               </div>
-              <p className={`text-base leading-snug font-medium ${theme.subtitle}`}>
-                Inquadra il codice con lo smartphone per collegare il tuo account <strong>Spotify</strong>.
+              
+              <p className={`text-sm md:text-base leading-snug font-medium ${theme.subtitle}`}>
+                Inquadra il codice con la fotocamera del tuo smartphone per collegare il tuo account.
               </p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="w-2 h-2 rounded-full bg-[#1DB954] animate-ping inline-block" />
+
+              {/* Enhanced status indicator */}
+              <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-white/5 border border-white/10 w-fit">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#1DB954] shadow-[0_0_8px_#1DB954]" />
                 <span className={`text-xs font-semibold ${theme.subtitle}`}>In attesa di scansione...</span>
               </div>
               
               {directAuthUrl && (
-                <div className="mt-2 flex flex-col gap-2">
+                <div className="mt-1 flex flex-col gap-2">
                   <a
                     href={directAuthUrl}
                     target="_blank"
@@ -443,16 +504,25 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             key="load" 
             initial={{ opacity: 0, scale: 0.95 }} 
             animate={{ opacity: 1, scale: 1 }} 
-            className={`flex flex-col items-center justify-center p-10 rounded-[2.5rem] min-w-[17.5rem] aspect-square ${theme.card}`}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className={`flex flex-col items-center justify-center p-12 rounded-[2.5rem] max-w-md w-full text-center ${theme.card}`}
           >
-            <FeedbackIcon type="success" isNight={isNight} />
-            <div className="flex flex-col items-center gap-3 mt-2">
-                <h2 className={`text-xl font-bold tracking-tight ${theme.title}`}>Collegato</h2>
-                <div className="flex items-center gap-2.5">
-                    <div className={`w-5 h-5 border-[0.15625rem] rounded-full animate-spin ${theme.spinner}`} />
-                    <p className={`text-base font-medium ${theme.subtitle}`}>Caricamento...</p>
-                </div>
+            <div className="relative mb-6">
+              <div className="w-16 h-16 rounded-full bg-[#1DB954]/20 flex items-center justify-center animate-pulse">
+                <FaSpotify className="w-10 h-10 text-[#1DB954]" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#1DB954] flex items-center justify-center shadow-md">
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
             </div>
+
+            <h2 className={`text-xl md:text-2xl font-bold tracking-tight mb-2 ${theme.title}`}>
+              Sincronizzazione account in corso...
+            </h2>
+            <p className={`text-sm md:text-base font-medium ${theme.subtitle} max-w-xs`}>
+              Accesso completato dallo smartphone. Caricamento del tuo profilo Spotify...
+            </p>
           </motion.div>
         )}
 

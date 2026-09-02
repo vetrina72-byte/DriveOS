@@ -573,7 +573,6 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [fetchUserInfo, logout, attemptRefreshAndUpdatePlayerToken]);
 
     const login = useCallback(async (tokenData?: TokenData | null, authError?: string) => {
-        setState(s => ({ ...s, isLoading: true, error: null }));
         if (authError) { setState(s => ({...s, error: authError, isLoading: false})); return; }
         if (!tokenData?.access_token) { setState(s => ({...s, error: 'Token missing.', isLoading: false})); return; }
         try {
@@ -584,14 +583,28 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             localStorage.setItem('accessToken', access_token);
             localStorage.setItem('expiresAt', String(expiresAt));
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-            let userData = await fetchUserInfo(access_token);
-            if (!userData) {
-                // Graceful fallback to avoid locking user out
-                console.warn("[AuthContext] Setting fallback user profile after token grant");
-                userData = { id: 'spotify_user', display_name: 'Spotify User', product: 'premium' };
-            }
-            setState(s => ({ ...s, accessToken: access_token, expiresAt, user: userData, isAuthenticated: true, isLoading: false, error: null }));
+
+            // Instantly transition UI: set authenticated and provisional user immediately
+            const initialUser = { id: 'spotify_user', display_name: 'Spotify User', product: 'premium' };
+            setState(s => ({ 
+                ...s, 
+                accessToken: access_token, 
+                expiresAt, 
+                user: s.user || initialUser, 
+                isAuthenticated: true, 
+                isLoading: false, 
+                error: null 
+            }));
             setHasFetchedHomeContent(false);
+
+            // Fetch complete user profile asynchronously in the background
+            fetchUserInfo(access_token).then(userData => {
+                if (userData) {
+                    setState(s => ({ ...s, user: userData }));
+                }
+            }).catch(err => {
+                console.warn('[AuthContext] Background fetchUserInfo warning:', err);
+            });
         } catch (err) { 
             console.error('[AuthContext] Login error:', err);
             logout(); 
