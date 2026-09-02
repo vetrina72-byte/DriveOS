@@ -1227,8 +1227,8 @@ function EnvironmentController({
   const targetSky = useRef(new THREE.Color()).current;
   const targetFloor = useRef(new THREE.Color()).current;
   const currentEnvColor = useRef(new THREE.Color("#ffffff")).current;
-  const currentFloorColor = useRef(new THREE.Color("#050608")).current;
-  const nightFloorColor = useRef(new THREE.Color("#030406")).current;
+  const currentFloorColor = useRef(new THREE.Color("#050505")).current;
+  const nightFloorColor = useRef(new THREE.Color("#040404")).current;
 
   // Default Day Values
   const dayAmbientIntensity = 0.5;
@@ -1239,7 +1239,7 @@ function EnvironmentController({
   useEffect(() => {
     // Sincronizziamo lo sfondo della scena dinamicamente in useFrame per nascondere i bordi del piano e garantire l'effetto di spazio infinito.
     // Inizializziamo subito scene.background con il colore corretto per evitare flash o ritardi al caricamento
-    scene.background = new THREE.Color(isNight ? "#030406" : "#ffffff");
+    scene.background = new THREE.Color(isNight ? "#040404" : "#ffffff");
   }, [scene, isNight]);
 
   const getWeatherKey = useCallback((condition: string): string => {

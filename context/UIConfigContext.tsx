@@ -75,7 +75,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [spotLightIntensity, setSpotLightIntensity] = useState(1.0);
   const [spotLightAngle, setSpotLightAngle] = useState(0.6);
   const [spotLightPenumbra, setSpotLightPenumbra] = useState(0.5);
-  const [spotLightTemperature, setSpotLightTemperature] = useState(6500);
+  const [spotLightTemperature, setSpotLightTemperature] = useState(5500);
   const [carReflectionOffsetY, setCarReflectionOffsetY] = useState(0.0);
   const [carReflectionOpacity, setCarReflectionOpacity] = useState(1.08);
   const [carReflectionRoughness, setCarReflectionRoughness] = useState(0.00);

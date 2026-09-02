@@ -124,11 +124,15 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     clearError();
     
     const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
-    // Use the actual current browser origin dynamically to guarantee it matches the current domain
-    const currentOrigin = typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost:5173')
-      ? window.location.origin
-      : (import.meta.env.VITE_REDIRECT_URI ? new URL(import.meta.env.VITE_REDIRECT_URI).origin : 'https://drive-os-chi.vercel.app');
-    const redirectUri = `${currentOrigin}/api/spotify-callback`;
+    
+    // Per risolvere il "redirect_uri mismatch", dobbiamo usare l'URL ufficiale registrato in Spotify.
+    // In produzione (o nell'anteprima) forziamo l'uso di Vercel se non siamo su localhost.
+    const isLocalhost = typeof window !== 'undefined' && (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'));
+    const backendUrl = isLocalhost 
+        ? 'http://localhost:3000' 
+        : (import.meta.env.VITE_REDIRECT_URI ? new URL(import.meta.env.VITE_REDIRECT_URI).origin : 'https://drive-os-chi.vercel.app');
+        
+    const redirectUri = `${backendUrl}/api/spotify-callback`;
     const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
     
     // Generate PKCE values
@@ -140,7 +144,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(compositeState)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
 
     try {
-      await fetch('/api/register-auth-session', {
+      await fetch(`${backendUrl}/api/register-auth-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -156,27 +160,17 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
 
     setDirectAuthUrl(authUrl);
     
-    // Genera un URL più corto usando TinyURL (per rendere il QR meno denso e facilissimo da scansionare).
-    // Se fallisce per qualsiasi motivo, usa l'URL completo come fallback sicuro.
-    try {
-      const tinyRes = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(authUrl)}`);
-      if (tinyRes.ok) {
-        const shortUrl = await tinyRes.text();
-        setQrCodeUrl(generateQrUrl(shortUrl));
-      } else {
-        setQrCodeUrl(generateQrUrl(authUrl));
-      }
-    } catch (e) {
-      setQrCodeUrl(generateQrUrl(authUrl));
-    }
-
+    // Mostriamo il QR code originale (senza passare da servizi esterni di abbreviazione)
+    setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
     pollTimer.current = window.setInterval(async () => {
       try {
-        const res = await fetch(`/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}&_t=${Date.now()}`, {
+        // Polling diretto al backend corretto (Vercel o localhost) per garantire la sincronizzazione
+        const res = await fetch(`${backendUrl}/api/check-auth-status?sessionId=${encodeURIComponent(sidRef.current)}&_t=${Date.now()}`, {
           cache: 'no-store'
         });
+
         
         if (!res.ok) return;
         
