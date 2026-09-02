@@ -54,16 +54,18 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                         params: { limit: 20, _t: Date.now() }
                     });
                     if (savedEpRes.data?.items) {
-                        episodesList = savedEpRes.data.items.map((item: any) => ({
-                            id: item.episode?.id,
-                            name: item.episode?.name,
-                            description: item.episode?.description,
-                            uri: item.episode?.uri,
-                            images: item.episode?.images || item.episode?.show?.images,
-                            type: 'episode',
-                            show: item.episode?.show,
-                            duration_ms: item.episode?.duration_ms || 1800000,
-                        })).filter((i: any) => i.id);
+                        episodesList = savedEpRes.data.items
+                            .filter((item: any) => item.episode && item.episode.resume_point?.fully_played !== true)
+                            .map((item: any) => ({
+                                id: item.episode?.id,
+                                name: item.episode?.name,
+                                description: item.episode?.description,
+                                uri: item.episode?.uri,
+                                images: item.episode?.images || item.episode?.show?.images,
+                                type: 'episode',
+                                show: item.episode?.show,
+                                duration_ms: item.episode?.duration_ms || 1800000,
+                            })).filter((i: any) => i.id);
                     }
                 } catch (e) {
                     console.warn('[PodcastGridView] Could not fetch saved episodes:', e);
@@ -76,15 +78,16 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                         });
                         if (recentRes.data?.items) {
                             episodesList = recentRes.data.items
-                                .filter((item: any) => item.track?.type === 'episode' || item.context?.type === 'show')
+                                .filter((item: any) => item.track?.type === 'episode')
                                 .map((item: any) => ({
-                                    id: item.track?.id || item.context?.uri,
+                                    id: item.track?.id,
                                     name: item.track?.name || 'Episodio Recente',
-                                    uri: item.track?.uri || item.context?.uri,
+                                    uri: item.track?.uri,
                                     images: item.track?.album?.images || item.track?.show?.images,
                                     type: 'episode',
+                                    show: item.track?.show,
                                     duration_ms: item.track?.duration_ms || 1800000,
-                                }));
+                                })).filter((i: any) => i.id);
                         }
                     } catch (e) {
                         console.warn('[PodcastGridView] Could not fetch recently played podcasts:', e);
@@ -201,8 +204,11 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                         })}
                     </div>
                 ) : (
-                    <div className={`p-6 rounded-xl text-center border border-dashed ${isNight ? 'border-white/15 bg-white/5' : 'border-black/15 bg-black/5'}`}>
-                        <p className={`text-sm ${themeColor}`}>Nessun episodio in corso. Inizia ad ascoltare un podcast per vederlo qui.</p>
+                    <div className={`p-4 rounded-xl flex items-center gap-3 backdrop-blur-md border ${isNight ? 'bg-white/[0.04] border-white/10 text-white/70' : 'bg-black/[0.03] border-black/10 text-zinc-600'}`}>
+                        <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 shrink-0">
+                            <FiMic className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-medium">Nessun episodio in riproduzione. I tuoi ascolti recenti appariranno qui.</p>
                     </div>
                 )}
             </div>

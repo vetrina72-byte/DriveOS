@@ -161,11 +161,21 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Show not found.'}</div>;
     }
     
-    const handlePlayEpisode = (index: number) => {
+    const handlePlayEpisode = async (index: number) => {
         if (!isPlayerReady) return;
-        const urisToPlay = episodes.slice(index).map(e => e.uri);
-        if (urisToPlay.length > 0) {
-            onPlay({ uris: urisToPlay });
+        const episode = episodes[index];
+        if (!episode?.uri) return;
+        try {
+            await apiClient.put('/me/player/play', {
+                uris: [episode.uri]
+            });
+            onPlay({ uris: [episode.uri] });
+        } catch (err) {
+            console.error("Failed to play episode:", err);
+            const urisToPlay = episodes.slice(index).map(e => e.uri);
+            if (urisToPlay.length > 0) {
+                onPlay({ uris: urisToPlay });
+            }
         }
     };
     
