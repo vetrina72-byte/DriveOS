@@ -36,7 +36,7 @@ async function startServer() {
   }, 60 * 1000);
 
   app.post('/api/register-auth-session', async (req, res) => {
-    const { sessionId, codeVerifier, redirectUri } = req.body || {};
+    const { sessionId, codeVerifier, redirectUri, authUrl } = req.body || {};
     if (!sessionId) {
       return res.status(400).json({ error: 'Missing sessionId' });
     }
@@ -44,6 +44,7 @@ async function startServer() {
       status: 'pending',
       codeVerifier,
       redirectUri,
+      authUrl,
       timestamp: Date.now()
     };
     authStore.set(String(sessionId), sessionData);
@@ -52,6 +53,30 @@ async function startServer() {
       await redis.set(`spotify:auth:${sessionId}`, JSON.stringify(sessionData), 'EX', 900);
     } catch (e) {}
     res.json({ ok: true });
+  });
+
+  app.get('/api/spotify-qr-login', async (req, res) => {
+    const { sid } = req.query;
+    if (!sid) {
+      return res.status(400).send('Manca il Session ID (sid).');
+    }
+    
+    let sessionData = authStore.get(String(sid));
+    if (!sessionData) {
+      try {
+        const redis = getRedis();
+        const str = await redis.get(`spotify:auth:${sid}`);
+        if (str) {
+          sessionData = JSON.parse(str);
+        }
+      } catch (e) {}
+    }
+
+    if (!sessionData || !sessionData.authUrl) {
+      return res.status(404).send('Sessione scaduta o non trovata. Per favore ricarica la pagina sull\'infotainment per generare un nuovo QR code.');
+    }
+
+    res.redirect(sessionData.authUrl);
   });
 
   function parseState(rawState: any) {

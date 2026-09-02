@@ -137,6 +137,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     const compositeState = encodeCompositeState(sidRef.current, codeVerifier, redirectUri);
 
     // Register session on backend (as backup and for in-memory/Redis caches)
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(compositeState)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
+
     try {
       await fetch('/api/register-auth-session', {
         method: 'POST',
@@ -144,17 +146,19 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         body: JSON.stringify({
           sessionId: sidRef.current,
           codeVerifier,
-          redirectUri
+          redirectUri,
+          authUrl
         })
       });
     } catch (err) {
       console.warn('[SpotifyLogin] Registration notice:', err);
     }
 
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(compositeState)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
-
     setDirectAuthUrl(authUrl);
-    setQrCodeUrl(generateQrUrl(authUrl));
+    
+    // Genera un URL molto più corto per il QR code (così è meno denso e più facile da scansionare col telefono)
+    const shortUrl = `${window.location.origin}/api/spotify-qr-login?sid=${sidRef.current}`;
+    setQrCodeUrl(generateQrUrl(shortUrl));
     setUiState('ATTESA');
 
     pollTimer.current = window.setInterval(async () => {
