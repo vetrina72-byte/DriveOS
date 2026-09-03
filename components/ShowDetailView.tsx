@@ -83,7 +83,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     const [episodes, setEpisodes] = useState<Episode[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { nowPlaying, isPlayerReady } = useAuth();
+    const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh } = useAuth();
     const playerState = nowPlaying.spotifyState;
     
     const [totalEpisodes, setTotalEpisodes] = useState(0);
@@ -106,8 +106,22 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             try {
                 const showRes = await apiClient.get(`/shows/${showId}`);
                 if (isMounted) {
-                    setShow(showRes.data || null);
-                    setTotalEpisodes(showRes.data?.episodes?.total || 0);
+                    const responseData = showRes.data;
+                    setShow(responseData || null);
+                    setTotalEpisodes(responseData?.episodes?.total || 0);
+
+                    // Estrazione episodi con ripiegamento
+                    let episodeList = responseData?.episodes?.items ?? responseData?.items ?? [];
+                    if (episodeList.length === 0) {
+                        try {
+                            const fallbackRes = await apiClient.get(`/shows/${showId}/episodes?limit=50`);
+                            episodeList = fallbackRes.data?.items ?? [];
+                        } catch (e) {
+                            console.error("Fallback episodes fetch failed", e);
+                        }
+                    }
+                    setEpisodes(episodeList);
+                    setLoading(false);
                 }
             } catch (err) {
                 console.error(err);
@@ -183,10 +197,37 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         if (!episode?.uri) return;
         setPlayError(null);
         try {
+            const deviceId = localStorage.getItem('spotify_device_id') || playerState?.device?.id;
+            const sessionId = localStorage.getItem('auth_session_id');
+            if (deviceId) {
+                 await fetch('/api/transfer-player', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ device_id: deviceId, sessionId })
+                 });
+            }
+
             await apiClient.put('/me/player/play', {
                 uris: [episode.uri]
             });
             onPlay({ uris: [episode.uri] });
+            
+            setTimeout(async () => {
+                try {
+                    const stateRes = await apiClient.get('/me/player');
+                    if (stateRes.data && setNowPlaying) {
+                        setNowPlaying(prev => ({
+                            ...prev,
+                            spotifyState: stateRes.data
+                        }));
+                    }
+                    if (triggerDataRefresh) {
+                        triggerDataRefresh();
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch remote player state after play", e);
+                }
+            }, 800);
         } catch (err: any) {
             console.error("Failed to play episode:", err);
             const status = err?.response?.status;
@@ -253,7 +294,6 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             {/* Episode List Header */}
             <div className="flex justify-between items-center mb-4">
                 <h2 className={`text-2xl font-bold ${theme.textPrimary}`}>Episodi</h2>
-                {totalEpisodes > limit && <PaginationControls />}
             </div>
             
             {/* Episode List */}
