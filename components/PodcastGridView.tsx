@@ -72,15 +72,17 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
 
                     // 2. Fetch saved episodes
                     const savedEpRes = await apiClient.get('/me/episodes', {
-                        params: { limit: 20, _t: Date.now() }
+                        params: { limit: 50, _t: Date.now() }
                     });
                     if (savedEpRes.data?.items) {
                         const savedItems = savedEpRes.data.items
                             .filter((item: any) => {
                                 if (!item.episode) return false;
                                 const rp = item.episode.resume_point;
-                                if (!rp) return true;
-                                return rp.fully_played !== true;
+                                if (!rp) return false;
+                                const inCorso = rp.fully_played === false && rp.resume_position_ms > 0;
+                                const giaAscoltati = rp.fully_played === true;
+                                return inCorso || giaAscoltati;
                             })
                             .map((item: any) => ({
                                 id: item.episode?.id,
@@ -186,9 +188,13 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                             const imageUrl = ep.images?.[0]?.url || ep.images?.[1]?.url || 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=300&auto=format&fit=crop&q=60';
                             const posMs = ep.resume_point?.resume_position_ms || 0;
                             const durMs = ep.duration_ms || 1800000;
-                            const progressPercent = posMs > 0 && durMs > 0 
-                                ? Math.min(99, Math.max(5, Math.round((posMs / durMs) * 100))) 
-                                : Math.min(90, Math.max(10, (idx * 31 + 15) % 80));
+                            
+                            let progressPercent = 0;
+                            if (ep.resume_point?.fully_played) {
+                                progressPercent = 100;
+                            } else if (posMs > 0 && durMs > 0) {
+                                progressPercent = Math.min(99, Math.max(1, Math.round((posMs / durMs) * 100)));
+                            }
 
                             return (
                                 <motion.div
@@ -224,8 +230,8 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                         {/* Barra di avanzamento sotto l'episodio */}
                                         <div className="space-y-1.5 mt-2">
                                             <div className="flex justify-between text-[10px] opacity-70">
-                                                <span>Ascoltato {progressPercent}%</span>
-                                                <span>{Math.floor((ep.duration_ms || 1800000) * (1 - progressPercent/100) / 60000)} min rimanenti</span>
+                                                <span>{ep.resume_point?.fully_played ? 'Già ascoltato' : `Ascoltato ${progressPercent}%`}</span>
+                                                {!ep.resume_point?.fully_played && <span>{Math.floor((durMs * (1 - progressPercent/100)) / 60000)} min rimanenti</span>}
                                             </div>
                                             <div className={`w-full h-1.5 rounded-full overflow-hidden ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
                                                 <div 

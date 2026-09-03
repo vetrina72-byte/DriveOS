@@ -103,8 +103,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         const fetchShowInfo = async () => {
             try {
                 const showRes = await apiClient.get(`/shows/${showId}`);
-                setShow(showRes.data);
-                setTotalEpisodes(showRes.data.episodes.total);
+                setShow(showRes.data || null);
+                setTotalEpisodes(showRes.data?.episodes?.total || 0);
             } catch (err) {
                 setError('Could not load show details.');
                 console.error(err);
@@ -132,7 +132,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
 
             try {
                 const episodesRes = await apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`);
-                setEpisodes(episodesRes.data.items.reverse());
+                setEpisodes(episodesRes.data?.items ? [...episodesRes.data.items].reverse() : []);
             } catch (err) {
                 setError('Could not load episodes.');
                 console.error(err);
