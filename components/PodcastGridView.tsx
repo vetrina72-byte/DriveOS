@@ -72,7 +72,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
 
                     // 2. Fetch saved episodes
                     const savedEpRes = await apiClient.get('/me/episodes', {
-                        params: { limit: 50, _t: Date.now() }
+                        params: { limit: 50, market: 'IT', _t: Date.now() }
                     });
                     if (savedEpRes.data?.items) {
                         const savedItems = savedEpRes.data.items

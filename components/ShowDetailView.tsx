@@ -107,17 +107,27 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                 const showRes = await apiClient.get(`/shows/${showId}?market=IT`);
                 if (isMounted) {
                     const responseData = showRes.data;
-                    console.log("EPISODES RAW RESPONSE (SHOW):", JSON.stringify(responseData));
+                    console.log("[PODCAST DEBUG] Raw response (SHOW):", responseData);
                     setShow(responseData || null);
                     setTotalEpisodes(responseData?.episodes?.total || 0);
 
                     // Estrazione episodi con ripiegamento
-                    let episodeList = responseData?.episodes?.items ?? responseData?.items ?? [];
+                    let episodeList = responseData?.episodes?.items 
+                                   ?? responseData?.items 
+                                   ?? responseData?.data?.episodes?.items 
+                                   ?? responseData?.data?.items 
+                                   ?? [];
+                    
                     if (episodeList.length === 0) {
                         try {
                             const fallbackRes = await apiClient.get(`/shows/${showId}/episodes?market=IT&limit=50`);
-                            console.log("EPISODES RAW RESPONSE (FALLBACK):", JSON.stringify(fallbackRes.data));
-                            episodeList = fallbackRes.data?.items ?? [];
+                            console.log("[PODCAST DEBUG] Raw response (FALLBACK):", fallbackRes.data);
+                            const fallbackData = fallbackRes.data;
+                            episodeList = fallbackData?.items 
+                                       ?? fallbackData?.episodes?.items 
+                                       ?? fallbackData?.data?.items 
+                                       ?? fallbackData?.data?.episodes?.items 
+                                       ?? [];
                         } catch (e) {
                             console.error("Fallback episodes fetch failed", e);
                         }
@@ -139,10 +149,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
 
     useEffect(() => {
         let isMounted = true;
-        if (totalEpisodes === 0) {
-            if (show && isMounted) { // Show is loaded but has 0 episodes
-                setLoading(false);
-            }
+        // Skip pagination fetch if it's the first page, since we get it from show info
+        if (currentPage === 1) {
             return;
         }
 
@@ -150,15 +158,21 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             setLoading(true);
             setError(null);
 
-            const totalPages = Math.ceil(totalEpisodes / limit);
-            const pageToFetch = totalPages - currentPage;
-            const offset = Math.max(0, pageToFetch * limit);
+            const offset = (currentPage - 1) * limit;
 
             try {
                 const episodesRes = await apiClient.get(`/shows/${showId}/episodes?market=IT&limit=${limit}&offset=${offset}`);
                 if (isMounted) {
-                    console.log("EPISODES RAW RESPONSE (PAGINATION):", JSON.stringify(episodesRes.data));
-                    setEpisodes(episodesRes.data?.items ? [...episodesRes.data.items].reverse() : []);
+                    const responseData = episodesRes.data;
+                    console.log("[PODCAST DEBUG] Raw response (PAGINATION):", responseData);
+                    
+                    const fetchedEpisodes = responseData?.items 
+                                         ?? responseData?.episodes?.items 
+                                         ?? responseData?.data?.items 
+                                         ?? responseData?.data?.episodes?.items 
+                                         ?? [];
+                                         
+                    setEpisodes(fetchedEpisodes);
                 }
             } catch (err) {
                 console.error(err);
@@ -175,7 +189,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
 
         fetchEpisodes();
         return () => { isMounted = false; };
-    }, [showId, currentPage, totalEpisodes, show]);
+    }, [showId, currentPage]);
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',

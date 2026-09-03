@@ -167,7 +167,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     const backendUrl = isLocalhost ? 'http://localhost:3000' : (configuredBackend || currentOrigin || 'https://drive-os-chi.vercel.app');
         
     const redirectUri = import.meta.env.VITE_REDIRECT_URI || `${backendUrl}/api/spotify-callback`;
-    const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state';
+    const scope = 'streaming user-read-email user-read-private user-library-read user-read-playback-state user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-library-modify user-follow-read user-follow-modify user-modify-playback-state user-read-playback-position';
     
     // Generate PKCE values
     const codeVerifier = generateCodeVerifier();
