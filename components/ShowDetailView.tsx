@@ -88,12 +88,14 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
     
     const [totalEpisodes, setTotalEpisodes] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
+    const [playError, setPlayError] = useState<string | null>(null);
     const limit = 50;
 
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window.current_track?.id;
     
     useEffect(() => {
+        let isMounted = true;
         setShow(null);
         setEpisodes([]);
         setTotalEpisodes(0);
@@ -103,20 +105,26 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         const fetchShowInfo = async () => {
             try {
                 const showRes = await apiClient.get(`/shows/${showId}`);
-                setShow(showRes.data || null);
-                setTotalEpisodes(showRes.data?.episodes?.total || 0);
+                if (isMounted) {
+                    setShow(showRes.data || null);
+                    setTotalEpisodes(showRes.data?.episodes?.total || 0);
+                }
             } catch (err) {
-                setError('Could not load show details.');
                 console.error(err);
-                setLoading(false);
+                if (isMounted) {
+                    setError('Could not load show details.');
+                    setLoading(false);
+                }
             }
         };
         fetchShowInfo();
+        return () => { isMounted = false; };
     }, [showId]);
 
     useEffect(() => {
+        let isMounted = true;
         if (totalEpisodes === 0) {
-            if (show) { // Show is loaded but has 0 episodes
+            if (show && isMounted) { // Show is loaded but has 0 episodes
                 setLoading(false);
             }
             return;
@@ -132,17 +140,24 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
 
             try {
                 const episodesRes = await apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`);
-                setEpisodes(episodesRes.data?.items ? [...episodesRes.data.items].reverse() : []);
+                if (isMounted) {
+                    setEpisodes(episodesRes.data?.items ? [...episodesRes.data.items].reverse() : []);
+                }
             } catch (err) {
-                setError('Could not load episodes.');
                 console.error(err);
-                setEpisodes([]);
+                if (isMounted) {
+                    setError('Could not load episodes.');
+                    setEpisodes([]);
+                }
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchEpisodes();
+        return () => { isMounted = false; };
     }, [showId, currentPage, totalEpisodes, show]);
     
     const theme = {
@@ -162,8 +177,6 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
         return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Show not found.'}</div>;
     }
     
-    const [playError, setPlayError] = useState<string | null>(null);
-
     const handlePlayEpisode = async (index: number) => {
         if (!isPlayerReady) return;
         const episode = episodes[index];

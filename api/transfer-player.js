@@ -18,10 +18,13 @@ export default async function handler(req, res) {
 
   if (!device_id) return res.status(400).json({ error: 'missing_device_id' });
 
-  if (!accessToken && sessionId) {
+  let usedSessionRefresh = false;
+
+  if (sessionId) {
     const session = await ensureSpotifyToken(sessionId);
     if (session && session.access_token) {
       accessToken = session.access_token;
+      usedSessionRefresh = true;
     }
   }
 
@@ -33,7 +36,7 @@ export default async function handler(req, res) {
 
   try {
     console.log('▶️ [PROXY TRANSFER] Calling spotify /v1/me/player for device', device_id);
-    const spotifyRes = await fetch(url, {
+    let spotifyRes = await fetch(url, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -41,6 +44,22 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({ device_ids: [device_id], play: false })
     });
+
+    if (spotifyRes.status === 401 && sessionId && !usedSessionRefresh) {
+      // Force refresh if we didn't get this token directly from a fresh session store retrieval
+      const session = await ensureSpotifyToken(sessionId);
+      if (session && session.access_token) {
+        accessToken = session.access_token;
+        spotifyRes = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ device_ids: [device_id], play: false })
+        });
+      }
+    }
 
     if (spotifyRes.status === 204) {
       return res.status(200).json({ ok: true });
