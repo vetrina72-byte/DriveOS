@@ -136,6 +136,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             } catch (err) {
                 setError('Could not load episodes.');
                 console.error(err);
+                setEpisodes([]);
             } finally {
                 setLoading(false);
             }
@@ -249,49 +250,54 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
               initial="hidden"
               animate="visible"
             >
-                {episodes?.filter(Boolean).map((episode, index) => {
-                    const isPlaying = isPlayingContext && episode?.id === currentTrackId;
-                    const activeColor = isNight ? 'text-green-400' : 'text-green-600';
-                    const epName = episode?.name || 'Episodio';
-                    const epDesc = episode?.description ? episode.description.replace(/<[^>]*>?/gm, '') : '';
-                    const epDate = episode?.release_date ? new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                    const epDuration = episode?.duration_ms ? formatDuration(episode.duration_ms) : '';
+                {(() => {
+                    const validEpisodes = Array.isArray(episodes) ? episodes.filter(ep => ep && ep.id) : [];
+                    return validEpisodes.map((episode, index) => {
+                        const isPlaying = isPlayingContext && episode?.id === currentTrackId;
+                        const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+                        const epName = episode?.name ?? 'Episodio';
+                        const rawDescription = (episode as any)?.description ?? (episode as any)?.html_description ?? '';
+                        const cleanDescription = rawDescription.replace(/<[^>]*>?/gm, '');
+                        const epDate = episode?.release_date ? new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                        const epDuration = episode?.duration_ms ? formatDuration(episode.duration_ms) : '';
+                        const coverImage = episode?.images?.[0]?.url ?? show?.images?.[0]?.url ?? '';
 
-                    return (
-                        <motion.div
-                            key={`${episode?.id || index}-${index}`}
-                            variants={itemVariants}
-                            onClick={() => handlePlayEpisode(index)}
-                            className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
-                        >
-                            {episode?.images?.[0]?.url ? (
-                                <img src={episode.images[0].url} alt={epName} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
-                            ) : (
-                                <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
-                                    <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
-                                </div>
-                            )}
-                            <div className="flex flex-col overflow-hidden">
-                                <div className="flex items-center gap-2 min-w-0">
-                                    {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
-                                    <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{epName}</span>
-                                </div>
-                                <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{epDesc}</span>
-                                <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
-                                    {epDate && <span>{epDate}</span>}
-                                    {epDate && epDuration && <span>•</span>}
-                                    {epDuration && <span>{epDuration}</span>}
-                                </div>
-                            </div>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }}
-                                disabled={!isPlayerReady}
-                                className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                        return (
+                            <motion.div
+                                key={`${episode.id}-${index}`}
+                                variants={itemVariants}
+                                onClick={() => handlePlayEpisode(index)}
+                                className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                             >
-                                <FiPlay className="w-5 h-5 ml-0.5" />
-                            </button>
-                        </motion.div>
-                    );
+                                {coverImage ? (
+                                    <img src={coverImage} alt={epName} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
+                                ) : (
+                                    <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
+                                        <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
+                                    </div>
+                                )}
+                                <div className="flex flex-col overflow-hidden">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
+                                        <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{epName}</span>
+                                    </div>
+                                    <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{cleanDescription}</span>
+                                    <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
+                                        {epDate && <span>{epDate}</span>}
+                                        {epDate && epDuration && <span>•</span>}
+                                        {epDuration && <span>{epDuration}</span>}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }}
+                                    disabled={!isPlayerReady}
+                                    className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                                >
+                                    <FiPlay className="w-5 h-5 ml-0.5" />
+                                </button>
+                            </motion.div>
+                        );
+                    });
                 })}
             </motion.div>
 
