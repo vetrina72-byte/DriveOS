@@ -104,9 +104,10 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
 
         const fetchShowInfo = async () => {
             try {
-                const showRes = await apiClient.get(`/shows/${showId}`);
+                const showRes = await apiClient.get(`/shows/${showId}?market=IT`);
                 if (isMounted) {
                     const responseData = showRes.data;
+                    console.log("EPISODES RAW RESPONSE (SHOW):", JSON.stringify(responseData));
                     setShow(responseData || null);
                     setTotalEpisodes(responseData?.episodes?.total || 0);
 
@@ -114,7 +115,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                     let episodeList = responseData?.episodes?.items ?? responseData?.items ?? [];
                     if (episodeList.length === 0) {
                         try {
-                            const fallbackRes = await apiClient.get(`/shows/${showId}/episodes?limit=50`);
+                            const fallbackRes = await apiClient.get(`/shows/${showId}/episodes?market=IT&limit=50`);
+                            console.log("EPISODES RAW RESPONSE (FALLBACK):", JSON.stringify(fallbackRes.data));
                             episodeList = fallbackRes.data?.items ?? [];
                         } catch (e) {
                             console.error("Fallback episodes fetch failed", e);
@@ -153,8 +155,9 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             const offset = Math.max(0, pageToFetch * limit);
 
             try {
-                const episodesRes = await apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`);
+                const episodesRes = await apiClient.get(`/shows/${showId}/episodes?market=IT&limit=${limit}&offset=${offset}`);
                 if (isMounted) {
+                    console.log("EPISODES RAW RESPONSE (PAGINATION):", JSON.stringify(episodesRes.data));
                     setEpisodes(episodesRes.data?.items ? [...episodesRes.data.items].reverse() : []);
                 }
             } catch (err) {
