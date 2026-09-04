@@ -697,6 +697,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [isRadioPlaying, setIsRadioPlaying] = useState(false);
     const youtubePlayerRef = useRef<any>(null);
     const [isYouTubePlaying, setIsYouTubePlaying] = useState(false);
+    const [isYouTubeShuffle, setIsYouTubeShuffle] = useState(false);
+    const [youtubeRepeatMode, setYoutubeRepeatMode] = useState<0 | 1 | 2>(0);
     const [youTubeProgress, setYouTubeProgress] = useState({ position: 0, duration: 1 });
     const progressIntervalRef = useRef<number | null>(null);
     const [isYouTubeSeeking, setIsYouTubeSeeking] = useState(false);
@@ -955,18 +957,33 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (nowPlaying.source !== 'youtube' || !nowPlaying.youtubePlaylist || !nowPlaying.youtubeTrack) {
             return;
         }
+
+        if (youtubeRepeatMode === 2) {
+            youtubePlayerRef.current?.seekTo(0);
+            youtubePlayerRef.current?.playVideo();
+            return;
+        }
     
         const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
             track => track.videoId === nowPlaying.youtubeTrack?.videoId
         );
-    
-        if (currentTrackIndex === -1 || currentTrackIndex >= nowPlaying.youtubePlaylist.length - 1) {
+
+        if (isYouTubeShuffle && nowPlaying.youtubePlaylist.length > 1) {
+            let nextIdx = Math.floor(Math.random() * nowPlaying.youtubePlaylist.length);
+            if (nextIdx === currentTrackIndex) {
+                nextIdx = (nextIdx + 1) % nowPlaying.youtubePlaylist.length;
+            }
+            playYouTube(nowPlaying.youtubePlaylist[nextIdx], nowPlaying.youtubePlaylist);
             return;
         }
     
-        const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
-        playYouTube(nextTrack, nowPlaying.youtubePlaylist);
-    }, [nowPlaying, playYouTube]);
+        if (currentTrackIndex > -1 && currentTrackIndex < nowPlaying.youtubePlaylist.length - 1) {
+            const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
+            playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+        } else if (youtubeRepeatMode === 1 && nowPlaying.youtubePlaylist.length > 0) {
+            playYouTube(nowPlaying.youtubePlaylist[0], nowPlaying.youtubePlaylist);
+        }
+    }, [nowPlaying, playYouTube, youtubeRepeatMode, isYouTubeShuffle]);
 
     useEffect(() => {
         if (progressIntervalRef.current) {
@@ -1205,9 +1222,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
              const currentTrackIndex = nowPlaying.youtubePlaylist.findIndex(
                 track => track.videoId === nowPlaying.youtubeTrack?.videoId
             );
-            if (currentTrackIndex > -1 && currentTrackIndex < nowPlaying.youtubePlaylist.length - 1) {
+            if (isYouTubeShuffle && nowPlaying.youtubePlaylist.length > 1) {
+                let nextIdx = Math.floor(Math.random() * nowPlaying.youtubePlaylist.length);
+                if (nextIdx === currentTrackIndex) {
+                    nextIdx = (nextIdx + 1) % nowPlaying.youtubePlaylist.length;
+                }
+                playYouTube(nowPlaying.youtubePlaylist[nextIdx], nowPlaying.youtubePlaylist);
+            } else if (currentTrackIndex > -1 && currentTrackIndex < nowPlaying.youtubePlaylist.length - 1) {
                 const nextTrack = nowPlaying.youtubePlaylist[currentTrackIndex + 1];
                 playYouTube(nextTrack, nowPlaying.youtubePlaylist);
+            } else if (youtubeRepeatMode === 1 && nowPlaying.youtubePlaylist.length > 0) {
+                playYouTube(nowPlaying.youtubePlaylist[0], nowPlaying.youtubePlaylist);
             }
         }
     };
@@ -1233,6 +1258,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             if (currentTrackIndex > 0) {
                 const prevTrack = nowPlaying.youtubePlaylist[currentTrackIndex - 1];
                 playYouTube(prevTrack, nowPlaying.youtubePlaylist);
+            } else if (youtubeRepeatMode === 1 && nowPlaying.youtubePlaylist.length > 0) {
+                playYouTube(nowPlaying.youtubePlaylist[nowPlaying.youtubePlaylist.length - 1], nowPlaying.youtubePlaylist);
             }
         }
     };
@@ -1284,6 +1311,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         } : prev);
         
         apiClient.put(`/me/player/repeat?state=${repeatMode}`).catch(e => console.error("Failed to toggle repeat", e));
+    };
+
+    const handleToggleYouTubeShuffle = () => {
+        setIsYouTubeShuffle(prev => !prev);
+    };
+
+    const handleToggleYouTubeRepeat = () => {
+        setYoutubeRepeatMode(prev => ((prev + 1) % 3) as 0 | 1 | 2);
     };
     
     const handleSeekYouTube = useCallback((position: number) => {
@@ -1337,7 +1372,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (source === 'youtube' && youtubeTrack) {
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-            const isYouTubePlaylist = youtubePlaylist && youtubePlaylist.length > 0;
+            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
+            const isYouTubePlaylist = Boolean(youtubePlaylist && youtubePlaylist.length > 0);
+            const currentTrackIndex = youtubePlaylist ? youtubePlaylist.findIndex(track => track.videoId === youtubeTrack.videoId) : -1;
 
             return (
                  <div className="w-full h-full flex flex-col justify-between px-4 py-2">
@@ -1348,6 +1385,30 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 <DynamicTrackTitle title={title} isAnyAppOpen={Boolean(isAnyAppOpen)} />
                                 <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
                             </div>
+                        </div>
+                        <div className={`flex items-center flex-shrink-0 pl-2 ${isAnyAppOpen ? 'gap-2 sm:gap-5' : 'gap-5'}`}>
+                            <div className="flex items-center" style={{ gap: `${(spinnerShuffleGap) / 16}rem`}}>
+                                <button
+                                    onClick={handleToggleYouTubeShuffle}
+                                    className="transition"
+                                    style={{ color: isYouTubeShuffle ? buttonActiveColor : inactiveButtonColor }}
+                                    aria-label={isYouTubeShuffle ? "Disable shuffle" : "Enable shuffle"}
+                                >
+                                    <PiShuffleBold className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
+                                </button>
+                            </div>
+                            <button
+                                onClick={handleToggleYouTubeRepeat}
+                                className="transition"
+                                style={{ color: youtubeRepeatMode > 0 ? buttonActiveColor : inactiveButtonColor }}
+                                aria-label="Set repeat mode"
+                            >
+                                {youtubeRepeatMode === 2 ? (
+                                    <PiRepeatOnceBold className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
+                                ) : (
+                                    <PiRepeatBold className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
+                                )}
+                            </button>
                         </div>
                     </div>
                     <YouTubeProgressBar 
@@ -1365,7 +1426,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             className={isAnyAppOpen ? "flex items-center shrink" : "flex items-center"} 
                             style={{ gap: `${(effectiveControlsGap) / 16}rem` }}
                         >
-                            <button onClick={handlePrevTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
+                            <button 
+                                onClick={handlePrevTrack} 
+                                disabled={!isYouTubePlaylist || (youtubeRepeatMode === 0 && currentTrackIndex <= 0)} 
+                                className="transition disabled:opacity-30 disabled:cursor-not-allowed" 
+                                style={{ color: buttonActiveColor }}
+                            >
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
                             </button>
                             <button onClick={handleTogglePlay} style={{ color: buttonActiveColor }}>
@@ -1374,12 +1440,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                     : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
                                 }
                             </button>
-                            <button onClick={handleNextTrack} className={`transition ${!isYouTubePlaylist ? 'opacity-30' : ''}`} style={{ color: buttonActiveColor }} disabled={!isYouTubePlaylist}>
+                            <button 
+                                onClick={handleNextTrack} 
+                                disabled={!isYouTubePlaylist || (youtubeRepeatMode === 0 && !isYouTubeShuffle && currentTrackIndex >= (youtubePlaylist?.length ?? 1) - 1)} 
+                                className="transition disabled:opacity-30 disabled:cursor-not-allowed" 
+                                style={{ color: buttonActiveColor }}
+                            >
                                 <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                             </button>
+                            {/* Invisible placeholder matching Spotify Like button so Prev/Play/Next positions are identical across all sources */}
+                            <div style={{ width: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`, height: `${(playerControlsSize * (isAnyAppOpen ? 0.8 : 0.9)) / 16}rem`}} aria-hidden="true" />
                         </div>
                         <div className={`flex-1 flex justify-end items-center ${isAnyAppOpen ? 'shrink-0' : ''}`}>
-                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
+                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className={`p-1 rounded-full transition-all duration-200`} style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : inactiveButtonColor }}>
                                 <BsList className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
                             </button>
                         </div>

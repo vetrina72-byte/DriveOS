@@ -70,6 +70,15 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     const [playError, setPlayError] = useState<string | null>(null);
     const [isSwitching, setIsSwitching] = useState<boolean>(false);
     const [switchingEpisodeId, setSwitchingEpisodeId] = useState<string | null>(null);
+    const [, setHistoryTick] = useState<number>(0);
+
+    useEffect(() => {
+        const handleHistoryUpdated = () => {
+            setHistoryTick(t => t + 1);
+        };
+        window.addEventListener('podcast_history_updated', handleHistoryUpdated);
+        return () => window.removeEventListener('podcast_history_updated', handleHistoryUpdated);
+    }, []);
     
     const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh, _setPlayerState } = useAuth();
     const playerState = nowPlaying.spotifyState;
@@ -225,6 +234,30 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         setSwitchingEpisodeId(episode.id);
         setPlayError(null);
 
+        // Registra subito l'episodio in PodcastService così compare all'istante in "In Corso / Già Ascoltati"
+        PodcastService.recordEpisodePlayed({
+            id: episode.id,
+            name: episode.title || (episode as any).name || 'Episodio',
+            title: episode.title,
+            description: episode.description || '',
+            duration_ms: episode.duration_ms || 1800000,
+            release_date: episode.release_date || '',
+            uri: episode.uri,
+            image: episode.image || show?.images?.[0]?.url || '',
+            images: episode.image ? [{ url: episode.image }] : (show?.images || []),
+            type: 'episode',
+            show: show ? {
+                id: show.id,
+                name: show.name,
+                publisher: show.publisher,
+                images: show.images
+            } : undefined,
+            resume_point: {
+                fully_played: false,
+                resume_position_ms: 1000
+            }
+        }, show);
+
         try {
             await playEpisode(episode);
         } catch (err: any) {
@@ -334,15 +367,29 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                             {isPlaying && !isThisEpisodeSwitching && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
                                             <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.title}</span>
                                             {status.fully_played ? (
-                                                <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        PodcastService.toggleEpisodeCompleted(episode.id, episode.duration_ms);
+                                                    }}
+                                                    title="Segna come da riascoltare"
+                                                    className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 transition-colors cursor-pointer"
+                                                >
                                                     <FiCheck className="w-3 h-3 stroke-[3]" />
                                                     Ascoltato
-                                                </span>
+                                                </button>
                                             ) : status.resume_position_ms > 0 ? (
-                                                <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        PodcastService.markEpisodeCompleted(episode.id, episode.duration_ms);
+                                                    }}
+                                                    title="Clicca per segnare come già ascoltato"
+                                                    className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-colors cursor-pointer"
+                                                >
                                                     <FiClock className="w-3 h-3" />
                                                     In corso ({status.progress_percent}%)
-                                                </span>
+                                                </button>
                                             ) : null}
                                         </div>
                                         <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description}</span>

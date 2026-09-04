@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../spotifyClient';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
 import { FiMic, FiPlay, FiCompass, FiFilter, FiClock } from 'react-icons/fi';
+import { PodcastService } from '../services/PodcastService';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -41,6 +42,48 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
         { id: 'business', name: 'Business' }
     ];
 
+    const syncLocalEpisodes = useCallback(() => {
+        const historyItems = PodcastService.getListeningHistory();
+        if (historyItems.length > 0) {
+            setSavedEpisodes(prev => {
+                const map = new Map<string, SpotifyItem>();
+                // Add local history first
+                for (const item of historyItems) {
+                    map.set(item.id, {
+                        id: item.id,
+                        name: item.name || item.title || 'Episodio',
+                        description: item.description,
+                        uri: item.uri,
+                        images: item.images || (item.image ? [{ url: item.image }] : (item.show?.images || [])),
+                        type: 'episode',
+                        show: item.show,
+                        duration_ms: item.duration_ms || 1800000,
+                        resume_point: item.resume_point
+                    });
+                }
+                // Retain any API-loaded episodes not in local history
+                for (const ep of prev) {
+                    if (!map.has(ep.id)) {
+                        map.set(ep.id, ep);
+                    }
+                }
+                return Array.from(map.values());
+            });
+        }
+    }, []);
+
+    useEffect(() => {
+        const handleHistoryUpdated = () => {
+            syncLocalEpisodes();
+        };
+        window.addEventListener('podcast_history_updated', handleHistoryUpdated);
+        window.addEventListener('focus', handleHistoryUpdated);
+        return () => {
+            window.removeEventListener('podcast_history_updated', handleHistoryUpdated);
+            window.removeEventListener('focus', handleHistoryUpdated);
+        };
+    }, [syncLocalEpisodes]);
+
     useEffect(() => {
         const fetchPodcasts = async () => {
             setLoading(true);
@@ -48,6 +91,26 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
             try {
                 let episodesList: SpotifyItem[] = [];
                 let showsList: SpotifyItem[] = [];
+
+                // 0. Include locally stored podcast history (episodes clicked/listened to)
+                try {
+                    const historyItems = PodcastService.getListeningHistory();
+                    for (const item of historyItems) {
+                        episodesList.push({
+                            id: item.id,
+                            name: item.name || item.title || 'Episodio',
+                            description: item.description,
+                            uri: item.uri,
+                            images: item.images || (item.image ? [{ url: item.image }] : (item.show?.images || [])),
+                            type: 'episode',
+                            show: item.show,
+                            duration_ms: item.duration_ms || 1800000,
+                            resume_point: item.resume_point
+                        });
+                    }
+                } catch (e) {
+                    console.warn('[PodcastGridView] Could not load local podcast history:', e);
+                }
 
                 try {
                     // 1. Check currently playing episode
@@ -57,7 +120,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
 
                     if (currentRes?.data?.item && currentRes.data.item.type === 'episode') {
                         const ep = currentRes.data.item;
-                        episodesList.push({
+                        const currItem: SpotifyItem = {
                             id: ep.id,
                             name: ep.name,
                             description: ep.description,
@@ -67,7 +130,12 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                             show: ep.show,
                             duration_ms: ep.duration_ms || 1800000,
                             resume_point: ep.resume_point,
-                        });
+                        };
+                        const existingIdx = episodesList.findIndex(e => e.id === ep.id);
+                        if (existingIdx >= 0) {
+                            episodesList.splice(existingIdx, 1);
+                        }
+                        episodesList.unshift(currItem);
                     }
 
                     // 2. Fetch saved episodes

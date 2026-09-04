@@ -19,6 +19,7 @@ import ShowDetailView from './ShowDetailView';
 import GenresView from './GenresView';
 import CategoryPlaylistsView from './CategoryPlaylistsView';
 import NewReleasesView from './NewReleasesView';
+import { PodcastService } from '../services/PodcastService';
 
 export type ViewType = 
     | 'home' 
@@ -279,7 +280,16 @@ const SpotifyPlayer = ({
         else if (item.type === 'category') {
             if (item.id === 'new-releases' || item.name?.toLowerCase() === 'nuove uscite') changeView({ type: 'new-releases' });
             else changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
-        } else if (item.type === 'track' && isPlayerReady) { play({ uris: [item.uri] }, item); }
+        } else if (item.type === 'track' && isPlayerReady) { 
+            play({ uris: [item.uri] }, item); 
+        } else if (item.type === 'episode') {
+            PodcastService.recordEpisodePlayed(item as any);
+            if (isPlayerReady && item.uri) {
+                play({ uris: [item.uri] }, item as any);
+            } else if ((item as any).show?.id) {
+                changeView({ type: 'show', id: (item as any).show.id, title: (item as any).show.name });
+            }
+        }
     };
 
     const handleBack = () => {

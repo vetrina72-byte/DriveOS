@@ -19,12 +19,13 @@ export class PodcastService {
      * Local storage key for persisting podcast playback points across sessions
      */
     private static STORAGE_KEY = 'podcast_episodes_progress';
+    private static HISTORY_STORAGE_KEY = 'podcast_listening_history';
 
     /**
      * Retrieves the playback status of an episode, checking both Spotify API resume_point
      * and local fallback storage.
      */
-    static getEpisodeStatus(episode: Episode): { fully_played: boolean; resume_position_ms: number; progress_percent: number } {
+    static getEpisodeStatus(episode: Episode | { id: string; duration_ms?: number; resume_point?: { fully_played?: boolean; resume_position_ms?: number } }): { fully_played: boolean; resume_position_ms: number; progress_percent: number } {
         let fullyPlayed = Boolean(episode.resume_point?.fully_played);
         let resumeMs = episode.resume_point?.resume_position_ms || 0;
 
@@ -65,7 +66,7 @@ export class PodcastService {
         try {
             const raw = localStorage.getItem(this.STORAGE_KEY);
             const data = raw ? JSON.parse(raw) : {};
-            const isCompleted = fullyPlayed || (durationMs > 0 && positionMs >= durationMs * 0.95);
+            const isCompleted = fullyPlayed || (durationMs > 0 && positionMs >= durationMs * 0.92);
             data[episodeId] = {
                 resume_position_ms: positionMs,
                 fully_played: isCompleted,
@@ -73,6 +74,199 @@ export class PodcastService {
             };
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
         } catch (e) {}
+    }
+
+    /**
+     * Records an episode as clicked/played, adding or updating it in the history list
+     */
+    static recordEpisodePlayed(episode: {
+        id: string;
+        name?: string;
+        title?: string;
+        description?: string;
+        duration_ms?: number;
+        release_date?: string;
+        uri?: string;
+        image?: string;
+        images?: { url: string }[];
+        type?: string;
+        show?: {
+            id?: string;
+            name: string;
+            publisher?: string;
+            images?: { url: string }[];
+        };
+        resume_point?: {
+            fully_played: boolean;
+            resume_position_ms: number;
+        };
+    }, showData?: any): void {
+        if (!episode?.id) return;
+        try {
+            const raw = localStorage.getItem(this.HISTORY_STORAGE_KEY);
+            let history: any[] = raw ? JSON.parse(raw) : [];
+
+            const status = this.getEpisodeStatus(episode as any);
+            const effectiveShow = episode.show || showData || undefined;
+
+            const itemToSave = {
+                id: episode.id,
+                name: episode.title || episode.name || 'Episodio',
+                title: episode.title || episode.name || 'Episodio',
+                description: episode.description || '',
+                duration_ms: episode.duration_ms || 1800000,
+                release_date: episode.release_date || '',
+                uri: episode.uri || `spotify:episode:${episode.id}`,
+                image: episode.image || episode.images?.[0]?.url || effectiveShow?.images?.[0]?.url || '/placeholder-podcast.png',
+                images: episode.images || (episode.image ? [{ url: episode.image }] : (effectiveShow?.images || [])),
+                type: 'episode',
+                show: effectiveShow ? {
+                    id: effectiveShow.id,
+                    name: effectiveShow.name,
+                    publisher: effectiveShow.publisher,
+                    images: effectiveShow.images
+                } : undefined,
+                resume_point: {
+                    fully_played: status.fully_played,
+                    resume_position_ms: status.resume_position_ms > 0 ? status.resume_position_ms : 1000
+                },
+                last_played_at: Date.now()
+            };
+
+            const existingIdx = history.findIndex(item => item.id === episode.id);
+            if (existingIdx >= 0) {
+                history[existingIdx] = {
+                    ...history[existingIdx],
+                    ...itemToSave,
+                    resume_point: {
+                        fully_played: history[existingIdx].resume_point?.fully_played || itemToSave.resume_point.fully_played,
+                        resume_position_ms: Math.max(history[existingIdx].resume_point?.resume_position_ms || 0, itemToSave.resume_point.resume_position_ms)
+                    },
+                    last_played_at: Date.now()
+                };
+            } else {
+                history.unshift(itemToSave);
+            }
+
+            if (history.length > 50) history = history.slice(0, 50);
+            localStorage.setItem(this.HISTORY_STORAGE_KEY, JSON.stringify(history));
+
+            this.saveEpisodeProgress(
+                episode.id, 
+                itemToSave.resume_point.resume_position_ms, 
+                episode.duration_ms || 0, 
+                itemToSave.resume_point.fully_played
+            );
+
+            window.dispatchEvent(new CustomEvent('podcast_history_updated', { detail: { id: episode.id } }));
+        } catch (e) {
+            console.error("[PodcastService] Error recording episode played:", e);
+        }
+    }
+
+    /**
+     * Updates episode progress from live player state
+     */
+    static updateEpisodeProgress(episodeId: string, positionMs: number, durationMs: number, fullyPlayed: boolean = false): void {
+        if (!episodeId) return;
+        this.saveEpisodeProgress(episodeId, positionMs, durationMs, fullyPlayed);
+
+        try {
+            const raw = localStorage.getItem(this.HISTORY_STORAGE_KEY);
+            if (!raw) return;
+            let history: any[] = JSON.parse(raw);
+            const idx = history.findIndex(item => item.id === episodeId);
+            if (idx >= 0) {
+                const isCompleted = fullyPlayed || (durationMs > 0 && positionMs >= durationMs * 0.92);
+                history[idx].resume_point = {
+                    resume_position_ms: positionMs,
+                    fully_played: isCompleted
+                };
+                history[idx].last_played_at = Date.now();
+                localStorage.setItem(this.HISTORY_STORAGE_KEY, JSON.stringify(history));
+                window.dispatchEvent(new CustomEvent('podcast_history_updated', { detail: { id: episodeId } }));
+            }
+        } catch (e) {}
+    }
+
+    /**
+     * Marks an episode as completely listened
+     */
+    static markEpisodeCompleted(episodeId: string, durationMs?: number): void {
+        if (!episodeId) return;
+        const dur = durationMs || 1000;
+        this.saveEpisodeProgress(episodeId, dur, dur, true);
+        try {
+            const raw = localStorage.getItem(this.HISTORY_STORAGE_KEY);
+            if (raw) {
+                let history: any[] = JSON.parse(raw);
+                const idx = history.findIndex(item => item.id === episodeId);
+                if (idx >= 0) {
+                    history[idx].resume_point = {
+                        resume_position_ms: dur,
+                        fully_played: true
+                    };
+                    history[idx].last_played_at = Date.now();
+                    localStorage.setItem(this.HISTORY_STORAGE_KEY, JSON.stringify(history));
+                }
+            }
+            window.dispatchEvent(new CustomEvent('podcast_history_updated', { detail: { id: episodeId } }));
+        } catch (e) {}
+    }
+
+    /**
+     * Toggles whether an episode is marked as completed or in progress
+     */
+    static toggleEpisodeCompleted(episodeId: string, durationMs?: number): void {
+        if (!episodeId) return;
+        try {
+            const current = this.getEpisodeStatus({ id: episodeId, duration_ms: durationMs });
+            const newCompleted = !current.fully_played;
+            const dur = durationMs || 1000;
+            const pos = newCompleted ? dur : 1000;
+
+            this.saveEpisodeProgress(episodeId, pos, dur, newCompleted);
+
+            const raw = localStorage.getItem(this.HISTORY_STORAGE_KEY);
+            if (raw) {
+                let history: any[] = JSON.parse(raw);
+                const idx = history.findIndex(item => item.id === episodeId);
+                if (idx >= 0) {
+                    history[idx].resume_point = {
+                        resume_position_ms: pos,
+                        fully_played: newCompleted
+                    };
+                    history[idx].last_played_at = Date.now();
+                    localStorage.setItem(this.HISTORY_STORAGE_KEY, JSON.stringify(history));
+                }
+            }
+            window.dispatchEvent(new CustomEvent('podcast_history_updated', { detail: { id: episodeId } }));
+        } catch (e) {}
+    }
+
+    /**
+     * Returns the list of listened or clicked episodes, sorted by most recent
+     */
+    static getListeningHistory(): any[] {
+        try {
+            const raw = localStorage.getItem(this.HISTORY_STORAGE_KEY);
+            if (!raw) return [];
+            let history: any[] = JSON.parse(raw);
+            if (!Array.isArray(history)) return [];
+
+            return history.map(item => {
+                const status = this.getEpisodeStatus(item);
+                return {
+                    ...item,
+                    resume_point: {
+                        fully_played: status.fully_played,
+                        resume_position_ms: status.resume_position_ms
+                    }
+                };
+            }).sort((a, b) => (b.last_played_at || 0) - (a.last_played_at || 0));
+        } catch (e) {
+            return [];
+        }
     }
 
     /**
