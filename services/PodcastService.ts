@@ -15,13 +15,17 @@ export class PodcastService {
      * RISOLUTORE UNIFICATO DI ENTITÀ PODCAST
      * Gestisce sia ID Show diretti, sia URI Spotify, sia Playlist di Podcast.
      */
-    static async getEpisodes(rawId: string): Promise<Episode[]> {
+    static async getEpisodesWithOffset(rawId: string, offset: number): Promise<Episode[]> {
+        return this.getEpisodes(rawId, offset);
+    }
+
+    static async getEpisodes(rawId: string, offset: number = 0): Promise<Episode[]> {
         if (!rawId) return [];
 
         // 1. Sanitize dell'ID (rimozione di prefissi spotify:show: o spotify:playlist:)
         const cleanId = rawId.replace(/^spotify:(show|playlist|episode):/, '').trim();
 
-        console.log(`[PodcastService] Avvio recupero per ID: "${cleanId}" (Originale: "${rawId}")`);
+        console.log(`[PodcastService] Avvio recupero per ID: "${cleanId}" (Originale: "${rawId}", Offset: ${offset})`);
 
         let userCountry = 'IT';
         try {
@@ -36,7 +40,7 @@ export class PodcastService {
         // 2. TENTATIVO A: Endpoint Show Ufficiale (/shows/{id}/episodes)
         try {
             const showRes = await apiClient.get(`/shows/${cleanId}/episodes`, {
-                params: { market: userCountry, limit: 50 }
+                params: { market: userCountry, limit: 50, offset }
             });
             const items = showRes.data?.items ?? [];
             if (items.length > 0) {
@@ -47,25 +51,27 @@ export class PodcastService {
             console.warn(`[PodcastService] Tentativo /shows/${cleanId}/episodes fallito (Status ${err?.response?.status})`);
         }
 
-        // 3. TENTATIVO B: Dettaglio Show Generale (/shows/{id})
-        try {
-            const detailRes = await apiClient.get(`/shows/${cleanId}`, {
-                params: { market: userCountry }
-            });
-            const items = detailRes.data?.episodes?.items ?? [];
-            if (items.length > 0) {
-                console.log(`[PodcastService] Successo da /shows/${cleanId}:`, items.length);
-                return this.mapEpisodes(items);
+        // 3. TENTATIVO B: Dettaglio Show Generale (/shows/{id}) - solo se offset 0
+        if (offset === 0) {
+            try {
+                const detailRes = await apiClient.get(`/shows/${cleanId}`, {
+                    params: { market: userCountry }
+                });
+                const items = detailRes.data?.episodes?.items ?? [];
+                if (items.length > 0) {
+                    console.log(`[PodcastService] Successo da /shows/${cleanId}:`, items.length);
+                    return this.mapEpisodes(items);
+                }
+            } catch (err: any) {
+                console.warn(`[PodcastService] Tentativo /shows/${cleanId} fallito (Status ${err?.response?.status})`);
             }
-        } catch (err: any) {
-            console.warn(`[PodcastService] Tentativo /shows/${cleanId} fallito (Status ${err?.response?.status})`);
         }
 
         // 4. TENTATIVO C: Fallback per Playlist di Podcast (/playlists/{id}/tracks)
         // Se l'ID apparteneva a una Playlist "Da Scoprire" anziché a uno Show
         try {
             const playlistRes = await apiClient.get(`/playlists/${cleanId}/tracks`, {
-                params: { market: userCountry, limit: 50 }
+                params: { market: userCountry, limit: 50, offset }
             });
             const tracks = playlistRes.data?.items?.map((item: any) => item.track ?? item.episode) ?? [];
             if (tracks.length > 0) {

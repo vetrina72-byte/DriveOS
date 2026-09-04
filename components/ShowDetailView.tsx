@@ -62,6 +62,9 @@ const formatDuration = (ms: number) => {
 const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNight, onPlay }) => {
     const [show, setShow] = useState<Show | null>(null);
     const [episodes, setEpisodes] = useState<Episode[]>([]);
+    const [offset, setOffset] = useState<number>(0);
+    const [hasMore, setHasMore] = useState<boolean>(true);
+    const [loadingMore, setLoadingMore] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [playError, setPlayError] = useState<string | null>(null);
@@ -81,6 +84,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             setErrorMessage(null);
             setShow(null);
             setEpisodes([]);
+            setOffset(0);
+            setHasMore(true);
 
             try {
                 // 1. Fetch Dettagli Show/Playlist (Header)
@@ -104,6 +109,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                 if (isMounted) {
                     if (data.length === 0) {
                         setErrorMessage(`Nessun episodio trovato per questo podcast (ID: ${showId})`);
+                    } else if (data.length < 50) {
+                        setHasMore(false);
                     }
                     setEpisodes(data);
                     setLoading(false);
@@ -119,6 +126,23 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         loadData();
         return () => { isMounted = false; };
     }, [showId]);
+
+    const loadMoreEpisodes = async () => {
+        if (!hasMore || loadingMore || !showId) return;
+        setLoadingMore(true);
+
+        const nextOffset = offset + 50;
+        const newEpisodes = await PodcastService.getEpisodesWithOffset(showId, nextOffset);
+
+        if (newEpisodes.length > 0) {
+            setEpisodes(prev => [...prev, ...newEpisodes]);
+            setOffset(nextOffset);
+            if (newEpisodes.length < 50) setHasMore(false);
+        } else {
+            setHasMore(false);
+        }
+        setLoadingMore(false);
+    };
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -184,7 +208,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     const sanitizedShowDescription = show?.description ? show.description.replace(/<[^>]*>?/gm, '') : '';
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
+        <div className="flex-grow overflow-y-auto overflow-x-hidden h-full max-h-[100vh] px-6 pb-6 hide-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* Header */}
             {show && (
                 <header className="flex items-end gap-6 mb-6 pt-4">
@@ -282,6 +306,27 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                             );
                         })}
                     </motion.div>
+                    
+                    {hasMore && (
+                        <div className="flex justify-center mt-8 mb-4">
+                            <button 
+                                onClick={loadMoreEpisodes}
+                                disabled={loadingMore}
+                                className={`px-6 py-3 rounded-full font-bold transition-all ${
+                                    isNight 
+                                        ? 'bg-white/10 hover:bg-white/20 text-white' 
+                                        : 'bg-black/5 hover:bg-black/10 text-black'
+                                } disabled:opacity-50 flex items-center gap-2`}
+                            >
+                                {loadingMore ? (
+                                    <>
+                                        <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin border-current" />
+                                        Caricamento...
+                                    </>
+                                ) : 'Carica altri episodi'}
+                            </button>
+                        </div>
+                    )}
                 </>
             )}
         </div>
