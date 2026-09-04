@@ -105,7 +105,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
-  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(3.2);
+  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(3.6);
   const [spinnerSize, setSpinnerSize] = useState(18);
   const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
   const [debugSpinner, setDebugSpinner] = useState(false);
@@ -156,7 +156,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [satelliteLabelOutlineWidth, setSatelliteLabelOutlineWidth] = useState(1.2);
 
   const [progressBarHeight, setProgressBarHeight] = useState(5.4);
-  const [progressBarVerticalOffset, setProgressBarVerticalOffset] = useState(8.6);
+  const [progressBarVerticalOffset, setProgressBarVerticalOffset] = useState(12.9);
   const [playButtonScale, setPlayButtonScale] = useState(0.87);
   const [skipButtonScale, setSkipButtonScale] = useState(1.29);
 

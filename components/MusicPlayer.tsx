@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import YouTube from 'react-youtube';
 import { useAuth } from '../context/AuthContext';
@@ -62,6 +62,62 @@ const formatTime = (ms: number) => {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+/**
+ * Helper to format remaining milliseconds into -M:SS countdown
+ */
+const formatRemainingTime = (ms: number) => {
+  if (!ms || isNaN(ms) || ms <= 0) return '-0:00';
+  const totalSeconds = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `-${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+/**
+ * DynamicTrackTitle - only animates if the text truly overflows its container.
+ * If the title fits completely within the player, it stays static with zero movement.
+ * When overflowing, it moves strictly by the overflow delta, never detaching.
+ */
+const DynamicTrackTitle = ({ title, isAnyAppOpen }: { title: string; isAnyAppOpen: boolean }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const textRef = useRef<HTMLSpanElement>(null);
+    const [overflow, setOverflow] = useState(0);
+
+    useLayoutEffect(() => {
+        const calculateOverflow = () => {
+            if (containerRef.current && textRef.current) {
+                const containerWidth = containerRef.current.clientWidth;
+                const textWidth = textRef.current.scrollWidth;
+                const diff = textWidth - containerWidth;
+                setOverflow(diff > 6 ? diff : 0);
+            }
+        };
+        calculateOverflow();
+        const ro = new ResizeObserver(() => calculateOverflow());
+        if (containerRef.current) ro.observe(containerRef.current);
+        return () => ro.disconnect();
+    }, [title, isAnyAppOpen]);
+
+    return (
+        <div 
+            ref={containerRef} 
+            className={`font-semibold overflow-hidden whitespace-nowrap w-full ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} 
+            style={{ color: 'var(--text-primary)' }}
+        >
+            <span
+                ref={textRef}
+                className={overflow > 0 ? 'inline-block whitespace-nowrap marquee-dynamic' : 'truncate block'}
+                style={overflow > 0 ? {
+                    '--marquee-offset': `-${overflow + 8}px`,
+                    animationDuration: `${Math.max(6, (overflow / 20) + 4)}s`
+                } as React.CSSProperties : undefined}
+            >
+                {title}
+            </span>
+        </div>
+    );
 };
 
 /**
@@ -261,15 +317,13 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
     }, [isSeeking, player, state.duration]);
     
     const durationMs = state.duration || 0;
+    const remainingMs = Math.max(0, durationMs - progressMs);
 
     return (
         <div 
             className="flex items-center gap-2 w-full select-none flex-shrink-0 relative" 
             style={{ height: `${(height) / 16}rem`, marginTop: `${(offset) / 16}rem` }}
         >
-            <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
-                {formatTime(progressMs)}
-            </span>
             <div
                 ref={progressContainerRef}
                 className="spotify-progress-bar flex-1 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible select-none"
@@ -290,7 +344,7 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
                 </div>
             </div>
             <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
-                {formatTime(durationMs)}
+                {formatRemainingTime(remainingMs)}
             </span>
         </div>
     );
@@ -356,15 +410,13 @@ const YouTubeProgressBar = ({
     const displayPosition = isSeeking ? localPosition : progress.position;
     const progressPercentage = progress.duration > 0 ? (displayPosition / progress.duration) * 100 : 0;
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
+    const remainingMs = Math.max(0, ((progress.duration || 0) - displayPosition) * 1000);
 
     return (
         <div 
             className="flex items-center gap-2 w-full select-none flex-shrink-0 relative" 
             style={{ height: `${(height) / 16}rem`, marginTop: `${(offset) / 16}rem` }}
         >
-            <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
-                {formatTime(displayPosition * 1000)}
-            </span>
             <div
                 ref={progressRef}
                 className="flex-1 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
@@ -379,7 +431,7 @@ const YouTubeProgressBar = ({
                 </div>
             </div>
             <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
-                {formatTime(progress.duration * 1000)}
+                {formatRemainingTime(remainingMs)}
             </span>
         </div>
     );
@@ -513,9 +565,17 @@ const DisabledPlayerView = ({
             </div>
             {/* Progress bar */}
             <div 
-                className="w-full rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden flex-shrink-0" 
+                className="flex items-center gap-2 w-full select-none flex-shrink-0 relative" 
                 style={{ height: `${(progressBarHeight) / 16}rem`, marginTop: `${(progressBarVerticalOffset) / 16}rem` }}
-            />
+            >
+                <div 
+                    className="flex-1 rounded-full cursor-not-allowed bg-[var(--progress-bg)] overflow-hidden" 
+                    style={{ height: `${(progressBarHeight) / 16}rem` }}
+                />
+                <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
+                    -0:00
+                </span>
+            </div>
             {/* Controls */}
             <div className="w-full flex justify-between items-center" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                 <div className="flex-1 flex justify-start"></div>
@@ -1285,11 +1345,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
                             <img src={thumbnail} alt={title} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg object-cover flex-shrink-0 shadow-lg`} />
                             <div className={`overflow-hidden flex-grow min-w-0 ${isAnyAppOpen ? 'shrink' : ''}`}>
-                                <div className={`font-semibold overflow-hidden whitespace-nowrap ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>
-                                    <span className={title && title.length > 22 ? 'marquee-animation' : 'truncate block'}>
-                                        {title}
-                                    </span>
-                                </div>
+                                <DynamicTrackTitle title={title} isAnyAppOpen={Boolean(isAnyAppOpen)} />
                                 <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
                             </div>
                         </div>
@@ -1427,11 +1483,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 </div>
                             )}
                             <div className={`overflow-hidden flex-grow min-w-0 ${isAnyAppOpen ? 'shrink' : ''}`}>
-                                <div className={`font-semibold overflow-hidden whitespace-nowrap ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>
-                                    <span className={trackName && trackName.length > 22 ? 'marquee-animation' : 'truncate block'}>
-                                        {trackName}
-                                    </span>
-                                </div>
+                                <DynamicTrackTitle title={trackName} isAnyAppOpen={Boolean(isAnyAppOpen)} />
                                 <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{artists}</div>
                             </div>
                         </div>
