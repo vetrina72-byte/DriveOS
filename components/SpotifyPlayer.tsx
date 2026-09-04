@@ -275,7 +275,7 @@ const SpotifyPlayer = ({
 
     const handleSelectItem = (item: MediaItem) => {
         if (item.id === 'liked-songs') { changeView({ type: 'playlist', id: 'liked-songs' }); return; }
-        if (['playlist', 'album', 'artist', 'show'].includes(item.type)) { changeView({ type: item.type as any, id: item.id }); }
+        if (['playlist', 'album', 'artist', 'show'].includes(item.type)) { changeView({ type: item.type as any, id: item.id, title: item.name }); }
         else if (item.type === 'category') {
             if (item.id === 'new-releases' || item.name?.toLowerCase() === 'nuove uscite') changeView({ type: 'new-releases' });
             else changeView({ type: 'categoryPlaylists', id: item.id, title: item.name });
@@ -316,7 +316,7 @@ const SpotifyPlayer = ({
                     {view.type === 'categoryPlaylists' && <CategoryPlaylistsView categoryId={view.id!} title={view.title!} isNight={isNight} onSelectItem={handleSelectItem} onBack={handleBack} />}
                     {(view.type === 'playlist' || view.type === 'album') && <PlaylistDetailView itemId={view.id!} itemType={view.type as any} isNight={isNight} onPlay={(opts, item) => play(opts, item)} />}
                     {view.type === 'artist' && <ArtistDetailView artistId={view.id!} isNight={isNight} onPlay={(opts, item) => play(opts, item)} onSelectItem={handleSelectItem} onFollowChange={triggerDataRefresh} />}
-                    {view.type === 'show' && <ShowDetailView showId={view.id!} isNight={isNight} onPlay={(opts) => play(opts)} />}
+                    {view.type === 'show' && <ShowDetailView showId={view.id!} showName={view.title} isNight={isNight} onPlay={(opts) => play(opts)} />}
                 </div>
             );
         }
