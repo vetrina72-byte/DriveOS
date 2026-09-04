@@ -188,17 +188,29 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             const deviceId = localStorage.getItem('spotify_device_id') || playerState?.device?.id;
             const sessionId = localStorage.getItem('auth_session_id');
             if (deviceId) {
-                 await fetch('/api/transfer-player', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ device_id: deviceId, sessionId })
-                 });
+                 try {
+                     const transferRes = await fetch('/api/transfer-player', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ device_id: deviceId, sessionId })
+                     });
+                     if (!transferRes.ok) {
+                         console.warn("Transfer player failed:", transferRes.status);
+                     }
+                 } catch (e) {
+                     console.warn("Failed to reach /api/transfer-player:", e);
+                 }
             }
 
-            await apiClient.put('/me/player/play', {
-                uris: [episode.uri]
-            });
-            onPlay({ uris: [episode.uri] });
+            try {
+                await apiClient.put('/me/player/play', {
+                    uris: [episode.uri]
+                });
+                onPlay({ uris: [episode.uri] });
+            } catch (playErr) {
+                console.error("Failed to play episode:", playErr);
+                // Optionally handle playback error without crashing
+            }
             
             setTimeout(async () => {
                 try {

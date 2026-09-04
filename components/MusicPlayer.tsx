@@ -1397,7 +1397,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             </button>
                         </div>
                          <div className={`flex-1 flex justify-end items-center ${isAnyAppOpen ? 'shrink-0' : ''}`}>
-                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${playerState.track_window.next_tracks.length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
+                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full transition-all duration-200 ${(playerState?.track_window?.next_tracks ?? []).length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
                                 <BsList className={`${isAnyAppOpen ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-5 h-5'}`} />
                             </button>
                         </div>
@@ -1421,7 +1421,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }} />;
     };
 
-    const nextSpotifyTrack = playerState?.track_window.next_tracks[0];
+    const nextSpotifyTrack = playerState?.track_window?.next_tracks?.[0];
     const nextYouTubeTrack = nowPlaying.youtubePlaylist && nowPlaying.youtubeTrack
         ? nowPlaying.youtubePlaylist[nowPlaying.youtubePlaylist.findIndex(t => t.videoId === nowPlaying.youtubeTrack?.videoId) + 1]
         : null;

@@ -11,10 +11,7 @@ import { useWeather } from '../context/WeatherContext';
 const originalTemplate = L.Util.template;
 L.Util.template = function (str: any, data: any) {
   if (typeof str !== 'string') {
-    const subdomain = data?.s || 'a';
-    const rawTileUrl = str;
-    const tileUrl = rawTileUrl ? (rawTileUrl as string).replace('{s}', subdomain) : '';
-    return tileUrl;
+    return '';
   }
   return originalTemplate(str, data);
 };
