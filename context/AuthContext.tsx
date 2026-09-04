@@ -421,8 +421,13 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         });
         
         if (newState) {
+            if (!newState.track_window) {
+                console.warn('[Player] Stato di riproduzione vuoto o non ancora disponibile');
+                return;
+            }
+
             // Persist the essential track metadata for next session instant-load
-            if (newState.track_window.current_track) {
+            if (newState.track_window?.current_track) {
                 localStorage.setItem("cached_track_data", JSON.stringify(newState.track_window.current_track));
                 localStorage.setItem("spotify_last_track", newState.track_window.current_track.uri);
             }

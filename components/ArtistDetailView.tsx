@@ -97,7 +97,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const playerState = nowPlaying.spotifyState;
 
     const isPlayingContext = playerState && !playerState.paused;
-    const currentTrackId = playerState?.track_window.current_track?.id;
+    const currentTrackId = playerState?.track_window?.current_track?.id;
 
     const fetchDetails = useCallback(async () => {
         setIsLoading(true);

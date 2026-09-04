@@ -95,7 +95,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const isLikedSongs = itemId === 'liked-songs';
     const isCurrentContext = Boolean(playerState && (playerState.context?.uri === details?.uri || isLikedSongs || (details?.uri && details.uri.includes(playerState.track_window?.current_track?.id || ''))));
     const isPlayingContext = isCurrentContext && !playerState?.paused;
-    const currentTrackId = playerState?.track_window.current_track?.id;
+    const currentTrackId = playerState?.track_window?.current_track?.id;
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -307,7 +307,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                     if (!track) return null;
                     const imageUrl = itemType === 'album' ? details.images?.[0]?.url : track.album?.images?.[0]?.url;
                     const albumName = itemType === 'album' ? details.name : track.album.name;
-                    const isCurrentTrack = track.id === currentTrackId && Boolean(playerState?.track_window.current_track);
+                    const isCurrentTrack = track.id === currentTrackId && Boolean(playerState?.track_window?.current_track);
                     const isPlaying = isCurrentTrack && !playerState?.paused;
                     const isPaused = isCurrentTrack && Boolean(playerState?.paused);
                     const activeColor = isNight ? 'text-green-400' : 'text-green-600';

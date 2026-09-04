@@ -70,7 +70,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const playerState = nowPlaying.spotifyState;
 
     const isPlayingContext = playerState && !playerState.paused;
-    const currentTrackId = playerState?.track_window.current_track?.id;
+    const currentTrackId = playerState?.track_window?.current_track?.id;
 
     useEffect(() => {
         if (!query) return;

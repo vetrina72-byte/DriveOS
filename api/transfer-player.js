@@ -47,7 +47,7 @@ export default async function handler(req, res) {
 
     if (spotifyRes.status === 401 && sessionId && !usedSessionRefresh) {
       // Force refresh if we didn't get this token directly from a fresh session store retrieval
-      const session = await ensureSpotifyToken(sessionId);
+      const session = await ensureSpotifyToken(sessionId, null, true);
       if (session && session.access_token) {
         accessToken = session.access_token;
         spotifyRes = await fetch(url, {

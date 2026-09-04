@@ -673,9 +673,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     // Check if we are active LOCALLY
     // FIX: Relaxed checking. We allow playerState to exist even if 'player' instance (SDK) isn't fully ready yet.
     // This supports the optimistic UI state hydrated from localStorage in AuthContext.
-    const isPlayerActive = playerState && playerState.track_window.current_track;
+    const isPlayerActive = playerState && playerState?.track_window?.current_track;
     
-    const currentTrack = playerState?.track_window.current_track;
+    const currentTrack = playerState?.track_window?.current_track;
     const currentTrackUri = currentTrack?.uri;
 
     const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
@@ -1315,8 +1315,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
 
         if (source === 'spotify' && isPlayerActive) {
-            const { name: trackName, album, artists } = playerState.track_window.current_track!;
-            const imageUrl = album.images[0]?.url;
+            const currentTrack = playerState?.track_window?.current_track ?? playerState?.item ?? null;
+            const trackName = currentTrack?.name ?? 'Episodio in riproduzione';
+            const imageUrl = currentTrack?.album?.images?.[0]?.url ?? currentTrack?.images?.[0]?.url ?? '/placeholder.png';
+            const albumName = currentTrack?.album?.name ?? 'Podcast';
+            const artists = currentTrack?.artists?.map((a: any) => a.name).join(', ') ?? 'Podcast';
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
             const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
@@ -1326,12 +1329,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
                             {imageUrl && (
                                 <div className="flex-shrink-0">
-                                    <img src={imageUrl} alt={album.name} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg shadow-lg`} />
+                                    <img src={imageUrl} alt={albumName} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg shadow-lg`} />
                                 </div>
                             )}
                             <div className={`overflow-hidden flex-grow ${isAnyAppOpen ? 'min-w-0 shrink' : ''}`}>
                                 <div className={`font-semibold truncate ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>{trackName}</div>
-                                <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{artists.map(a => a.name).join(', ')}</div>
+                                <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{artists}</div>
                             </div>
                         </div>
                         <div className={`flex items-center flex-shrink-0 pl-2 ${isAnyAppOpen ? 'gap-2 sm:gap-5' : 'gap-5'}`}>

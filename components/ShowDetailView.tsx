@@ -69,10 +69,10 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [playError, setPlayError] = useState<string | null>(null);
     
-    const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh } = useAuth();
+    const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh, _setPlayerState } = useAuth();
     const playerState = nowPlaying.spotifyState;
     const isPlayingContext = playerState && !playerState.paused;
-    const currentTrackId = playerState?.track_window.current_track?.id;
+    const currentTrackId = playerState?.track_window?.current_track?.id;
     
     useEffect(() => {
         let isMounted = true;
@@ -158,6 +158,32 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         const episode = episodes[index];
         if (!episode?.uri) return;
         setPlayError(null);
+        
+        // Optimistic UI update: Insert a safe mock state into the Player to avoid rendering null
+        if (_setPlayerState) {
+            _setPlayerState({
+                context: { uri: show?.uri || '' } as any,
+                track_window: {
+                    current_track: {
+                        id: episode.id,
+                        uri: episode.uri,
+                        name: episode.title || episode.name,
+                        album: { name: show?.name || 'Podcast', images: [{ url: episode.image || show?.image || '' }] },
+                        images: [{ url: episode.image || show?.image || '' }],
+                        artists: [{ name: show?.publisher || 'Podcast' }]
+                    } as any,
+                    next_tracks: [],
+                    previous_tracks: []
+                },
+                position: 0,
+                duration: episode.duration_ms,
+                paused: false,
+                shuffle: false,
+                repeat_mode: 0,
+                disallows: { pausing: false, skipping_next: false, skipping_prev: false }
+            } as any);
+        }
+
         try {
             const deviceId = localStorage.getItem('spotify_device_id') || playerState?.device?.id;
             const sessionId = localStorage.getItem('auth_session_id');
