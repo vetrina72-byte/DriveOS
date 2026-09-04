@@ -295,7 +295,10 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                             const status = PodcastService.getEpisodeStatus(ep, isCurrent ? playerState : undefined);
                             const progressPercent = status.progress_percent;
                             const isFullyPlayed = status.fully_played;
-                            const remainingMin = Math.max(1, Math.ceil((status.duration_ms - status.resume_position_ms) / 60000));
+                            const remainingMs = Math.max(0, status.duration_ms - status.resume_position_ms);
+                            const remainingText = remainingMs > 60000
+                                ? `${Math.ceil(remainingMs / 60000)} min rimanenti`
+                                : `${Math.max(1, Math.round(remainingMs / 1000))} sec rimanenti`;
 
                             const handleCardClick = () => {
                                 if (isCurrent) {
@@ -348,7 +351,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                         <div className="space-y-1.5 mt-2">
                                             <div className="flex justify-between text-[10px] opacity-70">
                                                 <span>{isFullyPlayed ? 'Già ascoltato' : `Ascoltato ${progressPercent}%`}</span>
-                                                {!isFullyPlayed && <span>{remainingMin} min rimanenti</span>}
+                                                {!isFullyPlayed && <span>{remainingText}</span>}
                                             </div>
                                             <div className={`w-full h-1.5 rounded-full overflow-hidden ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
                                                 <div 

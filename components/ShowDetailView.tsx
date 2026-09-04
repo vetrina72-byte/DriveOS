@@ -444,7 +444,9 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                                 <>
                                                     <span>•</span>
                                                     <span className="text-amber-400 font-medium">
-                                                        {Math.max(1, Math.ceil((status.duration_ms - status.resume_position_ms) / 60000))} min rimanenti
+                                                        {status.duration_ms - status.resume_position_ms > 60000
+                                                            ? `${Math.ceil((status.duration_ms - status.resume_position_ms) / 60000)} min rimanenti`
+                                                            : `${Math.max(1, Math.round((status.duration_ms - status.resume_position_ms) / 1000))} sec rimanenti`}
                                                     </span>
                                                 </>
                                             )}

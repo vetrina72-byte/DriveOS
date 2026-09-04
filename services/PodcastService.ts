@@ -62,8 +62,10 @@ export class PodcastService {
                 const elapsed = (isPlaying && playerState.timestamp) ? Math.max(0, Date.now() - playerState.timestamp) : 0;
                 const livePos = Math.min(playerState.duration, Math.max(0, (playerState.position || 0) + elapsed));
                 resumeMs = livePos;
-                if (livePos >= playerState.duration * 0.95) {
+                if (livePos >= playerState.duration - 2000) {
                     fullyPlayed = true;
+                } else {
+                    fullyPlayed = false;
                 }
             }
         }
@@ -73,7 +75,7 @@ export class PodcastService {
         if (fullyPlayed) {
             percent = 100;
         } else if (resumeMs > 0 && duration > 0) {
-            percent = Math.min(100, Math.max(0, Math.round((resumeMs / duration) * 100)));
+            percent = Math.min(99, Math.max(0, Math.round((resumeMs / duration) * 100)));
         }
 
         return {
@@ -93,9 +95,9 @@ export class PodcastService {
             const raw = localStorage.getItem(this.STORAGE_KEY);
             const data = raw ? JSON.parse(raw) : {};
             const effectiveDuration = durationMs > 0 ? durationMs : (data[episodeId]?.duration_ms || 0);
-            const isCompleted = fullyPlayed || (effectiveDuration > 0 && positionMs >= effectiveDuration * 0.95);
+            const isCompleted = fullyPlayed || (effectiveDuration > 0 && positionMs >= effectiveDuration - 2000);
             data[episodeId] = {
-                resume_position_ms: positionMs,
+                resume_position_ms: isCompleted ? effectiveDuration : positionMs,
                 duration_ms: effectiveDuration,
                 fully_played: isCompleted,
                 updated_at: Date.now()
@@ -206,9 +208,9 @@ export class PodcastService {
             const idx = history.findIndex(item => item.id === episodeId);
             if (idx >= 0) {
                 const effectiveDuration = durationMs > 0 ? durationMs : (history[idx].duration_ms || 1800000);
-                const isCompleted = fullyPlayed || (effectiveDuration > 0 && positionMs >= effectiveDuration * 0.95);
+                const isCompleted = fullyPlayed || (effectiveDuration > 0 && positionMs >= effectiveDuration - 2000);
                 history[idx].resume_point = {
-                    resume_position_ms: positionMs,
+                    resume_position_ms: isCompleted ? effectiveDuration : positionMs,
                     fully_played: isCompleted
                 };
                 if (durationMs > 0) {
