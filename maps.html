@@ -568,6 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (y < 0 || y >= numTiles) return null;
             const wrappedX = ((x % numTiles) + numTiles) % numTiles;
             let providerUrl = this.tileProviders[providerKey] || this.tileProviders.dark;
+            if (typeof providerUrl !== 'string') return null;
             const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
             // MapTiler dark doesn't support {r}

@@ -7,6 +7,18 @@ import VehicleArrowIcon from './VehicleArrowIcon';
 import { useNavigation } from '../context/NavigationContext';
 import { useWeather } from '../context/WeatherContext';
 
+// Patch difensiva per prevenire loop infiniti (TypeError: replace of undefined) nel caricamento tile (loadTile / Yg.url)
+const originalTemplate = L.Util.template;
+L.Util.template = function (str: any, data: any) {
+  if (typeof str !== 'string') {
+    const subdomain = data?.s || 'a';
+    const tileUrl = str;
+    const safeUrl = (typeof tileUrl === 'string' ? tileUrl : '').replace('{s}', subdomain);
+    return safeUrl;
+  }
+  return originalTemplate(str, data);
+};
+
 // Function to create a leaflet icon from the React component - UPDATED
 const createVehicleIcon = (bearing: number): L.DivIcon => {
   return L.divIcon({

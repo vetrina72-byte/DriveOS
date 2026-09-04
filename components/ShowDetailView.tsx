@@ -56,41 +56,34 @@ interface ShowDetailViewProps {
 }
 
 async function fetchPodcastEpisodesRobust(showId: string, showName: string | undefined, accessToken: string, offset: number = 0) {
-  const headers = { 
-    'Authorization': `Bearer ${accessToken}`,
-    'Accept': 'application/json'
-  };
-
-  // STRATEGIA 1: Endpoint diretto episodi con mercato italiano (market=IT)
+  let userCountry = 'IT';
   try {
-    const url1 = `https://api.spotify.com/v1/shows/${showId}/episodes?market=IT&limit=50&offset=${offset}`;
-    const res1 = await fetch(url1, { headers });
-    if (res1.ok) {
-      const data1 = await res1.json();
-      if (data1?.items && data1.items.length > 0) return data1.items;
+    const meRes = await apiClient.get('/me');
+    if (meRes.data && meRes.data.country) {
+      userCountry = meRes.data.country;
     }
+  } catch (e) {
+    console.warn("Impossibile recuperare il profilo utente per il market:", e);
+  }
+
+  // STRATEGIA 1: Endpoint diretto episodi con mercato dinamico
+  try {
+    const res1 = await apiClient.get(`/shows/${showId}/episodes?market=${userCountry}&limit=50&offset=${offset}`);
+    if (res1.data?.items && res1.data.items.length > 0) return res1.data.items;
   } catch (e) { console.warn("Strategia 1 fallita:", e); }
 
   // STRATEGIA 2: Endpoint diretto episodi SENZA parametro market
   try {
-    const url2 = `https://api.spotify.com/v1/shows/${showId}/episodes?limit=50&offset=${offset}`;
-    const res2 = await fetch(url2, { headers });
-    if (res2.ok) {
-      const data2 = await res2.json();
-      if (data2?.items && data2.items.length > 0) return data2.items;
-    }
+    const res2 = await apiClient.get(`/shows/${showId}/episodes?limit=50&offset=${offset}`);
+    if (res2.data?.items && res2.data.items.length > 0) return res2.data.items;
   } catch (e) { console.warn("Strategia 2 fallita:", e); }
 
-  // STRATEGIA 3: Endpoint principale dello Show (data.episodes.items)
+  // STRATEGIA 3: Endpoint principale dello Show
   if (offset === 0) {
     try {
-      const url3 = `https://api.spotify.com/v1/shows/${showId}?market=IT`;
-      const res3 = await fetch(url3, { headers });
-      if (res3.ok) {
-        const data3 = await res3.json();
-        if (data3?.episodes?.items && data3.episodes.items.length > 0) {
-          return data3.episodes.items;
-        }
+      const res3 = await apiClient.get(`/shows/${showId}?market=${userCountry}`);
+      if (res3.data?.episodes?.items && res3.data.episodes.items.length > 0) {
+        return res3.data.episodes.items;
       }
     } catch (e) { console.warn("Strategia 3 fallita:", e); }
   }
@@ -99,13 +92,9 @@ async function fetchPodcastEpisodesRobust(showId: string, showName: string | und
   if (showName) {
     try {
       const query = encodeURIComponent(`show:${showName}`);
-      const url4 = `https://api.spotify.com/v1/search?q=${query}&type=episode&market=IT&limit=50&offset=${offset}`;
-      const res4 = await fetch(url4, { headers });
-      if (res4.ok) {
-        const data4 = await res4.json();
-        if (data4?.episodes?.items && data4.episodes.items.length > 0) {
-          return data4.episodes.items;
-        }
+      const res4 = await apiClient.get(`/search?q=${query}&type=episode&market=${userCountry}&limit=50&offset=${offset}`);
+      if (res4.data?.episodes?.items && res4.data.episodes.items.length > 0) {
+        return res4.data.episodes.items;
       }
     } catch (e) { console.warn("Strategia 4 fallita:", e); }
   }
