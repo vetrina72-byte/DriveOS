@@ -249,11 +249,21 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                     {tracks.slice(0, 5).map((track, index) => {
                         const isPlaying = isPlayingContext && track.id === currentTrackId;
                         const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+                        const trackItemForOptimistic = {
+                            id: track.id,
+                            name: track.name,
+                            type: 'track' as const,
+                            uri: track.uri,
+                            images: track.album?.images || artist.images || [],
+                            album: track.album,
+                            artists: [{ name: artist.name }],
+                            duration_ms: track.duration_ms
+                        };
                         return (
                             <motion.div
                                 key={track.id}
                                 variants={itemVariants}
-                                onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index } }, artist)}
+                                onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index } }, trackItemForOptimistic)}
                                 className={`flex items-center gap-4 p-2 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                             >
                                 <span className={`w-6 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>

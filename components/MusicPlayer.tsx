@@ -54,7 +54,18 @@ interface MusicPlayerProps {
 }
 
 /**
- * SpotifyProgressBar - Visual Dictatorship Version
+ * Helper to format milliseconds into MM:SS
+ */
+const formatTime = (ms: number) => {
+  if (!ms || isNaN(ms)) return '0:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+/**
+ * SpotifyProgressBar - Visual Dictatorship Version with MM:SS Timestamps
  */
 const SpotifyProgressBar = ({ player, state, height, offset }: { player: SpotifyPlayer | null, state: SpotifyPlayerState, height: number, offset: number }) => {
     const barFillRef = useRef<HTMLDivElement>(null);
@@ -64,6 +75,30 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
     // The absolute truth of what is currently rendered on screen explicitly for seeking
     const visualPosRef = useRef<number>(state.position);
     const optimisticSeekRef = useRef<{ pos: number, ts: number } | null>(null);
+
+    // Local progress state incremented every second when playing
+    const [progressMs, setProgressMs] = useState<number>(state.position || 0);
+
+    // Sync with incoming state.position
+    useEffect(() => {
+        if (!isSeeking) {
+            setProgressMs(state.position || 0);
+        }
+    }, [state.position, isSeeking]);
+
+    // Timer incrementing progressMs every second when playing
+    useEffect(() => {
+        if (state.paused || isSeeking) return;
+
+        const interval = setInterval(() => {
+            setProgressMs(prev => {
+                const next = prev + 1000;
+                return state.duration ? Math.min(next, state.duration) : next;
+            });
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [state.paused, isSeeking, state.duration]);
 
     // --- PAGE VISIBILITY API ---
     useEffect(() => {
@@ -143,7 +178,9 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         const percent = ratio * 100;
         
         barFillRef.current.style.width = `${percent}%`;
-        visualPosRef.current = Math.round(state.duration * ratio);
+        const newPos = Math.round(state.duration * ratio);
+        visualPosRef.current = newPos;
+        setProgressMs(newPos);
     };
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -176,6 +213,7 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
             setIsSeeking(false);
             if (state.duration) {
                 const targetPos = Math.round(visualPosRef.current);
+                setProgressMs(targetPos);
                 const now = Date.now();
                 optimisticSeekRef.current = { pos: targetPos, ts: now };
                 localStorage.setItem("last_progress_ms", String(targetPos));
@@ -222,25 +260,38 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         };
     }, [isSeeking, player, state.duration]);
     
+    const durationMs = state.duration || 0;
+
     return (
-        <div
-            ref={progressContainerRef}
-            className="spotify-progress-bar w-full rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible flex-shrink-0 select-none"
+        <div 
+            className="flex items-center gap-2 w-full select-none flex-shrink-0 relative" 
             style={{ height: `${(height) / 16}rem`, marginTop: `${(offset) / 16}rem` }}
-            onMouseDown={handleMouseDown}
-            onTouchStart={handleTouchStart}
         >
-            <div 
-                ref={barFillRef}
-                className="h-full rounded-full bg-[var(--progress-fill)] relative" 
-                // Initial render width
-                style={{ width: `${Math.max(0, Math.min(100, (visualPosRef.current / (state.duration || 1)) * 100))}%` }} 
+            <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
+                {formatTime(progressMs)}
+            </span>
+            <div
+                ref={progressContainerRef}
+                className="spotify-progress-bar flex-1 rounded-full cursor-pointer group relative bg-[var(--progress-bg)] overflow-visible select-none"
+                style={{ height: `${(height) / 16}rem` }}
+                onMouseDown={handleMouseDown}
+                onTouchStart={handleTouchStart}
             >
-                 <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
-                    style={{ transform: 'translateY(-50%)' }} 
-                />
+                <div 
+                    ref={barFillRef}
+                    className="h-full rounded-full bg-[var(--progress-fill)] relative" 
+                    // Initial render width
+                    style={{ width: `${Math.max(0, Math.min(100, (visualPosRef.current / (state.duration || 1)) * 100))}%` }} 
+                >
+                     <div 
+                        className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
+                        style={{ transform: 'translateY(-50%)' }} 
+                    />
+                </div>
             </div>
+            <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
+                {formatTime(durationMs)}
+            </span>
         </div>
     );
 };
@@ -307,18 +358,29 @@ const YouTubeProgressBar = ({
     const visualPercentage = Math.min(100, Math.max(0, progressPercentage));
 
     return (
-        <div
-            ref={progressRef}
-            className="w-full rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible flex-shrink-0"
+        <div 
+            className="flex items-center gap-2 w-full select-none flex-shrink-0 relative" 
             style={{ height: `${(height) / 16}rem`, marginTop: `${(offset) / 16}rem` }}
-            onMouseDown={handleMouseDown}
         >
-            <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
-                <div 
-                    className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
-                    style={{ transform: 'translateY(-50%)' }} 
-                />
+            <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
+                {formatTime(displayPosition * 1000)}
+            </span>
+            <div
+                ref={progressRef}
+                className="flex-1 rounded-full cursor-pointer group bg-[var(--progress-bg)] overflow-visible"
+                style={{ height: `${(height) / 16}rem` }}
+                onMouseDown={handleMouseDown}
+            >
+                <div className="h-full rounded-full bg-[var(--progress-fill)] relative" style={{ width: `${visualPercentage}%` }}>
+                    <div 
+                        className="absolute top-1/2 -right-1.5 w-3 h-3 rounded-full bg-[var(--progress-fill)] opacity-100"
+                        style={{ transform: 'translateY(-50%)' }} 
+                    />
+                </div>
             </div>
+            <span className="text-[10px] text-gray-400 font-mono flex-shrink-0 tabular-nums select-none leading-none -translate-y-px">
+                {formatTime(progress.duration * 1000)}
+            </span>
         </div>
     );
 };
@@ -554,8 +616,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const effectiveControlsGap = isMobileOrTablet 
         ? (isAnyAppOpen 
             ? (isOverflowing ? 33 : 18) 
-            : 100) 
-        : 100;
+            : playerControlsGap) 
+        : playerControlsGap;
     
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
     const [isQueueClosing, setIsQueueClosing] = useState(false);
@@ -582,6 +644,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const hasEndedRef = useRef(false);
     const prevPositionRef = useRef(0);
     const lastTogglePlayTimeRef = useRef<number>(0);
+    const lastTrackDataRef = useRef<{
+        name: string;
+        imageUrl: string;
+        albumName: string;
+        artists: string;
+    } | null>(null);
 
     const { sceneTransitionSpeed = 1.10 } = useUIConfig();
 
@@ -1216,8 +1284,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <div className="flex items-center justify-between w-full">
                         <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
                             <img src={thumbnail} alt={title} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg object-cover flex-shrink-0 shadow-lg`} />
-                            <div className={`overflow-hidden flex-grow ${isAnyAppOpen ? 'min-w-0 shrink' : ''}`}>
-                                <div className={`font-semibold truncate ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>{title}</div>
+                            <div className={`overflow-hidden flex-grow min-w-0 ${isAnyAppOpen ? 'shrink' : ''}`}>
+                                <div className={`font-semibold overflow-hidden whitespace-nowrap ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>
+                                    <span className={title && title.length > 22 ? 'marquee-animation' : 'truncate block'}>
+                                        {title}
+                                    </span>
+                                </div>
                                 <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{channelTitle}</div>
                             </div>
                         </div>
@@ -1316,10 +1388,27 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         if (source === 'spotify' && isPlayerActive) {
             const currentTrack = playerState?.track_window?.current_track ?? playerState?.item ?? null;
-            const trackName = currentTrack?.name ?? (currentTrack as any)?.title ?? 'Episodio in riproduzione';
-            const imageUrl = currentTrack?.album?.images?.[0]?.url ?? currentTrack?.images?.[0]?.url ?? (currentTrack as any)?.image ?? '/placeholder.png';
-            const albumName = currentTrack?.album?.name ?? 'Podcast';
-            const artists = currentTrack?.artists?.map((a: any) => a.name).join(', ') ?? 'Podcast';
+            const rawName = currentTrack?.name ?? (currentTrack as any)?.title;
+            const rawImage = currentTrack?.album?.images?.[0]?.url ?? currentTrack?.images?.[0]?.url ?? (currentTrack as any)?.image;
+            const rawAlbum = currentTrack?.album?.name;
+            const rawArtists = currentTrack?.artists?.map((a: any) => a.name).join(', ');
+
+            // Keep Previous Data logic: cache valid track data so buffering does not cause jumps
+            if (rawName && rawName !== 'In riproduzione') {
+                lastTrackDataRef.current = {
+                    name: rawName,
+                    imageUrl: rawImage || lastTrackDataRef.current?.imageUrl || '/placeholder.png',
+                    albumName: rawAlbum || lastTrackDataRef.current?.albumName || 'Musica',
+                    artists: rawArtists || lastTrackDataRef.current?.artists || ''
+                };
+            }
+
+            const trackName = rawName || lastTrackDataRef.current?.name || 'In riproduzione';
+            const imageUrl = rawImage || lastTrackDataRef.current?.imageUrl || '/placeholder.png';
+            const albumName = rawAlbum || lastTrackDataRef.current?.albumName || 'Musica';
+            const artists = rawArtists || lastTrackDataRef.current?.artists || (currentTrack?.uri?.includes('episode') ? 'Podcast' : '');
+            
+            const isPodcastEpisode = Boolean(currentTrack?.uri?.includes('episode') || (currentTrack as any)?.type === 'episode');
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
             const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
@@ -1329,7 +1418,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
                             {imageUrl && (
                                 <div className="flex-shrink-0 relative">
-                                    <img src={imageUrl} alt={albumName} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg shadow-lg`} />
+                                    <img src={imageUrl} alt={albumName} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg shadow-lg object-cover`} />
                                     {(nowPlaying.isLoading || (playerState as any)?.isLoading) && (
                                         <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center backdrop-blur-[1px]">
                                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1337,8 +1426,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                     )}
                                 </div>
                             )}
-                            <div className={`overflow-hidden flex-grow ${isAnyAppOpen ? 'min-w-0 shrink' : ''}`}>
-                                <div className={`font-semibold truncate ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>{trackName}</div>
+                            <div className={`overflow-hidden flex-grow min-w-0 ${isAnyAppOpen ? 'shrink' : ''}`}>
+                                <div className={`font-semibold overflow-hidden whitespace-nowrap ${isAnyAppOpen ? 'text-xs sm:text-sm' : 'text-sm'}`} style={{ color: 'var(--text-primary)' }}>
+                                    <span className={trackName && trackName.length > 22 ? 'marquee-animation' : 'truncate block'}>
+                                        {trackName}
+                                    </span>
+                                </div>
                                 <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{artists}</div>
                             </div>
                         </div>

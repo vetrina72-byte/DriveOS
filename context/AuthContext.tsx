@@ -6,6 +6,7 @@ import { NowPlayingState, YouTubeTrackInfo, PlayOptions } from '../types';
 import { SpotifyItem as MediaItem } from '../components/PlaylistItem';
 import { getSessionId } from '../lib/sessionId';
 import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalPlayer, getPlayerInstance, getDeviceId, safePlay } from '../lib/spotify-player';
+import { PodcastService } from '../services/PodcastService';
 
 export interface SpotifyUser {
     display_name: string;
@@ -429,9 +430,33 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
             
+            // Keep previous track data if incoming track is temporarily missing image or metadata
+            const newTrack = newState?.track_window?.current_track || (newState as any)?.item;
+            const prevTrack = s.spotifyState?.track_window?.current_track || (s.spotifyState as any)?.item;
+
+            let resolvedState = { ...newState, isLoading: false };
+            if (newTrack && prevTrack) {
+                const prevImages = prevTrack.album?.images || prevTrack.images;
+                if ((!newTrack.album?.images || newTrack.album.images.length === 0) && prevImages?.length) {
+                    resolvedState = {
+                        ...resolvedState,
+                        track_window: {
+                            ...resolvedState.track_window,
+                            current_track: {
+                                ...newTrack,
+                                album: {
+                                    ...newTrack.album,
+                                    images: prevImages
+                                }
+                            }
+                        }
+                    };
+                }
+            }
+
             return { 
                 ...s, 
-                spotifyState: { ...newState, isLoading: false }, 
+                spotifyState: resolvedState, 
                 isLoading: false, 
                 source: 'spotify',
                 activeDevice: null 
@@ -442,6 +467,12 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             if (!newState.track_window) {
                 console.warn('[Player] Stato di riproduzione vuoto o non ancora disponibile');
                 return;
+            }
+
+            // Record podcast progress if current track is an episode
+            const activeTrk = newState.track_window?.current_track;
+            if (activeTrk?.uri?.includes('episode') && activeTrk.id) {
+                PodcastService.saveEpisodeProgress(activeTrk.id, newState.position, newState.duration);
             }
 
             // Persist the essential track metadata for next session instant-load
@@ -876,18 +907,40 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         setNowPlaying(prev => {
             let nextSpotifyState = prev.spotifyState;
             if (itemForOptimisticUpdate) {
-                const optTrack: any = {
-                    id: itemForOptimisticUpdate.id,
-                    uri: itemForOptimisticUpdate.uri,
-                    name: (itemForOptimisticUpdate as any).name || (itemForOptimisticUpdate as any).title || 'In riproduzione',
-                    album: (itemForOptimisticUpdate as any).album || {
-                        name: (itemForOptimisticUpdate as any).albumName || (itemForOptimisticUpdate as any).showName || 'Podcast',
-                        images: (itemForOptimisticUpdate as any).images || [{ url: (itemForOptimisticUpdate as any).imageUrl || (itemForOptimisticUpdate as any).image || '' }]
-                    },
-                    images: (itemForOptimisticUpdate as any).images || [{ url: (itemForOptimisticUpdate as any).imageUrl || (itemForOptimisticUpdate as any).image || '' }],
-                    artists: (itemForOptimisticUpdate as any).artists || [{ name: (itemForOptimisticUpdate as any).artistName || (itemForOptimisticUpdate as any).publisher || 'Podcast' }],
-                    duration_ms: (itemForOptimisticUpdate as any).duration_ms || 0
-                };
+                const prevTrack = prev.spotifyState?.track_window?.current_track || (prev.spotifyState as any)?.item;
+                const isPlaylistOrContainer = itemForOptimisticUpdate.type === 'playlist' || itemForOptimisticUpdate.type === 'show' || itemForOptimisticUpdate.type === 'album';
+
+                // If user played from a playlist/show without track-level info and we already have a track,
+                // do NOT wipe or replace the track with the playlist name during buffering
+                let optTrack: any;
+                if (isPlaylistOrContainer && prevTrack) {
+                    optTrack = {
+                        ...prevTrack,
+                        album: {
+                            ...prevTrack.album,
+                            // Keep previous album and cover
+                            images: prevTrack.album?.images?.length ? prevTrack.album.images : ((itemForOptimisticUpdate as any).images || [])
+                        }
+                    };
+                } else {
+                    const fallbackImages = (itemForOptimisticUpdate as any).images || [{ url: (itemForOptimisticUpdate as any).imageUrl || (itemForOptimisticUpdate as any).image || '' }];
+                    const prevImages = prevTrack?.album?.images || prevTrack?.images;
+                    const finalImages = (fallbackImages[0]?.url) ? fallbackImages : (prevImages || []);
+
+                    optTrack = {
+                        id: itemForOptimisticUpdate.id,
+                        uri: itemForOptimisticUpdate.uri,
+                        name: (itemForOptimisticUpdate as any).name || (itemForOptimisticUpdate as any).title || prevTrack?.name || 'In riproduzione',
+                        album: (itemForOptimisticUpdate as any).album || {
+                            name: (itemForOptimisticUpdate as any).albumName || (itemForOptimisticUpdate as any).showName || prevTrack?.album?.name || 'Musica',
+                            images: finalImages
+                        },
+                        images: finalImages,
+                        artists: (itemForOptimisticUpdate as any).artists || [{ name: (itemForOptimisticUpdate as any).artistName || (itemForOptimisticUpdate as any).publisher || 'Artista' }],
+                        duration_ms: (itemForOptimisticUpdate as any).duration_ms || prevTrack?.duration_ms || 0
+                    };
+                }
+
                 nextSpotifyState = {
                     context: { uri: effectiveOptions.context_uri || null, metadata: null },
                     disallows: { pausing: false, skipping_next: false, skipping_prev: false },

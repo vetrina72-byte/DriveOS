@@ -231,10 +231,22 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             return;
         }
 
+        const selectedTrack = tracks[index];
+        const trackItemForOptimistic: SpotifyItem | undefined = selectedTrack ? {
+            id: selectedTrack.id,
+            name: selectedTrack.name,
+            type: 'track',
+            uri: selectedTrack.uri,
+            images: selectedTrack.album?.images || (details?.images ? details.images : []),
+            album: selectedTrack.album,
+            artists: selectedTrack.artists,
+            duration_ms: selectedTrack.duration_ms
+        } : undefined;
+
         if (isLikedSongs) {
-            onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } }, details);
+            onPlay({ uris: tracks.map(t => t.uri), offset: { position: index } }, trackItemForOptimistic);
         } else if (details?.uri) {
-            onPlay({ context_uri: details.uri, offset: { position: index } }, details);
+            onPlay({ context_uri: details.uri, offset: { position: index } }, trackItemForOptimistic);
         }
     };
 

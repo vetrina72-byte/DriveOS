@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../spotifyClient';
-import { FiPlay, FiMic } from 'react-icons/fi';
+import { FiPlay, FiMic, FiCheck, FiClock } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import { PodcastService, Episode } from '../services/PodcastService';
@@ -313,6 +313,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                             const isPlaying = isPlayingContext && episode?.id === currentTrackId;
                             const isThisEpisodeSwitching = isSwitching && switchingEpisodeId === episode.id;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+                            const status = PodcastService.getEpisodeStatus(episode);
                             
                             return (
                                 <motion.div
@@ -332,13 +333,37 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                         <div className="flex items-center gap-2 min-w-0">
                                             {isPlaying && !isThisEpisodeSwitching && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
                                             <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.title}</span>
+                                            {status.fully_played ? (
+                                                <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
+                                                    <FiCheck className="w-3 h-3 stroke-[3]" />
+                                                    Ascoltato
+                                                </span>
+                                            ) : status.resume_position_ms > 0 ? (
+                                                <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                                    <FiClock className="w-3 h-3" />
+                                                    In corso ({status.progress_percent}%)
+                                                </span>
+                                            ) : null}
                                         </div>
                                         <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description}</span>
                                         <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
                                             {episode.release_date && <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
                                             {episode.release_date && episode.duration_ms > 0 && <span>•</span>}
                                             {episode.duration_ms > 0 && <span>{formatDuration(episode.duration_ms)}</span>}
+                                            {!status.fully_played && status.resume_position_ms > 0 && (
+                                                <>
+                                                    <span>•</span>
+                                                    <span className="text-amber-400 font-medium">
+                                                        {Math.max(1, Math.round((episode.duration_ms - status.resume_position_ms) / 60000))} min rimanenti
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
+                                        {!status.fully_played && status.resume_position_ms > 0 && (
+                                            <div className={`w-full max-w-xs h-1 rounded-full overflow-hidden mt-1.5 ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
+                                                <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${status.progress_percent}%` }} />
+                                            </div>
+                                        )}
                                     </div>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }}

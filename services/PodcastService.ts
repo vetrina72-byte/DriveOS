@@ -8,9 +8,73 @@ export interface Episode {
     release_date: string;
     uri: string;
     image: string;
+    resume_point?: {
+        fully_played: boolean;
+        resume_position_ms: number;
+    };
 }
 
 export class PodcastService {
+    /**
+     * Local storage key for persisting podcast playback points across sessions
+     */
+    private static STORAGE_KEY = 'podcast_episodes_progress';
+
+    /**
+     * Retrieves the playback status of an episode, checking both Spotify API resume_point
+     * and local fallback storage.
+     */
+    static getEpisodeStatus(episode: Episode): { fully_played: boolean; resume_position_ms: number; progress_percent: number } {
+        let fullyPlayed = Boolean(episode.resume_point?.fully_played);
+        let resumeMs = episode.resume_point?.resume_position_ms || 0;
+
+        try {
+            const raw = localStorage.getItem(this.STORAGE_KEY);
+            if (raw) {
+                const stored = JSON.parse(raw);
+                const localEp = stored[episode.id];
+                if (localEp) {
+                    if (localEp.fully_played) fullyPlayed = true;
+                    if (localEp.resume_position_ms > resumeMs) {
+                        resumeMs = localEp.resume_position_ms;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        const duration = episode.duration_ms || 1;
+        let percent = 0;
+        if (fullyPlayed) {
+            percent = 100;
+        } else if (resumeMs > 0 && duration > 0) {
+            percent = Math.min(99, Math.max(1, Math.round((resumeMs / duration) * 100)));
+        }
+
+        return {
+            fully_played: fullyPlayed,
+            resume_position_ms: resumeMs,
+            progress_percent: percent
+        };
+    }
+
+    /**
+     * Saves episode playback progress locally so badges update in real-time
+     */
+    static saveEpisodeProgress(episodeId: string, positionMs: number, durationMs: number, fullyPlayed: boolean = false): void {
+        if (!episodeId) return;
+        try {
+            const raw = localStorage.getItem(this.STORAGE_KEY);
+            const data = raw ? JSON.parse(raw) : {};
+            const isCompleted = fullyPlayed || (durationMs > 0 && positionMs >= durationMs * 0.95);
+            data[episodeId] = {
+                resume_position_ms: positionMs,
+                fully_played: isCompleted,
+                updated_at: Date.now()
+            };
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {}
+    }
+
     /**
      * RISOLUTORE UNIFICATO DI ENTITÀ PODCAST
      * Gestisce sia ID Show diretti, sia URI Spotify, sia Playlist di Podcast.
@@ -96,7 +160,11 @@ export class PodcastService {
                 duration_ms: ep.duration_ms ?? 0,
                 release_date: ep.release_date ?? '',
                 uri: ep.uri ?? `spotify:episode:${ep.id}`,
-                image: ep.images?.[0]?.url ?? ep.show?.images?.[0]?.url ?? '/placeholder-podcast.png'
+                image: ep.images?.[0]?.url ?? ep.show?.images?.[0]?.url ?? '/placeholder-podcast.png',
+                resume_point: ep.resume_point ? {
+                    fully_played: Boolean(ep.resume_point.fully_played),
+                    resume_position_ms: ep.resume_point.resume_position_ms || 0
+                } : undefined
             }));
     }
 }
