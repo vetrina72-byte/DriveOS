@@ -382,60 +382,51 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }, [state.accessToken, nowPlaying.source, nowPlaying.spotifyState]);
 
     const _setPlayerState = useCallback((newState: SpotifyPlayerState | null) => {
-        // If we get a valid state update from the SDK, we know the local player is active.
-        // We can safely unlock the transfer flag.
-        if (newState) {
-            isTransferring.current = false;
-        }
-
+        // 3. Ignorare gli Stati Transitori Vuoti nel Listener dell'SDK
+        // Se lo stato è nullo o privo di traccia (tipico evento transitorio dell'SDK durante il caricamento o cambio episodio):
+        // IGNORIAMO questo evento per non far lampeggiare l'UI con un layout vuoto.
         const hasValidTrack = Boolean(newState?.track_window?.current_track || (newState as any)?.item);
 
-        // 3. Ignorare gli Stati Transitori Vuoti nel Listener dell'SDK
-        // Se lo stato è nullo o privo di traccia ma stiamo cambiando traccia (isSwitchingTrack o optimistic UI),
-        // IGNORIAMO questo evento per non far lampeggiare l'UI con un layout vuoto.
-        if (isSwitchingTrack.current && (!newState || !hasValidTrack)) {
-            console.log('[Player] Ignorato stato transitorio vuoto durante il cambio traccia');
+        if (!newState || !hasValidTrack) {
+            if (isSwitchingTrack.current || latestOptimisticItem.current) {
+                console.log('[Player] Ignorato stato transitorio vuoto durante il cambio traccia o optimistic update');
+                return;
+            }
+            
+            // Se lo stato locale è null (disconnesso/trasferito), controlliamo chi ha preso il controllo
+            if (newState === null) {
+                checkRemotePlayerState();
+                if (!remotePollIntervalRef.current) {
+                    remotePollIntervalRef.current = window.setInterval(checkRemotePlayerState, 1500);
+                }
+                setNowPlaying(s => ({ 
+                    ...s, 
+                    spotifyState: null, 
+                    isLoading: false 
+                }));
+            }
             return;
         }
 
-        if (hasValidTrack) {
-            isSwitchingTrack.current = false;
+        // Se arriva uno stato valido, togliamo il flag di loading e sblocchiamo il cambio traccia
+        isSwitchingTrack.current = false;
+        isTransferring.current = false;
+        latestOptimisticItem.current = null;
+
+        if (remotePollIntervalRef.current) {
+            clearInterval(remotePollIntervalRef.current);
+            remotePollIntervalRef.current = null;
         }
 
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
             
-            // Se lo stato non ha una traccia valida ma lo stato precedente ne aveva una durante il caricamento, preserviamo lo stato
-            if (!hasValidTrack && s.isLoading && s.spotifyState) {
-                return s;
-            }
-
-            const isLoading = hasValidTrack ? false : (isSwitchingTrack.current || s.isLoading);
-            
-            // Se lo stato locale è null (disconnesso/trasferito), controlliamo chi ha preso il controllo
-            if (newState === null) {
-                // Controllo immediato
-                checkRemotePlayerState();
-                
-                // Avvia polling per tenere aggiornato lo stato remoto - 1.5s FAST POLLING
-                if (!remotePollIntervalRef.current) {
-                    remotePollIntervalRef.current = window.setInterval(checkRemotePlayerState, 1500);
-                }
-            } else {
-                // Se lo stato locale è attivo, fermiamo il polling remoto
-                if (remotePollIntervalRef.current) {
-                    clearInterval(remotePollIntervalRef.current);
-                    remotePollIntervalRef.current = null;
-                }
-            }
-
             return { 
                 ...s, 
-                spotifyState: newState ? { ...newState, isLoading: Boolean(isLoading) } : null, 
-                isLoading: Boolean(isLoading), 
+                spotifyState: { ...newState, isLoading: false }, 
+                isLoading: false, 
                 source: 'spotify',
-                // Se newState esiste, siamo noi il dispositivo attivo (di solito), quindi puliamo activeDevice
-                activeDevice: newState ? null : s.activeDevice 
+                activeDevice: null 
             };
         });
         

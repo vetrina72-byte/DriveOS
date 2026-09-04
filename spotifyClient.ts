@@ -9,6 +9,9 @@ const apiClient = axios.create({
 // Request interceptor to add access token
 apiClient.interceptors.request.use(
   (config) => {
+    if (config.url?.startsWith('/v1/')) {
+      config.url = config.url.replace(/^\/v1/, '');
+    }
     const token = localStorage.getItem('accessToken') || localStorage.getItem('spotify_access_token');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;

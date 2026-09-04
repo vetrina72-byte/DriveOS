@@ -155,19 +155,12 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         placeholderIcon: isNight ? 'text-zinc-500' : 'text-zinc-600',
     };
 
-    const handlePlayEpisode = async (index: number) => {
-        if (!isPlayerReady || isSwitching) return; // Blocca click multipli (debounce/lock)
-        const episode = episodes[index];
+    // 1. OPTIMISTIC UPDATE: Inietta immediatamente i dati del nuovo episodio con flag di caricamento
+    const playEpisode = async (episode: PodcastEpisode) => {
         if (!episode?.uri) return;
-        
-        setIsSwitching(true);
-        setSwitchingEpisodeId(episode.id);
-        setPlayError(null);
-        
-        // 1. OPTIMISTIC UPDATE: Inietta immediatamente i dati del nuovo episodio con flag di caricamento
+
         const optimisticTrack: any = {
             id: episode.id,
-            uri: episode.uri,
             name: episode.title || episode.name || 'Episodio in riproduzione',
             artists: [{ name: show?.publisher || show?.name || 'Podcast' }],
             album: { 
@@ -175,7 +168,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                 images: [{ url: episode.image || show?.image || '' }] 
             },
             images: [{ url: episode.image || show?.image || '' }],
-            duration_ms: episode.duration_ms
+            duration_ms: episode.duration_ms,
+            uri: episode.uri
         };
 
         const optimisticState: any = {
@@ -208,56 +202,31 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             _setPlayerState(optimisticState);
         }
 
+        // 2. Esegui la chiamata API reale (singola chiamata mirata per evitare glitch audio)
         try {
             const deviceId = localStorage.getItem('spotify_device_id') || playerState?.device?.id;
-            const sessionId = localStorage.getItem('auth_session_id');
-            if (deviceId) {
-                 try {
-                     const transferRes = await fetch('/api/transfer-player', {
-                         method: 'POST',
-                         headers: { 'Content-Type': 'application/json' },
-                         body: JSON.stringify({ device_id: deviceId, sessionId })
-                     });
-                     if (!transferRes.ok) {
-                         console.warn("Transfer player failed:", transferRes.status);
-                     }
-                 } catch (e) {
-                     console.warn("Failed to reach /api/transfer-player:", e);
-                 }
-            }
+            await apiClient.put('/me/player/play', 
+                { uris: [episode.uri] },
+                { params: deviceId ? { device_id: deviceId } : undefined }
+            );
+        } catch (error) {
+            console.warn("Chiamata diretta apiClient.put fallita, fallback su onPlay:", error);
+            onPlay({ uris: [episode.uri] }, optimisticTrack);
+        }
+    };
 
-            // 2. UNICA CHIAMATA DI PLAY: Prevenzione "Audio Doppio"
-            let directPlaySucceeded = false;
-            try {
-                await apiClient.put('/me/player/play', {
-                    uris: [episode.uri]
-                });
-                directPlaySucceeded = true;
-            } catch (playErr) {
-                console.warn("Direct play failed, trying fallback to onPlay handler:", playErr);
-            }
+    // 2. Debounce sul pulsante di Play (Prevenzione "Audio Doppio")
+    const handlePlayEpisode = async (index: number) => {
+        if (isSwitching || !isPlayerReady) return; // Blocca click multipli (debounce/lock)
+        const episode = episodes[index];
+        if (!episode?.uri) return;
+        
+        setIsSwitching(true);
+        setSwitchingEpisodeId(episode.id);
+        setPlayError(null);
 
-            if (!directPlaySucceeded) {
-                onPlay({ uris: [episode.uri] }, optimisticTrack);
-            }
-            
-            setTimeout(async () => {
-                try {
-                    const stateRes = await apiClient.get('/me/player');
-                    if (stateRes.data && setNowPlaying) {
-                        setNowPlaying(prev => ({
-                            ...prev,
-                            spotifyState: stateRes.data,
-                            isLoading: false
-                        }));
-                    }
-                    if (triggerDataRefresh) {
-                        triggerDataRefresh();
-                    }
-                } catch (e) {
-                    console.error("Failed to fetch remote player state after play", e);
-                }
-            }, 800);
+        try {
+            await playEpisode(episode);
         } catch (err: any) {
             console.error("Failed to play episode:", err);
             const status = err?.response?.status;
