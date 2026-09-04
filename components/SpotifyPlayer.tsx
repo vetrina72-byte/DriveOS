@@ -64,11 +64,12 @@ const SpotifyPlayer = ({
     layeredAppTopOffset?: number;
 }) => {
     const { 
-        isAuthenticated, user, error, play, isPlayerReady, triggerDataRefresh, 
+        isAuthenticated, user, error, play, pauseSpotify, isPlayerReady, triggerDataRefresh, 
         triggerHomeContentFetch, resetHomeContent, homeContentLoading, homeContentError,
         continueListeningItems, newReleases, userPlaylists, madeForYouPlaylists,
         topArtists, chartsPlaylists, genresCategories, recommendedShows,
-        partyPlaylists, topTracks, artistRadioTracks, trackRecommendations, savedAlbums, madeForYou
+        partyPlaylists, topTracks, artistRadioTracks, trackRecommendations, savedAlbums, madeForYou,
+        nowPlaying
     } = useAuth();
 
     const { sceneTransitionSpeed = 1.10 } = useUIConfig();
@@ -283,6 +284,20 @@ const SpotifyPlayer = ({
         } else if (item.type === 'track' && isPlayerReady) { 
             play({ uris: [item.uri] }, item); 
         } else if (item.type === 'episode') {
+            const currentTrack = nowPlaying.spotifyState?.track_window?.current_track ?? (nowPlaying.spotifyState as any)?.item ?? null;
+            const isCurrent = Boolean(
+                (currentTrack?.id && currentTrack.id === item.id) ||
+                (currentTrack?.uri && item.uri && currentTrack.uri === item.uri)
+            );
+            if (isCurrent) {
+                if (nowPlaying.spotifyState && !nowPlaying.spotifyState.paused && nowPlaying.source === 'spotify') {
+                    pauseSpotify();
+                } else {
+                    play();
+                }
+                return;
+            }
+
             PodcastService.recordEpisodePlayed(item as any);
             if (isPlayerReady && item.uri) {
                 play({ uris: [item.uri] }, item as any);

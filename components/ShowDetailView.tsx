@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../spotifyClient';
-import { FiPlay, FiMic, FiCheck, FiClock } from 'react-icons/fi';
+import { FiPlay, FiPause, FiMic, FiCheck, FiClock } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import { PodcastService, Episode } from '../services/PodcastService';
@@ -71,6 +71,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     const [isSwitching, setIsSwitching] = useState<boolean>(false);
     const [switchingEpisodeId, setSwitchingEpisodeId] = useState<string | null>(null);
     const [, setHistoryTick] = useState<number>(0);
+    const [, setLiveTick] = useState<number>(0);
 
     useEffect(() => {
         const handleHistoryUpdated = () => {
@@ -80,10 +81,30 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         return () => window.removeEventListener('podcast_history_updated', handleHistoryUpdated);
     }, []);
     
-    const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh, _setPlayerState } = useAuth();
+    const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh, _setPlayerState, play, pauseSpotify } = useAuth();
     const playerState = nowPlaying.spotifyState;
-    const isPlayingContext = playerState && !playerState.paused;
-    const currentTrackId = playerState?.track_window?.current_track?.id;
+    const isPlayingContext = playerState && !playerState.paused && nowPlaying.source === 'spotify';
+    const currentTrack = playerState?.track_window?.current_track ?? playerState?.item ?? null;
+    const currentTrackId = currentTrack?.id;
+    const currentTrackUri = currentTrack?.uri;
+
+    // Real-time live percentage progression while listening
+    useEffect(() => {
+        if (!isPlayingContext || !currentTrackId) return;
+
+        const interval = setInterval(() => {
+            setLiveTick(t => t + 1);
+            if (currentTrack?.uri?.includes('episode') || (currentTrack as any)?.type === 'episode') {
+                const elapsed = playerState?.timestamp ? Math.max(0, Date.now() - playerState.timestamp) : 0;
+                const curPos = Math.min(playerState?.duration || 0, Math.max(0, (playerState?.position || 0) + elapsed));
+                if (playerState?.duration) {
+                    PodcastService.updateEpisodeProgress(currentTrackId, curPos, playerState.duration);
+                }
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [isPlayingContext, currentTrackId, playerState, currentTrack]);
     
     useEffect(() => {
         let isMounted = true;
@@ -227,8 +248,24 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
 
     // 2. Debounce sul pulsante di Play (Prevenzione "Audio Doppio")
     const handlePlayClick = async (episode: PodcastEpisode) => {
-        if (isSwitching || !isPlayerReady) return; // Blocca click multipli
         if (!episode?.uri) return;
+
+        const isCurrentTrack = Boolean(
+            (currentTrackId && episode.id === currentTrackId) ||
+            (currentTrackUri && episode.uri === currentTrackUri)
+        );
+
+        // Se l'episodio cliccato è quello attualmente in riproduzione o in pausa, fa toggle play/pause istantaneo senza riavviare da capo
+        if (isCurrentTrack) {
+            if (isPlayingContext) {
+                pauseSpotify();
+            } else {
+                play();
+            }
+            return;
+        }
+
+        if (isSwitching || !isPlayerReady) return; // Blocca click multipli se sta caricando un nuovo brano
 
         setIsSwitching(true);
         setSwitchingEpisodeId(episode.id);
@@ -343,10 +380,29 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                         animate="visible"
                     >
                         {episodes.map((episode, index) => {
-                            const isPlaying = isPlayingContext && episode?.id === currentTrackId;
+                            const isCurrentTrack = Boolean(
+                                (currentTrackId && episode.id === currentTrackId) ||
+                                (currentTrackUri && episode.uri === currentTrackUri)
+                            );
+                            const isPlaying = isPlayingContext && isCurrentTrack;
                             const isThisEpisodeSwitching = isSwitching && switchingEpisodeId === episode.id;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
-                            const status = PodcastService.getEpisodeStatus(episode);
+                            
+                            let status = PodcastService.getEpisodeStatus(episode);
+
+                            // Aggiornamento dinamico in tempo reale della percentuale e dei minuti rimanenti durante l'ascolto
+                            if (isCurrentTrack && playerState && playerState.duration > 0) {
+                                const elapsed = (isPlaying && playerState.timestamp) ? Math.max(0, Date.now() - playerState.timestamp) : 0;
+                                const livePos = Math.min(playerState.duration, Math.max(0, (playerState.position || 0) + elapsed));
+                                const duration = episode.duration_ms || playerState.duration || 1;
+                                const livePct = Math.min(99, Math.max(1, Math.round((livePos / duration) * 100)));
+                                
+                                status = {
+                                    fully_played: status.fully_played || (livePos >= duration * 0.92),
+                                    resume_position_ms: livePos,
+                                    progress_percent: status.fully_played ? 100 : livePct
+                                };
+                            }
                             
                             return (
                                 <motion.div
@@ -401,7 +457,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                                 <>
                                                     <span>•</span>
                                                     <span className="text-amber-400 font-medium">
-                                                        {Math.max(1, Math.round((episode.duration_ms - status.resume_position_ms) / 60000))} min rimanenti
+                                                        {Math.max(1, Math.round((Math.max(episode.duration_ms, playerState?.duration || 0) - status.resume_position_ms) / 60000))} min rimanenti
                                                     </span>
                                                 </>
                                             )}
@@ -419,6 +475,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                     >
                                         {isThisEpisodeSwitching ? (
                                             <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                                        ) : isPlaying ? (
+                                            <FiPause className="w-5 h-5" />
                                         ) : (
                                             <FiPlay className="w-5 h-5 ml-0.5" />
                                         )}

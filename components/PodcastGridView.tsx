@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../spotifyClient';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
 import { motion } from 'framer-motion';
-import { FiMic, FiPlay, FiCompass, FiFilter, FiClock } from 'react-icons/fi';
+import { FiMic, FiPlay, FiPause, FiCompass, FiFilter, FiClock } from 'react-icons/fi';
 import { PodcastService } from '../services/PodcastService';
+import { useAuth } from '../context/AuthContext';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -32,6 +33,32 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
     const [discoveredShows, setDiscoveredShows] = useState<SpotifyItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [, setLiveTick] = useState<number>(0);
+
+    const { nowPlaying, isPlayerReady, play, pauseSpotify } = useAuth();
+    const playerState = nowPlaying.spotifyState;
+    const isPlayingContext = playerState && !playerState.paused && nowPlaying.source === 'spotify';
+    const currentTrack = playerState?.track_window?.current_track ?? playerState?.item ?? null;
+    const currentTrackId = currentTrack?.id;
+    const currentTrackUri = currentTrack?.uri;
+
+    // Aggiornamento in tempo reale della barra di avanzamento e percentuale durante l'ascolto
+    useEffect(() => {
+        if (!isPlayingContext || !currentTrackId) return;
+
+        const interval = setInterval(() => {
+            setLiveTick(t => t + 1);
+            if (currentTrack?.uri?.includes('episode') || (currentTrack as any)?.type === 'episode') {
+                const elapsed = playerState?.timestamp ? Math.max(0, Date.now() - playerState.timestamp) : 0;
+                const curPos = Math.min(playerState?.duration || 0, Math.max(0, (playerState?.position || 0) + elapsed));
+                if (playerState?.duration) {
+                    PodcastService.updateEpisodeProgress(currentTrackId, curPos, playerState.duration);
+                }
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [isPlayingContext, currentTrackId, playerState, currentTrack]);
 
     const categories = [
         { id: 'all', name: 'Tutti' },
@@ -254,25 +281,49 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                     <div className="flex gap-4 overflow-x-auto pb-3 pt-1 hide-scrollbar scroll-smooth">
                         {savedEpisodes.map((ep: any, idx) => {
                             const imageUrl = ep.images?.[0]?.url || ep.images?.[1]?.url || 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=300&auto=format&fit=crop&q=60';
-                            const posMs = ep.resume_point?.resume_position_ms || 0;
-                            const durMs = ep.duration_ms || 1800000;
+                            const isCurrent = Boolean(
+                                (currentTrackId && ep.id === currentTrackId) ||
+                                (currentTrackUri && ep.uri === currentTrackUri)
+                            );
+                            const isPlaying = isPlayingContext && isCurrent;
+
+                            let posMs = ep.resume_point?.resume_position_ms || 0;
+                            let durMs = ep.duration_ms || 1800000;
+                            const isFullyPlayed = Boolean(ep.resume_point?.fully_played);
                             
                             let progressPercent = 0;
-                            if (ep.resume_point?.fully_played) {
+                            if (isFullyPlayed) {
                                 progressPercent = 100;
+                            } else if (isCurrent && playerState && playerState.duration > 0) {
+                                const elapsed = (isPlaying && playerState.timestamp) ? Math.max(0, Date.now() - playerState.timestamp) : 0;
+                                posMs = Math.min(playerState.duration, Math.max(0, (playerState.position || 0) + elapsed));
+                                durMs = playerState.duration;
+                                progressPercent = Math.min(99, Math.max(1, Math.round((posMs / durMs) * 100)));
                             } else if (posMs > 0 && durMs > 0) {
                                 progressPercent = Math.min(99, Math.max(1, Math.round((posMs / durMs) * 100)));
                             }
+
+                            const handleCardClick = () => {
+                                if (isCurrent) {
+                                    if (isPlaying) {
+                                        pauseSpotify();
+                                    } else {
+                                        play();
+                                    }
+                                } else {
+                                    onSelectItem(ep);
+                                }
+                            };
 
                             return (
                                 <motion.div
                                     key={`in-corso-${ep.id || idx}`}
                                     whileHover={{ scale: 1.02 }}
                                     whileTap={{ scale: 0.98 }}
-                                    onClick={() => onSelectItem(ep)}
+                                    onClick={handleCardClick}
                                     className={`shrink-0 w-80 sm:w-96 rounded-xl p-3 flex gap-4 cursor-pointer transition-all shadow-md backdrop-blur-md border ${
                                         isNight 
-                                            ? 'bg-white/[0.06] hover:bg-white/[0.1] border-white/10 text-white' 
+                                             ? 'bg-white/[0.06] hover:bg-white/[0.1] border-white/10 text-white' 
                                             : 'bg-black/[0.04] hover:bg-black/[0.08] border-black/10 text-black'
                                     }`}
                                 >
@@ -280,7 +331,11 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                         <img src={imageUrl} alt={ep.name} className="w-full h-full object-cover" />
                                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                                             <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center text-black shadow-lg">
-                                                <FiPlay className="w-4 h-4 ml-0.5 fill-current" />
+                                                {isPlaying ? (
+                                                    <FiPause className="w-4 h-4 fill-current" />
+                                                ) : (
+                                                    <FiPlay className="w-4 h-4 ml-0.5 fill-current" />
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -298,8 +353,8 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                         {/* Barra di avanzamento sotto l'episodio */}
                                         <div className="space-y-1.5 mt-2">
                                             <div className="flex justify-between text-[10px] opacity-70">
-                                                <span>{ep.resume_point?.fully_played ? 'Già ascoltato' : `Ascoltato ${progressPercent}%`}</span>
-                                                {!ep.resume_point?.fully_played && <span>{Math.floor((durMs * (1 - progressPercent/100)) / 60000)} min rimanenti</span>}
+                                                <span>{isFullyPlayed ? 'Già ascoltato' : `Ascoltato ${progressPercent}%`}</span>
+                                                {!isFullyPlayed && <span>{Math.max(1, Math.floor((durMs * (1 - progressPercent/100)) / 60000))} min rimanenti</span>}
                                             </div>
                                             <div className={`w-full h-1.5 rounded-full overflow-hidden ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
                                                 <div 
