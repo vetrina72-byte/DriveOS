@@ -104,35 +104,47 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
 
         const fetchShowInfo = async () => {
             try {
+                console.log("--- PODCAST DEBUG START ---");
+                console.log("Show ID richiesto:", showId);
+                const accessToken = localStorage.getItem('spotify_access_token');
+                console.log("Token utilizzato (primi 10 char):", accessToken?.substring(0, 10));
+
                 const showRes = await apiClient.get(`/shows/${showId}?market=IT`);
                 if (isMounted) {
                     const responseData = showRes.data;
-                    console.log("[PODCAST DEBUG] Raw response (SHOW):", responseData);
                     setShow(responseData || null);
                     setTotalEpisodes(responseData?.episodes?.total || 0);
 
-                    // Estrazione episodi con ripiegamento
-                    let episodeList = responseData?.episodes?.items 
-                                   ?? responseData?.items 
-                                   ?? responseData?.data?.episodes?.items 
-                                   ?? responseData?.data?.items 
-                                   ?? [];
-                    
-                    if (episodeList.length === 0) {
+                    let fetchedEpisodes: Episode[] = [];
+
+                    // TENTATIVO 1: Endpoint diretto episodi con market IT
+                    try {
+                        const res1 = await apiClient.get(`/shows/${showId}/episodes?market=IT&limit=50`);
+                        console.log("Risposta RAW da Spotify (TENTATIVO 1):", JSON.stringify(res1.data, null, 2));
+                        if (res1.data && res1.data.items && res1.data.items.length > 0) {
+                            fetchedEpisodes = res1.data.items;
+                        }
+                    } catch (e) {
+                        console.error("Tentativo 1 fallito:", e);
+                    }
+
+                    // TENTATIVO 2: Endpoint generale dello show
+                    if (fetchedEpisodes.length === 0) {
                         try {
-                            const fallbackRes = await apiClient.get(`/shows/${showId}/episodes?market=IT&limit=50`);
-                            console.log("[PODCAST DEBUG] Raw response (FALLBACK):", fallbackRes.data);
-                            const fallbackData = fallbackRes.data;
-                            episodeList = fallbackData?.items 
-                                       ?? fallbackData?.episodes?.items 
-                                       ?? fallbackData?.data?.items 
-                                       ?? fallbackData?.data?.episodes?.items 
-                                       ?? [];
+                            console.log("Risposta RAW da Spotify (TENTATIVO 2 - SHOW):", JSON.stringify(responseData, null, 2));
+                            if (responseData.episodes && responseData.episodes.items && responseData.episodes.items.length > 0) {
+                                fetchedEpisodes = responseData.episodes.items;
+                            }
                         } catch (e) {
-                            console.error("Fallback episodes fetch failed", e);
+                            console.error("Tentativo 2 fallito:", e);
                         }
                     }
-                    setEpisodes(episodeList);
+
+                    console.log("--- PODCAST DEBUG END ---");
+
+                    if (fetchedEpisodes.length > 0) {
+                        setEpisodes(fetchedEpisodes);
+                    }
                     setLoading(false);
                 }
             } catch (err) {
@@ -164,21 +176,19 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
                 const episodesRes = await apiClient.get(`/shows/${showId}/episodes?market=IT&limit=${limit}&offset=${offset}`);
                 if (isMounted) {
                     const responseData = episodesRes.data;
-                    console.log("[PODCAST DEBUG] Raw response (PAGINATION):", responseData);
+                    console.log("Risposta RAW da Spotify (PAGINAZIONE):", JSON.stringify(responseData, null, 2));
                     
-                    const fetchedEpisodes = responseData?.items 
-                                         ?? responseData?.episodes?.items 
-                                         ?? responseData?.data?.items 
-                                         ?? responseData?.data?.episodes?.items 
-                                         ?? [];
+                    const fetchedEpisodes = responseData?.items || [];
                                          
-                    setEpisodes(fetchedEpisodes);
+                    if (fetchedEpisodes.length > 0) {
+                        setEpisodes(fetchedEpisodes);
+                    }
                 }
             } catch (err) {
                 console.error(err);
                 if (isMounted) {
                     setError('Could not load episodes.');
-                    setEpisodes([]);
+                    // Keeping old episodes if pagination fails
                 }
             } finally {
                 if (isMounted) {
@@ -314,64 +324,70 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, isNight, onPlay
             </div>
             
             {/* Episode List */}
-            <motion.div
-              className="flex flex-col gap-2"
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-            >
-                {(() => {
-                    const validEpisodes = Array.isArray(episodes) ? episodes.filter(ep => ep && ep.id) : [];
-                    return validEpisodes.map((episode, index) => {
-                        const isPlaying = isPlayingContext && episode?.id === currentTrackId;
-                        const activeColor = isNight ? 'text-green-400' : 'text-green-600';
-                        const epName = episode?.name ?? 'Episodio';
-                        const rawDescription = (episode as any)?.description ?? (episode as any)?.html_description ?? '';
-                        const cleanDescription = rawDescription.replace(/<[^>]*>?/gm, '');
-                        const epDate = episode?.release_date ? new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                        const epDuration = episode?.duration_ms ? formatDuration(episode.duration_ms) : '';
-                        const coverImage = episode?.images?.[0]?.url ?? show?.images?.[0]?.url ?? '';
-
-                        return (
-                            <motion.div
-                                key={`${episode.id}-${index}`}
-                                variants={itemVariants}
-                                onClick={() => handlePlayEpisode(index)}
-                                className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
-                            >
-                                {coverImage ? (
-                                    <img src={coverImage} alt={epName} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
-                                ) : (
-                                    <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
-                                        <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
-                                    </div>
-                                )}
-                                <div className="flex flex-col overflow-hidden">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
-                                        <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{epName}</span>
-                                    </div>
-                                    <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{cleanDescription}</span>
-                                    <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
-                                        {epDate && <span>{epDate}</span>}
-                                        {epDate && epDuration && <span>•</span>}
-                                        {epDuration && <span>{epDuration}</span>}
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }}
-                                    disabled={!isPlayerReady}
-                                    className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+            {episodes.length === 0 && !loading ? (
+                <div className="p-4 bg-red-500/20 border border-red-500 rounded-md text-red-400 font-bold mb-4 text-center">
+                    Nessun episodio restituito dall'API di Spotify per lo SHOW_ID {showId}
+                </div>
+            ) : (
+                <motion.div
+                  className="flex flex-col gap-2"
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                    {(() => {
+                        const validEpisodes = Array.isArray(episodes) ? episodes.filter(ep => ep && ep.id) : [];
+                        return validEpisodes.map((episode, index) => {
+                            const isPlaying = isPlayingContext && episode?.id === currentTrackId;
+                            const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+                            const epName = episode?.name ?? 'Episodio';
+                            const rawDescription = (episode as any)?.description ?? (episode as any)?.html_description ?? '';
+                            const cleanDescription = rawDescription.replace(/<[^>]*>?/gm, '');
+                            const epDate = episode?.release_date ? new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                            const epDuration = episode?.duration_ms ? formatDuration(episode.duration_ms) : '';
+                            const coverImage = episode?.images?.[0]?.url ?? show?.images?.[0]?.url ?? '';
+    
+                            return (
+                                <motion.div
+                                    key={`${episode.id}-${index}`}
+                                    variants={itemVariants}
+                                    onClick={() => handlePlayEpisode(index)}
+                                    className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                                 >
-                                    <FiPlay className="w-5 h-5 ml-0.5" />
-                                </button>
-                            </motion.div>
-                        );
-                    });
-                })}
-            </motion.div>
+                                    {coverImage ? (
+                                        <img src={coverImage} alt={epName} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
+                                    ) : (
+                                        <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
+                                            <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col overflow-hidden">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
+                                            <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{epName}</span>
+                                        </div>
+                                        <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{cleanDescription}</span>
+                                        <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
+                                            {epDate && <span>{epDate}</span>}
+                                            {epDate && epDuration && <span>•</span>}
+                                            {epDuration && <span>{epDuration}</span>}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }}
+                                        disabled={!isPlayerReady}
+                                        className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                                    >
+                                        <FiPlay className="w-5 h-5 ml-0.5" />
+                                    </button>
+                                </motion.div>
+                            );
+                        });
+                    })}
+                </motion.div>
+            )}
 
-            {totalEpisodes > limit && (
+            {totalEpisodes > limit && episodes.length > 0 && (
                 <div className="mt-6">
                     <PaginationControls />
                 </div>
