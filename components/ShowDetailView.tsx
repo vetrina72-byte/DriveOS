@@ -69,21 +69,24 @@ async function fetchPodcastEpisodesRobust(showId: string, showName: string | und
   // STRATEGIA 1: Endpoint diretto episodi con mercato dinamico
   try {
     const res1 = await apiClient.get(`/shows/${showId}/episodes?market=${userCountry}&limit=50&offset=${offset}`);
-    if (res1.data?.items && res1.data.items.length > 0) return res1.data.items;
+    const episodes = res1.data?.items ?? res1.data?.episodes?.items ?? [];
+    if (episodes.length > 0) return episodes;
   } catch (e) { console.warn("Strategia 1 fallita:", e); }
 
   // STRATEGIA 2: Endpoint diretto episodi SENZA parametro market
   try {
     const res2 = await apiClient.get(`/shows/${showId}/episodes?limit=50&offset=${offset}`);
-    if (res2.data?.items && res2.data.items.length > 0) return res2.data.items;
+    const episodes = res2.data?.items ?? res2.data?.episodes?.items ?? [];
+    if (episodes.length > 0) return episodes;
   } catch (e) { console.warn("Strategia 2 fallita:", e); }
 
   // STRATEGIA 3: Endpoint principale dello Show
   if (offset === 0) {
     try {
       const res3 = await apiClient.get(`/shows/${showId}?market=${userCountry}`);
-      if (res3.data?.episodes?.items && res3.data.episodes.items.length > 0) {
-        return res3.data.episodes.items;
+      const episodes = res3.data?.items ?? res3.data?.episodes?.items ?? [];
+      if (episodes.length > 0) {
+        return episodes;
       }
     } catch (e) { console.warn("Strategia 3 fallita:", e); }
   }
@@ -93,8 +96,9 @@ async function fetchPodcastEpisodesRobust(showId: string, showName: string | und
     try {
       const query = encodeURIComponent(`show:${showName}`);
       const res4 = await apiClient.get(`/search?q=${query}&type=episode&market=${userCountry}&limit=50&offset=${offset}`);
-      if (res4.data?.episodes?.items && res4.data.episodes.items.length > 0) {
-        return res4.data.episodes.items;
+      const episodes = res4.data?.items ?? res4.data?.episodes?.items ?? [];
+      if (episodes.length > 0) {
+        return episodes;
       }
     } catch (e) { console.warn("Strategia 4 fallita:", e); }
   }

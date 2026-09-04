@@ -12,9 +12,9 @@ const originalTemplate = L.Util.template;
 L.Util.template = function (str: any, data: any) {
   if (typeof str !== 'string') {
     const subdomain = data?.s || 'a';
-    const tileUrl = str;
-    const safeUrl = (typeof tileUrl === 'string' ? tileUrl : '').replace('{s}', subdomain);
-    return safeUrl;
+    const rawTileUrl = str;
+    const tileUrl = rawTileUrl ? (rawTileUrl as string).replace('{s}', subdomain) : '';
+    return tileUrl;
   }
   return originalTemplate(str, data);
 };
