@@ -22,13 +22,18 @@ export class PodcastService {
     private static HISTORY_STORAGE_KEY = 'podcast_listening_history';
 
     /**
-     * Retrieves the playback status of an episode, checking both Spotify API resume_point
-     * and local fallback storage.
+     * Retrieves the playback status of an episode, checking both Spotify API resume_point,
+     * live player state, and local fallback storage.
      */
-    static getEpisodeStatus(episode: Episode | { id: string; duration_ms?: number; resume_point?: { fully_played?: boolean; resume_position_ms?: number } }): { fully_played: boolean; resume_position_ms: number; progress_percent: number } {
+    static getEpisodeStatus(
+        episode: Episode | { id: string; duration_ms?: number; resume_point?: { fully_played?: boolean; resume_position_ms?: number } },
+        playerState?: any
+    ): { fully_played: boolean; resume_position_ms: number; progress_percent: number; duration_ms: number } {
         let fullyPlayed = Boolean(episode.resume_point?.fully_played);
         let resumeMs = episode.resume_point?.resume_position_ms || 0;
+        let effectiveDuration = episode.duration_ms || 0;
 
+        // 1. Check local storage for persistent progress
         try {
             const raw = localStorage.getItem(this.STORAGE_KEY);
             if (raw) {
@@ -36,25 +41,46 @@ export class PodcastService {
                 const localEp = stored[episode.id];
                 if (localEp) {
                     if (localEp.fully_played) fullyPlayed = true;
-                    if (localEp.resume_position_ms > resumeMs) {
+                    if (typeof localEp.resume_position_ms === 'number' && localEp.resume_position_ms > resumeMs) {
                         resumeMs = localEp.resume_position_ms;
+                    }
+                    if (localEp.duration_ms && localEp.duration_ms > 0) {
+                        effectiveDuration = localEp.duration_ms;
                     }
                 }
             }
         } catch (e) {}
 
-        const duration = episode.duration_ms || 1;
+        // 2. Real-time synchronization with active Spotify player state
+        if (playerState && playerState.duration > 0) {
+            const currentTrack = playerState?.track_window?.current_track ?? playerState?.item ?? null;
+            const matchesCurrent = (currentTrack?.id && currentTrack.id === episode.id) ||
+                                   (currentTrack?.uri && (episode as any).uri && currentTrack.uri === (episode as any).uri);
+            if (matchesCurrent) {
+                effectiveDuration = playerState.duration;
+                const isPlaying = !playerState.paused;
+                const elapsed = (isPlaying && playerState.timestamp) ? Math.max(0, Date.now() - playerState.timestamp) : 0;
+                const livePos = Math.min(playerState.duration, Math.max(0, (playerState.position || 0) + elapsed));
+                resumeMs = livePos;
+                if (livePos >= playerState.duration * 0.95) {
+                    fullyPlayed = true;
+                }
+            }
+        }
+
+        const duration = effectiveDuration > 0 ? effectiveDuration : (episode.duration_ms || 1800000);
         let percent = 0;
         if (fullyPlayed) {
             percent = 100;
         } else if (resumeMs > 0 && duration > 0) {
-            percent = Math.min(99, Math.max(1, Math.round((resumeMs / duration) * 100)));
+            percent = Math.min(100, Math.max(0, Math.round((resumeMs / duration) * 100)));
         }
 
         return {
             fully_played: fullyPlayed,
             resume_position_ms: resumeMs,
-            progress_percent: percent
+            progress_percent: percent,
+            duration_ms: duration
         };
     }
 
@@ -66,9 +92,11 @@ export class PodcastService {
         try {
             const raw = localStorage.getItem(this.STORAGE_KEY);
             const data = raw ? JSON.parse(raw) : {};
-            const isCompleted = fullyPlayed || (durationMs > 0 && positionMs >= durationMs * 0.92);
+            const effectiveDuration = durationMs > 0 ? durationMs : (data[episodeId]?.duration_ms || 0);
+            const isCompleted = fullyPlayed || (effectiveDuration > 0 && positionMs >= effectiveDuration * 0.95);
             data[episodeId] = {
                 resume_position_ms: positionMs,
+                duration_ms: effectiveDuration,
                 fully_played: isCompleted,
                 updated_at: Date.now()
             };
@@ -177,14 +205,18 @@ export class PodcastService {
             let history: any[] = JSON.parse(raw);
             const idx = history.findIndex(item => item.id === episodeId);
             if (idx >= 0) {
-                const isCompleted = fullyPlayed || (durationMs > 0 && positionMs >= durationMs * 0.92);
+                const effectiveDuration = durationMs > 0 ? durationMs : (history[idx].duration_ms || 1800000);
+                const isCompleted = fullyPlayed || (effectiveDuration > 0 && positionMs >= effectiveDuration * 0.95);
                 history[idx].resume_point = {
                     resume_position_ms: positionMs,
                     fully_played: isCompleted
                 };
+                if (durationMs > 0) {
+                    history[idx].duration_ms = durationMs;
+                }
                 history[idx].last_played_at = Date.now();
                 localStorage.setItem(this.HISTORY_STORAGE_KEY, JSON.stringify(history));
-                window.dispatchEvent(new CustomEvent('podcast_history_updated', { detail: { id: episodeId } }));
+                window.dispatchEvent(new CustomEvent('podcast_history_updated', { detail: { id: episodeId, positionMs, durationMs } }));
             }
         } catch (e) {}
     }

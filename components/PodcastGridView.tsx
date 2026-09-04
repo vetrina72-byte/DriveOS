@@ -76,6 +76,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                 const map = new Map<string, SpotifyItem>();
                 // Add local history first
                 for (const item of historyItems) {
+                    const epStatus = PodcastService.getEpisodeStatus(item);
                     map.set(item.id, {
                         id: item.id,
                         name: item.name || item.title || 'Episodio',
@@ -84,8 +85,11 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                         images: item.images || (item.image ? [{ url: item.image }] : (item.show?.images || [])),
                         type: 'episode',
                         show: item.show,
-                        duration_ms: item.duration_ms || 1800000,
-                        resume_point: item.resume_point
+                        duration_ms: epStatus.duration_ms || item.duration_ms || 1800000,
+                        resume_point: {
+                            fully_played: epStatus.fully_played,
+                            resume_position_ms: epStatus.resume_position_ms
+                        }
                     });
                 }
                 // Retain any API-loaded episodes not in local history
@@ -287,21 +291,11 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                             );
                             const isPlaying = isPlayingContext && isCurrent;
 
-                            let posMs = ep.resume_point?.resume_position_ms || 0;
-                            let durMs = ep.duration_ms || 1800000;
-                            const isFullyPlayed = Boolean(ep.resume_point?.fully_played);
-                            
-                            let progressPercent = 0;
-                            if (isFullyPlayed) {
-                                progressPercent = 100;
-                            } else if (isCurrent && playerState && playerState.duration > 0) {
-                                const elapsed = (isPlaying && playerState.timestamp) ? Math.max(0, Date.now() - playerState.timestamp) : 0;
-                                posMs = Math.min(playerState.duration, Math.max(0, (playerState.position || 0) + elapsed));
-                                durMs = playerState.duration;
-                                progressPercent = Math.min(99, Math.max(1, Math.round((posMs / durMs) * 100)));
-                            } else if (posMs > 0 && durMs > 0) {
-                                progressPercent = Math.min(99, Math.max(1, Math.round((posMs / durMs) * 100)));
-                            }
+                            // Sincronizzazione precisa al 100% con PodcastService e playerState attivo
+                            const status = PodcastService.getEpisodeStatus(ep, isCurrent ? playerState : undefined);
+                            const progressPercent = status.progress_percent;
+                            const isFullyPlayed = status.fully_played;
+                            const remainingMin = Math.max(1, Math.ceil((status.duration_ms - status.resume_position_ms) / 60000));
 
                             const handleCardClick = () => {
                                 if (isCurrent) {
@@ -324,7 +318,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                     className={`shrink-0 w-80 sm:w-96 rounded-xl p-3 flex gap-4 cursor-pointer transition-all shadow-md backdrop-blur-md border ${
                                         isNight 
                                              ? 'bg-white/[0.06] hover:bg-white/[0.1] border-white/10 text-white' 
-                                            : 'bg-black/[0.04] hover:bg-black/[0.08] border-black/10 text-black'
+                                             : 'bg-black/[0.04] hover:bg-black/[0.08] border-black/10 text-black'
                                     }`}
                                 >
                                     <div className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden shadow">
@@ -354,7 +348,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
                                         <div className="space-y-1.5 mt-2">
                                             <div className="flex justify-between text-[10px] opacity-70">
                                                 <span>{isFullyPlayed ? 'Già ascoltato' : `Ascoltato ${progressPercent}%`}</span>
-                                                {!isFullyPlayed && <span>{Math.max(1, Math.floor((durMs * (1 - progressPercent/100)) / 60000))} min rimanenti</span>}
+                                                {!isFullyPlayed && <span>{remainingMin} min rimanenti</span>}
                                             </div>
                                             <div className={`w-full h-1.5 rounded-full overflow-hidden ${isNight ? 'bg-white/10' : 'bg-black/10'}`}>
                                                 <div 

@@ -388,21 +388,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                             const isThisEpisodeSwitching = isSwitching && switchingEpisodeId === episode.id;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
                             
-                            let status = PodcastService.getEpisodeStatus(episode);
-
-                            // Aggiornamento dinamico in tempo reale della percentuale e dei minuti rimanenti durante l'ascolto
-                            if (isCurrentTrack && playerState && playerState.duration > 0) {
-                                const elapsed = (isPlaying && playerState.timestamp) ? Math.max(0, Date.now() - playerState.timestamp) : 0;
-                                const livePos = Math.min(playerState.duration, Math.max(0, (playerState.position || 0) + elapsed));
-                                const duration = episode.duration_ms || playerState.duration || 1;
-                                const livePct = Math.min(99, Math.max(1, Math.round((livePos / duration) * 100)));
-                                
-                                status = {
-                                    fully_played: status.fully_played || (livePos >= duration * 0.92),
-                                    resume_position_ms: livePos,
-                                    progress_percent: status.fully_played ? 100 : livePct
-                                };
-                            }
+                            // Calcolo dello stato di ascolto e percentuale perfettamente sincronizzato al 100%
+                            const status = PodcastService.getEpisodeStatus(episode, isCurrentTrack ? playerState : undefined);
                             
                             return (
                                 <motion.div
@@ -426,7 +413,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        PodcastService.toggleEpisodeCompleted(episode.id, episode.duration_ms);
+                                                        PodcastService.toggleEpisodeCompleted(episode.id, status.duration_ms);
                                                     }}
                                                     title="Segna come da riascoltare"
                                                     className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 transition-colors cursor-pointer"
@@ -438,7 +425,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        PodcastService.markEpisodeCompleted(episode.id, episode.duration_ms);
+                                                        PodcastService.markEpisodeCompleted(episode.id, status.duration_ms);
                                                     }}
                                                     title="Clicca per segnare come già ascoltato"
                                                     className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-colors cursor-pointer"
@@ -451,13 +438,13 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                         <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description}</span>
                                         <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
                                             {episode.release_date && <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
-                                            {episode.release_date && episode.duration_ms > 0 && <span>•</span>}
-                                            {episode.duration_ms > 0 && <span>{formatDuration(episode.duration_ms)}</span>}
+                                            {episode.release_date && status.duration_ms > 0 && <span>•</span>}
+                                            {status.duration_ms > 0 && <span>{formatDuration(status.duration_ms)}</span>}
                                             {!status.fully_played && status.resume_position_ms > 0 && (
                                                 <>
                                                     <span>•</span>
                                                     <span className="text-amber-400 font-medium">
-                                                        {Math.max(1, Math.round((Math.max(episode.duration_ms, playerState?.duration || 0) - status.resume_position_ms) / 60000))} min rimanenti
+                                                        {Math.max(1, Math.ceil((status.duration_ms - status.resume_position_ms) / 60000))} min rimanenti
                                                     </span>
                                                 </>
                                             )}
