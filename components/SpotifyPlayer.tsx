@@ -297,7 +297,7 @@ const SpotifyPlayer = ({
         if (isAuthenticated && user) {
             const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists', 'search', 'new-releases'].includes(view.type);
             return (
-                <div className="flex flex-col w-full h-full">
+                <div className="flex flex-col w-full h-full min-h-0">
                     <TopNavBar isNight={isNight} activeView={view.type} onNavigate={handleNavigate} onSearch={handleSearch} onBack={handleBack} showBackButton={isDetailView} />
                     {view.type === 'home' && (
                         <ContentArea isNight={isNight} onSelectItem={handleSelectItem} loading={homeContentLoading} error={homeContentError} user={user}

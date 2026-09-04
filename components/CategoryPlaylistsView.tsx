@@ -154,7 +154,7 @@ const CategoryPlaylistsView: React.FC<CategoryPlaylistsViewProps> = ({ categoryI
     };
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar flex flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar flex flex-col">
             <h2 className={`text-3xl font-bold mb-6 ${textColor}`}>{title}</h2>
 
             {error && validPlaylists.length === 0 ? (

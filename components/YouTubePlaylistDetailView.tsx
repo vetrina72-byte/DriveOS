@@ -111,7 +111,7 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
     }
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar">
             <header className="flex items-end gap-6 mb-6 pt-4">
                 {playlist.images?.[0]?.url ? (
                     <img src={playlist.images[0].url} alt={playlist.name} className="w-48 h-48 rounded-md object-cover shadow-2xl flex-shrink-0" />

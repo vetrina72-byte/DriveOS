@@ -99,7 +99,7 @@ const RecentlyPlayedView = ({ isNight, onPlay }: { isNight: boolean, onPlay: (op
     }
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar">
             <h2 className={`text-3xl font-bold mb-6 ${theme.textPrimary}`}>Ascoltati di recente</h2>
             <motion.div
               className="flex flex-col"

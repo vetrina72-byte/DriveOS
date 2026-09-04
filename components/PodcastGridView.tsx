@@ -164,7 +164,7 @@ const PodcastGridView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
     }
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-8 hide-scrollbar flex flex-col space-y-8">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-8 hide-scrollbar flex flex-col space-y-8">
             {/* Header principale */}
             <div className="flex items-center justify-between pt-2">
                 <h2 className={`text-3xl font-bold tracking-tight ${textColor}`}>Podcast</h2>

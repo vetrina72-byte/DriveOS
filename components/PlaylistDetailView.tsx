@@ -253,7 +253,7 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const sanitizedSubText = subText?.replace(/<[^>]*>?/gm, '') || '';
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar">
             {/* Header */}
             <header className="flex items-end gap-6 mb-6 pt-4">
                  {isLikedSongs ? (

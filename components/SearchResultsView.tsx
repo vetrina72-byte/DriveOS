@@ -125,7 +125,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const activeColor = isNight ? 'text-green-400' : 'text-green-600';
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {topResult && (
                     <motion.div

@@ -78,7 +78,7 @@ const ContentArea = ({
 
   if (loading) {
       return (
-          <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
+          <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
               <h1 className="text-3xl font-bold mb-8 px-6 text-transparent animate-pulse bg-gray-600/20 w-1/2 rounded-md h-9">.</h1>
               <SkeletonCarousel isNight={isNight} />
               <SkeletonCarousel isNight={isNight} />
@@ -92,7 +92,7 @@ const ContentArea = ({
   }
 
   return (
-    <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
+    <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
       <h1 
         className="text-3xl font-bold mb-8 px-6"
         style={{ color: 'var(--heading-color)' }}

@@ -208,7 +208,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     const sanitizedShowDescription = show?.description ? show.description.replace(/<[^>]*>?/gm, '') : '';
 
     return (
-        <div className="flex-grow overflow-y-auto overflow-x-hidden h-full max-h-[100vh] px-6 pb-6 hide-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pb-6 hide-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* Header */}
             {show && (
                 <header className="flex items-end gap-6 mb-6 pt-4">

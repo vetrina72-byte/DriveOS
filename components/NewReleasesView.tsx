@@ -82,7 +82,7 @@ const NewReleasesView = ({ isNight, onSelectItem }: { isNight: boolean, onSelect
     }
 
     return (
-        <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar">
             <h2 className={`text-3xl font-bold mb-6 ${isNight ? 'text-white' : 'text-black'}`}>Nuove Uscite</h2>
             <motion.div
               className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"

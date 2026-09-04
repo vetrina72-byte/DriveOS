@@ -208,7 +208,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const trackUris = tracks.map(t => t.uri);
 
     return (
-        <div className="flex-grow overflow-y-auto pb-6 hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
             <header className="flex items-end gap-6 mb-6 pt-4 px-6">
                 {artist.images?.[0]?.url ? (
                     <img src={artist.images[0].url} alt={artist.name} className="w-48 h-48 rounded-full object-cover shadow-2xl" />
