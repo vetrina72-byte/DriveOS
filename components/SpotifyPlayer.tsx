@@ -316,7 +316,7 @@ const SpotifyPlayer = ({
                     {view.type === 'categoryPlaylists' && <CategoryPlaylistsView categoryId={view.id!} title={view.title!} isNight={isNight} onSelectItem={handleSelectItem} onBack={handleBack} />}
                     {(view.type === 'playlist' || view.type === 'album') && <PlaylistDetailView itemId={view.id!} itemType={view.type as any} isNight={isNight} onPlay={(opts, item) => play(opts, item)} />}
                     {view.type === 'artist' && <ArtistDetailView artistId={view.id!} isNight={isNight} onPlay={(opts, item) => play(opts, item)} onSelectItem={handleSelectItem} onFollowChange={triggerDataRefresh} />}
-                    {view.type === 'show' && <ShowDetailView showId={view.id!} showName={view.title} isNight={isNight} onPlay={(opts) => play(opts)} />}
+                    {view.type === 'show' && <ShowDetailView showId={view.id!} showName={view.title} isNight={isNight} onPlay={(opts, item) => play(opts, item as any)} />}
                 </div>
             );
         }

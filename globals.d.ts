@@ -51,6 +51,9 @@ export interface SpotifyPlayerState {
         previous_tracks: SpotifyTrack[];
         next_tracks: SpotifyTrack[];
     };
+    item?: any;
+    isLoading?: boolean;
+    is_playing?: boolean;
     timestamp: number;
 }
 

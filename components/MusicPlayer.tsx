@@ -673,9 +673,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     // Check if we are active LOCALLY
     // FIX: Relaxed checking. We allow playerState to exist even if 'player' instance (SDK) isn't fully ready yet.
     // This supports the optimistic UI state hydrated from localStorage in AuthContext.
-    const isPlayerActive = playerState && playerState?.track_window?.current_track;
+    const isPlayerActive = Boolean(playerState && (playerState?.track_window?.current_track || (playerState as any)?.item));
     
-    const currentTrack = playerState?.track_window?.current_track;
+    const currentTrack = playerState?.track_window?.current_track ?? (playerState as any)?.item;
     const currentTrackUri = currentTrack?.uri;
 
     const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
@@ -1316,8 +1316,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         if (source === 'spotify' && isPlayerActive) {
             const currentTrack = playerState?.track_window?.current_track ?? playerState?.item ?? null;
-            const trackName = currentTrack?.name ?? 'Episodio in riproduzione';
-            const imageUrl = currentTrack?.album?.images?.[0]?.url ?? currentTrack?.images?.[0]?.url ?? '/placeholder.png';
+            const trackName = currentTrack?.name ?? (currentTrack as any)?.title ?? 'Episodio in riproduzione';
+            const imageUrl = currentTrack?.album?.images?.[0]?.url ?? currentTrack?.images?.[0]?.url ?? (currentTrack as any)?.image ?? '/placeholder.png';
             const albumName = currentTrack?.album?.name ?? 'Podcast';
             const artists = currentTrack?.artists?.map((a: any) => a.name).join(', ') ?? 'Podcast';
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;

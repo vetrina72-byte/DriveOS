@@ -31,7 +31,7 @@ interface ShowDetailViewProps {
     showId: string;
     showName?: string;
     isNight: boolean;
-    onPlay: (options: { uris?: string[] }) => void;
+    onPlay: (options: { uris?: string[] }, itemForOptimisticUpdate?: any) => void;
 }
 
 const AnimatedEqualizer = ({ className }: { className?: string; }) => (
@@ -68,6 +68,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     const [loading, setLoading] = useState<boolean>(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [playError, setPlayError] = useState<string | null>(null);
+    const [isSwitching, setIsSwitching] = useState<boolean>(false);
+    const [switchingEpisodeId, setSwitchingEpisodeId] = useState<string | null>(null);
     
     const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh, _setPlayerState } = useAuth();
     const playerState = nowPlaying.spotifyState;
@@ -154,34 +156,56 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     };
 
     const handlePlayEpisode = async (index: number) => {
-        if (!isPlayerReady) return;
+        if (!isPlayerReady || isSwitching) return; // Blocca click multipli (debounce/lock)
         const episode = episodes[index];
         if (!episode?.uri) return;
+        
+        setIsSwitching(true);
+        setSwitchingEpisodeId(episode.id);
         setPlayError(null);
         
-        // Optimistic UI update: Insert a safe mock state into the Player to avoid rendering null
-        if (_setPlayerState) {
-            _setPlayerState({
-                context: { uri: show?.uri || '' } as any,
-                track_window: {
-                    current_track: {
-                        id: episode.id,
-                        uri: episode.uri,
-                        name: episode.title || episode.name,
-                        album: { name: show?.name || 'Podcast', images: [{ url: episode.image || show?.image || '' }] },
-                        images: [{ url: episode.image || show?.image || '' }],
-                        artists: [{ name: show?.publisher || 'Podcast' }]
-                    } as any,
-                    next_tracks: [],
-                    previous_tracks: []
-                },
-                position: 0,
-                duration: episode.duration_ms,
-                paused: false,
-                shuffle: false,
-                repeat_mode: 0,
-                disallows: { pausing: false, skipping_next: false, skipping_prev: false }
-            } as any);
+        // 1. OPTIMISTIC UPDATE: Inietta immediatamente i dati del nuovo episodio con flag di caricamento
+        const optimisticTrack: any = {
+            id: episode.id,
+            uri: episode.uri,
+            name: episode.title || episode.name || 'Episodio in riproduzione',
+            artists: [{ name: show?.publisher || show?.name || 'Podcast' }],
+            album: { 
+                name: show?.name || 'Podcast', 
+                images: [{ url: episode.image || show?.image || '' }] 
+            },
+            images: [{ url: episode.image || show?.image || '' }],
+            duration_ms: episode.duration_ms
+        };
+
+        const optimisticState: any = {
+            isLoading: true,
+            is_playing: true,
+            context: { uri: show?.uri || '' },
+            item: optimisticTrack,
+            track_window: {
+                current_track: optimisticTrack,
+                next_tracks: [],
+                previous_tracks: []
+            },
+            position: 0,
+            duration: episode.duration_ms,
+            paused: false,
+            shuffle: false,
+            repeat_mode: 0,
+            disallows: { pausing: false, skipping_next: false, skipping_prev: false },
+            timestamp: Date.now()
+        };
+
+        if (setNowPlaying) {
+            setNowPlaying(prev => ({
+                ...prev,
+                source: 'spotify',
+                isLoading: true,
+                spotifyState: optimisticState
+            }));
+        } else if (_setPlayerState) {
+            _setPlayerState(optimisticState);
         }
 
         try {
@@ -202,14 +226,19 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                  }
             }
 
+            // 2. UNICA CHIAMATA DI PLAY: Prevenzione "Audio Doppio"
+            let directPlaySucceeded = false;
             try {
                 await apiClient.put('/me/player/play', {
                     uris: [episode.uri]
                 });
-                onPlay({ uris: [episode.uri] });
+                directPlaySucceeded = true;
             } catch (playErr) {
-                console.error("Failed to play episode:", playErr);
-                // Optionally handle playback error without crashing
+                console.warn("Direct play failed, trying fallback to onPlay handler:", playErr);
+            }
+
+            if (!directPlaySucceeded) {
+                onPlay({ uris: [episode.uri] }, optimisticTrack);
             }
             
             setTimeout(async () => {
@@ -218,7 +247,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                     if (stateRes.data && setNowPlaying) {
                         setNowPlaying(prev => ({
                             ...prev,
-                            spotifyState: stateRes.data
+                            spotifyState: stateRes.data,
+                            isLoading: false
                         }));
                     }
                     if (triggerDataRefresh) {
@@ -236,10 +266,12 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             } else {
                 setPlayError('Impossibile avviare la riproduzione dell\'episodio.');
             }
-            const urisToPlay = episodes.slice(index).map(e => e.uri);
-            if (urisToPlay.length > 0) {
-                onPlay({ uris: urisToPlay });
-            }
+        } finally {
+            // Sblocca il tasto dopo 1 secondo, dando tempo all'SDK di allinearsi
+            setTimeout(() => {
+                setIsSwitching(false);
+                setSwitchingEpisodeId(null);
+            }, 1000);
         }
     };
     
@@ -305,6 +337,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                     >
                         {episodes.map((episode, index) => {
                             const isPlaying = isPlayingContext && episode?.id === currentTrackId;
+                            const isThisEpisodeSwitching = isSwitching && switchingEpisodeId === episode.id;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
                             
                             return (
@@ -312,7 +345,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                     key={`${episode.id}-${index}`}
                                     variants={itemVariants}
                                     onClick={() => handlePlayEpisode(index)}
-                                    className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
+                                    className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady || isSwitching ? 'opacity-75 cursor-wait' : `cursor-pointer ${theme.hover}`}`}
                                 >
                                     {episode.image ? (
                                         <img src={episode.image} alt={episode.title} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
@@ -323,7 +356,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                     )}
                                     <div className="flex flex-col overflow-hidden">
                                         <div className="flex items-center gap-2 min-w-0">
-                                            {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
+                                            {isPlaying && !isThisEpisodeSwitching && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
                                             <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.title}</span>
                                         </div>
                                         <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description}</span>
@@ -335,10 +368,14 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                     </div>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handlePlayEpisode(index); }}
-                                        disabled={!isPlayerReady}
+                                        disabled={!isPlayerReady || isSwitching}
                                         className="bg-green-500 text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
                                     >
-                                        <FiPlay className="w-5 h-5 ml-0.5" />
+                                        {isThisEpisodeSwitching ? (
+                                            <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                            <FiPlay className="w-5 h-5 ml-0.5" />
+                                        )}
                                     </button>
                                 </motion.div>
                             );

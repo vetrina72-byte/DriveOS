@@ -388,10 +388,29 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             isTransferring.current = false;
         }
 
+        const hasValidTrack = Boolean(newState?.track_window?.current_track || (newState as any)?.item);
+
+        // 3. Ignorare gli Stati Transitori Vuoti nel Listener dell'SDK
+        // Se lo stato è nullo o privo di traccia ma stiamo cambiando traccia (isSwitchingTrack o optimistic UI),
+        // IGNORIAMO questo evento per non far lampeggiare l'UI con un layout vuoto.
+        if (isSwitchingTrack.current && (!newState || !hasValidTrack)) {
+            console.log('[Player] Ignorato stato transitorio vuoto durante il cambio traccia');
+            return;
+        }
+
+        if (hasValidTrack) {
+            isSwitchingTrack.current = false;
+        }
+
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
             
-            const isLoading = isSwitchingTrack.current; 
+            // Se lo stato non ha una traccia valida ma lo stato precedente ne aveva una durante il caricamento, preserviamo lo stato
+            if (!hasValidTrack && s.isLoading && s.spotifyState) {
+                return s;
+            }
+
+            const isLoading = hasValidTrack ? false : (isSwitchingTrack.current || s.isLoading);
             
             // Se lo stato locale è null (disconnesso/trasferito), controlliamo chi ha preso il controllo
             if (newState === null) {
@@ -412,8 +431,8 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
             return { 
                 ...s, 
-                spotifyState: newState, 
-                isLoading: isLoading ? s.isLoading : false, 
+                spotifyState: newState ? { ...newState, isLoading: Boolean(isLoading) } : null, 
+                isLoading: Boolean(isLoading), 
                 source: 'spotify',
                 // Se newState esiste, siamo noi il dispositivo attivo (di solito), quindi puliamo activeDevice
                 activeDevice: newState ? null : s.activeDevice 
@@ -857,7 +876,37 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         // IMMEDIATELY update state to remove remote UI and show optimistic state
         setNowPlaying(prev => {
             let nextSpotifyState = prev.spotifyState;
-            if (isResume && !prev.activeDevice && prev.spotifyState) {
+            if (itemForOptimisticUpdate) {
+                const optTrack: any = {
+                    id: itemForOptimisticUpdate.id,
+                    uri: itemForOptimisticUpdate.uri,
+                    name: (itemForOptimisticUpdate as any).name || (itemForOptimisticUpdate as any).title || 'In riproduzione',
+                    album: (itemForOptimisticUpdate as any).album || {
+                        name: (itemForOptimisticUpdate as any).albumName || (itemForOptimisticUpdate as any).showName || 'Podcast',
+                        images: (itemForOptimisticUpdate as any).images || [{ url: (itemForOptimisticUpdate as any).imageUrl || (itemForOptimisticUpdate as any).image || '' }]
+                    },
+                    images: (itemForOptimisticUpdate as any).images || [{ url: (itemForOptimisticUpdate as any).imageUrl || (itemForOptimisticUpdate as any).image || '' }],
+                    artists: (itemForOptimisticUpdate as any).artists || [{ name: (itemForOptimisticUpdate as any).artistName || (itemForOptimisticUpdate as any).publisher || 'Podcast' }],
+                    duration_ms: (itemForOptimisticUpdate as any).duration_ms || 0
+                };
+                nextSpotifyState = {
+                    context: { uri: effectiveOptions.context_uri || null, metadata: null },
+                    disallows: { pausing: false, skipping_next: false, skipping_prev: false },
+                    duration: optTrack.duration_ms,
+                    paused: false,
+                    position: 0,
+                    repeat_mode: 0,
+                    shuffle: false,
+                    track_window: {
+                        current_track: optTrack,
+                        next_tracks: [],
+                        previous_tracks: []
+                    },
+                    item: optTrack,
+                    isLoading: true,
+                    timestamp: Date.now()
+                } as any;
+            } else if (isResume && !prev.activeDevice && prev.spotifyState) {
                 nextSpotifyState = {
                     ...prev.spotifyState,
                     paused: false,
@@ -871,7 +920,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 source: 'spotify', 
                 radioStation: null, 
                 youtubeTrack: null, 
-                isLoading: shouldShowSpinner,
+                isLoading: shouldShowSpinner || Boolean(itemForOptimisticUpdate),
                 activeDevice: null
             };
         });
