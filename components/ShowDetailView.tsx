@@ -1,28 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../spotifyClient';
-import { FiPlay, FiMic, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiPlay, FiMic } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
+import { PodcastService, Episode } from '../services/PodcastService';
 
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.05
-    }
+    transition: { staggerChildren: 0.05 }
   }
 };
 
 const itemVariants = {
   hidden: { y: 20, opacity: 0 },
-  visible: {
-    y: 0,
-    opacity: 1,
-    transition: {
-      duration: 0.3
-    }
-  }
+  visible: { y: 0, opacity: 1, transition: { duration: 0.3 } }
 };
 
 interface Show {
@@ -32,20 +25,6 @@ interface Show {
     description: string;
     images: { url: string }[];
     uri: string;
-    episodes: {
-        total: number;
-    }
-}
-
-interface Episode {
-    id: string;
-    title: string;
-    description: string;
-    duration_ms: number;
-    release_date: string;
-    audio_url: string;
-    uri: string;
-    image: string;
 }
 
 interface ShowDetailViewProps {
@@ -53,57 +32,6 @@ interface ShowDetailViewProps {
     showName?: string;
     isNight: boolean;
     onPlay: (options: { uris?: string[] }) => void;
-}
-
-async function fetchPodcastEpisodesRobust(showId: string, showName: string | undefined, accessToken: string, offset: number = 0) {
-  let userCountry = 'IT';
-  try {
-    const meRes = await apiClient.get('/me');
-    if (meRes.data && meRes.data.country) {
-      userCountry = meRes.data.country;
-    }
-  } catch (e) {
-    console.warn("Impossibile recuperare il profilo utente per il market:", e);
-  }
-
-  // STRATEGIA 1: Endpoint diretto episodi con mercato dinamico
-  try {
-    const res1 = await apiClient.get(`/shows/${showId}/episodes?market=${userCountry}&limit=50&offset=${offset}`);
-    const episodes = res1.data?.items ?? res1.data?.episodes?.items ?? [];
-    if (episodes.length > 0) return episodes;
-  } catch (e) { console.warn("Strategia 1 fallita:", e); }
-
-  // STRATEGIA 2: Endpoint diretto episodi SENZA parametro market
-  try {
-    const res2 = await apiClient.get(`/shows/${showId}/episodes?limit=50&offset=${offset}`);
-    const episodes = res2.data?.items ?? res2.data?.episodes?.items ?? [];
-    if (episodes.length > 0) return episodes;
-  } catch (e) { console.warn("Strategia 2 fallita:", e); }
-
-  // STRATEGIA 3: Endpoint principale dello Show
-  if (offset === 0) {
-    try {
-      const res3 = await apiClient.get(`/shows/${showId}?market=${userCountry}`);
-      const episodes = res3.data?.items ?? res3.data?.episodes?.items ?? [];
-      if (episodes.length > 0) {
-        return episodes;
-      }
-    } catch (e) { console.warn("Strategia 3 fallita:", e); }
-  }
-
-  // STRATEGIA 4 (FALLBACK ESTREMO): Ricerca episodi tramite Spotify Search API
-  if (showName) {
-    try {
-      const query = encodeURIComponent(`show:${showName}`);
-      const res4 = await apiClient.get(`/search?q=${query}&type=episode&market=${userCountry}&limit=50&offset=${offset}`);
-      const episodes = res4.data?.items ?? res4.data?.episodes?.items ?? [];
-      if (episodes.length > 0) {
-        return episodes;
-      }
-    } catch (e) { console.warn("Strategia 4 fallita:", e); }
-  }
-
-  return [];
 }
 
 const AnimatedEqualizer = ({ className }: { className?: string; }) => (
@@ -134,119 +62,63 @@ const formatDuration = (ms: number) => {
 const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNight, onPlay }) => {
     const [show, setShow] = useState<Show | null>(null);
     const [episodes, setEpisodes] = useState<Episode[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [playError, setPlayError] = useState<string | null>(null);
+    
     const { nowPlaying, isPlayerReady, setNowPlaying, triggerDataRefresh } = useAuth();
     const playerState = nowPlaying.spotifyState;
-    
-    const [totalEpisodes, setTotalEpisodes] = useState(0);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [playError, setPlayError] = useState<string | null>(null);
-    const limit = 50;
-
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window.current_track?.id;
     
     useEffect(() => {
         let isMounted = true;
-        setShow(null);
-        setEpisodes([]);
-        setTotalEpisodes(0);
-        setCurrentPage(1);
-        setLoading(true);
-
-        const fetchShowInfo = async () => {
-            try {
-                console.log("--- PODCAST DEBUG START ---");
-                console.log("Show ID richiesto:", showId);
-                const accessToken = localStorage.getItem('spotify_access_token');
-                console.log("Token utilizzato (primi 10 char):", accessToken?.substring(0, 10));
-
-                const showRes = await apiClient.get(`/shows/${showId}?market=IT`);
-                if (isMounted) {
-                    const responseData = showRes.data;
-                    setShow(responseData || null);
-                    setTotalEpisodes(responseData?.episodes?.total || 0);
-
-                    const rawEpisodes = await fetchPodcastEpisodesRobust(showId, showName || responseData?.name, accessToken || '');
-                    
-                    const cleanEpisodes: Episode[] = rawEpisodes.map((ep: any) => ({
-                        id: ep?.id ?? Math.random().toString(),
-                        title: ep?.name ?? 'Episodio senza titolo',
-                        description: (ep?.description ?? ep?.html_description ?? '').replace(/<[^>]*>?/gm, ''),
-                        duration_ms: ep?.duration_ms ?? 0,
-                        release_date: ep?.release_date ?? '',
-                        audio_url: ep?.audio_preview_url ?? '',
-                        uri: ep?.uri ?? `spotify:episode:${ep?.id}`,
-                        image: ep?.images?.[0]?.url ?? '/placeholder-podcast.png'
-                    }));
-
-                    if (cleanEpisodes.length > 0) {
-                        setEpisodes(cleanEpisodes);
-                    }
-                    setLoading(false);
-                }
-            } catch (err) {
-                console.error(err);
-                if (isMounted) {
-                    setError('Could not load show details.');
-                    setLoading(false);
-                }
-            }
-        };
-        fetchShowInfo();
-        return () => { isMounted = false; };
-    }, [showId]);
-
-    useEffect(() => {
-        let isMounted = true;
-        // Skip pagination fetch if it's the first page, since we get it from show info
-        if (currentPage === 1) {
-            return;
-        }
-
-        const fetchEpisodes = async () => {
+        
+        async function loadData() {
+            if (!showId) return;
+            
             setLoading(true);
-            setError(null);
-
-            const offset = (currentPage - 1) * limit;
+            setErrorMessage(null);
+            setShow(null);
+            setEpisodes([]);
 
             try {
-                const accessToken = localStorage.getItem('spotify_access_token');
-                const rawEpisodes = await fetchPodcastEpisodesRobust(showId, showName || show?.name, accessToken || '', offset);
+                // 1. Fetch Dettagli Show/Playlist (Header)
+                const cleanId = showId.replace(/^spotify:(show|playlist|episode):/, '').trim();
+                try {
+                    // Try to fetch as show first, then fallback to playlist if it fails
+                    const showRes = await apiClient.get(`/shows/${cleanId}?market=IT`);
+                    if (isMounted) setShow(showRes.data);
+                } catch (e) {
+                    try {
+                        const plRes = await apiClient.get(`/playlists/${cleanId}?market=IT`);
+                        if (isMounted) setShow(plRes.data);
+                    } catch (err) {
+                        console.warn("Header metadata fetch failed:", err);
+                    }
+                }
+
+                // 2. Fetch Episodi tramite PodcastService
+                const data = await PodcastService.getEpisodes(showId);
                 
                 if (isMounted) {
-                    const cleanEpisodes: Episode[] = rawEpisodes.map((ep: any) => ({
-                        id: ep?.id ?? Math.random().toString(),
-                        title: ep?.name ?? 'Episodio senza titolo',
-                        description: (ep?.description ?? ep?.html_description ?? '').replace(/<[^>]*>?/gm, ''),
-                        duration_ms: ep?.duration_ms ?? 0,
-                        release_date: ep?.release_date ?? '',
-                        audio_url: ep?.audio_preview_url ?? '',
-                        uri: ep?.uri ?? `spotify:episode:${ep?.id}`,
-                        image: ep?.images?.[0]?.url ?? '/placeholder-podcast.png'
-                    }));
-
-                    if (cleanEpisodes.length > 0) {
-                        setEpisodes(cleanEpisodes);
+                    if (data.length === 0) {
+                        setErrorMessage(`Nessun episodio trovato per questo podcast (ID: ${showId})`);
                     }
+                    setEpisodes(data);
+                    setLoading(false);
                 }
             } catch (err) {
-                console.error(err);
                 if (isMounted) {
-                    setError('Could not load episodes.');
-                    // Keeping old episodes if pagination fails
-                }
-            } finally {
-                if (isMounted) {
+                    setErrorMessage('Errore critico durante il caricamento del podcast.');
                     setLoading(false);
                 }
             }
-        };
-
-        fetchEpisodes();
+        }
+        
+        loadData();
         return () => { isMounted = false; };
-    }, [showId, currentPage]);
+    }, [showId]);
     
     const theme = {
         textPrimary: isNight ? 'text-white' : 'text-black',
@@ -257,14 +129,6 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         placeholderIcon: isNight ? 'text-zinc-500' : 'text-zinc-600',
     };
 
-    if (loading && episodes.length === 0) {
-        return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
-    }
-
-    if (error || !show) {
-        return <div className="flex-grow flex justify-center items-center text-red-400">{error || 'Show not found.'}</div>;
-    }
-    
     const handlePlayEpisode = async (index: number) => {
         if (!isPlayerReady) return;
         const episode = episodes[index];
@@ -319,44 +183,29 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     
     const sanitizedShowDescription = show?.description ? show.description.replace(/<[^>]*>?/gm, '') : '';
 
-    const PaginationControls = () => {
-        const buttonClasses = `px-4 py-2 rounded-md font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isNight ? 'bg-white/10 hover:bg-white/20' : 'bg-black/10 hover:bg-black/20'}`;
-        const totalPages = Math.ceil(totalEpisodes / limit);
-    
-        return (
-            <div className="flex justify-center items-center gap-4">
-                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
-                    <FiChevronLeft className="w-5 h-5"/>
-                    Precedente
-                </button>
-                 <span className={theme.textSecondary}>Pagina {currentPage} di {totalPages > 0 ? totalPages : 1}</span>
-                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage >= totalPages || loading} className={buttonClasses} style={{ color: 'var(--text-primary)'}}>
-                    Successivo
-                    <FiChevronRight className="w-5 h-5"/>
-                </button>
-            </div>
-        );
-    };
-
     return (
         <div className="flex-grow overflow-y-auto px-6 pb-6 hide-scrollbar">
             {/* Header */}
-            <header className="flex items-end gap-6 mb-6 pt-4">
-                {show?.images?.[0]?.url ? (
-                    <img src={show.images[0].url} alt={show?.name || 'Show'} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
-                ) : (
-                    <div className={`w-48 h-48 rounded-md flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
-                        <FiMic className={`w-16 h-16 ${theme.placeholderIcon}`} />
+            {show && (
+                <header className="flex items-end gap-6 mb-6 pt-4">
+                    {show?.images?.[0]?.url ? (
+                        <img src={show.images[0].url} alt={show?.name || 'Show'} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
+                    ) : (
+                        <div className={`w-48 h-48 rounded-md flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
+                            <FiMic className={`w-16 h-16 ${theme.placeholderIcon}`} />
+                        </div>
+                    )}
+                    <div className="flex flex-col gap-3 self-end">
+                        <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Podcast</span>
+                        <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{show?.name || showName || ''}</h1>
+                        <p className={`text-lg font-semibold ${theme.textPrimary}`}>{show?.publisher || ''}</p>
                     </div>
-                )}
-                <div className="flex flex-col gap-3 self-end">
-                    <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Podcast</span>
-                    <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{show?.name || ''}</h1>
-                    <p className={`text-lg font-semibold ${theme.textPrimary}`}>{show?.publisher || ''}</p>
-                </div>
-            </header>
+                </header>
+            )}
             
-            <p className={`mb-6 ${theme.textSecondary}`}>{sanitizedShowDescription}</p>
+            {sanitizedShowDescription && (
+                <p className={`mb-6 ${theme.textSecondary}`}>{sanitizedShowDescription}</p>
+            )}
 
             {playError && (
                 <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center justify-between">
@@ -365,35 +214,37 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                 </div>
             )}
 
-            {/* Episode List Header */}
-            <div className="flex justify-between items-center mb-4">
-                <h2 className={`text-2xl font-bold ${theme.textPrimary}`}>Episodi</h2>
-            </div>
-            
-            {/* Episode List */}
-            {episodes.length === 0 && !loading ? (
-                <div className="p-4 bg-red-500/20 border border-red-500 rounded-md text-red-400 font-bold mb-4 text-center">
-                    Nessun episodio restituito dall'API di Spotify per lo SHOW_ID {showId}
+            {/* UI Feedback come richiesto */}
+            {loading && (
+                <div className="flex flex-col items-center justify-center my-12 gap-4">
+                    <div className={`w-10 h-10 rounded-full border-4 border-t-transparent animate-spin ${isNight ? 'border-white' : 'border-black'}`} />
+                    <span className={`font-semibold ${theme.textSecondary}`}>Caricamento episodi in corso...</span>
                 </div>
-            ) : (
-                <motion.div
-                  className="flex flex-col gap-2"
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                >
-                    {(() => {
-                        const validEpisodes = Array.isArray(episodes) ? episodes.filter(ep => ep && ep.id) : [];
-                        return validEpisodes.map((episode, index) => {
+            )}
+
+            {!loading && errorMessage && episodes.length === 0 && (
+                <div className="p-4 bg-red-500/20 border border-red-500 rounded-md text-red-400 font-bold mb-4 text-center shadow-lg">
+                    {errorMessage}
+                </div>
+            )}
+
+            {/* Episode List */}
+            {!loading && episodes.length > 0 && (
+                <>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className={`text-2xl font-bold ${theme.textPrimary}`}>Episodi</h2>
+                    </div>
+                    
+                    <motion.div
+                        className="flex flex-col gap-2"
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                    >
+                        {episodes.map((episode, index) => {
                             const isPlaying = isPlayingContext && episode?.id === currentTrackId;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
-                            const epName = episode?.title ?? 'Episodio';
-                            const rawDescription = (episode as any)?.description ?? (episode as any)?.html_description ?? '';
-                            const cleanDescription = rawDescription.replace(/<[^>]*>?/gm, '');
-                            const epDate = episode?.release_date ? new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                            const epDuration = episode?.duration_ms ? formatDuration(episode.duration_ms) : '';
-                            const coverImage = episode?.image ?? show?.images?.[0]?.url ?? '';
-    
+                            
                             return (
                                 <motion.div
                                     key={`${episode.id}-${index}`}
@@ -401,8 +252,8 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                     onClick={() => handlePlayEpisode(index)}
                                     className={`grid grid-cols-[auto_1fr_auto] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                                 >
-                                    {coverImage ? (
-                                        <img src={coverImage} alt={epName} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
+                                    {episode.image ? (
+                                        <img src={episode.image} alt={episode.title} className="w-16 h-16 rounded object-cover flex-shrink-0"/>
                                     ) : (
                                         <div className={`w-16 h-16 rounded flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
                                             <FiMic className={`w-8 h-8 ${theme.placeholderIcon}`} />
@@ -411,13 +262,13 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                     <div className="flex flex-col overflow-hidden">
                                         <div className="flex items-center gap-2 min-w-0">
                                             {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
-                                            <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{epName}</span>
+                                            <span className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{episode.title}</span>
                                         </div>
-                                        <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{cleanDescription}</span>
+                                        <span className={`text-sm mt-1 text-ellipsis overflow-hidden line-clamp-2 ${theme.textSecondary}`}>{episode.description}</span>
                                         <div className={`flex items-center gap-2 mt-2 text-xs ${theme.textSecondary}`}>
-                                            {epDate && <span>{epDate}</span>}
-                                            {epDate && epDuration && <span>•</span>}
-                                            {epDuration && <span>{epDuration}</span>}
+                                            {episode.release_date && <span>{new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                                            {episode.release_date && episode.duration_ms > 0 && <span>•</span>}
+                                            {episode.duration_ms > 0 && <span>{formatDuration(episode.duration_ms)}</span>}
                                         </div>
                                     </div>
                                     <button
@@ -429,15 +280,9 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                                     </button>
                                 </motion.div>
                             );
-                        });
-                    })}
-                </motion.div>
-            )}
-
-            {totalEpisodes > limit && episodes.length > 0 && (
-                <div className="mt-6">
-                    <PaginationControls />
-                </div>
+                        })}
+                    </motion.div>
+                </>
             )}
         </div>
     );
