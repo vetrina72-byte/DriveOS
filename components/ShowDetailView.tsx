@@ -39,12 +39,13 @@ interface Show {
 
 interface Episode {
     id: string;
-    name: string;
+    title: string;
     description: string;
     duration_ms: number;
     release_date: string;
+    audio_url: string;
     uri: string;
-    images: { url: string }[];
+    image: string;
 }
 
 interface ShowDetailViewProps {
@@ -54,7 +55,7 @@ interface ShowDetailViewProps {
     onPlay: (options: { uris?: string[] }) => void;
 }
 
-async function fetchPodcastEpisodesRobust(showId: string, showName: string | undefined, accessToken: string) {
+async function fetchPodcastEpisodesRobust(showId: string, showName: string | undefined, accessToken: string, offset: number = 0) {
   const headers = { 
     'Authorization': `Bearer ${accessToken}`,
     'Accept': 'application/json'
@@ -62,7 +63,7 @@ async function fetchPodcastEpisodesRobust(showId: string, showName: string | und
 
   // STRATEGIA 1: Endpoint diretto episodi con mercato italiano (market=IT)
   try {
-    const url1 = `https://api.spotify.com/v1/shows/${showId}/episodes?market=IT&limit=50&offset=0`;
+    const url1 = `https://api.spotify.com/v1/shows/${showId}/episodes?market=IT&limit=50&offset=${offset}`;
     const res1 = await fetch(url1, { headers });
     if (res1.ok) {
       const data1 = await res1.json();
@@ -72,7 +73,7 @@ async function fetchPodcastEpisodesRobust(showId: string, showName: string | und
 
   // STRATEGIA 2: Endpoint diretto episodi SENZA parametro market
   try {
-    const url2 = `https://api.spotify.com/v1/shows/${showId}/episodes?limit=50&offset=0`;
+    const url2 = `https://api.spotify.com/v1/shows/${showId}/episodes?limit=50&offset=${offset}`;
     const res2 = await fetch(url2, { headers });
     if (res2.ok) {
       const data2 = await res2.json();
@@ -81,22 +82,24 @@ async function fetchPodcastEpisodesRobust(showId: string, showName: string | und
   } catch (e) { console.warn("Strategia 2 fallita:", e); }
 
   // STRATEGIA 3: Endpoint principale dello Show (data.episodes.items)
-  try {
-    const url3 = `https://api.spotify.com/v1/shows/${showId}?market=IT`;
-    const res3 = await fetch(url3, { headers });
-    if (res3.ok) {
-      const data3 = await res3.json();
-      if (data3?.episodes?.items && data3.episodes.items.length > 0) {
-        return data3.episodes.items;
+  if (offset === 0) {
+    try {
+      const url3 = `https://api.spotify.com/v1/shows/${showId}?market=IT`;
+      const res3 = await fetch(url3, { headers });
+      if (res3.ok) {
+        const data3 = await res3.json();
+        if (data3?.episodes?.items && data3.episodes.items.length > 0) {
+          return data3.episodes.items;
+        }
       }
-    }
-  } catch (e) { console.warn("Strategia 3 fallita:", e); }
+    } catch (e) { console.warn("Strategia 3 fallita:", e); }
+  }
 
   // STRATEGIA 4 (FALLBACK ESTREMO): Ricerca episodi tramite Spotify Search API
   if (showName) {
     try {
       const query = encodeURIComponent(`show:${showName}`);
-      const url4 = `https://api.spotify.com/v1/search?q=${query}&type=episode&market=IT&limit=50`;
+      const url4 = `https://api.spotify.com/v1/search?q=${query}&type=episode&market=IT&limit=50&offset=${offset}`;
       const res4 = await fetch(url4, { headers });
       if (res4.ok) {
         const data4 = await res4.json();
@@ -176,13 +179,13 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                     
                     const cleanEpisodes: Episode[] = rawEpisodes.map((ep: any) => ({
                         id: ep?.id ?? Math.random().toString(),
-                        name: ep?.name ?? 'Episodio senza titolo',
+                        title: ep?.name ?? 'Episodio senza titolo',
                         description: (ep?.description ?? ep?.html_description ?? '').replace(/<[^>]*>?/gm, ''),
                         duration_ms: ep?.duration_ms ?? 0,
                         release_date: ep?.release_date ?? '',
                         audio_url: ep?.audio_preview_url ?? '',
                         uri: ep?.uri ?? `spotify:episode:${ep?.id}`,
-                        images: ep?.images ?? []
+                        image: ep?.images?.[0]?.url ?? '/placeholder-podcast.png'
                     }));
 
                     if (cleanEpisodes.length > 0) {
@@ -216,22 +219,19 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             const offset = (currentPage - 1) * limit;
 
             try {
-                const episodesRes = await apiClient.get(`/shows/${showId}/episodes?limit=${limit}&offset=${offset}`);
+                const accessToken = localStorage.getItem('spotify_access_token');
+                const rawEpisodes = await fetchPodcastEpisodesRobust(showId, showName || show?.name, accessToken || '', offset);
+                
                 if (isMounted) {
-                    const responseData = episodesRes.data;
-                    console.log("Risposta RAW da Spotify (PAGINAZIONE):", JSON.stringify(responseData, null, 2));
-                    
-                    const rawEpisodes = responseData?.items || [];
-                                         
                     const cleanEpisodes: Episode[] = rawEpisodes.map((ep: any) => ({
                         id: ep?.id ?? Math.random().toString(),
-                        name: ep?.name ?? 'Episodio senza titolo',
+                        title: ep?.name ?? 'Episodio senza titolo',
                         description: (ep?.description ?? ep?.html_description ?? '').replace(/<[^>]*>?/gm, ''),
                         duration_ms: ep?.duration_ms ?? 0,
                         release_date: ep?.release_date ?? '',
                         audio_url: ep?.audio_preview_url ?? '',
                         uri: ep?.uri ?? `spotify:episode:${ep?.id}`,
-                        images: ep?.images ?? []
+                        image: ep?.images?.[0]?.url ?? '/placeholder-podcast.png'
                     }));
 
                     if (cleanEpisodes.length > 0) {
@@ -394,12 +394,12 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                         return validEpisodes.map((episode, index) => {
                             const isPlaying = isPlayingContext && episode?.id === currentTrackId;
                             const activeColor = isNight ? 'text-green-400' : 'text-green-600';
-                            const epName = episode?.name ?? 'Episodio';
+                            const epName = episode?.title ?? 'Episodio';
                             const rawDescription = (episode as any)?.description ?? (episode as any)?.html_description ?? '';
                             const cleanDescription = rawDescription.replace(/<[^>]*>?/gm, '');
                             const epDate = episode?.release_date ? new Date(episode.release_date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
                             const epDuration = episode?.duration_ms ? formatDuration(episode.duration_ms) : '';
-                            const coverImage = episode?.images?.[0]?.url ?? show?.images?.[0]?.url ?? '';
+                            const coverImage = episode?.image ?? show?.images?.[0]?.url ?? '';
     
                             return (
                                 <motion.div
