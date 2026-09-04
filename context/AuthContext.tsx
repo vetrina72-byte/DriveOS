@@ -388,7 +388,15 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         const hasValidTrack = Boolean(newState?.track_window?.current_track || (newState as any)?.item);
 
         if (!newState || !hasValidTrack) {
-            if (isSwitchingTrack.current || latestOptimisticItem.current) {
+            let isCurrentlyLoading = isSwitchingTrack.current || Boolean(latestOptimisticItem.current);
+            setNowPlaying(s => {
+                if (s.isLoading || (s.spotifyState as any)?.isLoading) {
+                    isCurrentlyLoading = true;
+                }
+                return s;
+            });
+
+            if (isCurrentlyLoading) {
                 console.log('[Player] Ignorato stato transitorio vuoto durante il cambio traccia o optimistic update');
                 return;
             }

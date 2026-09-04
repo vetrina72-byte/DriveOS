@@ -173,7 +173,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         };
 
         const optimisticState: any = {
-            isLoading: true,
+            isLoading: true, // Aggiungi questo flag per mostrare lo spinner sulla cover
             is_playing: true,
             context: { uri: show?.uri || '' },
             item: optimisticTrack,
@@ -191,6 +191,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             timestamp: Date.now()
         };
 
+        // 1. OPTIMISTIC UPDATE: Aggiorna subito la UI in attesa di Spotify
         if (setNowPlaying) {
             setNowPlaying(prev => ({
                 ...prev,
@@ -202,25 +203,24 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             _setPlayerState(optimisticState);
         }
 
-        // 2. Esegui la chiamata API reale (singola chiamata mirata per evitare glitch audio)
+        // 2. Esegui la chiamata API reale
         try {
             const deviceId = localStorage.getItem('spotify_device_id') || playerState?.device?.id;
-            await apiClient.put('/me/player/play', 
+            await apiClient.put('/v1/me/player/play', 
                 { uris: [episode.uri] },
                 { params: deviceId ? { device_id: deviceId } : undefined }
             );
         } catch (error) {
-            console.warn("Chiamata diretta apiClient.put fallita, fallback su onPlay:", error);
+            console.error("Errore Playback:", error);
             onPlay({ uris: [episode.uri] }, optimisticTrack);
         }
     };
 
     // 2. Debounce sul pulsante di Play (Prevenzione "Audio Doppio")
-    const handlePlayEpisode = async (index: number) => {
-        if (isSwitching || !isPlayerReady) return; // Blocca click multipli (debounce/lock)
-        const episode = episodes[index];
+    const handlePlayClick = async (episode: PodcastEpisode) => {
+        if (isSwitching || !isPlayerReady) return; // Blocca click multipli
         if (!episode?.uri) return;
-        
+
         setIsSwitching(true);
         setSwitchingEpisodeId(episode.id);
         setPlayError(null);
@@ -228,7 +228,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         try {
             await playEpisode(episode);
         } catch (err: any) {
-            console.error("Failed to play episode:", err);
+            console.error("Errore Playback:", err);
             const status = err?.response?.status;
             if (status === 403 || status === 400 || status === 404) {
                 setPlayError('Contenuto non disponibile per il player remoto o Spotify Premium richiesto.');
@@ -242,6 +242,11 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                 setSwitchingEpisodeId(null);
             }, 1000);
         }
+    };
+
+    const handlePlayEpisode = (index: number) => {
+        const episode = episodes[index];
+        if (episode) handlePlayClick(episode);
     };
     
     const sanitizedShowDescription = show?.description ? show.description.replace(/<[^>]*>?/gm, '') : '';

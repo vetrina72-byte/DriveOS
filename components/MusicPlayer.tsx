@@ -1328,8 +1328,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <div className="flex items-center justify-between w-full">
                         <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
                             {imageUrl && (
-                                <div className="flex-shrink-0">
+                                <div className="flex-shrink-0 relative">
                                     <img src={imageUrl} alt={albumName} className={`${isAnyAppOpen ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-12 h-12'} rounded-lg shadow-lg`} />
+                                    {(nowPlaying.isLoading || (playerState as any)?.isLoading) && (
+                                        <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center backdrop-blur-[1px]">
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <div className={`overflow-hidden flex-grow ${isAnyAppOpen ? 'min-w-0 shrink' : ''}`}>

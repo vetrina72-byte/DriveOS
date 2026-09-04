@@ -73,7 +73,20 @@ export function initSpotifyPlayerOnce(options: InitOptions) {
                 options.onNotReady(details);
             });
             
-            player.addListener('player_state_changed', options.onStateChange);
+            player.addListener('player_state_changed', (state) => {
+                // Se lo stato è nullo ma sappiamo di aver appena forzato un cambio traccia (Optimistic Update), 
+                // l'handler ignorerà l'evento per non far lampeggiare l'UI.
+                if (!state || (!state.track_window?.current_track && !(state as any)?.item)) {
+                    options.onStateChange(state);
+                    return; 
+                }
+
+                // Se arriva uno stato valido, togliamo il flag di loading e aggiorniamo
+                options.onStateChange({
+                    ...state,
+                    isLoading: false 
+                } as any);
+            });
 
             player.addListener('initialization_error', ({ message }) => {
                 console.error('[Spotify SDK] Initialization Error', message);
