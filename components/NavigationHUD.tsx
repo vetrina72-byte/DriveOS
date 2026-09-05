@@ -105,7 +105,7 @@ export default function NavigationHUD({
       {/* Upper Panel direction steps HUD */}
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden cursor-pointer pointer-events-auto select-none transition-all duration-300"
+        className="w-full bg-neutral-900/85 backdrop-blur-md border border-white/10 rounded-2xl shadow-lg overflow-hidden cursor-pointer pointer-events-auto select-none transition-all duration-300"
       >
         <div className="flex items-center gap-4 p-4">
           <div className="w-12 h-12 rounded-lg bg-emerald-500/15 text-emerald-550 flex items-center justify-center flex-shrink-0 animate-pulse">

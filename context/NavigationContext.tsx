@@ -28,6 +28,10 @@ interface NavigationContextType {
   setFavoriteLocations: (locs: LocationData[]) => void;
   navigationTarget: LocationData | null;
   setNavigationTarget: (target: LocationData | null) => void;
+  isNavigating: boolean;
+  setIsNavigating: (val: boolean) => void;
+  isRoutePreview: boolean;
+  setIsRoutePreview: (val: boolean) => void;
   mapStyle: string;
   setMapStyle: (style: string) => void;
   simulatedRemainingDistance: number | null;
@@ -58,6 +62,8 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
   const [workLocation, setWorkLocation] = useState<LocationData | null>(null);
   const [favoriteLocations, setFavoriteLocations] = useState<LocationData[]>([]);
   const [navigationTarget, setNavigationTarget] = useState<LocationData | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [isRoutePreview, setIsRoutePreview] = useState(false);
   const [mapStyle, setMapStyle] = useState('dark');
   const [simulatedRemainingDistance, setSimulatedRemainingDistance] = useState<number | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -154,6 +160,8 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
   const handleCancelNavigation = useCallback((message?: string) => {
     setNavigationTarget(null);
     setTripInfo(null);
+    setIsNavigating(false);
+    setIsRoutePreview(false);
     routeStore.setRoute(null);
     stopTripSimulation();
     const mapsIframe = document.querySelector('iframe[title="Tesla Navigation"]');
@@ -235,6 +243,10 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
         setFavoriteLocations,
         navigationTarget,
         setNavigationTarget,
+        isNavigating,
+        setIsNavigating,
+        isRoutePreview,
+        setIsRoutePreview,
         mapStyle,
         setMapStyle,
         simulatedRemainingDistance,

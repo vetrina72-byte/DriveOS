@@ -201,7 +201,7 @@ export default function MapControls({
                 e.stopPropagation();
                 onRecenter();
               }}
-              className="w-16 h-16 rounded-2xl border border-white/12 bg-zinc-900/95 hover:bg-zinc-800/90 text-[#f0f0f0] flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[0.9375rem] p-0 select-none touch-none"
+              className="w-16 h-16 rounded-2xl border border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0] flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-lg backdrop-blur-md p-0 select-none touch-none"
               title="Ricentra la visuale"
             >
               <svg className="w-8 h-8 fill-current text-[#f0f0f0]" viewBox="0 -960 960 960">
@@ -217,10 +217,10 @@ export default function MapControls({
               e.stopPropagation();
               onToggleSatellite();
             }}
-            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[0.9375rem] p-0 select-none touch-none ${
+            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-lg backdrop-blur-md p-0 select-none touch-none ${
               isSatellite
                 ? 'bg-blue-600 border-blue-500 text-white'
-                : 'border-white/12 bg-zinc-900/95 hover:bg-zinc-800/90 text-[#f0f0f0]'
+                : 'border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0]'
             }`}
             title="Satellite / Mappa Stradale"
           >
@@ -236,10 +236,10 @@ export default function MapControls({
               e.stopPropagation();
               onToggleWeather();
             }}
-            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-[0_8px_20px_rgba(0,0,0,0.4)] backdrop-blur-[0.9375rem] p-0 select-none touch-none ${
+            className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-lg backdrop-blur-md p-0 select-none touch-none ${
               isWeatherActive
                 ? 'bg-blue-600 border-blue-500 text-white'
-                : 'border-white/12 bg-zinc-900/95 hover:bg-zinc-800/90 text-[#f0f0f0]'
+                : 'border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0]'
             }`}
             title="Radar Meteo"
           >
@@ -254,7 +254,7 @@ export default function MapControls({
       {isWeatherActive && wTs.length > 0 && (
         <div 
           id="tl-ctrl"
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1002] w-[21.25rem] px-4 py-3.5 border border-white/10 rounded-[1.875rem] flex flex-col pointer-events-auto select-none touch-none bg-zinc-950/95 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl text-white outline-none"
+          className="absolute bottom-[7.5rem] left-1/2 -translate-x-1/2 z-[1002] w-[21.25rem] px-4 py-3.5 border border-white/10 rounded-2xl flex flex-col pointer-events-auto select-none touch-none bg-neutral-900/85 shadow-lg backdrop-blur-md text-white outline-none"
         >
           <div className="flex items-center gap-4">
             <button 

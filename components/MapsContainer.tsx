@@ -55,6 +55,10 @@ const MapsContainer = React.memo(({
     navigationTarget,
     homeLocation,
     workLocation,
+    isNavigating: naving,
+    setIsNavigating: setNaving,
+    isRoutePreview,
+    setIsRoutePreview,
     handleSelectDestination: onSelectDestination,
     handleCancelNavigation,
   } = useNavigation();
@@ -90,7 +94,6 @@ const MapsContainer = React.memo(({
   const devCntRef = useRef<number>(0);
 
   // Controls visual triggers
-  const [naving, setNaving] = useState(false);
   const [steps, setSteps] = useState<StepInfo[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [destinationName, setDestinationName] = useState('Destinazione');
@@ -133,6 +136,7 @@ const MapsContainer = React.memo(({
   const autoZoomedRef = useRef<boolean>(false);
   const pendDestRef = useRef<{ coords: { lat: number; lng: number }; name: string } | null>(null);
   const savedModeRef = useRef<'north-up' | 'heading-up' | null>(null);
+  const prevCmodeRef = useRef<'north-up' | 'heading-up'>('north-up');
   const weatherSlotRef = useRef<'A' | 'B'>('A');
 
   // Physics animation variables for drawer slide sheet
@@ -576,19 +580,20 @@ const MapsContainer = React.memo(({
           new maplibregl.LngLatBounds(coords[0], coords[0])
         );
         mapRef.current.fitBounds(bounds, {
-          padding: { top: 140, bottom: 180, left: 80, right: 80 }
+          padding: { top: 220, bottom: 320, left: 140, right: 140 },
+          animate: true,
+          duration: 800
         });
         followRef.current = false;
         setIsMapFollowing(false);
       }
 
-      // Automatic tracking startup timers scheduler
-      isPendingStartRef.current = true;
-      if (startTrackTimerRef.current) clearTimeout(startTrackTimerRef.current);
-      startTrackTimerRef.current = setTimeout(() => {
-        startTracking();
-      }, 5000);
-
+      // Stop map following while in preview
+      followRef.current = false;
+      setIsMapFollowing(false);
+      setIsRoutePreview(true);
+      setNaving(false);
+      navingRef.current = false;
     } catch (e) {
       console.error('[ROUTE] Navigation fetch error', e);
     }
@@ -599,11 +604,14 @@ const MapsContainer = React.memo(({
   const startTracking = useCallback(() => {
     if (!destRef.current) return;
     isPendingStartRef.current = false;
+    setIsRoutePreview(false);
     setNaving(true);
     navingRef.current = true;
 
-    cmodeRef.current = 'heading-up';
-    setCmode('heading-up');
+    // Restore previous mode
+    cmodeRef.current = prevCmodeRef.current;
+    setCmode(prevCmodeRef.current);
+
     followRef.current = true;
     setIsMapFollowing(true);
 
@@ -612,6 +620,10 @@ const MapsContainer = React.memo(({
 
   // Sets active navigation itinerary target endpoint and adds pin markers
   const setDest = useCallback(async (coords: { lat: number; lng: number }, name: string) => {
+    prevCmodeRef.current = cmodeRef.current;
+    cmodeRef.current = 'north-up';
+    setCmode('north-up');
+    
     clearRoute(true);
     activeFetchIdRef.current++;
     destRef.current = coords;
@@ -622,18 +634,21 @@ const MapsContainer = React.memo(({
       destMarkRef.current = null;
     }
 
+    const pinWrapper = document.createElement('div');
+    pinWrapper.style.width = '24px';
+    pinWrapper.style.height = '24px';
+    pinWrapper.style.pointerEvents = 'none';
+
     const pinEl = document.createElement('div');
-    pinEl.className = 'dest-pin';
-    pinEl.style.width = '3rem';
-    pinEl.style.height = '4rem';
-    pinEl.style.pointerEvents = 'none';
-    pinEl.style.filter = 'drop-shadow(0 6px 10px rgba(0,0,0,0.5))';
-    pinEl.innerHTML = `<svg width="48" height="64" viewBox="0 0 24 24"><ellipse cx="12" cy="22.5" rx="5" ry="1.5" fill="rgba(0,0,0,.2)"/><g><path d="M12,2c-4.2,0-8,3.22-8,8.2c0,3.18,2.45,6.92,7.34,11.23c0.38,0.33,0.95,0.33,1.33,0C17.55,17.12,20,13.38,20,10.2 C20,5.22,16.2,2,12,2z M12,12c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2c1.1,0,2,0.9,2,2C14,11.1,13.1,12,12,12z" fill="#EF4444" stroke="#FFFFFF" stroke-width="1.2"/></g></svg>`;
+    pinEl.className = 'w-full h-full rounded-full bg-red-600 border-[3px] border-white shadow-[0_4px_12px_rgba(0,0,0,0.4)] flex items-center justify-center';
+    pinEl.innerHTML = `<div style="width: 6px; height: 6px; background: white; border-radius: 50%;"></div>`;
+    
+    pinWrapper.appendChild(pinEl);
 
     if (mapRef.current) {
       destMarkRef.current = new maplibregl.Marker({
-        element: pinEl,
-        anchor: 'bottom'
+        element: pinWrapper,
+        anchor: 'center'
       }).setLngLat([coords.lng, coords.lat]).addTo(mapRef.current);
     }
 
@@ -681,22 +696,29 @@ const MapsContainer = React.memo(({
 
     if (!isSoft) {
       if (rposRef.current && mapRef.current) {
-        flyingRef.current = true;
-        mapRef.current.flyTo({
-          center: [rposRef.current.lng, rposRef.current.lat],
-          zoom: 14,
-          bearing: 0,
-          duration: 1800,
-          essential: true,
-          easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-        });
-        mapRef.current.once('moveend', () => {
-          flyingRef.current = false;
-          followRef.current = true;
-          setIsMapFollowing(true);
-          cmodeRef.current = 'north-up';
-          setCmode('north-up');
-        });
+        
+        // Restore mode to what it was
+        cmodeRef.current = prevCmodeRef.current;
+        setCmode(prevCmodeRef.current);
+
+        if (smoothRecRef.current) {
+          smoothRecRef.current();
+        } else {
+          flyingRef.current = true;
+          mapRef.current.flyTo({
+            center: [rposRef.current.lng, rposRef.current.lat],
+            zoom: cmodeRef.current === 'heading-up' ? 16 : 14,
+            bearing: cmodeRef.current === 'heading-up' ? cbearRef.current : 0,
+            duration: 1800,
+            essential: true,
+            easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+          });
+          mapRef.current.once('moveend', () => {
+            flyingRef.current = false;
+            followRef.current = true;
+            setIsMapFollowing(true);
+          });
+        }
       } else {
         followRef.current = true;
         setIsMapFollowing(true);
@@ -741,8 +763,29 @@ const MapsContainer = React.memo(({
     showToast('Tracking riattivato');
   }, [showToast]);
 
+  const handleRecenter = useCallback(() => {
+    if (isRoutePreview) {
+      if (mapRef.current && geoRef.current && geoRef.current.length > 0) {
+        const bounds = geoRef.current.reduce(
+          (b: maplibregl.LngLatBounds, c: [number, number]) => b.extend(c),
+          new maplibregl.LngLatBounds(geoRef.current[0], geoRef.current[0])
+        );
+        mapRef.current.fitBounds(bounds, {
+          padding: { top: 220, bottom: 320, left: 140, right: 140 },
+          animate: true,
+          duration: 800
+        });
+        followRef.current = false;
+        setIsMapFollowing(false);
+      }
+    } else {
+      smoothRec();
+    }
+  }, [isRoutePreview, smoothRec]);
+
   // Compass interaction triggers
   const handleToggleCompass = useCallback(() => {
+    if (isRoutePreview) return; // Prevent changing during preview
     if (!mapRef.current) return;
     mapRef.current.stop();
     flyingRef.current = false;
@@ -753,7 +796,7 @@ const MapsContainer = React.memo(({
     smoothRec();
     
     showToast(newMode === 'heading-up' ? 'Heading Up attivato' : 'North Up attivato');
-  }, [smoothRec, showToast]);
+  }, [smoothRec, showToast, isRoutePreview]);
 
   // Satellite layer toggle layout styling updater
   const handleToggleSatellite = useCallback(() => {
@@ -799,7 +842,9 @@ const MapsContainer = React.memo(({
     isWeatherActiveRef.current = newWeather;
 
     if (newWeather) {
-      if (rposRef.current && mapRef.current) {
+      if (isRoutePreview) {
+        // Do not fly out to zoom 6 when in route preview, keep the bounding box
+      } else if (rposRef.current && mapRef.current) {
         followRef.current = false;
         setIsMapFollowing(false);
         mapRef.current.flyTo({
@@ -816,11 +861,27 @@ const MapsContainer = React.memo(({
           mapRef.current.setPaintProperty(`wl-${s}`, 'raster-opacity', 0);
         }
       });
-      smoothRec();
+      if (isRoutePreview) {
+        if (mapRef.current && geoRef.current && geoRef.current.length > 0) {
+          const bounds = geoRef.current.reduce(
+            (b: maplibregl.LngLatBounds, c: [number, number]) => b.extend(c),
+            new maplibregl.LngLatBounds(geoRef.current[0], geoRef.current[0])
+          );
+          mapRef.current.fitBounds(bounds, {
+            padding: { top: 220, bottom: 320, left: 140, right: 140 },
+            animate: true,
+            duration: 800
+          });
+          followRef.current = false;
+          setIsMapFollowing(false);
+        }
+      } else {
+        smoothRec();
+      }
     }
 
     showToast(newWeather ? 'Radar Meteo abilitato' : 'Radar Meteo disattivato');
-  }, [isWeatherActive, smoothRec, showToast]);
+  }, [isWeatherActive, smoothRec, showToast, isRoutePreview]);
 
   // Handles timeline framework caching and rendering transitions matching original HTML
   const handleWeatherFrameChange = useCallback((frame: WeatherFrame, index: number, isFuture: boolean) => {
@@ -845,14 +906,12 @@ const MapsContainer = React.memo(({
 
   // Synchronizes changes in NavigationTarget from NavigateTool or context triggers
   useEffect(() => {
-    if (isOpen) {
-      if (navigationTarget) {
-        setDest({ lat: navigationTarget.lat, lng: navigationTarget.lng }, navigationTarget.name);
-      } else {
-        clearRoute(false);
-      }
+    if (navigationTarget) {
+      setDest({ lat: navigationTarget.lat, lng: navigationTarget.lng }, navigationTarget.name);
+    } else {
+      clearRoute(false);
     }
-  }, [navigationTarget, isOpen, setDest, clearRoute]);
+  }, [navigationTarget, setDest, clearRoute]);
 
   // Reverse geocodes the vehicle position to track current street
   useEffect(() => {
@@ -1020,7 +1079,7 @@ const MapsContainer = React.memo(({
           mapRef.current.jumpTo({
             center: [rposRef.current.lng, rposRef.current.lat],
             bearing: b,
-            zoom: cmodeRef.current === 'heading-up' ? 17.2 : 14
+            zoom: cmodeRef.current === 'heading-up' ? 16 : 14
           });
         }
 
@@ -1223,16 +1282,42 @@ const MapsContainer = React.memo(({
 
       recTimerRef.current = setTimeout(() => {
         if (isWeatherActiveRef.current) return;
-        followRef.current = true;
-        setIsMapFollowing(true);
-        if (savedModeRef.current === 'heading-up') {
-          cmodeRef.current = 'heading-up';
-          setCmode('heading-up');
+        
+        if (navingRef.current) {
+          followRef.current = true;
+          setIsMapFollowing(true);
+          if (savedModeRef.current === 'heading-up') {
+            cmodeRef.current = 'heading-up';
+            setCmode('heading-up');
+          } else {
+            cmodeRef.current = 'north-up';
+            setCmode('north-up');
+          }
+          if (smoothRecRef.current) smoothRecRef.current();
+        } else if (geoRef.current && geoRef.current.length > 0) {
+          const bounds = geoRef.current.reduce(
+            (b: maplibregl.LngLatBounds, c: [number, number]) => b.extend(c),
+            new maplibregl.LngLatBounds(geoRef.current[0], geoRef.current[0])
+          );
+          map.fitBounds(bounds, {
+            padding: { top: 220, bottom: 320, left: 140, right: 140 },
+            animate: true,
+            duration: 800
+          });
+          followRef.current = false;
+          setIsMapFollowing(false);
         } else {
-          cmodeRef.current = 'north-up';
-          setCmode('north-up');
+          followRef.current = true;
+          setIsMapFollowing(true);
+          if (savedModeRef.current === 'heading-up') {
+            cmodeRef.current = 'heading-up';
+            setCmode('heading-up');
+          } else {
+            cmodeRef.current = 'north-up';
+            setCmode('north-up');
+          }
+          if (smoothRecRef.current) smoothRecRef.current();
         }
-        if (smoothRecRef.current) smoothRecRef.current();
       }, 5000);
     };
 
@@ -1280,7 +1365,7 @@ const MapsContainer = React.memo(({
   const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
 
   const selectPlaceFromPanel = (item: any) => {
-    setDest({ lat: item.lat, lng: item.lng }, item.name);
+    onSelectDestination({ lat: item.lat, lng: item.lng, name: item.name });
   };
 
   return (
@@ -1360,16 +1445,18 @@ const MapsContainer = React.memo(({
               onToggleCompass={handleToggleCompass}
               onToggleSatellite={handleToggleSatellite}
               onToggleWeather={handleToggleWeather}
-              onRecenter={smoothRec}
+              onRecenter={handleRecenter}
               onWeatherFrameChange={handleWeatherFrameChange}
             />
 
             {/* Bottom-left stats indicator panel (TripStatsHUD.tsx) */}
             <TripStatsHUD 
               isActive={naving}
+              isRoutePreview={isRoutePreview}
               destinationName={destinationName}
               remainingDistance={remainingDistance}
               remainingTime={remainingTime}
+              onStartNavigation={startTracking}
               onCancelNavigation={() => {
                 clearRoute(false);
                 handleCancelNavigation();
@@ -1381,7 +1468,7 @@ const MapsContainer = React.memo(({
             {currentStreet && (
               <div 
                 id="street-box" 
-                className="absolute bottom-6 right-6 z-[1001] bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-2"
+                className="absolute bottom-[7.5rem] right-6 z-[1001] bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-2"
               >
                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                 <span>{currentStreet}</span>
@@ -1392,7 +1479,7 @@ const MapsContainer = React.memo(({
             {toastVisible && (
               <div 
                 id="toast" 
-                className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[10000] bg-zinc-950/95 border border-white/10 text-white rounded-xl py-3 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl flex items-center gap-2.5 max-w-[90%] font-medium text-xs md:text-sm tracking-tight pointer-events-none animate-slide-up duration-300"
+                className="absolute bottom-[8.5rem] left-1/2 -translate-x-1/2 z-[10000] bg-zinc-950/95 border border-white/10 text-white rounded-xl py-3 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl flex items-center gap-2.5 max-w-[90%] font-medium text-xs md:text-sm tracking-tight pointer-events-none animate-slide-up duration-300"
               >
                 <svg className="w-5 h-5 text-blue-400 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                 <span>{toastText}</span>

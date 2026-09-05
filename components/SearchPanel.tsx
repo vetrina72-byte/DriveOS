@@ -237,7 +237,7 @@ export default function SearchPanel({
   const displayList = query.length >= 2 ? results : recents;
 
   return (
-    <div className="w-full bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden relative z-20 pointer-events-auto">
+    <div className="w-full bg-neutral-900/85 backdrop-blur-md border border-white/10 rounded-2xl shadow-lg overflow-hidden relative z-20 pointer-events-auto">
       <div className="relative flex items-center p-3">
         <Search className="absolute left-6 text-zinc-400 w-5 h-5 pointer-events-none" />
         <input

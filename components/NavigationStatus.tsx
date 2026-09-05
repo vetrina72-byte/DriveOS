@@ -146,7 +146,7 @@ export default function NavigationStatus({ width, widgetBgColor }: NavigationSta
 
   return (
     <div 
-      className="relative backdrop-blur-md rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0"
+      className="relative backdrop-blur-md rounded-2xl border border-white/10 shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0"
       style={{ 
         width: `${(width) / 16}rem`,
         height: '7.0625rem',

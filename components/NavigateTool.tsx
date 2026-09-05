@@ -170,15 +170,9 @@ const NavigateTool = ({
         }
 
         if (isFocused) {
-            if (showRecentsOnFocus) {
-                setIsExpanded(true);
-            } else {
-                setIsExpanded(query.trim().length > 0);
-            }
-        } else {
-            setIsExpanded(false);
+            setIsExpanded(true);
         }
-    }, [isFocused, isHome, showRecentsOnFocus, query]);
+    }, [isFocused, isHome]);
 
     const handleSelect = (feature: any) => {
         const { lat, lon: lng } = feature.properties;
@@ -190,6 +184,7 @@ const NavigateTool = ({
         setQuery('');
         setSuggestions([]);
         setIsFocused(false);
+        setIsExpanded(false);
         onSelectDestination({ lat, lng, name });
     };
 
@@ -198,7 +193,15 @@ const NavigateTool = ({
         setQuery('');
         setSuggestions([]);
         setIsFocused(false);
+        setIsExpanded(false);
         onSelectDestination({ lat: place.lat, lng: place.lng, name: place.name });
+    };
+    
+    const handleClose = () => {
+        setIsFocused(false);
+        setIsExpanded(false);
+        setQuery('');
+        setSuggestions([]);
     };
     
     useEffect(() => {
@@ -222,7 +225,7 @@ const NavigateTool = ({
     return (
         <div 
             ref={containerRef}
-            className={`relative backdrop-blur-md rounded-xl shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
+            className={`relative backdrop-blur-md rounded-2xl border border-white/10 shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
             style={{ 
                 width: `${(width) / 16}rem`,
                 height: `${(isExpanded ? expandedHeight : baseHeight) / 16}rem`,
@@ -230,26 +233,31 @@ const NavigateTool = ({
             }}
         >
              <div className="p-3 flex flex-col h-full overflow-hidden">
-                <div className="relative flex-shrink-0">
-                    <ICONS.search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.iconColor}`} />
-                    <textarea
-                        ref={inputRef}
-                        rows={1}
-                        id="home-search-input"
-                        name="destination"
-                        aria-label="Navigate"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onFocus={() => setIsFocused(true)}
-                        onBlur={() => setTimeout(() => {
-                            if (!containerRef.current?.contains(document.activeElement)) {
-                                setIsFocused(false);
-                            }
-                        }, 200)}
-                        placeholder="Navigate"
-                        className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors resize-none overflow-y-auto hide-scrollbar ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                        style={isNight ? { backgroundColor: darkNavigateInputBg } : undefined}
-                    />
+                <div className="relative flex-shrink-0 flex items-center gap-2">
+                    <div className="relative flex-grow">
+                        <ICONS.search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.iconColor}`} />
+                        <textarea
+                            ref={inputRef}
+                            rows={1}
+                            id="home-search-input"
+                            name="destination"
+                            aria-label="Navigate"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            onFocus={() => setIsFocused(true)}
+                            placeholder="Navigate"
+                            className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors resize-none overflow-y-auto hide-scrollbar ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                            style={isNight ? { backgroundColor: darkNavigateInputBg } : undefined}
+                        />
+                    </div>
+                    {isExpanded && (
+                        <button
+                            onClick={handleClose}
+                            className={`flex-shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${theme.suggestionHover} ${isNight ? 'text-zinc-300' : 'text-zinc-700'}`}
+                        >
+                            Chiudi
+                        </button>
+                    )}
                 </div>
                 
                 <div className={`overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'flex-grow mt-2 opacity-100' : 'opacity-0'}`}>
