@@ -54,20 +54,33 @@ export default function MapControls({
           const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
           if (!res.ok) throw new Error();
           const d = await res.json();
-          const past = (d.radar?.past || []).map((p: any) => ({ time: p.time, path: p.path }));
-          const fut = (d.radar?.nowcast || []).map((f: any) => ({ time: f.time, path: f.path }));
-          const merged = [...past, ...fut];
+          const currentTime = Math.floor(Date.now() / 1000);
           
-          setWTs(merged);
-          setWNow(past.length);
+          let futureFrames = (d.radar?.nowcast || []).map((f: any) => ({ time: f.time, path: f.path }));
           
-          // Start near the boundary between historical and forecast
-          const initialIdx = past.length > 0 ? past.length - 1 : 0;
+          if (futureFrames.length === 0) {
+            futureFrames = (d.radar?.past || []).filter((f: any) => f.time >= currentTime).map((f: any) => ({ time: f.time, path: f.path }));
+          }
+
+          if (futureFrames.length === 0 && d.radar?.past?.length > 0) {
+            console.warn("Nessun fotogramma di previsione futura disponibile, utilizzo tutti i fotogrammi recenti in alternativa.");
+            // Utilizzo l'intero blocco passato (solitamente 13 frame) per garantire una animazione lunga
+            futureFrames = d.radar.past.map((f: any) => ({ time: f.time, path: f.path }));
+          } else if (futureFrames.length === 0) {
+            console.warn("Nessun fotogramma disponibile.");
+            return;
+          }
+          
+          setWTs(futureFrames);
+          setWNow(0); // Boundary is 0 since all are future frames
+          
+          // Start from the first future frame (now)
+          const initialIdx = 0;
           setWFr(initialIdx);
-          updateFrameInfo(merged, initialIdx, past.length);
+          updateFrameInfo(futureFrames, initialIdx, 0);
           
           // Enable autoplayer
-          startPlayback(merged, initialIdx, past.length);
+          startPlayback(futureFrames, initialIdx, 0);
         } catch (e) {
           console.error('[WEATHER] Failed to load RainViewer config', e);
         }
@@ -97,6 +110,9 @@ export default function MapControls({
   };
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (wPlay) {
+      stopPlayback();
+    }
     const idx = parseInt(e.target.value);
     setWFr(idx);
     updateFrameInfo(wTs, idx, wNow);
@@ -110,7 +126,7 @@ export default function MapControls({
       nextIdx = (nextIdx + 1) % frames.length;
       setWFr(nextIdx);
       updateFrameInfo(frames, nextIdx, boundaryIn);
-    }, 750);
+    }, 1500);
   };
 
   const stopPlayback = () => {
@@ -129,11 +145,9 @@ export default function MapControls({
     }
   };
 
-  const boundaryPercentage = wTs.length > 0 && wNow > 0 ? (wNow / wTs.length) * 100 : 50;
-
-  const sliderBackgroundStyle = {
-    background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${boundaryPercentage}%, #ef4444 ${boundaryPercentage}%, #ef4444 100%)`
-  };
+  const boundaryPercentage = wTs.length > 0 ? (wNow / wTs.length) * 100 : 0;
+  const currentPercentage = wTs.length > 1 ? (wFr / (wTs.length - 1)) * 100 : 0;
+  const hasForecast = wTs.length > 0 && wNow < wTs.length;
 
   return (
     <>
@@ -254,40 +268,44 @@ export default function MapControls({
       {isWeatherActive && wTs.length > 0 && (
         <div 
           id="tl-ctrl"
-          className="absolute bottom-[7.5rem] left-1/2 -translate-x-1/2 z-[1002] w-[21.25rem] px-4 py-3.5 border border-white/10 rounded-2xl flex flex-col pointer-events-auto select-none touch-none bg-neutral-900/85 shadow-lg backdrop-blur-md text-white outline-none"
+          className="absolute bottom-[7.5rem] left-1/2 -translate-x-1/2 z-[1002] w-[92%] sm:w-[22rem] pointer-events-auto select-none touch-none"
         >
-          <div className="flex items-center gap-4">
+          <div className="bg-[#111111]/95 backdrop-blur-xl border border-white/10 px-4 py-3 sm:py-3.5 rounded-2xl flex items-center gap-4 shadow-2xl">
             <button 
               id="tl-pp" 
               onClick={(e) => {
                 e.stopPropagation();
                 togglePlayback();
               }}
-              className="bg-none border-none text-white cursor-pointer hover:opacity-80 active:scale-95 transition-all p-1 flex-shrink-0"
+              className="w-10 h-10 flex-shrink-0 rounded-full bg-white text-black flex items-center justify-center cursor-pointer hover:bg-neutral-200 transition-colors"
             >
               {wPlay ? (
-                /* Pause SVG from lucide-play */
-                <svg className="w-6 h-6 fill-white text-white" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><rect x="14" y="4" width="4" height="16" rx="1" /><rect x="6" y="4" width="4" height="16" rx="1" /></svg>
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><rect x="14" y="5" width="3" height="14" rx="1" /><rect x="7" y="5" width="3" height="14" rx="1" /></svg>
               ) : (
-                /* Play SVG */
-                <svg className="w-6 h-6 fill-white text-white translate-x-0.5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                <svg className="w-5 h-5 fill-current translate-x-0.5" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z" /></svg>
               )}
             </button>
-            <div className="flex-grow flex flex-col gap-0.5">
-              <div id="tl-lbl" className="text-[0.8125rem] font-semibold text-zinc-100 leading-none flex justify-between items-center pr-1 select-none">
-                <span>Radar Meteo</span>
-                <span className="font-extrabold tracking-tight text-white">{currentTimeLabel}</span>
+            <div className="flex-grow flex flex-col gap-1.5">
+              <div className="flex justify-between items-baseline px-0.5">
+                <span className="text-[10px] font-semibold text-white/50 tracking-widest uppercase">Nowcast</span>
+                <span className="text-[13px] font-bold text-white tracking-wide tabular-nums">
+                  {currentTimeLabel}
+                </span>
               </div>
-              <input 
-                type="range" 
-                id="tl-slider" 
-                min="0" 
-                max={wTs.length - 1}
-                value={wFr}
-                onChange={handleSliderChange}
-                className="w-full h-1.5 rounded-full appearance-none bg-zinc-800 outline-none cursor-pointer mt-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4.5 [&::-webkit-slider-thumb]:h-4.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_2px_6px_rgba(0,0,0,0.5)] [&::-webkit-slider-thumb]:-translate-y-[30%]"
-                style={sliderBackgroundStyle}
-              />
+              <div className="relative w-full h-1.5 rounded-full bg-white/10 overflow-hidden cursor-pointer group mt-0.5">
+                <div 
+                  className="absolute top-0 left-0 h-full bg-[#409cff] transition-all duration-300 ease-linear"
+                  style={{ width: `${currentPercentage}%` }}
+                />
+                <input 
+                  type="range" 
+                  min="0" 
+                  max={wTs.length > 1 ? wTs.length - 1 : 1}
+                  value={wFr}
+                  onChange={handleSliderChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -181,6 +181,11 @@ export default function WeatherModal({ tempUnit }: WeatherModalProps) {
             const highTempFormatted = formatTempWithUnit(convertTemp(data.current.high, tempUnit), tempUnit);
             const lowTempFormatted = formatTempWithUnit(convertTemp(data.current.low, tempUnit), tempUnit);
 
+            const minTemp = data.current.low;
+            const maxTemp = data.current.high;
+            const currentTemp = nowData.temperature;
+            const positionPercent = minTemp === maxTemp ? 50 : Math.min(Math.max(((currentTemp - minTemp) / (maxTemp - minTemp)) * 100, 0), 100);
+
             return (
                 <>
                     <header className="flex justify-between items-center">
@@ -196,7 +201,7 @@ export default function WeatherModal({ tempUnit }: WeatherModalProps) {
                             <span>{isNaN(mainTemp) ? '--' : mainTemp}</span>
                             <span className="absolute top-1 -right-2 text-2xl sm:top-1 sm:-right-3 sm:text-3xl md:text-4xl opacity-80">{mainUnitSymbol}</span>
                         </div>
-                        <div className="flex flex-col items-center mt-1 md:mt-2">
+                        <div className="flex flex-col items-center mt-1 md:mt-2 w-full px-4">
                             <div className="relative inline-block">
                                 <WeatherIcon 
                                     condition={nowData.condition} 
@@ -212,12 +217,18 @@ export default function WeatherModal({ tempUnit }: WeatherModalProps) {
                                     />
                                 )}
                             </div>
-                            <div className="flex flex-col items-center mt-1">
-                                <p className="font-bold text-sm sm:text-base md:text-lg">{nowData.condition}</p>
-                                <p className={`${theme.textSecondary} font-semibold text-xs sm:text-sm`}>
-                                    <span className={theme.textAccent}>↑{highTempFormatted}</span>
-                                    <span className="mx-1">↓{lowTempFormatted}</span>
-                                </p>
+                            <div className="flex flex-col items-center mt-1 w-full">
+                                <p className="font-bold text-sm sm:text-base md:text-lg mb-1">{nowData.condition}</p>
+                                <div className="flex items-center justify-center w-full gap-2">
+                                    <span className={`${theme.textSecondary} font-semibold text-xs sm:text-sm w-8 text-right`}>{lowTempFormatted}</span>
+                                    <div className="relative flex-1 max-w-[120px] h-1.5 sm:h-2 rounded-full bg-gradient-to-r from-blue-500/30 via-green-500/30 to-red-500/30 mx-1">
+                                        <div 
+                                            className="absolute top-1/2 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-white rounded-full shadow-sm border border-gray-300"
+                                            style={{ left: `${positionPercent}%`, transform: 'translate(-50%, -50%)' }}
+                                        />
+                                    </div>
+                                    <span className={`${theme.textSecondary} font-semibold text-xs sm:text-sm w-8 text-left`}>{highTempFormatted}</span>
+                                </div>
                             </div>
                         </div>
                     </div>

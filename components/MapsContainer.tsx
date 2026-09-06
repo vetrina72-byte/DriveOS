@@ -105,23 +105,11 @@ const MapsContainer = React.memo(({
   const [isSatellite, setIsSatellite] = useState(false);
   const [isWeatherActive, setIsWeatherActive] = useState(false);
   const [isMapFollowing, setIsMapFollowing] = useState(true);
+  const [currentZoom, setCurrentZoom] = useState(14);
 
   // Custom additions for authentic maps template
   const [currentStreet, setCurrentStreet] = useState<string>('');
   const lastGeocodeTimeRef = useRef<number>(0);
-
-  const [toastText, setToastText] = useState<string>('');
-  const [toastVisible, setToastVisible] = useState<boolean>(false);
-  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToastText(msg);
-    setToastVisible(true);
-    toastTimerRef.current = setTimeout(() => {
-      setToastVisible(false);
-    }, 3000);
-  }, []);
 
   // Sync ref values for render frame loops
   const cmodeRef = useRef<'north-up' | 'heading-up'>('north-up');
@@ -759,9 +747,7 @@ const MapsContainer = React.memo(({
     mapRef.current.once('moveend', () => {
       flyingRef.current = false;
     });
-    
-    showToast('Tracking riattivato');
-  }, [showToast]);
+  }, []);
 
   const handleRecenter = useCallback(() => {
     if (isRoutePreview) {
@@ -794,9 +780,7 @@ const MapsContainer = React.memo(({
     cmodeRef.current = newMode;
     setCmode(newMode);
     smoothRec();
-    
-    showToast(newMode === 'heading-up' ? 'Heading Up attivato' : 'North Up attivato');
-  }, [smoothRec, showToast, isRoutePreview]);
+  }, [smoothRec, isRoutePreview]);
 
   // Satellite layer toggle layout styling updater
   const handleToggleSatellite = useCallback(() => {
@@ -831,36 +815,26 @@ const MapsContainer = React.memo(({
          });
        }
     });
-
-    showToast(newSat ? 'Visuale Satellite attivata' : 'Visuale Stradale attivata');
-  }, [isSatellite, isNight, showToast]);
+  }, [isSatellite, isNight]);
 
   // Weather radar timeline layer triggers
   const handleToggleWeather = useCallback(() => {
-    const newWeather = !isWeatherActive;
-    setIsWeatherActive(newWeather);
-    isWeatherActiveRef.current = newWeather;
-
-    if (newWeather) {
-      if (isRoutePreview) {
-        // Do not fly out to zoom 6 when in route preview, keep the bounding box
-      } else if (rposRef.current && mapRef.current) {
-        followRef.current = false;
-        setIsMapFollowing(false);
-        mapRef.current.flyTo({
-          center: [rposRef.current.lng, rposRef.current.lat],
-          zoom: 6,
-          duration: 2000,
-          essential: true
-        });
+    if (isWeatherActive) {
+      // Turning OFF
+      setIsWeatherActive(false);
+      isWeatherActiveRef.current = false;
+      
+      if (mapRef.current) {
+        mapRef.current.setMaxZoom(20);
       }
-    } else {
+      
       // Clear opacity on weather layers wl-A and wl-B
       ['A', 'B'].forEach((s) => {
         if (mapRef.current && mapRef.current.getLayer(`wl-${s}`)) {
           mapRef.current.setPaintProperty(`wl-${s}`, 'raster-opacity', 0);
         }
       });
+      
       if (isRoutePreview) {
         if (mapRef.current && geoRef.current && geoRef.current.length > 0) {
           const bounds = geoRef.current.reduce(
@@ -878,10 +852,41 @@ const MapsContainer = React.memo(({
       } else {
         smoothRec();
       }
+    } else {
+      // Turning ON
+      if (mapRef.current) {
+        const currentZoom = mapRef.current.getZoom();
+        
+        if (currentZoom > 7.2) {
+          if (!isRoutePreview) {
+            followRef.current = false;
+            setIsMapFollowing(false);
+          }
+          
+          // Esegui prima lo zoom morbido senza toccare il MaxZoom per evitare scatti
+          mapRef.current.easeTo({ zoom: 7.2, duration: 2500 });
+          
+          // Attendi che lo zoom finisca prima di limitare la vista e accendere il radar
+          setTimeout(() => {
+            if (mapRef.current) {
+              mapRef.current.setMaxZoom(7.2);
+            }
+            setIsWeatherActive(true);
+            isWeatherActiveRef.current = true;
+          }, 2500);
+          
+        } else {
+          // Eravamo già distanti, attiviamo tutto subito
+          mapRef.current.setMaxZoom(7.2);
+          setIsWeatherActive(true);
+          isWeatherActiveRef.current = true;
+        }
+      } else {
+        setIsWeatherActive(true);
+        isWeatherActiveRef.current = true;
+      }
     }
-
-    showToast(newWeather ? 'Radar Meteo abilitato' : 'Radar Meteo disattivato');
-  }, [isWeatherActive, smoothRec, showToast, isRoutePreview]);
+  }, [isWeatherActive, smoothRec, isRoutePreview]);
 
   // Handles timeline framework caching and rendering transitions matching original HTML
   const handleWeatherFrameChange = useCallback((frame: WeatherFrame, index: number, isFuture: boolean) => {
@@ -893,13 +898,21 @@ const MapsContainer = React.memo(({
 
     const src = mapRef.current.getSource(sourceId) as any;
     if (src) {
-      const tileUrl = `https://tilecache.rainviewer.com${frame.path}/256/{z}/{x}/{y}/2/1_1.webp`;
+      // Use webp for broader compatibility and reduce flashing by setting opacity delayed
+      // Color Scheme 4 is Universal (Green, Yellow, Red)
+      const tileUrl = `https://tilecache.rainviewer.com${frame.path}/512/{z}/{x}/{y}/4/1_1.webp`;
       src.setTiles([tileUrl]);
     }
 
-    // Set crossfade layers opacities
+    // Set new layer to visible immediately
     mapRef.current.setPaintProperty(layerId, 'raster-opacity', 0.85);
-    mapRef.current.setPaintProperty(currentLayerId, 'raster-opacity', 0);
+    
+    // Delay hiding the old layer to allow new tiles to fetch without flashing
+    setTimeout(() => {
+      if (mapRef.current && weatherSlotRef.current === ns) {
+        mapRef.current.setPaintProperty(currentLayerId, 'raster-opacity', 0);
+      }
+    }, 600);
 
     weatherSlotRef.current = ns;
   }, []);
@@ -1021,7 +1034,7 @@ const MapsContainer = React.memo(({
           checkRouteDeviations({ lat: nla, lng: nlo });
         }
       },
-      (err) => console.warn('[GPS] Geolocation watches error', err),
+      (err) => console.warn('[GPS] Geolocation watches error', err.message || err),
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
 
@@ -1053,20 +1066,22 @@ const MapsContainer = React.memo(({
 
         // Heading spline easing matching Class Nav perfectly
         const tb = tbearRef.current;
-        const mdNom = ((tb - mbearRef.current + 540) % 360) - 180;
+        const normalizeAngle = (angle: number) => ((angle % 360) + 360) % 360;
+        
+        const mdNom = ((tb - normalizeAngle(mbearRef.current) + 540) % 360) - 180;
         const mk = speedRef.current > 0.8 ? 3.5 : 0;
         if (mk > 0) {
-          mbearRef.current = (mbearRef.current + mdNom * (1 - Math.exp(-mk * dt)) + 360) % 360;
+          mbearRef.current = mbearRef.current + mdNom * (1 - Math.exp(-mk * dt));
         } else {
-          mbearRef.current = tb;
+          mbearRef.current = mbearRef.current + mdNom;
         }
 
-        const cdNom = ((tb - cbearRef.current + 540) % 360) - 180;
+        const cdNom = ((tb - normalizeAngle(cbearRef.current) + 540) % 360) - 180;
         const ck = speedRef.current > 0.8 ? 1.0 : 0;
         if (ck > 0) {
-          cbearRef.current = (cbearRef.current + cdNom * (1 - Math.exp(-ck * dt)) + 360) % 360;
+          cbearRef.current = cbearRef.current + cdNom * (1 - Math.exp(-ck * dt));
         } else {
-          cbearRef.current = tb;
+          cbearRef.current = cbearRef.current + cdNom;
         }
 
         if (vmRef.current) {
@@ -1126,11 +1141,15 @@ const MapsContainer = React.memo(({
       bearingSnap: 0,
       dragRotate: true,
       touchZoomRotate: true,
-      maxTileCacheSize: 300,
+      maxTileCacheSize: 100,
       maxZoom: 20
     });
 
     mapRef.current = map;
+    
+    map.dragRotate.enable();
+    map.touchZoomRotate.enableRotation();
+    if (typeof map.setBearingSnap === 'function') map.setBearingSnap(0);
 
     // Trigger Resize observers on layouts modification
     const resObs = new ResizeObserver(() => {
@@ -1209,9 +1228,9 @@ const MapsContainer = React.memo(({
             map.addSource(si, {
               type: 'raster',
               tiles: [],
-              tileSize: 256,
+              tileSize: 512,
               minzoom: 0,
-              maxzoom: 24
+              maxzoom: 7
             });
             map.addLayer({
               id: li,
@@ -1333,6 +1352,10 @@ const MapsContainer = React.memo(({
       handleEndInt();
     });
 
+    map.on('zoom', () => {
+      setCurrentZoom(Math.round(map.getZoom() * 10) / 10);
+    });
+
     map.on('rotate', () => {
       setBearing(map.getBearing());
     });
@@ -1430,7 +1453,6 @@ const MapsContainer = React.memo(({
                   onCancelNavigation={() => {
                     clearRoute(false);
                     handleCancelNavigation();
-                    showToast('Navigazione terminata');
                   }}
                 />
             </div>
@@ -1460,29 +1482,26 @@ const MapsContainer = React.memo(({
               onCancelNavigation={() => {
                 clearRoute(false);
                 handleCancelNavigation();
-                showToast('Navigazione terminata');
               }}
             />
 
             {/* Bottom-right dynamic geocoded street info banner */}
-            {currentStreet && (
+            {(currentStreet || isWeatherActive) && (
               <div 
                 id="street-box" 
-                className="absolute bottom-[7.5rem] right-6 z-[1001] bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-2"
+                className="absolute bottom-[7.5rem] right-6 z-[1001] bg-zinc-950/92 backdrop-blur-2xl border border-white/10 rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.5)] select-none leading-none flex items-center gap-3"
               >
-                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                <span>{currentStreet}</span>
-              </div>
-            )}
-
-            {/* Bottom-centered dynamic interactive notification toasts */}
-            {toastVisible && (
-              <div 
-                id="toast" 
-                className="absolute bottom-[8.5rem] left-1/2 -translate-x-1/2 z-[10000] bg-zinc-950/95 border border-white/10 text-white rounded-xl py-3 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl flex items-center gap-2.5 max-w-[90%] font-medium text-xs md:text-sm tracking-tight pointer-events-none animate-slide-up duration-300"
-              >
-                <svg className="w-5 h-5 text-blue-400 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <span>{toastText}</span>
+                {currentStreet && (
+                  <>
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                    <span>{currentStreet}</span>
+                  </>
+                )}
+                {isWeatherActive && (
+                  <span className={`tabular-nums ${currentStreet ? 'border-l border-white/20 pl-3' : ''}`}>
+                    Zoom: {currentZoom.toFixed(1)}
+                  </span>
+                )}
               </div>
             )}
 
