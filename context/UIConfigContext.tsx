@@ -6,17 +6,17 @@ import { initialSceneColors } from '../App';
 const DEFAULT_HOME_CONFIG: SceneConfig = {
     cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
     cameraTarget: { x: -1.30, y: -0.40, z: 0.05 }, 
-    modelPos: { x: -1.40, y: -1.05, z: 0.15 },
+    modelPos: { x: -1.40, y: -1.05, z: -0.65 },
     modelRot: { x: 0.01, y: -1.49, z: 0.00 },
     modelScale: 2.68,
 };
 
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
-  cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
-  modelPos: { x: -4.90, y: -0.15, z: -0.40 }, 
+  cameraTarget: { x: -6.50, y: 0.45, z: -0.70 },
+  modelPos: { x: -6.50, y: -0.15, z: -0.70 }, 
   modelRot: { x: 0.01, y: -1.19, z: 0.01 },
-  modelScale: 1.57,
+  modelScale: 1.67,
 };
 
 export const UIConfigContext = createContext<any>(null);
@@ -41,11 +41,12 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   
   const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(DEFAULT_APP_OPEN_CONFIG);
+  const [debugPlacementPreview, setDebugPlacementPreview] = useState<'auto' | 'appOpen' | 'home'>('auto');
 
   const [headlightConfig, setHeadlightConfig] = useState<HeadlightConfig>({
-      x: -0.05, y: 0.77, z: -1.55, angle: 0.06, yaw: 0.01, assemblyYaw: -1.588,
+      x: 0.00, y: 0.68, z: -2.05, angle: 0.06, yaw: 0.01, assemblyYaw: -1.588,
       intensity: 0.75, startWidth: 0.30, endWidth: 0.10, length: 7.00,
-      startHeight: 0.03, endHeight: 0.01, fade: 7.40, separation: 1.25,
+      startHeight: 0.03, endHeight: 0.01, fade: 7.40, separation: 1.30,
       circular: true, linked: true, 
   });
 
@@ -184,6 +185,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     sceneTransitionSpeed, setSceneTransitionSpeed,
     homeConfig, setHomeConfig,
     appOpenConfig, setAppOpenConfig,
+    debugPlacementPreview, setDebugPlacementPreview,
     headlightConfig, setHeadlightConfig,
     sceneColors, setSceneColors,
     nightAmbientIntensity, setNightAmbientIntensity,

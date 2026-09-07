@@ -107,7 +107,7 @@ export const initialSceneColors: SceneColors = {
 const DEFAULT_HOME_CONFIG: SceneConfig = {
     cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
     cameraTarget: { x: -1.30, y: -0.40, z: 0.05 }, 
-    modelPos: { x: -1.40, y: -1.05, z: 0.15 },
+    modelPos: { x: -1.40, y: -1.05, z: -0.65 },
     modelRot: { x: 0.01, y: -1.49, z: 0.00 },
     modelScale: 2.68,
 };
@@ -184,7 +184,7 @@ function AppContent() {
     topBarScale, topBarOffsetY, setTopBarOffsetY, mapsSearchPanelTop,
     miniMapTop, miniMapRight, miniMapSize, miniMapZoom, miniMapFadeStart, miniMapFadeEnd,
     uiScale, appBarWidth, minOrbitDistance, maxOrbitDistance, sceneTransitionSpeed,
-    homeConfig, appOpenConfig, headlightConfig, sceneColors,
+    homeConfig, appOpenConfig, debugPlacementPreview, setDebugPlacementPreview, headlightConfig, sceneColors,
     nightAmbientIntensity, nightFrontLightIntensity, nightEnvironmentIntensity,
     dayFogNear, dayFogFar, nightFogNear, nightFogFar, carShadowOpacity, aoMapIntensity, carShadowWidth, carShadowLength, carShadowOffsetY,
     carShadowOffsetX, carShadowOffsetZ,
@@ -590,10 +590,21 @@ function AppContent() {
   const isMapLayeredBehind = activeApp !== null && SPLIT_APPS_WITH_MAP_UNDER.includes(activeApp);
   const shouldShowMap = activeApp === 'maps' || isMapsLayered || isMapLayeredBehind;
 
+  const isCanvasAppOpen = debugPlacementPreview === 'home'
+    ? false
+    : debugPlacementPreview === 'appOpen'
+      ? true
+      : (activeApp !== null);
+
+  const handleDebugClose = useCallback(() => {
+    setDebugPlacementPreview('auto');
+    handleSubAppClose();
+  }, [handleSubAppClose, setDebugPlacementPreview]);
+
   return (
     <div id="main-app-container" className="absolute top-0 left-0 w-full h-full select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
       <VehicleCanvas
-        isAppOpen={activeApp !== null}
+        isAppOpen={isCanvasAppOpen}
         isNight={isNight}
         aoMapIntensity={aoMapIntensity}
         minOrbitDistance={minOrbitDistance}
@@ -664,7 +675,7 @@ function AppContent() {
         <TheaterApp isOpen={activeApp === 'theater'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} layeredAppTopOffset={layeredAppTopOffset} />
         <DebugControls
             isOpen={activeApp === 'debug'}
-            onClose={handleSubAppClose}
+            onClose={handleDebugClose}
             onDragProgress={handleSpotifyDrag}
             isMapsLayered={isMapsLayered || isMapLayeredBehind}
             isAppView={true}
