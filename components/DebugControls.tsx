@@ -44,17 +44,17 @@ const WEATHER_CONDITIONS = [
 ];
 
 const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
-  cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
-  cameraTarget: { x: -6.50, y: 0.45, z: -0.70 },
-  modelPos: { x: -6.50, y: -0.15, z: -0.70 }, 
-  modelRot: { x: 0.01, y: -1.19, z: 0.01 },
-  modelScale: 1.67,
+  cameraPos: { x: 1.55, y: 1.74, z: 3.58 },
+  cameraTarget: { x: 0.10, y: 0.22, z: 0.65 },
+  modelPos: { x: -5.45, y: -1.00, z: 1.90 },
+  modelRot: { x: 0.01, y: -1.49, z: 0.01 },
+  modelScale: 1.25,
 };
 
 const DEFAULT_HOME_CONFIG: SceneConfig = {
     cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
     cameraTarget: { x: -1.30, y: -0.40, z: 0.05 }, 
-    modelPos: { x: -1.40, y: -1.05, z: -0.65 },
+    modelPos: { x: -1.40, y: -1.05, z: 0.15 },
     modelRot: { x: 0.01, y: -1.49, z: 0.00 },
     modelScale: 2.68,
 };

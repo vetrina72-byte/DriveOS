@@ -91,20 +91,15 @@ class ModelErrorBoundary extends React.Component<
 
   render() {
     if (this.state.hasError) {
-      return (
-        <Html center>
-          <div className="bg-neutral-900/90 text-red-400 text-xs px-4 py-2 rounded-lg border border-red-500/30 backdrop-blur pointer-events-none">
-            Errore caricamento modello 3D
-          </div>
-        </Html>
-      );
+      return null;
     }
     return this.props.children;
   }
 }
 
-// URL del modello GLTF (BMW G80 M3 servito localmente da /public per massima affidabilità e velocità)
-const MODEL_URL = "/low_poly_bmw_g80_m3.glb";
+// URL del modello GLTF (Raw GitHub Link) - VOLVO EX30
+const MODEL_URL =
+  "https://raw.githubusercontent.com/vetrina72-byte/assets/main/volvo_ex30.glb";
 
 // Interfaccia per la configurazione della scena
 export interface SceneConfig {
@@ -161,46 +156,10 @@ const Model = forwardRef<
   const rearLightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
   const frontLightMats = useRef<Record<string, THREE.MeshStandardMaterial>>({});
 
-  const normalizedScene = useMemo(() => {
-    // Clone scene so we do not dirty or mutate the cached GLTF instance across unmounts/re-renders
-    const cloned = scene.clone(true);
-
-    cloned.position.set(0, 0, 0);
-    cloned.rotation.set(0, 0, 0);
-    cloned.scale.set(1, 1, 1);
-    cloned.updateMatrixWorld(true);
-
-    const rawBox = new THREE.Box3().setFromObject(cloned);
-    const size = new THREE.Vector3();
-    rawBox.getSize(size);
-    const center = new THREE.Vector3();
-    rawBox.getCenter(center);
-    const minY = rawBox.min.y;
-
-    // Shift cloned model so center is at (0, y, 0) and lowest point (wheels) rests at y = 0
-    cloned.position.set(-center.x, -minY, -center.z);
-
-    const rotator = new THREE.Group();
-    rotator.name = "Rotator";
-    // If length is along Z (like BMW G80 where size.z > size.x),
-    // rotate 90° around Y so front (+Z) aligns with +X, matching the vehicle coordinate system
-    if (size.z > size.x) {
-      rotator.rotation.y = Math.PI / 2;
-    }
-    rotator.add(cloned);
-
-    const wrapper = new THREE.Group();
-    wrapper.name = "NormalizedVehicleWrapper";
-    wrapper.add(rotator);
-    wrapper.updateMatrixWorld(true);
-
-    return wrapper;
-  }, [scene]);
-
   useEffect(() => {
     rearLightMats.current = {};
     frontLightMats.current = {};
-    normalizedScene.traverse((child: any) => {
+    scene.traverse((child: any) => {
       if (child.isMesh && child.name.toLowerCase().includes("shadow")) {
         child.visible = false;
         child.castShadow = false;
@@ -227,35 +186,11 @@ const Model = forwardRef<
             combinedName.includes("metal") ||
             combinedName.includes("hood") ||
             combinedName.includes("door") ||
-            combinedName.includes("bumper") ||
-            matName.includes("material.015")
+            combinedName.includes("bumper")
           ) {
             mat.metalness = Math.max(mat.metalness || 0, 0.7);
             mat.roughness = Math.min(mat.roughness || 1, 0.18);
             mat.envMapIntensity = 3.2;
-          }
-
-          // Rims / Wheels (Material.029 in BMW)
-          if (
-            combinedName.includes("rim") ||
-            combinedName.includes("wheel") ||
-            matName.includes("material.029")
-          ) {
-            mat.metalness = 0.9;
-            mat.roughness = 0.15;
-            mat.envMapIntensity = 3.5;
-          }
-
-          // Tires (Material.016 on wheel meshes Plane003, Plane004, Plane005, Plane006)
-          if (
-            (childName.includes("plane003") ||
-              childName.includes("plane004") ||
-              childName.includes("plane005") ||
-              childName.includes("plane006")) &&
-            matName.includes("material.016")
-          ) {
-            mat.metalness = 0.05;
-            mat.roughness = 0.85;
           }
 
           // Lenti / Vetri protettivi dei fari anteriori e posteriori
@@ -276,17 +211,12 @@ const Model = forwardRef<
           if (
             combinedName.includes("window") ||
             combinedName.includes("windshield") ||
-            (combinedName.includes("glass") &&
-              !combinedName.includes("red") &&
-              !combinedName.includes("light")) ||
-            (childName.includes("plane002") &&
-              (matName.includes("material.020") ||
-                matName.includes("material.003")))
+            (combinedName.includes("glass") && !combinedName.includes("red") && !combinedName.includes("light"))
           ) {
             mat.transparent = true;
-            mat.opacity = 0.6;
+            mat.opacity = 0.5;
             mat.roughness = 0.1;
-            mat.metalness = 0.8;
+            mat.metalness = 0.9;
             mat.color.set("#111111");
             child.castShadow = false;
           }
@@ -298,8 +228,7 @@ const Model = forwardRef<
             combinedName.includes("rear") ||
             combinedName.includes("brake") ||
             combinedName.includes("stop") ||
-            combinedName.includes("backlight") ||
-            matName.includes("material.018");
+            combinedName.includes("backlight");
 
           // Fari anteriori (luce bianca pura)
           const isFrontLight =
@@ -307,8 +236,7 @@ const Model = forwardRef<
             combinedName.includes("front_light") ||
             combinedName.includes("drl") ||
             combinedName.includes("thor") ||
-            combinedName.includes("daytime") ||
-            matName.includes("material.019");
+            combinedName.includes("daytime");
 
           const isGenericLight =
             combinedName.includes("light") ||
@@ -332,7 +260,7 @@ const Model = forwardRef<
         });
       }
     });
-  }, [normalizedScene]);
+  }, [scene]);
 
   useFrame((_, delta) => {
     const rearTarget = isNight ? 3.6 : 0.0;
@@ -364,7 +292,7 @@ const Model = forwardRef<
     // Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error
     <Primitive
       ref={ref}
-      object={normalizedScene}
+      object={scene}
       position={[position.x, position.y, position.z]}
       rotation={[rotation.x, rotation.y, rotation.z]}
       scale={scale}
@@ -508,7 +436,6 @@ function SceneController({
 
   const initializedCamera = useRef(false);
   const isRestoringHome = useRef(false);
-  const userHasOrbited = useRef(false);
   const restoreAnimProgress = useRef(1.0);
   const snapshotHomePos = useRef(new THREE.Vector3());
   const snapshotHomeTarget = useRef(new THREE.Vector3());
@@ -633,7 +560,6 @@ function SceneController({
 
     const onStart = () => {
       setInteracting(true);
-      userHasOrbited.current = true;
       onInteractionChange?.(true);
       isRestoringHome.current = false;
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
@@ -995,31 +921,6 @@ function SceneController({
         isAppOpen ? localAppOpenConfig.cameraPos.z : localHomeConfig.cameraPos.z,
       );
 
-      const endScale = isAppOpen
-        ? localAppOpenConfig.modelScale
-        : localHomeConfig.modelScale;
-      const endQuat = isAppOpen ? quatTargetAppOpen : quatTargetHome;
-      const endModelPos = new THREE.Vector3(
-        isAppOpen ? localAppOpenConfig.modelPos.x : localHomeConfig.modelPos.x,
-        isAppOpen ? localAppOpenConfig.modelPos.y : localHomeConfig.modelPos.y,
-        isAppOpen ? localAppOpenConfig.modelPos.z : localHomeConfig.modelPos.z,
-      );
-
-      applyInterpolation(
-        frozenCamPos.current,
-        frozenCamTarget.current,
-        frozenModelPos.current,
-        frozenModelScale.current,
-        frozenModelRot.current,
-        endPos,
-        endTarget,
-        endModelPos,
-        endScale,
-        endQuat,
-        easeT,
-        ctrl
-      );
-
       if (normT >= 1.0) {
         transitionMode.current = "idle";
         p = autoTargetP.current;
@@ -1050,6 +951,31 @@ function SceneController({
           }
         }
       }
+
+      const endScale = isAppOpen
+        ? localAppOpenConfig.modelScale
+        : localHomeConfig.modelScale;
+      const endQuat = isAppOpen ? quatTargetAppOpen : quatTargetHome;
+      const endModelPos = new THREE.Vector3(
+        isAppOpen ? localAppOpenConfig.modelPos.x : localHomeConfig.modelPos.x,
+        isAppOpen ? localAppOpenConfig.modelPos.y : localHomeConfig.modelPos.y,
+        isAppOpen ? localAppOpenConfig.modelPos.z : localHomeConfig.modelPos.z,
+      );
+
+      applyInterpolation(
+        frozenCamPos.current,
+        frozenCamTarget.current,
+        frozenModelPos.current,
+        frozenModelScale.current,
+        frozenModelRot.current,
+        endPos,
+        endTarget,
+        endModelPos,
+        endScale,
+        endQuat,
+        easeT,
+        ctrl
+      );
     } else if (transitionMode.current === "drag") {
       let rawP = dragProgress.current as number;
       if (typeof rawP !== "number" || isNaN(rawP)) {
@@ -1154,7 +1080,6 @@ function SceneController({
         );
       } else {
         isRestoringHome.current = false;
-        userHasOrbited.current = false;
         vec3A.set(
           localHomeConfig.cameraPos.x as number,
           localHomeConfig.cameraPos.y as number,
@@ -1180,17 +1105,6 @@ function SceneController({
         ctrl.enableRotate = true;
         ctrl.enabled = true;
       }
-      if (modelRef.current) {
-        const targetScale = isAppOpen ? localAppOpenConfig.modelScale : localHomeConfig.modelScale;
-        const targetPos = isAppOpen ? localAppOpenConfig.modelPos : localHomeConfig.modelPos;
-        const targetQuat = isAppOpen ? quatTargetAppOpen : quatTargetHome;
-        modelRef.current.scale.set(targetScale, targetScale, targetScale);
-        modelRef.current.quaternion.copy(targetQuat);
-        modelRef.current.position.set(targetPos.x, targetPos.y, targetPos.z);
-        syncLights();
-      }
-      p = isAppOpen ? 0 : 1;
-      currentP.current = p;
     }
 
     // 4. Viewport & Aspect Ratio dinamico dal DOM - Sincronizzato frame-per-frame con il pannello dell'app
@@ -1219,12 +1133,14 @@ function SceneController({
 
         if (activePanelRect) {
           visibleWidth = Math.round(activePanelRect.left);
-        } else if (isAppOpen || p < 0.999) {
-          // Fallback se il pannello non ha ancora calcolato il rect ma l'app è aperta o in transizione
+        } else if (isAppOpen) {
+          // Fallback se il pannello non ha ancora calcolato il rect ma l'app è aperta
           let minWidthPercent = 0.40;
           if (cw < 1024) minWidthPercent = 0.50;
           else if (cw < 1280) minWidthPercent = 0.35;
           visibleWidth = Math.round(cw * minWidthPercent + cw * (1 - minWidthPercent) * p);
+        } else {
+          visibleWidth = cw;
         }
       }
 
@@ -1671,6 +1587,16 @@ function VehicleCanvas({
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
   const shadowRef = useRef<THREE.Mesh>(null!);
 
+  const [renderIdle, setRenderIdle] = useState(false);
+  useEffect(() => {
+    if (isAppOpen) {
+      const timer = setTimeout(() => setRenderIdle(true), sceneTransitionSpeed * 1000 + 100);
+      return () => clearTimeout(timer);
+    } else {
+      setRenderIdle(false);
+    }
+  }, [isAppOpen, sceneTransitionSpeed]);
+
   // Generate a procedural noise/grain texture to break up the perfect glass reflections
   const noiseTexture = useMemo(() => {
     const size = 256;
@@ -1755,23 +1681,8 @@ function VehicleCanvas({
         homeConfig.cameraTarget.y,
         homeConfig.cameraTarget.z,
       ] as [number, number, number],
-    [homeConfig.cameraTarget.x, homeConfig.cameraTarget.y, homeConfig.cameraTarget.z],
+    [],
   );
-
-  useEffect(() => {
-    if (frontLightRef.current) frontLightRef.current.target = frontLightTarget;
-    if (directionalLightRef.current) directionalLightRef.current.target = frontLightTarget;
-  }, [frontLightTarget]);
-
-  const [renderIdle, setRenderIdle] = useState(false);
-  useEffect(() => {
-    if (isAppOpen) {
-      const timer = setTimeout(() => setRenderIdle(true), sceneTransitionSpeed * 1000 + 100);
-      return () => clearTimeout(timer);
-    } else {
-      setRenderIdle(false);
-    }
-  }, [isAppOpen, sceneTransitionSpeed]);
 
   const [runtimeAppOpenConfig, setRuntimeAppOpenConfig] = useState<SceneConfig>(
     appOpenConfigFromProps,
@@ -1782,6 +1693,11 @@ function VehicleCanvas({
       setRuntimeAppOpenConfig(appOpenConfigFromProps);
     }
   }, [appOpenConfigFromProps, isAppOpen]);
+
+  useEffect(() => {
+    if (frontLightRef.current) frontLightRef.current.target = frontLightTarget;
+    if (directionalLightRef.current) directionalLightRef.current.target = frontLightTarget;
+  }, [frontLightTarget]);
 
   const activeConfig = isAppOpen ? runtimeAppOpenConfig : initialConfig;
 

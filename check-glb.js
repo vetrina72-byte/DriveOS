@@ -5,7 +5,7 @@ async function main() {
   const io = new NodeIO();
   // download the glb first
   const fetch = await import('node-fetch');
-  const res = await fetch.default('https://raw.githubusercontent.com/vetrina72-byte/assets/main/low_poly_bmw_g80_m3.glb');
+  const res = await fetch.default('https://raw.githubusercontent.com/vetrina72-byte/assets/main/volvo_ex30.glb');
   const buffer = await res.arrayBuffer();
   const document = await io.readBinary(new Uint8Array(buffer));
   
