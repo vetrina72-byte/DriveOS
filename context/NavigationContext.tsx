@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { routeStore } from '../components/routeStore';
+import { TelemetryStore } from './TelemetryStore';
 
 export interface LocationData {
   lat: number;
@@ -13,8 +14,8 @@ export interface TripInfo {
 }
 
 interface NavigationContextType {
-  currentPosition: { lat: number; lng: number } | null;
-  bearing: number;
+  
+  
   throttledPosition: { lat: number; lng: number } | null;
   arrivalMessage: string | null;
   setArrivalMessage: (msg: string | null) => void;
@@ -34,7 +35,7 @@ interface NavigationContextType {
   setIsRoutePreview: (val: boolean) => void;
   mapStyle: string;
   setMapStyle: (style: string) => void;
-  simulatedRemainingDistance: number | null;
+  
   isSimulating: boolean;
   startTripSimulation: () => void;
   stopTripSimulation: () => void;
@@ -51,8 +52,6 @@ interface NavigationProviderProps {
 }
 
 export function NavigationProvider({ children, onSelectDestination, onMapInteraction }: NavigationProviderProps) {
-  const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [bearing, setBearing] = useState(0);
   const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const [arrivalMessage, setArrivalMessage] = useState<string | null>(null);
   const arrivalTimeoutRef = useRef<number | null>(null);
@@ -65,10 +64,10 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
   const [isNavigating, setIsNavigating] = useState(false);
   const [isRoutePreview, setIsRoutePreview] = useState(false);
   const [mapStyle, setMapStyle] = useState('dark');
-  const [simulatedRemainingDistance, setSimulatedRemainingDistance] = useState<number | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   
   const simulationIntervalRef = useRef<number | null>(null);
+  const lastThrottledTimeRef = useRef<number>(0);
 
   // Load locations from localStorage
   useEffect(() => {
@@ -93,16 +92,25 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
         (position) => {
           const { latitude, longitude, heading } = position.coords;
           const newPos = { lat: latitude, lng: longitude };
-          setCurrentPosition(newPos);
+          
+          TelemetryStore.setPosition(newPos);
+          
           if (heading !== null && heading !== undefined) {
-            setBearing((prevBearing) => {
-              let diff = heading - prevBearing;
-              if (diff > 180) diff -= 360;
-              if (diff < -180) diff += 360;
-              return (prevBearing + diff * 0.3 + 360) % 360;
-            });
+            let prevBearing = TelemetryStore.bearing;
+            let diff = heading - prevBearing;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            TelemetryStore.setBearing((prevBearing + diff * 0.3 + 360) % 360);
           }
+          
           lastPositionRef.current = newPos;
+
+          // Throttled update for global context
+          const now = Date.now();
+          if (now - lastThrottledTimeRef.current > 5000) {
+            setThrottledPosition(newPos);
+            lastThrottledTimeRef.current = now;
+          }
         },
         (error) => console.warn(error.message),
         { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
@@ -111,21 +119,16 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
     }
   }, []);
 
-  // Throttled position update
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (currentPosition) setThrottledPosition(currentPosition);
-    }, 250);
-    return () => clearTimeout(handler);
-  }, [currentPosition]);
-
   const startTripSimulation = useCallback(() => {
     if (simulationIntervalRef.current) clearInterval(simulationIntervalRef.current);
     if (!tripInfo) return;
+
     const totalDistKm = tripInfo.distance / 1000;
     let currentDist = totalDistKm;
-    setSimulatedRemainingDistance(currentDist);
+    
+    TelemetryStore.setSimulatedRemainingDistance(currentDist);
     setIsSimulating(true);
+
     simulationIntervalRef.current = window.setInterval(() => {
       currentDist -= totalDistKm / 100;
       if (currentDist <= 0) {
@@ -136,7 +139,7 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
         }
         setIsSimulating(false);
       }
-      setSimulatedRemainingDistance(currentDist);
+      TelemetryStore.setSimulatedRemainingDistance(currentDist);
     }, 200);
   }, [tripInfo]);
 
@@ -145,7 +148,7 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
       clearInterval(simulationIntervalRef.current);
       simulationIntervalRef.current = null;
     }
-    setSimulatedRemainingDistance(null);
+    TelemetryStore.setSimulatedRemainingDistance(null);
     setIsSimulating(false);
   }, []);
 
@@ -228,8 +231,6 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
   return (
     <NavigationContext.Provider
       value={{
-        currentPosition,
-        bearing,
         throttledPosition,
         arrivalMessage,
         setArrivalMessage,
@@ -249,7 +250,6 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
         setIsRoutePreview,
         mapStyle,
         setMapStyle,
-        simulatedRemainingDistance,
         isSimulating,
         startTripSimulation,
         stopTripSimulation,

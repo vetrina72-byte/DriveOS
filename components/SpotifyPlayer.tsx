@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUIConfig } from '../context/UIConfigContext';
@@ -93,9 +93,9 @@ const SpotifyPlayer = ({
 
     // Single source of truth for the animation physics
     const physics = useRef({
-        currentPercent: 100, // 0 = open, 100 = closed
-        targetPercent: 100,
-        startPercent: 100,
+        currentPercent: isOpen ? 0 : 100, // 0 = open, 100 = closed
+        targetPercent: isOpen ? 0 : 100,
+        startPercent: isOpen ? 0 : 100,
         animStartTime: 0,
         isDragging: false,
         isInteracting: false, // NEW: Tracks if user interaction sequence is active (drag + settle)
@@ -111,6 +111,17 @@ const SpotifyPlayer = ({
     // Constants
     const CLOSE_THRESHOLD_PERCENT = 20; // Drag past 20% to close
 
+    const updateRef = useRef<() => void>(() => {});
+
+    const startAnimation = useCallback(() => {
+        if (!physics.current.animationId) {
+            physics.current.animationId = requestAnimationFrame(() => {
+                physics.current.animationId = 0;
+                updateRef.current();
+            });
+        }
+    }, []);
+
     // --- MAIN LOOP ---
     useEffect(() => {
         const update = () => {
@@ -119,6 +130,7 @@ const SpotifyPlayer = ({
             const isVertical = isVerticalRef.current; // Read from ref for atomic updates in loop
 
             // 1. Update Physics
+            let isSettled = false;
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
@@ -127,8 +139,14 @@ const SpotifyPlayer = ({
                     // power4.out easing
                     const easeT = 1 - Math.pow(1 - t, 4);
                     state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
+                    if (t >= 1.0) {
+                        state.currentPercent = state.targetPercent;
+                        state.animStartTime = 0;
+                        isSettled = true;
+                    }
                 } else {
                     state.currentPercent = state.targetPercent;
+                    isSettled = true;
                 }
             }
 
@@ -142,7 +160,7 @@ const SpotifyPlayer = ({
 
                 // Check if settled (animation finished)
                 // We use a threshold of 0.5% to consider it "done" for the 3D scene handoff
-                if (!state.isDragging && Math.abs(state.targetPercent - state.currentPercent) < 0.5) {
+                if (!state.isDragging && (isSettled || Math.abs(state.targetPercent - state.currentPercent) < 0.5)) {
                     state.isInteracting = false;
                     onDragProgress?.(null); // Release control to auto-animation
                 }
@@ -166,11 +184,32 @@ const SpotifyPlayer = ({
                 }
             }
 
-            state.animationId = requestAnimationFrame(update);
+            // 4. Schedule next frame ONLY if active
+            if (!isSettled || state.isDragging || state.isInteracting) {
+                state.animationId = requestAnimationFrame(() => {
+                    state.animationId = 0;
+                    updateRef.current();
+                });
+            } else {
+                state.animationId = 0;
+            }
         };
 
-        physics.current.animationId = requestAnimationFrame(update);
-        return () => cancelAnimationFrame(physics.current.animationId);
+        updateRef.current = update;
+    });
+
+    useEffect(() => {
+        // Initial positioning render
+        updateRef.current();
+        return () => {
+            if (physics.current.animationId) {
+                cancelAnimationFrame(physics.current.animationId);
+                physics.current.animationId = 0;
+            }
+            if (physics.current.isInteracting) {
+                onDragProgress?.(null);
+            }
+        };
     }, [onDragProgress]); 
 
     // --- SYNC REACT PROP TO PHYSICS TARGET ---
@@ -180,10 +219,11 @@ const SpotifyPlayer = ({
         // Only update target if not dragging
         if (!state.isDragging) {
             const newTargetPercent = isOpen ? 0 : 100;
-            if (state.targetPercent !== newTargetPercent || state.animStartTime === 0) {
+            if (state.targetPercent !== newTargetPercent || state.animStartTime === 0 || Math.abs(state.currentPercent - newTargetPercent) > 0.01) {
                 state.startPercent = state.currentPercent;
                 state.targetPercent = newTargetPercent;
                 state.animStartTime = performance.now();
+                startAnimation();
             }
             
             if (isOpen) {
@@ -197,7 +237,7 @@ const SpotifyPlayer = ({
                 return () => clearTimeout(timer);
             }
         }
-    }, [isOpen, triggerHomeContentFetch]);
+    }, [isOpen, triggerHomeContentFetch, sceneTransitionSpeed, startAnimation]);
 
     // --- INTERACTION HANDLERS ---
     const handlePointerDown = (e: React.PointerEvent) => {
@@ -222,6 +262,7 @@ const SpotifyPlayer = ({
         }
         
         state.dragStartPercent = state.currentPercent; 
+        startAnimation();
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
@@ -240,6 +281,7 @@ const SpotifyPlayer = ({
         if (newPercent < 0) newPercent = 0;
         
         state.currentPercent = newPercent;
+        startAnimation();
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
@@ -264,6 +306,7 @@ const SpotifyPlayer = ({
             state.targetPercent = 0;
             state.animStartTime = performance.now();
         }
+        startAnimation();
     };
 
     // --- VIEW LOGIC (Unchanged) ---

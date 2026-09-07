@@ -97,8 +97,40 @@ const MapsContainer = React.memo(({
   const [steps, setSteps] = useState<StepInfo[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [destinationName, setDestinationName] = useState('Destinazione');
-  const [remainingDistance, setRemainingDistance] = useState(0);
-  const [remainingTime, setRemainingTime] = useState(0);
+  const remainingDistanceRef = useRef(0);
+  const remainingTimeRef = useRef(0);
+
+  // Helper functions for DOM updates
+  const formatDistance = (meters: number) => {
+    if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+    return `${Math.round(meters)} m`;
+  };
+  const formatDuration = (seconds: number) => {
+    const minutes = Math.round(seconds / 60);
+    if (minutes >= 60) {
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return `${h} h ${m} min`;
+    }
+    return `${minutes} min`;
+  };
+  const computeETA = (seconds: number) => {
+    const etaDate = new Date(Date.now() + seconds * 1000);
+    const hrs = etaDate.getHours().toString().padStart(2, '0');
+    const mins = etaDate.getMinutes().toString().padStart(2, '0');
+    return `${hrs}:${mins}`;
+  };
+
+  const updateHUD = (remDist: number, remTime: number) => {
+    remainingDistanceRef.current = remDist;
+    remainingTimeRef.current = remTime;
+    const elKm = document.getElementById('nb-km');
+    if(elKm) elKm.innerText = formatDistance(remDist);
+    const elMin = document.getElementById('nb-min');
+    if(elMin) elMin.innerText = formatDuration(remTime);
+    const elEta = document.getElementById('nb-eta');
+    if(elEta) elEta.innerText = computeETA(remTime);
+  };
 
   const [cmode, setCmode] = useState<'north-up' | 'heading-up'>('north-up');
   const [bearing, setBearing] = useState(0);
@@ -440,8 +472,7 @@ const MapsContainer = React.memo(({
       rem -= sd * t;
     }
 
-    setRemainingDistance(rem);
-    setRemainingTime(rem / Math.max(speedRef.current, 8));
+    updateHUD(rem, rem / Math.max(speedRef.current, 8));
 
     // Dynamic step progress index matching
     let cumTrav = 0;
@@ -540,8 +571,7 @@ const MapsContainer = React.memo(({
       siRef.current = 0;
       setCurrentStepIndex(0);
       nearIdxRef.current = 0;
-      setRemainingDistance(route.distance);
-      setRemainingTime(route.duration);
+      updateHUD(route.distance, route.duration);
 
       // Store route coordinate vectors for instrument panel Minimap rendering
       const reversedCoords: [number, number][] = coords.map((c: [number, number]) => [c[1], c[0]]);
@@ -1090,12 +1120,19 @@ const MapsContainer = React.memo(({
         }
 
         if (mapRef.current && followRef.current && !interactRef.current && !flyingRef.current && !isWeatherActiveRef.current) {
-          const b = cmodeRef.current === 'heading-up' ? cbearRef.current : 0;
-          mapRef.current.jumpTo({
-            center: [rposRef.current.lng, rposRef.current.lat],
-            bearing: b,
-            zoom: cmodeRef.current === 'heading-up' ? 16 : 14
-          });
+          const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+          const targetFps = isMobile ? 24 : 60;
+          const frameTime = 1000 / targetFps;
+          
+          if (!(mapRef.current as any)._lastMapUpdate || t - (mapRef.current as any)._lastMapUpdate >= frameTime) {
+            const b = cmodeRef.current === 'heading-up' ? cbearRef.current : 0;
+            mapRef.current.jumpTo({
+              center: [rposRef.current.lng, rposRef.current.lat],
+              bearing: b,
+              zoom: cmodeRef.current === 'heading-up' ? 16 : 14
+            });
+            (mapRef.current as any)._lastMapUpdate = t;
+          }
         }
 
         if (navingRef.current && stepsRef.current.length && geoRef.current) {
@@ -1245,6 +1282,19 @@ const MapsContainer = React.memo(({
 
     map.on('style.load', () => {
       map.setProjection({ type: 'globe' } as any);
+      
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+      if (isMobile) {
+        const layers = map.getStyle().layers;
+        if (layers) {
+          layers.forEach((layer) => {
+            if (layer.type === 'fill-extrusion' || layer.id.includes('building') || layer.id.includes('3d')) {
+              map.removeLayer(layer.id);
+            }
+          });
+        }
+      }
+
       addLayers();
       if (geoRef.current && map.getSource('route')) {
         (map.getSource('route') as any).setData({
@@ -1447,8 +1497,8 @@ const MapsContainer = React.memo(({
                   destinationName={destinationName}
                   steps={steps}
                   currentStepIndex={currentStepIndex}
-                  remainingDistance={remainingDistance}
-                  remainingTime={remainingTime}
+                  remainingDistance={remainingDistanceRef.current}
+                  remainingTime={remainingTimeRef.current}
                   vehiclePosition={rposRef.current}
                   onCancelNavigation={() => {
                     clearRoute(false);
@@ -1476,8 +1526,8 @@ const MapsContainer = React.memo(({
               isActive={naving}
               isRoutePreview={isRoutePreview}
               destinationName={destinationName}
-              remainingDistance={remainingDistance}
-              remainingTime={remainingTime}
+              remainingDistance={remainingDistanceRef.current}
+              remainingTime={remainingTimeRef.current}
               onStartNavigation={startTracking}
               onCancelNavigation={() => {
                 clearRoute(false);
@@ -1512,4 +1562,4 @@ const MapsContainer = React.memo(({
   );
 });
 
-export default MapsContainer;
+export default React.memo(MapsContainer);

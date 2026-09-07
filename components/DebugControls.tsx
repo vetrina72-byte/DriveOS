@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
@@ -171,9 +171,9 @@ export default function DebugControls({
   }, [isMapsLayered, isOpen]);
 
   const physics = useRef({
-      currentPercent: 100, // 0 = open, 100 = closed
-      targetPercent: 100,
-      startPercent: 100,
+      currentPercent: isOpen ? 0 : 100, // 0 = open, 100 = closed
+      targetPercent: isOpen ? 0 : 100,
+      startPercent: isOpen ? 0 : 100,
       animStartTime: 0,
       isDragging: false,
       isInteracting: false, // NEW: Interaction sequence tracking
@@ -186,6 +186,18 @@ export default function DebugControls({
   const ANIMATION_SPEED = 0.18; 
   const CLOSE_THRESHOLD_PERCENT = 25;
 
+  const updateRef = useRef<() => void>(() => {});
+
+  const startAnimation = useCallback(() => {
+      if (!isAppView) return;
+      if (!physics.current.animationId) {
+          physics.current.animationId = requestAnimationFrame(() => {
+              physics.current.animationId = 0;
+              updateRef.current();
+          });
+      }
+  }, [isAppView]);
+
   // --- PHYSICS LOOP ---
   useEffect(() => {
       if (!isAppView) return; // Only animate if it's an app view
@@ -195,6 +207,7 @@ export default function DebugControls({
           const panel = panelRef.current;
 
           // 1. Update Physics
+          let isSettled = false;
           if (!state.isDragging) {
               if (state.animStartTime > 0) {
                   const elapsed = performance.now() - state.animStartTime;
@@ -203,8 +216,14 @@ export default function DebugControls({
                   // power4.out easing
                   const easeT = 1 - Math.pow(1 - t, 4);
                   state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
+                  if (t >= 1.0) {
+                      state.currentPercent = state.targetPercent;
+                      state.animStartTime = 0;
+                      isSettled = true;
+                  }
               } else {
                   state.currentPercent = state.targetPercent;
+                  isSettled = true;
               }
           }
 
@@ -216,7 +235,7 @@ export default function DebugControls({
               onDragProgress?.(visualProgress);
 
               // Check if settled
-              if (!state.isDragging && Math.abs(state.targetPercent - state.currentPercent) < 0.5) {
+              if (!state.isDragging && (isSettled || Math.abs(state.targetPercent - state.currentPercent) < 0.5)) {
                   state.isInteracting = false;
                   onDragProgress?.(null);
               }
@@ -236,12 +255,29 @@ export default function DebugControls({
               }
           }
 
-          state.animationId = requestAnimationFrame(update);
+          // 4. Schedule next frame ONLY if active
+          if (!isSettled || state.isDragging || state.isInteracting) {
+              state.animationId = requestAnimationFrame(() => {
+                  state.animationId = 0;
+                  updateRef.current();
+              });
+          } else {
+              state.animationId = 0;
+          }
       };
 
-      physics.current.animationId = requestAnimationFrame(update);
+      updateRef.current = update;
+  });
+
+  useEffect(() => {
+      if (!isAppView) return;
+      // Initial positioning render
+      updateRef.current();
       return () => {
-          cancelAnimationFrame(physics.current.animationId);
+          if (physics.current.animationId) {
+              cancelAnimationFrame(physics.current.animationId);
+              physics.current.animationId = 0;
+          }
           if (physics.current.isInteracting) {
               onDragProgress?.(null);
           }
@@ -254,13 +290,14 @@ export default function DebugControls({
       const state = physics.current;
       if (!state.isDragging) {
           const newTargetPercent = isOpen ? 0 : 100;
-          if (state.targetPercent !== newTargetPercent || state.animStartTime === 0) {
+          if (state.targetPercent !== newTargetPercent || state.animStartTime === 0 || Math.abs(state.currentPercent - newTargetPercent) > 0.01) {
               state.startPercent = state.currentPercent;
               state.targetPercent = newTargetPercent;
               state.animStartTime = performance.now();
+              startAnimation();
           }
       }
-  }, [isOpen, isAppView]);
+  }, [isOpen, isAppView, startAnimation]);
 
   // --- DRAG HANDLERS ---
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -279,6 +316,7 @@ export default function DebugControls({
           state.panelDimension = panelRef.current.offsetWidth || window.innerWidth * 0.66;
       }
       state.dragStartPercent = state.currentPercent;
+      startAnimation();
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -295,6 +333,7 @@ export default function DebugControls({
       if (newPercent < 0) newPercent = 0; // Prevent widening
       
       state.currentPercent = newPercent;
+      startAnimation();
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -317,6 +356,7 @@ export default function DebugControls({
           state.targetPercent = 0;
           state.animStartTime = performance.now();
       }
+      startAnimation();
   };
 
   if (!isOpen && !isAppView) {

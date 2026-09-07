@@ -65,21 +65,20 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ iconSize, volumeSliderOff
     
     // Smoothly animate visualVolume towards the actual volume prop
     useEffect(() => {
+        if (Math.abs(volume - visualVolume) <= 0.005) {
+            if (visualVolume !== volume) {
+                setVisualVolume(volume);
+            }
+            return;
+        }
+
         let animationFrameId: number;
-        
         const animate = () => {
             setVisualVolume(current => {
                 const diff = volume - current;
-                // Snap if very close to target
                 if (Math.abs(diff) < 0.005) return volume;
-                // Interpolate (adjust 0.2 for speed/fluidity)
                 return current + diff * 0.2;
             });
-            
-            // Keep animating if we haven't reached target
-            if (Math.abs(volume - visualVolume) > 0.005) {
-                animationFrameId = requestAnimationFrame(animate);
-            }
         };
         
         animationFrameId = requestAnimationFrame(animate);

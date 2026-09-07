@@ -79,9 +79,9 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
 
     // --- PHYSICS ENGINE (Unified) ---
     const physics = useRef({
-        currentPercent: 100, // 0 = open, 100 = closed
-        targetPercent: 100,
-        startPercent: 100,
+        currentPercent: isOpen ? 0 : 100, // 0 = open, 100 = closed
+        targetPercent: isOpen ? 0 : 100,
+        startPercent: isOpen ? 0 : 100,
         animStartTime: 0,
         isDragging: false,
         isInteracting: false, // NEW: Interaction sequence tracking
@@ -102,6 +102,17 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const [selectedPlaylist, setSelectedPlaylist] = useState<{ id: string; name: string; images?: { url: string }[], description?: string } | null>(null);
     const [isQuotaModalDismissed, setIsQuotaModalDismissed] = useState(false);
 
+    const updateRef = useRef<() => void>(() => {});
+
+    const startAnimation = useCallback(() => {
+        if (!physics.current.animationId) {
+            physics.current.animationId = requestAnimationFrame(() => {
+                physics.current.animationId = 0;
+                updateRef.current();
+            });
+        }
+    }, []);
+
     // --- PHYSICS LOOP ---
     useEffect(() => {
         const update = () => {
@@ -109,6 +120,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             const panel = panelRef.current;
 
             // 1. Update Physics
+            let isSettled = false;
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
@@ -117,8 +129,14 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                     // power4.out easing
                     const easeT = 1 - Math.pow(1 - t, 4);
                     state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
+                    if (t >= 1.0) {
+                        state.currentPercent = state.targetPercent;
+                        state.animStartTime = 0;
+                        isSettled = true;
+                    }
                 } else {
                     state.currentPercent = state.targetPercent;
+                    isSettled = true;
                 }
             }
 
@@ -130,7 +148,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 onDragProgress?.(visualProgress);
 
                 // Check if settled
-                if (!state.isDragging && Math.abs(state.targetPercent - state.currentPercent) < 0.5) {
+                if (!state.isDragging && (isSettled || Math.abs(state.targetPercent - state.currentPercent) < 0.5)) {
                     state.isInteracting = false;
                     onDragProgress?.(null);
                 }
@@ -150,14 +168,28 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 }
             }
 
-            state.animationId = requestAnimationFrame(update);
+            // 4. Schedule next frame ONLY if active
+            if (!isSettled || state.isDragging || state.isInteracting) {
+                state.animationId = requestAnimationFrame(() => {
+                    state.animationId = 0;
+                    updateRef.current();
+                });
+            } else {
+                state.animationId = 0;
+            }
         };
 
-        physics.current.animationId = requestAnimationFrame(update);
+        updateRef.current = update;
+    });
+
+    useEffect(() => {
+        // Initial positioning render
+        updateRef.current();
         return () => {
-            cancelAnimationFrame(physics.current.animationId);
-            // CRITICAL FIX: Ensure we release the 3D scene if unmounted while interacting
-            // This prevents the "Zombie State" where the car freezes in the middle.
+            if (physics.current.animationId) {
+                cancelAnimationFrame(physics.current.animationId);
+                physics.current.animationId = 0;
+            }
             if (physics.current.isInteracting) {
                 onDragProgress?.(null);
             }
@@ -169,13 +201,14 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         const state = physics.current;
         if (!state.isDragging) {
             const newTargetPercent = isOpen ? 0 : 100;
-            if (state.targetPercent !== newTargetPercent || state.animStartTime === 0) {
+            if (state.targetPercent !== newTargetPercent || state.animStartTime === 0 || Math.abs(state.currentPercent - newTargetPercent) > 0.01) {
                 state.startPercent = state.currentPercent;
                 state.targetPercent = newTargetPercent;
                 state.animStartTime = performance.now();
+                startAnimation();
             }
         }
-    }, [isOpen]);
+    }, [isOpen, startAnimation]);
 
     // --- DRAG HANDLERS ---
     const handlePointerDown = (e: React.PointerEvent) => {
@@ -194,6 +227,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
              state.panelDimension = panelRef.current.offsetWidth || window.innerWidth * 0.66;
         }
         state.dragStartPercent = state.currentPercent;
+        startAnimation();
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
@@ -209,6 +243,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         if (newPercent < 0) newPercent = 0; // Prevent widening
         
         state.currentPercent = newPercent;
+        startAnimation();
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
@@ -233,6 +268,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             state.targetPercent = 0;
             state.animStartTime = performance.now();
         }
+        startAnimation();
     };
 
     const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';

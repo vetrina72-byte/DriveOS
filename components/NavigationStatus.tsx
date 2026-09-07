@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigation } from '../context/NavigationContext';
 import { useWeather } from '../context/WeatherContext';
+import { useTelemetryData } from '../hooks/useTelemetry';
 import { ICONS } from '../constants';
 import { routeStore } from './routeStore';
 import { formatTravelTime } from './NavigateTool';
@@ -35,8 +36,8 @@ export default function NavigationStatus({ width, widgetBgColor }: NavigationSta
     throttledPosition: currentPosition,
     handleCancelNavigation: onCancel,
     tripInfo,
-    simulatedRemainingDistance,
   } = useNavigation();
+  const { simulatedRemainingDistance } = useTelemetryData();
 
   const { useDarkTheme: isNight } = useWeather();
 

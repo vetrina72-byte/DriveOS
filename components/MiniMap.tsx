@@ -6,6 +6,7 @@ import { routeStore } from './routeStore';
 import VehicleArrowIcon from './VehicleArrowIcon';
 import { useNavigation } from '../context/NavigationContext';
 import { useWeather } from '../context/WeatherContext';
+import { useTelemetryData } from '../hooks/useTelemetry';
 
 // Patch difensiva per prevenire loop infiniti (TypeError: replace of undefined) nel caricamento tile (loadTile / Yg.url)
 const originalTemplate = L.Util.template;
@@ -111,8 +112,8 @@ const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClic
     onClick: (e: React.MouseEvent) => void;
     uiScale: number;
 }) => {
-  const { currentPosition: position, bearing } = useNavigation();
   const { isNight, useDarkTheme } = useWeather();
+  const { position, bearing } = useTelemetryData();
   const markerRef = useRef<L.Marker>(null);
 
   useEffect(() => {

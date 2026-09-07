@@ -64,12 +64,10 @@ const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
 export const VehicleProvider = ({ children }: React.PropsWithChildren<{}>) => {
   const [state, dispatch] = useReducer(vehicleReducer, initialState);
 
+  // The SIMULATE_UPDATE interval has been disabled to improve performance
+  // and prevent global re-renders of the React tree every 5 seconds.
   useEffect(() => {
-    const simulationInterval = setInterval(() => {
-      dispatch({ type: 'SIMULATE_UPDATE' });
-    }, 5000); // Update every 5 seconds
-
-    return () => clearInterval(simulationInterval);
+    // Battery and temp simulation interval removed for performance reasons.
   }, [state.driveMode]); // Rerun effect if drive mode changes
 
   return (

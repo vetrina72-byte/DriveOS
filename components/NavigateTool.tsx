@@ -48,7 +48,7 @@ const NavigateTool = ({
     showRecentsOnFocus?: boolean;
 }) => {
     const {
-        currentPosition,
+        throttledPosition: currentPosition,
         homeLocation,
         workLocation,
         handleSelectDestination: onSelectDestination,

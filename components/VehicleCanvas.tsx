@@ -1257,6 +1257,63 @@ function EnvironmentController({
     return "Cielo sereno";
   }, []);
 
+  useEffect(() => {
+    const weatherKey = getWeatherKey(weatherCondition);
+    const timeKey = isNight ? "night" : "day";
+    const colors = sceneColors[timeKey][weatherKey] || sceneColors[timeKey]["Cielo sereno"];
+    
+    const targetSkyColor = new THREE.Color(colors.sky);
+    const hexColor = "#" + targetSkyColor.getHexString();
+    
+    let gradientCss = "";
+    if (!isNight) {
+      // Giorno (Day) sky shades
+      if (weatherKey === "Cielo sereno") {
+        gradientCss = `linear-gradient(to bottom, #ffffff 0%, ${hexColor} 100%)`;
+      } else if (weatherKey === "Pioggia") {
+        gradientCss = `linear-gradient(to bottom, #414347 0%, ${hexColor} 100%)`;
+      } else if (weatherKey === "Temporale") {
+        gradientCss = `linear-gradient(to bottom, #2e3137 0%, ${hexColor} 100%)`;
+      } else if (weatherKey === "Neve") {
+        gradientCss = `linear-gradient(to bottom, #8a8a8a 0%, ${hexColor} 100%)`;
+      } else if (weatherKey === "Grandine") {
+        gradientCss = `linear-gradient(to bottom, #7f7f85 0%, ${hexColor} 100%)`;
+      } else if (weatherKey === "Nebbia") {
+        gradientCss = `linear-gradient(to bottom, #949ca4 0%, ${hexColor} 100%)`;
+      } else {
+        gradientCss = `linear-gradient(to bottom, #ffffff 0%, ${hexColor} 100%)`;
+      }
+    } else {
+      // Notte (Night) sky shades
+      if (weatherKey === "Cielo sereno") {
+        gradientCss = `linear-gradient(to bottom, #030408 0%, ${hexColor} 100%)`;
+      } else {
+        gradientCss = `linear-gradient(to bottom, #010204 0%, ${hexColor} 100%)`;
+      }
+    }
+
+    const transitionRule = "background 1.5s ease-in-out, background-color 1.5s ease-in-out";
+
+    // Sync HTML background with CSS transitions instead of 60 FPS JS recalculation
+    const container = document.getElementById("main-app-container");
+    if (container) {
+      container.style.transition = transitionRule;
+      container.style.background = gradientCss;
+      container.style.backgroundColor = hexColor;
+    }
+    
+    document.body.style.transition = transitionRule;
+    document.body.style.background = gradientCss;
+    document.body.style.backgroundColor = hexColor;
+    
+    const rootEl = document.getElementById("root");
+    if (rootEl) {
+      rootEl.style.transition = transitionRule;
+      rootEl.style.background = gradientCss;
+      rootEl.style.backgroundColor = hexColor;
+    }
+  }, [weatherCondition, isNight, sceneColors, getWeatherKey]);
+
   useFrame((_, delta) => {
     const t = 1 - Math.exp(-1.5 * delta);
 
@@ -1282,48 +1339,6 @@ function EnvironmentController({
 
     // Usa gl.setClearColor con il colore del pavimento
     gl.setClearColor(currentFloorColor, 1);
-
-    // Costruisci il gradiente CSS che copia esattamente gli stessi identici colori e sfumature usati per il cielo 3D
-    const hexColor = "#" + currentEnvColor.getHexString();
-    let gradientCss = "";
-
-    if (!isNight) {
-      // Giorno (Day) sky shades - sfuma con i colori chiari del cielo diurno (colore bianco per il cielo sereno)
-      if (weatherKey === "Cielo sereno") {
-        gradientCss = `linear-gradient(to bottom, #ffffff 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Pioggia") {
-        gradientCss = `linear-gradient(to bottom, #414347 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Temporale") {
-        gradientCss = `linear-gradient(to bottom, #2e3137 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Neve") {
-        gradientCss = `linear-gradient(to bottom, #8a8a8a 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Grandine") {
-        gradientCss = `linear-gradient(to bottom, #7f7f85 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Nebbia") {
-        gradientCss = `linear-gradient(to bottom, #949ca4 0%, ${hexColor} 100%)`;
-      } else {
-        gradientCss = `linear-gradient(to bottom, #ffffff 0%, ${hexColor} 100%)`;
-      }
-    } else {
-      // Notte (Night) sky shades - sfuma con i colori scuri e profondi del cielo notturno
-      if (weatherKey === "Cielo sereno") {
-        gradientCss = `linear-gradient(to bottom, #030408 0%, ${hexColor} 100%)`;
-      } else {
-        gradientCss = `linear-gradient(to bottom, #010204 0%, ${hexColor} 100%)`;
-      }
-    }
-
-    // Sync HTML background
-    const container = document.getElementById("main-app-container");
-    if (container) {
-      container.style.background = gradientCss;
-    }
-    // Also sync the body background to prevent dark bars when container resizes
-    document.body.style.background = gradientCss;
-    const rootEl = document.getElementById("root");
-    if (rootEl) {
-      rootEl.style.background = gradientCss;
-    }
 
     let targetAmbientIntensity: number,
       targetFrontLightIntensity: number,
@@ -1507,7 +1522,7 @@ interface VehicleCanvasProps {
   redPanelOrientation?: 'longitudinal' | 'transverse' | 'horizontal';
 }
 
-export default function VehicleCanvas({
+function VehicleCanvas({
   isAppOpen,
   isNight,
   aoMapIntensity = 1.0,
@@ -1571,6 +1586,16 @@ export default function VehicleCanvas({
   const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
   const shadowRef = useRef<THREE.Mesh>(null!);
+
+  const [renderIdle, setRenderIdle] = useState(false);
+  useEffect(() => {
+    if (isAppOpen) {
+      const timer = setTimeout(() => setRenderIdle(true), sceneTransitionSpeed * 1000 + 100);
+      return () => clearTimeout(timer);
+    } else {
+      setRenderIdle(false);
+    }
+  }, [isAppOpen, sceneTransitionSpeed]);
 
   // Generate a procedural noise/grain texture to break up the perfect glass reflections
   const noiseTexture = useMemo(() => {
@@ -1739,7 +1764,9 @@ export default function VehicleCanvas({
       <Canvas
         className="absolute inset-0"
         style={{ zIndex: 0, touchAction: "none" }}
-        shadows={{ type: THREE.PCFSoftShadowMap }}
+        shadows={typeof window !== 'undefined' && window.innerWidth > 1024 ? { type: THREE.PCFSoftShadowMap } : false}
+        dpr={[1, Math.min(window.devicePixelRatio, 1.5)]}
+        frameloop={renderIdle && dragProgress.current === null ? "demand" : "always"}
         camera={{
           fov: 48,
           near: 0.5,
@@ -1952,3 +1979,5 @@ export default function VehicleCanvas({
   );
 }
 useGLTF.preload(MODEL_URL);
+
+export default React.memo(VehicleCanvas);
