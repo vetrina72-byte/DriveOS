@@ -62,7 +62,7 @@ const NavigateTool = ({
     const [recents, setRecents] = useState<RecentPlace[]>([]);
     const searchTimeoutRef = useRef<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     const GEOAPIFY_API_KEY = '0d2c9c7f72c0477eb3260838db72a383';
 
@@ -202,15 +202,21 @@ const NavigateTool = ({
         setIsExpanded(false);
         setQuery('');
         setSuggestions([]);
-    };
-    
-    useEffect(() => {
-        const textarea = inputRef.current;
-        if (textarea) {
-            textarea.style.height = 'auto'; 
-            textarea.style.height = `${(textarea.scrollHeight) / 16}rem`; 
+        if (inputRef.current) {
+            inputRef.current.blur();
         }
-    }, [query]);
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setIsFocused(false);
+                setIsExpanded(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
     
     const theme = {
         bg: 'var(--player-bg)',
@@ -234,19 +240,22 @@ const NavigateTool = ({
         >
              <div className="p-3 flex flex-col h-full overflow-hidden">
                 <div className="relative flex-shrink-0 flex items-center gap-2">
-                    <div className="relative flex-grow">
-                        <ICONS.search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.iconColor}`} />
-                        <textarea
+                    <div className="relative flex-grow flex items-center">
+                        <ICONS.search className={`absolute left-3.5 w-5 h-5 pointer-events-none ${theme.iconColor}`} />
+                        <input
                             ref={inputRef}
-                            rows={1}
+                            type="text"
                             id="home-search-input"
                             name="destination"
                             aria-label="Navigate"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            onFocus={() => setIsFocused(true)}
+                            onFocus={() => {
+                                setIsFocused(true);
+                                setIsExpanded(true);
+                            }}
                             placeholder="Navigate"
-                            className={`w-full pl-11 pr-4 py-2.5 rounded-lg text-sm font-medium transition-colors resize-none overflow-y-auto hide-scrollbar ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                            className={`w-full h-10 pl-11 pr-4 rounded-xl text-sm font-medium transition-colors ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center`}
                             style={isNight ? { backgroundColor: darkNavigateInputBg } : undefined}
                         />
                     </div>
@@ -260,7 +269,7 @@ const NavigateTool = ({
                     )}
                 </div>
                 
-                <div className={`overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'flex-grow mt-2 opacity-100' : 'opacity-0'}`}>
+                <div className={`overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'flex-grow mt-2 opacity-100' : 'hidden'}`}>
                     {loading && <div className="text-center p-2 text-sm text-zinc-400">Ricerca...</div>}
                     
                     {!loading && query.trim().length === 0 && recents.length > 0 && (

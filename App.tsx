@@ -133,7 +133,6 @@ const ArrivalToast = () => {
 
 const NavigationWidget = ({ 
     navigateToolRef, 
-    navigateToolStyle, 
     navigateToolWidth, 
     widgetBgColor, 
     dayPlayerButtonColor, 
@@ -142,7 +141,6 @@ const NavigationWidget = ({
     isHome 
 }: { 
     navigateToolRef: React.RefObject<HTMLDivElement | null>;
-    navigateToolStyle: React.CSSProperties;
     navigateToolWidth: number;
     widgetBgColor: string;
     dayPlayerButtonColor: string;
@@ -153,7 +151,7 @@ const NavigationWidget = ({
     const { navigationTarget } = useNavigation();
     const { useDarkTheme } = useWeather();
     return (
-        <div ref={navigateToolRef} className="flex items-end" style={navigateToolStyle}>
+        <div ref={navigateToolRef} className="flex items-end">
             {navigationTarget ? (
                 <NavigationStatus width={navigateToolWidth} widgetBgColor={widgetBgColor}/>
             ) : (
@@ -267,63 +265,29 @@ function AppContent() {
 
   // --- REF FOR NAVIGATE TOOL ANIMATION ---
   const navigateToolRef = useRef<HTMLDivElement>(null);
-  const navigateToolVisualState = useRef(activeApp !== null ? 0 : 1); // 0 = Hidden/Open App, 1 = Visible/Home
 
   // Stable callbacks for drawer dragging
+  const dragActiveRef = useRef<boolean>(false);
+
   const handleDragProgress = useCallback((val: number | null) => {
     if (isSwitchingRef.current) return;
     dragProgressRef.current = val;
+    const isDragging = val !== null;
+    if (isDragging !== dragActiveRef.current) {
+      dragActiveRef.current = isDragging;
+      window.dispatchEvent(new CustomEvent('app-drag-state', { detail: isDragging }));
+    }
   }, []);
 
   const handleSpotifyDrag = useCallback((progress: number | null) => {
     if (isSwitchingRef.current) return;
     dragProgressRef.current = progress;
+    const isDragging = progress !== null;
+    if (isDragging !== dragActiveRef.current) {
+      dragActiveRef.current = isDragging;
+      window.dispatchEvent(new CustomEvent('app-drag-state', { detail: isDragging }));
+    }
   }, []);
-
-  // --- NAVIGATE TOOL ANIMATION LOOP ---
-  useEffect(() => {
-    let animationFrameId: number;
-
-    const loop = () => {
-        // Target is 0 if app is open, 1 if home
-        const target = activeApp !== null ? 0 : 1;
-        
-        // Override with drag progress if active
-        // dragProgress: 0 (Open) -> 1 (Closed/Home)
-        if (dragProgressRef.current !== null) {
-            navigateToolVisualState.current = dragProgressRef.current;
-        } else {
-            // Smooth lerp towards target
-            const diff = target - navigateToolVisualState.current;
-            if (Math.abs(diff) > 0.001) {
-                navigateToolVisualState.current += diff * 0.2;
-            } else {
-                navigateToolVisualState.current = target;
-            }
-        }
-
-        const current = Math.max(0, Math.min(1, navigateToolVisualState.current));
-        
-        if (navigateToolRef.current) {
-            const threshold = 0.25;
-            const endPoint = 0.85;
-            let visibility = 0;
-            if (current > threshold) {
-                visibility = (current - threshold) / (endPoint - threshold);
-                visibility = Math.min(1, Math.max(0, visibility));
-            }
-            const translateX = (1 - visibility) * 50; 
-            navigateToolRef.current.style.opacity = `${visibility}`;
-            navigateToolRef.current.style.transform = `translateX(${(translateX) / 16}rem)`;
-            navigateToolRef.current.style.pointerEvents = visibility > 0.9 ? 'auto' : 'none';
-        }
-
-        animationFrameId = requestAnimationFrame(loop);
-    };
-
-    loop();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [activeApp]);
 
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
@@ -561,29 +525,139 @@ function AppContent() {
         return playerDockedLeft;
     }, [playerDockedLeft, windowWidth]);
 
-    // Refactored logic to handle animation in JS
-    const navigateToolStyle = useMemo(() => {
-        const isStacked = windowWidth < 900;
-        const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, windowWidth - 32) : playerFloatingWidth;
-        const currentNavigateToolWidth = isStacked ? Math.min(navigateToolWidth, windowWidth - 32) : navigateToolWidth;
+    // --- REFS AND STATE FOR FLUID NAVIGATE TOOL ANIMATION ---
+    const launcherVisualState = useRef(isAppLauncherOpen ? 1 : 0);
+    const lastIsAppLauncherOpen = useRef(isAppLauncherOpen);
+    const launcherStartT = useRef(isAppLauncherOpen ? 1 : 0);
+    const launcherAnimStartTime = useRef(0);
 
-        const baseStyle: React.CSSProperties = { 
-            position: 'fixed', 
-            zIndex: 1000, 
-            bottom: isStacked
-                ? `${(playerFloatingBottom + playerFloatingHeight + 12) / 16}rem`
-                : `${(playerFloatingBottom) / 16}rem`, 
+    const appVisualState = useRef(activeApp !== null ? 0 : 1);
+    const lastActiveApp = useRef(activeApp);
+    const appStartT = useRef(activeApp !== null ? 0 : 1);
+    const appAnimStartTime = useRef(0);
+
+    // Track isAppLauncherOpen transitions
+    useEffect(() => {
+        if (isAppLauncherOpen !== lastIsAppLauncherOpen.current) {
+            lastIsAppLauncherOpen.current = isAppLauncherOpen;
+            launcherStartT.current = launcherVisualState.current;
+            launcherAnimStartTime.current = performance.now();
+        }
+    }, [isAppLauncherOpen]);
+
+    // Track activeApp transitions
+    useEffect(() => {
+        if (activeApp !== lastActiveApp.current) {
+            lastActiveApp.current = activeApp;
+            appStartT.current = appVisualState.current;
+            appAnimStartTime.current = performance.now();
+        }
+    }, [activeApp]);
+
+    // --- UNIFIED FLUID ANIMATION LOOP FOR NAVIGATE TOOL ---
+    useEffect(() => {
+        let animationFrameId: number;
+
+        const loop = () => {
+            const duration = (sceneTransitionSpeed || 1.10) * 1000;
+
+            // 1. Calculate launcher animation state (0 = closed/Home, 1 = open/Launcher)
+            // Using power4.out easing to match MusicPlayer and subapps
+            const targetLauncher = isAppLauncherOpen ? 1 : 0;
+            if (launcherAnimStartTime.current > 0) {
+                const elapsed = performance.now() - launcherAnimStartTime.current;
+                const normT = Math.min(elapsed / duration, 1.0);
+                const easeT = 1 - Math.pow(1 - normT, 4);
+                launcherVisualState.current = launcherStartT.current + (targetLauncher - launcherStartT.current) * easeT;
+                if (normT >= 1.0) {
+                    launcherAnimStartTime.current = 0;
+                }
+            } else {
+                launcherVisualState.current = targetLauncher;
+            }
+            const tLauncher = Math.max(0, Math.min(1, launcherVisualState.current));
+
+            // 2. Calculate app visibility / 3D car dragging progress
+            if (dragProgressRef.current !== null) {
+                appVisualState.current = dragProgressRef.current;
+                appAnimStartTime.current = 0;
+            } else {
+                const targetApp = activeApp !== null ? 0 : 1;
+                if (appAnimStartTime.current > 0) {
+                    const elapsed = performance.now() - appAnimStartTime.current;
+                    const normT = Math.min(elapsed / duration, 1.0);
+                    const easeT = 1 - Math.pow(1 - normT, 4);
+                    appVisualState.current = appStartT.current + (targetApp - appStartT.current) * easeT;
+                    if (normT >= 1.0) {
+                        appAnimStartTime.current = 0;
+                    }
+                } else {
+                    appVisualState.current = targetApp;
+                }
+            }
+            const tApp = Math.max(0, Math.min(1, appVisualState.current));
+
+            // 3. Update DOM styles directly on navigateToolRef
+            if (navigateToolRef.current) {
+                navigateToolRef.current.style.transition = 'none';
+
+                const winWidth = window.innerWidth;
+                const isStacked = winWidth < 900;
+                const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, winWidth - 32) : playerFloatingWidth;
+                const currentNavigateToolWidth = isStacked ? Math.min(responsiveNavigateToolWidth, winWidth - 32) : responsiveNavigateToolWidth;
+
+                // Home position (tLauncher = 0):
+                const homePercent = 50;
+                const homeOffsetPx = isStacked
+                    ? -(currentNavigateToolWidth / 2)
+                    : (currentFloatingPlayerWidth / 2 - currentNavigateToolWidth / 2 + 8);
+
+                // Launcher open position (tLauncher = 1):
+                const launcherPercent = 100;
+                const launcherOffsetPx = -(playerDockedLeft + 90 + currentNavigateToolWidth);
+
+                // Fluid linear interpolation between home and launcher position
+                const currentPercent = homePercent + (launcherPercent - homePercent) * tLauncher;
+                const currentOffsetPx = homeOffsetPx + (launcherOffsetPx - homeOffsetPx) * tLauncher;
+
+                // Bottom position
+                const homeBottom = isStacked ? (playerFloatingBottom + playerFloatingHeight + 12) : playerFloatingBottom;
+                const launcherBottom = playerFloatingBottom;
+                const currentBottomPx = homeBottom + (launcherBottom - homeBottom) * tLauncher;
+
+                // Opacity and Slide based on tApp
+                const threshold = 0.2;
+                const endPoint = 0.85;
+                let visibility = 0;
+                if (tApp > threshold) {
+                    visibility = Math.min(1, Math.max(0, (tApp - threshold) / (endPoint - threshold)));
+                }
+                const slideX = (1 - visibility) * 40;
+
+                navigateToolRef.current.style.position = 'fixed';
+                navigateToolRef.current.style.zIndex = '1000';
+                navigateToolRef.current.style.bottom = `${currentBottomPx / 16}rem`;
+                navigateToolRef.current.style.left = `calc(${currentPercent}% + ${currentOffsetPx / 16}rem)`;
+                navigateToolRef.current.style.opacity = `${visibility}`;
+                navigateToolRef.current.style.transform = `translateX(${slideX / 16}rem)`;
+                navigateToolRef.current.style.pointerEvents = (visibility > 0.8 && activeApp === null) ? 'auto' : 'none';
+            }
+
+            animationFrameId = requestAnimationFrame(loop);
         };
-        const homeLeft = isStacked
-            ? `calc(50% - ${(currentNavigateToolWidth / 2) / 16}rem)`
-            : `calc(50% + ${(currentFloatingPlayerWidth / 2 - currentNavigateToolWidth / 2 + 8) / 16}rem)`;
-            
-        const launcherOpenLeft = `calc(100% - ${(playerDockedLeft + 90) / 16}rem - ${(currentNavigateToolWidth) / 16}rem)`;
-        
-        if (isAppLauncherOpen) return { ...baseStyle, left: launcherOpenLeft };
-        
-        return { ...baseStyle, left: homeLeft };
-    }, [isAppLauncherOpen, playerFloatingBottom, playerFloatingHeight, playerDockedLeft, playerFloatingWidth, navigateToolWidth, windowWidth]);
+
+        loop();
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [
+        isAppLauncherOpen, 
+        activeApp, 
+        playerFloatingBottom, 
+        playerFloatingHeight, 
+        playerDockedLeft, 
+        playerFloatingWidth, 
+        responsiveNavigateToolWidth, 
+        sceneTransitionSpeed
+    ]);
   
   const recentAppsToShow = recentlyOpened.filter(id => !dockApps.includes(id)).slice(0, 2);
 
@@ -675,8 +749,7 @@ function AppContent() {
         {/* NAVIGATE TOOL CONTAINER */}
         <NavigationWidget 
             navigateToolRef={navigateToolRef}
-            navigateToolStyle={navigateToolStyle}
-            navigateToolWidth={navigateToolWidth}
+            navigateToolWidth={responsiveNavigateToolWidth}
             widgetBgColor={widgetBgColor}
             dayPlayerButtonColor={dayPlayerButtonColor}
             nightPlayerButtonColor={nightPlayerButtonColor}

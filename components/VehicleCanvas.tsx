@@ -575,10 +575,20 @@ function SceneController({
       interactTimeout.current = window.setTimeout(() => {
         if (!isAppOpen) {
           snapshotHomePos.current.copy(camera.position);
-          if (controls)
-            snapshotHomeTarget.current.copy((controls as any).target);
-          isRestoringHome.current = true;
-          restoreAnimProgress.current = 0;
+          
+          // Previeni animazioni microscopiche se la camera è già arrivata a destinazione
+          const ePos = new THREE.Vector3(
+            localHomeConfig.cameraPos.x as number,
+            localHomeConfig.cameraPos.y as number,
+            localHomeConfig.cameraPos.z as number
+          );
+          
+          if (snapshotHomePos.current.distanceTo(ePos) > 0.05) {
+            if (controls)
+              snapshotHomeTarget.current.copy((controls as any).target);
+            isRestoringHome.current = true;
+            restoreAnimProgress.current = 0;
+          }
         }
       }, 3000);
     };
@@ -635,6 +645,15 @@ function SceneController({
     }
   };
 
+  // Helper deterministico per azzerare completamente slancio e inerzia residua di OrbitControls
+  const resetOrbitMomentum = (controls: any) => {
+    if (!controls) return;
+    const prevDamping = controls.enableDamping;
+    controls.enableDamping = false;
+    controls.update();
+    controls.enableDamping = prevDamping;
+  };
+
   // Helper per interpolare tutto (Camera e Modello) con rispetto rigoroso dei lati della vettura
   const applyInterpolation = (
     startCamPos: THREE.Vector3,
@@ -650,6 +669,22 @@ function SceneController({
     t: number,
     ctrl: any
   ) => {
+    if (t >= 1.0) {
+      camera.position.copy(endCamPos);
+      camera.lookAt(endCamTarget);
+      if (ctrl) {
+        ctrl.target.copy(endCamTarget);
+        ctrl.enabled = false;
+      }
+      if (modelRef.current) {
+        modelRef.current.scale.set(endScale, endScale, endScale);
+        modelRef.current.position.copy(endModelPos);
+        modelRef.current.quaternion.copy(endQuat);
+        syncLights();
+      }
+      return;
+    }
+
     // 1. Camera Target (Lineare)
     vec3C.lerpVectors(startCamTarget, endCamTarget, t);
 
@@ -802,11 +837,20 @@ function SceneController({
       isRestoringHome.current = false;
       if (ctrl) ctrl.enableRotate = false;
     } else if (clickOccurred) {
+      if (interactTimeout.current) {
+        clearTimeout(interactTimeout.current);
+        interactTimeout.current = null;
+      }
+      
       // CANALE 2: CAMBIO STATO DA CLICK (Transizione automatica morbida dal valore corrente)
       transitionMode.current = "auto";
       animStartTime.current = performance.now();
       isRestoringHome.current = false;
-      if (ctrl) ctrl.enableRotate = false;
+      if (ctrl) {
+        ctrl.enableRotate = false;
+        resetOrbitMomentum(ctrl);
+        ctrl.enabled = false;
+      }
 
       // Congela istantaneamente la posizione reale prima di muoversi (CURRENT VISUAL STATE)
       frozenCamPos.current.copy(camera.position);
@@ -832,36 +876,44 @@ function SceneController({
       currentP.current = targetP;
 
       if (!isAppOpen) {
-        // FORZATURA DEI VALORI REALI HOME A SCHERMO INTERO E UPDATE DELLA MATRICE
-        camera.position.set(
+        const ePos = new THREE.Vector3(
           localHomeConfig.cameraPos.x as number,
           localHomeConfig.cameraPos.y as number,
-          localHomeConfig.cameraPos.z as number,
+          localHomeConfig.cameraPos.z as number
+        );
+        const eTarget = new THREE.Vector3(
+          localHomeConfig.cameraTarget.x as number,
+          localHomeConfig.cameraTarget.y as number,
+          localHomeConfig.cameraTarget.z as number
+        );
+        const eModelPos = new THREE.Vector3(
+          localHomeConfig.modelPos.x as number,
+          localHomeConfig.modelPos.y as number,
+          localHomeConfig.modelPos.z as number
+        );
+
+        applyInterpolation(
+          camera.position,
+          ctrl ? (ctrl as any).target : new THREE.Vector3(),
+          modelRef.current?.position || new THREE.Vector3(),
+          modelRef.current?.scale.x || 1.55,
+          modelRef.current?.quaternion || new THREE.Quaternion(),
+          ePos,
+          eTarget,
+          eModelPos,
+          localHomeConfig.modelScale,
+          quatTargetHome,
+          1.0,
+          ctrl
         );
         camera.updateProjectionMatrix();
         if (ctrl) {
-          ctrl.target.set(
-            localHomeConfig.cameraTarget.x as number,
-            localHomeConfig.cameraTarget.y as number,
-            localHomeConfig.cameraTarget.z as number,
-          );
+          resetOrbitMomentum(ctrl);
+          camera.position.copy(ePos);
+          camera.lookAt(eTarget);
+          ctrl.target.copy(eTarget);
           ctrl.enableRotate = true;
-          ctrl.update();
-        }
-        if (modelRef.current) {
-          modelRef.current.scale.set(
-            localHomeConfig.modelScale,
-            localHomeConfig.modelScale,
-            localHomeConfig.modelScale,
-          );
-          modelRef.current.quaternion.copy(quatTargetHome);
-          vec3B.set(
-            localHomeConfig.modelPos.x,
-            localHomeConfig.modelPos.y,
-            localHomeConfig.modelPos.z,
-          );
-          modelRef.current.position.copy(vec3B);
-          syncLights();
+          ctrl.enabled = true;
         }
       }
     }
@@ -921,37 +973,6 @@ function SceneController({
         isAppOpen ? localAppOpenConfig.cameraPos.z : localHomeConfig.cameraPos.z,
       );
 
-      if (normT >= 1.0) {
-        transitionMode.current = "idle";
-        p = autoTargetP.current;
-        currentP.current = p;
-        if (!isAppOpen) {
-          camera.position.copy(endPos);
-          camera.updateProjectionMatrix();
-          if (ctrl) {
-            ctrl.target.copy(endTarget);
-            ctrl.enableRotate = true;
-            ctrl.enabled = true;
-            ctrl.update();
-          }
-          if (modelRef.current) {
-            modelRef.current.scale.set(
-              localHomeConfig.modelScale,
-              localHomeConfig.modelScale,
-              localHomeConfig.modelScale,
-            );
-            modelRef.current.quaternion.copy(quatTargetHome);
-            vec3B.set(
-              localHomeConfig.modelPos.x,
-              localHomeConfig.modelPos.y,
-              localHomeConfig.modelPos.z,
-            );
-            modelRef.current.position.copy(vec3B);
-            syncLights();
-          }
-        }
-      }
-
       const endScale = isAppOpen
         ? localAppOpenConfig.modelScale
         : localHomeConfig.modelScale;
@@ -962,20 +983,50 @@ function SceneController({
         isAppOpen ? localAppOpenConfig.modelPos.z : localHomeConfig.modelPos.z,
       );
 
-      applyInterpolation(
-        frozenCamPos.current,
-        frozenCamTarget.current,
-        frozenModelPos.current,
-        frozenModelScale.current,
-        frozenModelRot.current,
-        endPos,
-        endTarget,
-        endModelPos,
-        endScale,
-        endQuat,
-        easeT,
-        ctrl
-      );
+      if (normT >= 1.0) {
+        transitionMode.current = "idle";
+        p = autoTargetP.current;
+        currentP.current = p;
+        
+        applyInterpolation(
+          frozenCamPos.current,
+          frozenCamTarget.current,
+          frozenModelPos.current,
+          frozenModelScale.current,
+          frozenModelRot.current,
+          endPos,
+          endTarget,
+          endModelPos,
+          endScale,
+          endQuat,
+          1.0,
+          ctrl
+        );
+        
+        if (ctrl && !isAppOpen) {
+          resetOrbitMomentum(ctrl);
+          camera.position.copy(endPos);
+          camera.lookAt(endTarget);
+          ctrl.target.copy(endTarget);
+          ctrl.enableRotate = true;
+          ctrl.enabled = true;
+        }
+      } else {
+        applyInterpolation(
+          frozenCamPos.current,
+          frozenCamTarget.current,
+          frozenModelPos.current,
+          frozenModelScale.current,
+          frozenModelRot.current,
+          endPos,
+          endTarget,
+          endModelPos,
+          endScale,
+          endQuat,
+          easeT,
+          ctrl
+        );
+      }
     } else if (transitionMode.current === "drag") {
       let rawP = dragProgress.current as number;
       if (typeof rawP !== "number" || isNaN(rawP)) {
@@ -1080,23 +1131,45 @@ function SceneController({
         );
       } else {
         isRestoringHome.current = false;
-        vec3A.set(
+        
+        const ePos = new THREE.Vector3(
           localHomeConfig.cameraPos.x as number,
           localHomeConfig.cameraPos.y as number,
-          localHomeConfig.cameraPos.z as number,
+          localHomeConfig.cameraPos.z as number
         );
-        camera.position.copy(vec3A);
-        camera.updateProjectionMatrix();
+        const eTarget = new THREE.Vector3(
+          localHomeConfig.cameraTarget.x as number,
+          localHomeConfig.cameraTarget.y as number,
+          localHomeConfig.cameraTarget.z as number
+        );
+        const eModelPos = new THREE.Vector3(
+          localHomeConfig.modelPos.x as number,
+          localHomeConfig.modelPos.y as number,
+          localHomeConfig.modelPos.z as number
+        );
+
+        applyInterpolation(
+          snapshotHomePos.current,
+          snapshotHomeTarget.current,
+          eModelPos,
+          localHomeConfig.modelScale,
+          quatTargetHome,
+          ePos,
+          eTarget,
+          eModelPos,
+          localHomeConfig.modelScale,
+          quatTargetHome,
+          1.0,
+          ctrl
+        );
+
         if (ctrl) {
-          vec3B.set(
-            localHomeConfig.cameraTarget.x as number,
-            localHomeConfig.cameraTarget.y as number,
-            localHomeConfig.cameraTarget.z as number,
-          );
-          ctrl.target.copy(vec3B);
+          resetOrbitMomentum(ctrl);
+          camera.position.copy(ePos);
+          camera.lookAt(eTarget);
+          ctrl.target.copy(eTarget);
           ctrl.enableRotate = true;
           ctrl.enabled = true;
-          ctrl.update();
         }
       }
       p = 1;
@@ -1114,36 +1187,13 @@ function SceneController({
       const cw = container.clientWidth;
       const ch = container.clientHeight;
 
-      let visibleWidth = cw;
-
-      if (cw >= 768) {
-        // Cerca il pannello attivo/visibile nel DOM
-        const panels = document.querySelectorAll('.spotify-app-panel');
-        let activePanelRect: DOMRect | null = null;
-        
-        for (let i = 0; i < panels.length; i++) {
-          const el = panels[i] as HTMLElement;
-          const rect = el.getBoundingClientRect();
-          // Il pannello è considerato visibile e sul lato destro se ha larghezza > 0 e rect.left < cw
-          if (rect.width > 0 && rect.left < cw && rect.left > 0) {
-            activePanelRect = rect;
-            break;
-          }
-        }
-
-        if (activePanelRect) {
-          visibleWidth = Math.round(activePanelRect.left);
-        } else if (isAppOpen) {
-          // Fallback se il pannello non ha ancora calcolato il rect ma l'app è aperta
-          let minWidthPercent = 0.40;
-          if (cw < 1024) minWidthPercent = 0.50;
-          else if (cw < 1280) minWidthPercent = 0.35;
-          visibleWidth = Math.round(cw * minWidthPercent + cw * (1 - minWidthPercent) * p);
-        } else {
-          visibleWidth = cw;
-        }
-      }
-
+      let minWidthPercent = 0.40;
+      if (cw < 640) minWidthPercent = 0.15;
+      else if (cw < 768) minWidthPercent = 0.25;
+      else if (cw < 1024) minWidthPercent = 0.50;
+      else if (cw < 1280) minWidthPercent = 0.35;
+      
+      let visibleWidth = Math.round(cw * minWidthPercent + cw * (1 - minWidthPercent) * p);
       visibleWidth = Math.max(1, Math.min(cw, visibleWidth));
 
       // Forza il ridimensionamento fisico e l'aggiornamento degli stili CSS del Canvas ad ogni singolo frame
@@ -1589,12 +1639,36 @@ function VehicleCanvas({
 
   const [renderIdle, setRenderIdle] = useState(false);
   useEffect(() => {
-    if (isAppOpen) {
-      const timer = setTimeout(() => setRenderIdle(true), sceneTransitionSpeed * 1000 + 100);
-      return () => clearTimeout(timer);
-    } else {
-      setRenderIdle(false);
-    }
+    let timer: NodeJS.Timeout;
+    
+    const checkIdleState = () => {
+      if (isAppOpen) {
+        timer = setTimeout(() => setRenderIdle(true), sceneTransitionSpeed * 1000 + 100);
+      } else {
+        setRenderIdle(false);
+      }
+    };
+    
+    checkIdleState();
+
+    const handleDragState = (e: Event) => {
+      const customEvent = e as CustomEvent<boolean>;
+      if (customEvent.detail === true) {
+        // Dragging started, wake up the render loop immediately
+        clearTimeout(timer);
+        setRenderIdle(false);
+      } else {
+        // Dragging ended, check if we need to idle again
+        checkIdleState();
+      }
+    };
+
+    window.addEventListener('app-drag-state', handleDragState);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('app-drag-state', handleDragState);
+    };
   }, [isAppOpen, sceneTransitionSpeed]);
 
   // Generate a procedural noise/grain texture to break up the perfect glass reflections
@@ -1888,9 +1962,9 @@ function VehicleCanvas({
           makeDefault
           enablePan={false}
           target={defaultOrbitTarget}
-          minPolarAngle={Math.PI / 2.8}
+          minPolarAngle={Math.PI / 4}
           maxPolarAngle={Math.PI / 2 - 0.035}
-          minDistance={minOrbitDistance}
+          minDistance={minOrbitDistance * (typeof window !== "undefined" && window.innerWidth < 1024 ? 0.7 : 1.0)}
           maxDistance={maxOrbitDistance}
           enableDamping={true}
           dampingFactor={0.035}
