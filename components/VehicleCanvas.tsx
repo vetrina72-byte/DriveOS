@@ -566,12 +566,11 @@ function SceneController({
     };
 
     const onEnd = () => {
-      // Rilasciamo i controlli e le logiche immediatamente
       setInteracting(false);
       onInteractionChange?.(false);
 
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
-      // Iniziamo il contatore per ripristinare la home (3 secondi)
+      // Iniziamo il contatore per ripristinare la home (4 secondi di inattività)
       interactTimeout.current = window.setTimeout(() => {
         if (!isAppOpen) {
           snapshotHomePos.current.copy(camera.position);
@@ -583,29 +582,47 @@ function SceneController({
             localHomeConfig.cameraPos.z as number
           );
           
-          if (snapshotHomePos.current.distanceTo(ePos) > 0.05) {
+          if (snapshotHomePos.current.distanceTo(ePos) > 0.08) {
             if (controls)
               snapshotHomeTarget.current.copy((controls as any).target);
             isRestoringHome.current = true;
             restoreAnimProgress.current = 0;
           }
         }
-      }, 3000);
+      }, 4000);
+    };
+
+    const onWheel = () => {
+      onStart();
+      if (interactTimeout.current) clearTimeout(interactTimeout.current);
+      interactTimeout.current = window.setTimeout(onEnd, 2000);
     };
 
     canvasEl.addEventListener("pointerdown", onStart);
     canvasEl.addEventListener("pointerup", onEnd);
     canvasEl.addEventListener("pointercancel", onEnd);
-    window.addEventListener("pointerup", onEnd); // cattura anche i rilasci fuori dal canvas
+    canvasEl.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("pointerup", onEnd);
+
+    const ctrl = controls as any;
+    if (ctrl && typeof ctrl.addEventListener === "function") {
+      ctrl.addEventListener("start", onStart);
+      ctrl.addEventListener("end", onEnd);
+    }
 
     return () => {
       canvasEl.removeEventListener("pointerdown", onStart);
       canvasEl.removeEventListener("pointerup", onEnd);
       canvasEl.removeEventListener("pointercancel", onEnd);
+      canvasEl.removeEventListener("wheel", onWheel);
       window.removeEventListener("pointerup", onEnd);
+      if (ctrl && typeof ctrl.removeEventListener === "function") {
+        ctrl.removeEventListener("start", onStart);
+        ctrl.removeEventListener("end", onEnd);
+      }
       if (interactTimeout.current) clearTimeout(interactTimeout.current);
     };
-  }, [controls, gl.domElement, isAppOpen, onInteractionChange]);
+  }, [controls, gl.domElement, isAppOpen, onInteractionChange, localHomeConfig.cameraPos.x, localHomeConfig.cameraPos.y, localHomeConfig.cameraPos.z]);
 
   const prevIsAppOpen = useRef(isAppOpen);
   const transitionMode = useRef<"idle" | "auto" | "drag">("idle");
@@ -908,10 +925,10 @@ function SceneController({
         );
         camera.updateProjectionMatrix();
         if (ctrl) {
-          resetOrbitMomentum(ctrl);
           camera.position.copy(ePos);
           camera.lookAt(eTarget);
           ctrl.target.copy(eTarget);
+          resetOrbitMomentum(ctrl);
           ctrl.enableRotate = true;
           ctrl.enabled = true;
         }
@@ -1004,10 +1021,10 @@ function SceneController({
         );
         
         if (ctrl && !isAppOpen) {
-          resetOrbitMomentum(ctrl);
           camera.position.copy(endPos);
           camera.lookAt(endTarget);
           ctrl.target.copy(endTarget);
+          resetOrbitMomentum(ctrl);
           ctrl.enableRotate = true;
           ctrl.enabled = true;
         }
@@ -1164,10 +1181,10 @@ function SceneController({
         );
 
         if (ctrl) {
-          resetOrbitMomentum(ctrl);
           camera.position.copy(ePos);
           camera.lookAt(eTarget);
           ctrl.target.copy(eTarget);
+          resetOrbitMomentum(ctrl);
           ctrl.enableRotate = true;
           ctrl.enabled = true;
         }
@@ -1967,9 +1984,9 @@ function VehicleCanvas({
           minDistance={minOrbitDistance * (typeof window !== "undefined" && window.innerWidth < 1024 ? 0.7 : 1.0)}
           maxDistance={maxOrbitDistance}
           enableDamping={true}
-          dampingFactor={0.035}
+          dampingFactor={0.06}
           rotateSpeed={0.55}
-          zoomSpeed={0.6}
+          zoomSpeed={0.85}
           enableZoom={true}
           enableRotate={!isAppOpen && dragProgress.current === null}
         />

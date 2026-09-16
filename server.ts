@@ -6,13 +6,12 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { getSession, setSession, createRelaySession, updateRelaySession, getRelaySession } from './lib/sessionStore.js';
+import { getSession, setSession, deleteSession, createRelaySession, updateRelaySession, getRelaySession } from './lib/sessionStore.js';
 import { ensureSpotifyToken } from './lib/spotifySessionManager.js';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const appDir = process.cwd();
 
 async function startServer() {
   const app = express();
@@ -134,10 +133,10 @@ async function startServer() {
       if (relayId) {
         await updateRelaySession(relayId, { authenticated: false, error: String(error) });
       }
-      return res.sendFile(path.join(__dirname, 'callback.html'));
+      return res.sendFile(path.join(appDir, 'callback.html'));
     }
     if (!code || !sessionId) {
-      return res.sendFile(path.join(__dirname, 'callback.html'));
+      return res.sendFile(path.join(appDir, 'callback.html'));
     }
 
     const sid = String(sessionId);
@@ -242,7 +241,7 @@ async function startServer() {
       }
       
       console.log(`[SPOTIFY CALLBACK] Successfully authenticated session: ${sid}`);
-      return res.sendFile(path.join(__dirname, 'callback.html'));
+      return res.sendFile(path.join(appDir, 'callback.html'));
 
     } catch (exchangeError: any) {
       console.error('Error exchanging token:', exchangeError.response ? exchangeError.response.data : exchangeError.message);
@@ -250,7 +249,7 @@ async function startServer() {
       if (effectiveRelayId) {
         await updateRelaySession(effectiveRelayId, { authenticated: false, error: 'auth_failed' });
       }
-      return res.sendFile(path.join(__dirname, 'callback.html'));
+      return res.sendFile(path.join(appDir, 'callback.html'));
     }
   });
 
@@ -609,9 +608,10 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     // Serve static files in production
-    app.use(express.static(path.join(__dirname, 'dist')));
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 

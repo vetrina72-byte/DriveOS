@@ -66,6 +66,7 @@ const DockButton = ({ icon: Icon, onClick, label, colorClasses = 'text-gray-400 
 type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  if (!hex || typeof hex !== 'string') return null;
   const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
   hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -309,6 +310,8 @@ function AppContent() {
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('#virtual-keyboard')) return;
+      if (target.closest('#search-panel-container')) return;
+      if (target.closest('#navigate-tool-container')) return;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       setIsKeyboardVisible(false);
       setKeyboardTarget(null);
@@ -733,6 +736,7 @@ function AppContent() {
             onClose={handleCloseMaps} 
             onInteractionStart={handleMapsInteractionStart} 
             onDragProgress={handleDragProgress}
+            spotifyPlayerBottom={spotifyPlayerBottom}
         />
         <SpotifyApp isOpen={activeApp === 'spotify'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} isMapsLayered={isMapsLayered || isMapLayeredBehind} onDragProgress={handleSpotifyDrag} layeredAppTopOffset={layeredAppTopOffset} />
         <TheaterApp isOpen={activeApp === 'theater'} onClose={handleSubAppClose} isNight={useDarkTheme} spotifyPlayerTop={spotifyPlayerTop} spotifyPlayerBottom={spotifyPlayerBottom} onDragProgress={handleSpotifyDrag} isMapsLayered={isMapsLayered || isMapLayeredBehind} layeredAppTopOffset={layeredAppTopOffset} />

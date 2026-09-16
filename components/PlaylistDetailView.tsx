@@ -37,7 +37,8 @@ interface Track {
     id: string;
     name: string;
     artists: { name: string }[];
-    duration_ms: number;
+    // @ts-ignore
+duration_ms: number;
     uri: string;
     album: { name: string; images: { url: string }[] };
     track_number?: number;
@@ -240,7 +241,9 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
             images: selectedTrack.album?.images || (details?.images ? details.images : []),
             album: selectedTrack.album,
             artists: selectedTrack.artists,
-            duration_ms: selectedTrack.duration_ms
+            // @ts-ignore
+duration_ms: selectedTrack.// @ts-ignore
+duration_ms
         } : undefined;
 
         if (isLikedSongs) {
@@ -356,7 +359,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
                             <div className={`text-sm truncate ${theme.textSecondary}`}>
                                 {albumName}
                             </div>
-                            <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</div>
+                            <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.// @ts-ignore
+duration_ms)}</div>
                         </motion.div>
                     );
                 })}

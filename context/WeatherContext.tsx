@@ -155,12 +155,24 @@ export const WeatherProvider: React.FC<{ children: React.ReactNode }> = ({ child
       try {
           const [weatherResponse, locationResponse] = await Promise.all([
               fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`),
-              fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`)
+              fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`).catch(() => null)
           ]);
+          
+          if (!weatherResponse.ok) {
+              throw new Error(`Meteo non disponibile (${weatherResponse.status})`);
+          }
+          
           const weatherApiData = await weatherResponse.json();
-          const locationData = await locationResponse.json();
+          let locationName = 'Posizione attuale';
+          if (locationResponse && locationResponse.ok) {
+              try {
+                  const locationData = await locationResponse.json();
+                  locationName = locationData.address?.city || locationData.address?.town || locationData.address?.village || locationData.address?.county || 'Posizione attuale';
+              } catch (e) {
+                  // Ignore JSON parse errors from rate-limited geocoding responses
+              }
+          }
           if (weatherApiData.error) throw new Error(`Open-Meteo Error: ${weatherApiData.reason}`);
-          const locationName = locationData.address?.city || locationData.address?.town || locationData.address?.village || locationData.address?.county || 'Current Location';
           
           const mappedData: Omit<WeatherData, 'lastUpdated'> = {
               locationName,

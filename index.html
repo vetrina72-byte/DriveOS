@@ -2,43 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
-    "react-dom/server": "https://esm.sh/react-dom@^19.1.1/server",
-    "react/": "https://esm.sh/react@^19.1.1/",
-    "react": "https://esm.sh/react@^19.1.1",
-    "path": "https://esm.sh/path@^0.12.7",
-    "@react-three/drei": "https://esm.sh/@react-three/drei@^10.6.1",
-    "three": "https://esm.sh/three@^0.179.1",
-    "@react-three/fiber": "https://esm.sh/@react-three/fiber@^9.3.0",
-    "vite": "https://esm.sh/vite@^7.1.1",
-    "url": "https://esm.sh/url@^0.11.4",
-    "react-icons/": "https://esm.sh/react-icons@^5.5.0/",
-    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
-    "leaflet": "https://esm.sh/leaflet@^1.9.4",
-    "dotenv/": "https://esm.sh/dotenv@^17.2.1/",
-    "cors": "https://esm.sh/cors@^2.8.5",
-    "axios": "https://esm.sh/axios@^1.11.0",
-    "express": "https://esm.sh/express@^5.1.0",
-    "react-dom": "https://esm.sh/react-dom@^19.1.1",
-    "framer-motion": "https://esm.sh/framer-motion@^11.3.11",
-    "electron": "https://esm.sh/electron@^37.3.1",
-    "electron-is-dev": "https://esm.sh/electron-is-dev@^3.0.1",
-    "fs": "https://esm.sh/fs@^0.0.1-security",
-    "react-youtube": "https://esm.sh/react-youtube@^10.1.0",
-    "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
-    "cookie-parser": "https://aistudiocdn.com/cookie-parser@^1.4.7",
-    "@vercel/kv": "https://aistudiocdn.com/@vercel/kv@^3.0.0",
-    "undici": "https://esm.sh/undici@^6.19.2",
-    "ioredis": "https://aistudiocdn.com/ioredis@^5.8.1"
-  }
-}
-</script>
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mio Infotainment</title>
+  <title>Drive OS</title>
+  <meta name="description" content="A modern, Tesla-like user interface for a vehicle, featuring 3D model interaction, real-time map, climate controls, media player, and voice command capabilities." />
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -311,6 +278,10 @@
     }
     .ui-scaler > * {
       pointer-events: auto;
+    }
+    .ui-scaler > *.pointer-events-none,
+    .ui-scaler .pointer-events-none {
+      pointer-events: none !important;
     }
 
     /* Music Player Styles */

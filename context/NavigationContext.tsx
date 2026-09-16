@@ -55,7 +55,16 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
   const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const [arrivalMessage, setArrivalMessage] = useState<string | null>(null);
   const arrivalTimeoutRef = useRef<number | null>(null);
-  const [tripInfo, setTripInfo] = useState<TripInfo | null>(null);
+  const [tripInfo, setTripInfoState] = useState<TripInfo | null>(null);
+
+  const setTripInfo = useCallback((info: TripInfo | null) => {
+    setTripInfoState((prev) => {
+      if (prev === null && info === null) return null;
+      if (prev && info && prev.time === info.time && prev.distance === info.distance) return prev;
+      return info;
+    });
+  }, []);
+
   const [throttledPosition, setThrottledPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [homeLocation, setHomeLocation] = useState<LocationData | null>(null);
   const [workLocation, setWorkLocation] = useState<LocationData | null>(null);
@@ -87,33 +96,41 @@ export function NavigationProvider({ children, onSelectDestination, onMapInterac
 
   // Set up geolocation watching
   useEffect(() => {
-    if (navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude, heading } = position.coords;
-          const newPos = { lat: latitude, lng: longitude };
-          
-          TelemetryStore.setPosition(newPos);
-          
-          if (heading !== null && heading !== undefined) {
-            let prevBearing = TelemetryStore.bearing;
-            let diff = heading - prevBearing;
-            if (diff > 180) diff -= 360;
-            if (diff < -180) diff += 360;
-            TelemetryStore.setBearing((prevBearing + diff * 0.3 + 360) % 360);
-          }
-          
-          lastPositionRef.current = newPos;
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      const handlePos = (position: GeolocationPosition) => {
+        const { latitude, longitude, heading } = position.coords;
+        const newPos = { lat: latitude, lng: longitude };
+        
+        TelemetryStore.setPosition(newPos);
+        
+        if (heading !== null && heading !== undefined && !isNaN(heading)) {
+          let prevBearing = TelemetryStore.bearing;
+          let diff = heading - prevBearing;
+          if (diff > 180) diff -= 360;
+          if (diff < -180) diff += 360;
+          TelemetryStore.setBearing((prevBearing + diff * 0.3 + 360) % 360);
+        }
+        
+        lastPositionRef.current = newPos;
 
-          // Throttled update for global context
-          const now = Date.now();
-          if (now - lastThrottledTimeRef.current > 5000) {
-            setThrottledPosition(newPos);
-            lastThrottledTimeRef.current = now;
-          }
-        },
-        (error) => console.warn(error.message),
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+        // Throttled update for global context
+        const now = Date.now();
+        if (now - lastThrottledTimeRef.current > 4000 || !lastThrottledTimeRef.current) {
+          setThrottledPosition(newPos);
+          lastThrottledTimeRef.current = now;
+        }
+      };
+
+      navigator.geolocation.getCurrentPosition(
+        handlePos,
+        (err) => console.warn('[GPS Init] getCurrentPosition error:', err.message),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+
+      const watchId = navigator.geolocation.watchPosition(
+        handlePos,
+        (error) => console.warn('[GPS Watch] error:', error.message),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
       );
       return () => navigator.geolocation.clearWatch(watchId);
     }

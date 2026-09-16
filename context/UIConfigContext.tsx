@@ -3,7 +3,7 @@ import type { SceneConfig, HeadlightConfig } from '../components/VehicleCanvas';
 import type { SceneColors } from '../App';
 import { initialSceneColors } from '../App';
 
-const DEFAULT_HOME_CONFIG: SceneConfig = {
+export const DEFAULT_HOME_CONFIG: SceneConfig = {
     cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
     cameraTarget: { x: -1.30, y: -0.40, z: 0.05 }, 
     modelPos: { x: -1.40, y: -1.05, z: 0.15 },
@@ -11,10 +11,10 @@ const DEFAULT_HOME_CONFIG: SceneConfig = {
     modelScale: 2.68,
 };
 
-const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
+export const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
   cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
-  modelPos: { x: -4.90, y: -0.15, z: -0.40 }, 
+  modelPos: { x: -4.90, y: -0.15, z: 0.20 }, 
   modelRot: { x: 0.01, y: -1.19, z: 0.01 },
   modelScale: 1.57,
 };

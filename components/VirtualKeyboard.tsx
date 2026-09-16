@@ -73,6 +73,7 @@ const Key: React.FC<KeyProps> = ({
             }}
             // Prevents the button from stealing focus when clicked, keeping the input active.
             onMouseDown={(e) => e.preventDefault()}
+            onTouchStart={(e) => e.preventDefault()}
             className={finalClassName}
             style={{ 
                 flex, 
@@ -431,6 +432,7 @@ const VirtualKeyboard = ({
                 <motion.div
                     key="keyboard-backdrop"
                     className="fixed inset-0 z-[9000] flex items-end pointer-events-none"
+                    style={{ pointerEvents: 'none' }}
                     initial={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     animate={{ backgroundColor: 'rgba(0,0,0,0)' }}
                     exit={{ backgroundColor: 'rgba(0,0,0,0)' }}
@@ -444,7 +446,9 @@ const VirtualKeyboard = ({
                         exit={{ y: '100%' }}
                         transition={{ type: 'spring', stiffness: 400, damping: 40 }}
                         onClick={(e) => e.stopPropagation()}
-                        style={keyboardStyle}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        style={{ ...keyboardStyle, pointerEvents: 'auto' }}
                     >
                         <div className="flex h-full w-full gap-6">
                             <div className="flex flex-col flex-[3.5] h-full" style={{ gap: `${(virtualKeyboardKeyGapY) / 16}rem` }}>

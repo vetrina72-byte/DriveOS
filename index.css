@@ -74,3 +74,31 @@ body {
   }
 }
 
+@keyframes dest-pin-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes dest-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.dest-pin-animated {
+  animation: dest-pin-bounce 2.4s ease-in-out infinite;
+}
+
+.dest-pulse-ring {
+  animation: dest-pulse 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+

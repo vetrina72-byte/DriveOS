@@ -112,6 +112,11 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
         async function loadData() {
             if (!showId) return;
             
+            if (!showId) {
+                setLoading(false);
+                return;
+            }
+
             setLoading(true);
             setErrorMessage(null);
             setShow(null);
@@ -121,7 +126,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
 
             try {
                 // 1. Fetch Dettagli Show/Playlist (Header)
-                const cleanId = showId.replace(/^spotify:(show|playlist|episode):/, '').trim();
+                const cleanId = (showId || '').replace(/^spotify:(show|playlist|episode):/, '').trim();
                 try {
                     // Try to fetch as show first, then fallback to playlist if it fails
                     const showRes = await apiClient.get(`/shows/${cleanId}?market=IT`);
@@ -186,7 +191,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     };
 
     // 1. OPTIMISTIC UPDATE: Inietta immediatamente i dati del nuovo episodio con flag di caricamento
-    const playEpisode = async (episode: PodcastEpisode) => {
+    const playEpisode = async (episode: any) => {
         if (!episode?.uri) return;
 
         const optimisticTrack: any = {
@@ -235,7 +240,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
 
         // 2. Esegui la chiamata API reale
         try {
-            const deviceId = localStorage.getItem('spotify_device_id') || playerState?.device?.id;
+            const deviceId = localStorage.getItem('spotify_device_id') || (playerState as any)?.device?.id;
             await apiClient.put('/v1/me/player/play', 
                 { uris: [episode.uri] },
                 { params: deviceId ? { device_id: deviceId } : undefined }
@@ -247,7 +252,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
     };
 
     // 2. Debounce sul pulsante di Play (Prevenzione "Audio Doppio")
-    const handlePlayClick = async (episode: PodcastEpisode) => {
+    const handlePlayClick = async (episode: any) => {
         if (!episode?.uri) return;
 
         const isCurrentTrack = Boolean(
@@ -287,7 +292,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
                 id: show.id,
                 name: show.name,
                 publisher: show.publisher,
-                images: show.images
+                images: show.imagess
             } : undefined,
             resume_point: {
                 fully_played: false,
@@ -327,7 +332,7 @@ const ShowDetailView: React.FC<ShowDetailViewProps> = ({ showId, showName, isNig
             {show && (
                 <header className="flex items-end gap-6 mb-6 pt-4">
                     {show?.images?.[0]?.url ? (
-                        <img src={show.images[0].url} alt={show?.name || 'Show'} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
+                        <img src={show.imagess[0].url} alt={show?.name || 'Show'} className="w-48 h-48 rounded-md object-cover shadow-2xl" />
                     ) : (
                         <div className={`w-48 h-48 rounded-md flex items-center justify-center flex-shrink-0 ${theme.placeholderBg}`}>
                             <FiMic className={`w-16 h-16 ${theme.placeholderIcon}`} />

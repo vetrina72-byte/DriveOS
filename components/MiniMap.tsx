@@ -20,10 +20,10 @@ L.Util.template = function (str: any, data: any) {
 // Function to create a leaflet icon from the React component - UPDATED
 const createVehicleIcon = (bearing: number): L.DivIcon => {
   return L.divIcon({
-    html: renderToStaticMarkup(<VehicleArrowIcon size={52} bearing={bearing} className="transition-transform duration-200 linear" />),
+    html: renderToStaticMarkup(<VehicleArrowIcon size={34} bearing={bearing} className="transition-transform duration-200 linear" />),
     className: 'vehicle-marker-icon', // custom class for transparent background
-    iconSize: [52, 52],
-    iconAnchor: [26, 26],
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
   });
 };
 

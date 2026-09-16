@@ -1,14 +1,14 @@
 import React from 'react';
 
 // This is the detailed, two-tone SVG from the main map, now in a reusable component.
-const VehicleArrowIcon = ({ size = 36, bearing = 0, className = '' }: { size?: number, bearing?: number, className?: string }) => (
+const VehicleArrowIcon = ({ size = 34, bearing = 0, className = '' }: { size?: number, bearing?: number, className?: string }) => (
   <svg
-    viewBox="0 0 1414 2000"
+    viewBox="227 429 960 960"
     width={size}
     height={size}
     style={{
       transform: `rotate(${bearing}deg)`,
-      transformOrigin: 'center',
+      transformOrigin: '50% 50%',
       filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
     }}
     className={className}

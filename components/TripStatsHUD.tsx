@@ -1,4 +1,22 @@
 import React from 'react';
+import { useWeather } from '../context/WeatherContext';
+import { 
+  Clock, 
+  Navigation, 
+  CheckCircle2, 
+  Circle, 
+  Zap, 
+  ShieldCheck, 
+  Milestone, 
+  Camera, 
+  Compass, 
+  AlertTriangle,
+  Info,
+  Construction,
+  GitFork,
+  TrafficCone
+} from 'lucide-react';
+import { RouteOption, RoadHazard } from '../types/maps';
 
 interface TripStatsHUDProps {
   isActive: boolean;
@@ -6,6 +24,11 @@ interface TripStatsHUDProps {
   destinationName: string;
   remainingDistance: number; // in meters
   remainingTime: number; // in seconds
+  routes?: RouteOption[];
+  selectedRouteIndex?: number;
+  upcomingHazard?: { hazard: RoadHazard; distanceMeters: number } | null;
+  hazardsSummary?: { cameras: number; signals: number; roadworks?: number; hazards?: number; congestion?: number };
+  onSelectRoute?: (index: number) => void;
   onCancelNavigation: () => void;
   onStartNavigation?: () => void;
 }
@@ -16,15 +39,27 @@ export default function TripStatsHUD({
   destinationName,
   remainingDistance,
   remainingTime,
+  routes = [],
+  selectedRouteIndex = 0,
+  upcomingHazard,
+  hazardsSummary,
+  onSelectRoute,
   onCancelNavigation,
   onStartNavigation,
 }: TripStatsHUDProps) {
+  const { useDarkTheme: isNight } = useWeather();
   if (!isActive && !isRoutePreview) return null;
 
-  // Formatting helpers
+  // If in route preview, prefer the selected route's metrics
+  const activeRoute = isRoutePreview && routes[selectedRouteIndex] ? routes[selectedRouteIndex] : null;
+  const displayDist = activeRoute ? activeRoute.distance : remainingDistance;
+  const displayTime = activeRoute ? activeRoute.duration : remainingTime;
+
   const formatDistance = (meters: number) => {
+    if (meters == null || isNaN(meters)) return '0 m';
     if (meters >= 1000) {
-      return `${(meters / 1000).toFixed(1)} km`;
+      const km = (meters / 1000).toFixed(1).replace('.', ',');
+      return `${km} km`;
     }
     return `${Math.round(meters)} m`;
   };
@@ -47,46 +82,370 @@ export default function TripStatsHUD({
   };
 
   return (
-    <div 
-      id="nav-bottom"
-      className="absolute bottom-[7.5rem] left-6 z-[1003] w-[22.5rem] max-w-[calc(100vw-48px)] bg-neutral-900/85 backdrop-blur-md border border-white/10 rounded-2xl shadow-lg p-5 text-white animate-fade-in transition-all duration-500 pointer-events-auto"
+    <div
+      id="nav-bottom-hud"
+      className={`absolute bottom-6 left-6 z-[1003] w-[24.5rem] max-w-[calc(100vw-36px)] backdrop-blur-md border rounded-2xl shadow-2xl p-4 animate-fade-in transition-all duration-300 pointer-events-auto ${
+        isNight
+          ? 'bg-neutral-900/95 border-white/15 text-white shadow-black/60'
+          : 'bg-white/95 border-zinc-300/80 text-zinc-900 shadow-slate-400/50'
+      }`}
     >
-      <div className="flex justify-between items-baseline mb-1.5">
-        <div id="nb-eta" className="text-3xl font-extrabold tracking-tight text-white">
-          {computeETA(remainingTime)}
+      {/* Real-time Proximity Hazard Alert (Navigation Mode) */}
+      {isActive && upcomingHazard && upcomingHazard.distanceMeters <= 700 && (
+        <div className={`mb-3 p-2.5 rounded-xl border flex items-center gap-2.5 animate-pulse ${
+          upcomingHazard.hazard.type === 'speed_camera'
+            ? isNight 
+              ? 'bg-rose-950/80 border-rose-500/40 text-rose-200' 
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+            : upcomingHazard.hazard.type === 'roadworks'
+              ? isNight
+                ? 'bg-amber-950/80 border-amber-500/40 text-amber-200'
+                : 'bg-amber-50 border-amber-300 text-amber-900'
+              : upcomingHazard.hazard.type === 'congestion'
+                ? isNight
+                  ? 'bg-red-950/80 border-red-500/40 text-red-200'
+                  : 'bg-red-50 border-red-300 text-red-900'
+                : isNight
+                  ? 'bg-zinc-800/90 border-amber-500/40 text-amber-200'
+                  : 'bg-amber-50 border-amber-300 text-amber-900'
+        }`}>
+          {upcomingHazard.hazard.type === 'speed_camera' ? (
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-rose-600 text-white flex-shrink-0">
+              <Camera className="w-4 h-4" />
+            </div>
+          ) : upcomingHazard.hazard.type === 'roadworks' ? (
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-600 text-white flex-shrink-0">
+              <Construction className="w-4 h-4" />
+            </div>
+          ) : upcomingHazard.hazard.type === 'congestion' ? (
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-600 text-white flex-shrink-0">
+              <TrafficCone className="w-4 h-4" />
+            </div>
+          ) : upcomingHazard.hazard.type === 'detour' ? (
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-orange-500 text-white flex-shrink-0">
+              <GitFork className="w-4 h-4" />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500 text-white flex-shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-black tracking-tight flex items-center gap-1.5">
+              <span>
+                {upcomingHazard.hazard.type === 'speed_camera'
+                  ? `Autovelox tra ${Math.round(upcomingHazard.distanceMeters)}m`
+                  : upcomingHazard.hazard.type === 'roadworks'
+                    ? `Lavori in corso tra ${Math.round(upcomingHazard.distanceMeters)}m`
+                    : upcomingHazard.hazard.type === 'congestion'
+                      ? `Rallentamento traffico tra ${Math.round(upcomingHazard.distanceMeters)}m`
+                      : upcomingHazard.hazard.type === 'detour'
+                        ? `Deviazione tra ${Math.round(upcomingHazard.distanceMeters)}m`
+                        : `Semaforo tra ${Math.round(upcomingHazard.distanceMeters)}m`}
+              </span>
+              {upcomingHazard.hazard.speedLimit && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white text-rose-700 font-extrabold border border-rose-500">
+                  {upcomingHazard.hazard.speedLimit} km/h
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] opacity-85 truncate">
+              {upcomingHazard.hazard.description || (
+                upcomingHazard.hazard.type === 'speed_camera'
+                  ? 'Rilevatore velocità attivo sul tratto'
+                  : upcomingHazard.hazard.type === 'roadworks'
+                    ? 'Cantiere stradale • Restringimento di carreggiata'
+                    : 'Impianto semaforico controllato'
+              )}
+            </div>
+          </div>
         </div>
-        <div className="text-sm font-medium text-zinc-400">
-          <span id="nb-min" className="text-zinc-200 font-semibold mr-2">
-            {formatDuration(remainingTime)}
+      )}
+
+      {/* Destination Name Header */}
+      <div className="flex items-center justify-between mb-2.5 gap-2">
+        <div
+          id="nb-dest"
+          className={`text-xs font-bold uppercase tracking-wider truncate flex-1 ${
+            isNight ? 'text-zinc-300' : 'text-zinc-600'
+          }`}
+        >
+          {destinationName || 'Destinazione'}
+        </div>
+        {isRoutePreview && (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20 whitespace-nowrap">
+            Opzioni percorso
           </span>
-          <span id="nb-km" className="text-zinc-200 font-semibold">
-            {formatDistance(remainingDistance)}
-          </span>
+        )}
+      </div>
+
+      {/* Main Stats: Structured Clean Layout */}
+      <div className="flex items-center justify-between mb-3 pb-3 border-b border-inherit">
+        {/* Left: Clock Icon + ETA + Duration */}
+        <div className="flex items-start gap-2.5">
+          <div
+            className={`p-2 rounded-xl mt-0.5 ${
+              isNight ? 'bg-zinc-800 text-blue-400' : 'bg-blue-50 text-blue-600'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+          </div>
+          <div>
+            <div
+              id="nb-eta"
+              className={`text-2xl font-black tracking-tight leading-none ${
+                isNight ? 'text-white' : 'text-zinc-950'
+              }`}
+            >
+              {computeETA(displayTime)}
+            </div>
+            <div
+              id="nb-min"
+              className={`text-xs font-semibold mt-1 ${
+                isNight ? 'text-zinc-300' : 'text-zinc-600'
+              }`}
+            >
+              {formatDuration(displayTime)}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Road Icon + Distance */}
+        <div className="flex items-center gap-2 pl-3 border-l border-inherit">
+          <div
+            className={`p-2 rounded-xl ${
+              isNight ? 'bg-zinc-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+            }`}
+          >
+            <Navigation className="w-4 h-4 rotate-45" />
+          </div>
+          <div>
+            <div
+              id="nb-km"
+              className={`text-lg font-extrabold tracking-tight ${
+                isNight ? 'text-white' : 'text-zinc-900'
+              }`}
+            >
+              {formatDistance(displayDist)}
+            </div>
+            <div
+              className={`text-[11px] font-medium leading-tight ${
+                isNight ? 'text-zinc-400' : 'text-zinc-500'
+              }`}
+            >
+              distanza
+            </div>
+          </div>
         </div>
       </div>
-      <div id="nb-dest" className="text-sm font-medium text-zinc-500 truncate mb-4">
-        {destinationName || 'Destinazione'}
-      </div>
-      <div className="flex gap-2.5">
+
+      {/* Route hazards counter on current selected route */}
+      {hazardsSummary && (hazardsSummary.cameras > 0 || hazardsSummary.signals > 0 || (hazardsSummary.roadworks ?? 0) > 0 || (hazardsSummary.hazards ?? 0) > 0) && (
+        <div className={`mb-3 py-1.5 px-3 rounded-xl text-[11px] font-semibold flex items-center justify-between flex-wrap gap-1 ${
+          isNight ? 'bg-zinc-800/60 text-zinc-300 border border-white/5' : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
+        }`}>
+          <span className="flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
+            <span>Condizioni tratta:</span>
+          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {hazardsSummary.cameras > 0 && (
+              <span className="inline-flex items-center gap-1 text-rose-500 font-bold">
+                <Camera className="w-3 h-3" />
+                {hazardsSummary.cameras} {hazardsSummary.cameras === 1 ? 'Autovelox' : 'Autovelox'}
+              </span>
+            )}
+            {hazardsSummary.signals > 0 && (
+              <span className="inline-flex items-center gap-1 text-amber-500 font-bold">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block" />
+                {hazardsSummary.signals} {hazardsSummary.signals === 1 ? 'Semaforo' : 'Semafori'}
+              </span>
+            )}
+            {(hazardsSummary.roadworks ?? 0) > 0 && (
+              <span className="inline-flex items-center gap-1 text-amber-600 font-bold">
+                <Construction className="w-3 h-3" />
+                {hazardsSummary.roadworks} {hazardsSummary.roadworks === 1 ? 'Cantiere' : 'Cantieri'}
+              </span>
+            )}
+            {(hazardsSummary.hazards ?? 0) > 0 && (
+              <span className="inline-flex items-center gap-1 text-orange-500 font-bold">
+                <AlertTriangle className="w-3 h-3" />
+                {hazardsSummary.hazards} Pericolo
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Alternative Routes Selection List (During Route Preview) */}
+      {isRoutePreview && routes.length > 0 && (
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center justify-between px-0.5">
+            <span
+              className={`text-[11px] font-bold uppercase tracking-wider ${
+                isNight ? 'text-zinc-400' : 'text-zinc-500'
+              }`}
+            >
+              Percorsi disponibili ({routes.length})
+            </span>
+            <span className="text-[10px] text-zinc-400 font-medium">
+              Tocca per visualizzare
+            </span>
+          </div>
+          <div className="max-h-[16rem] overflow-y-auto space-y-2 pr-0.5 scrollbar-thin">
+            {routes.map((rt) => {
+              const isSelected = rt.index === selectedRouteIndex;
+              const badgeType = rt.badgeType || (rt.index === 0 ? 'fastest' : 'alternative');
+
+              return (
+                <button
+                  key={`route-opt-${rt.index}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectRoute?.(rt.index);
+                  }}
+                  className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1.5 ${
+                    isSelected
+                      ? isNight
+                        ? 'bg-blue-600/20 border-blue-500/80 text-white shadow-md ring-1 ring-blue-500/50'
+                        : 'bg-blue-50/90 border-blue-500 text-blue-950 shadow-md ring-1 ring-blue-400/50'
+                      : isNight
+                      ? 'bg-zinc-800/40 border-white/5 text-zinc-300 hover:bg-zinc-800/80'
+                      : 'bg-zinc-50/90 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                  }`}
+                >
+                  {/* Top line: Radio check, Duration, ETA & Distinct Badges */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {isSelected ? (
+                        <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                      ) : (
+                        <Circle className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                      )}
+                      <span className={`text-[13px] font-black ${isSelected ? (isNight ? 'text-blue-300' : 'text-blue-950') : ''}`}>
+                        {formatDuration(rt.duration)}
+                      </span>
+                      <span className="text-zinc-400 text-xs">•</span>
+                      <span className={`text-xs font-semibold ${isNight ? 'text-zinc-300' : 'text-zinc-600'}`}>
+                        {formatDistance(rt.distance)}
+                      </span>
+                    </div>
+
+                    {/* Distinct Route Typology Badge */}
+                    <div className="flex items-center gap-1">
+                      {badgeType === 'fastest' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                          <Zap className="w-3 h-3" />
+                          PIÙ VELOCE
+                        </span>
+                      ) : badgeType === 'scenic' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30">
+                          <Compass className="w-3 h-3" />
+                          PANORAMICO
+                        </span>
+                      ) : badgeType === 'toll_free' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                          <ShieldCheck className="w-3 h-3" />
+                          NO PEDAGGI
+                        </span>
+                      ) : badgeType === 'shortest' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/30">
+                          <Milestone className="w-3 h-3" />
+                          PIÙ BREVE
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-500/15 text-zinc-500">
+                          {rt.label}
+                        </span>
+                      )}
+
+                      {/* Time delta relative to fastest */}
+                      {rt.timeDiffMinutes > 0 && badgeType !== 'fastest' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-500/15 text-zinc-600 dark:text-zinc-400">
+                          +{rt.timeDiffMinutes} min
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Road Tag and Time/Cost Advantage */}
+                  <div className="flex items-center justify-between text-[11px] font-medium pl-6">
+                    <span className={`truncate ${isSelected ? (isNight ? 'text-blue-200' : 'text-blue-800') : (isNight ? 'text-zinc-400' : 'text-zinc-500')}`}>
+                      {rt.tag || rt.label}
+                    </span>
+
+                    {rt.gainSummary && (
+                      <span className={`flex-shrink-0 text-[10px] font-semibold ${isSelected ? (isNight ? 'text-blue-300' : 'text-blue-700') : (isNight ? 'text-zinc-400' : 'text-zinc-500')}`}>
+                        {rt.gainSummary}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Why Choose this route explanation banner */}
+                  {rt.whyChoose && (
+                    <div className={`mt-1 text-[10.5px] leading-snug px-2 py-1.5 rounded-lg flex items-start gap-1.5 ${
+                      isSelected
+                        ? isNight 
+                          ? 'bg-blue-950/60 text-blue-200 border border-blue-500/20' 
+                          : 'bg-blue-100/70 text-blue-900 border border-blue-200'
+                        : isNight 
+                          ? 'bg-zinc-900/60 text-zinc-400 border border-white/5' 
+                          : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
+                    }`}>
+                      <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-blue-500" />
+                      <span>{rt.whyChoose}</span>
+                    </div>
+                  )}
+
+                  {/* Hazard count indicators if available for this alternative */}
+                  {((rt.speedCamerasCount ?? 0) > 0 || (rt.trafficSignalsCount ?? 0) > 0) && (
+                    <div className="flex items-center gap-3 text-[10px] font-semibold pl-6 pt-0.5 opacity-80">
+                      {(rt.speedCamerasCount ?? 0) > 0 && (
+                        <span className="flex items-center gap-1 text-rose-500">
+                          <Camera className="w-2.5 h-2.5" />
+                          {rt.speedCamerasCount} {rt.speedCamerasCount === 1 ? 'Autovelox' : 'Autovelox'}
+                        </span>
+                      )}
+                      {(rt.trafficSignalsCount ?? 0) > 0 && (
+                        <span className="flex items-center gap-1 text-amber-500">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          {rt.trafficSignalsCount} {rt.trafficSignalsCount === 1 ? 'Semaforo' : 'Semafori'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex gap-2">
         {isRoutePreview && onStartNavigation ? (
-          <button 
-            id="nb-start" 
+          <button
+            id="nb-start"
             onClick={(e) => {
               e.stopPropagation();
               onStartNavigation();
             }}
-            className="flex-1 bg-blue-600 border border-blue-500 hover:bg-blue-500 active:scale-95 text-white font-bold text-sm py-3.5 rounded-xl cursor-pointer transition-all"
+            className="flex-1 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold text-sm py-3 rounded-xl cursor-pointer transition-all shadow-md shadow-blue-600/30 flex items-center justify-center gap-1.5"
           >
-            Inizia Viaggio
+            <span>Inizia Viaggio</span>
           </button>
         ) : null}
-        <button 
-          id="nb-stop" 
+        <button
+          id="nb-stop"
           onClick={(e) => {
             e.stopPropagation();
             onCancelNavigation();
           }}
-          className="flex-1 bg-zinc-800/80 border border-white/5 hover:bg-zinc-700/80 active:scale-95 text-red-500 font-bold text-sm py-3.5 rounded-xl cursor-pointer transition-all"
+          className={`flex-1 border active:scale-[0.98] text-sm font-semibold py-3 rounded-xl cursor-pointer transition-all ${
+            isNight
+              ? 'bg-zinc-800/80 border-white/10 text-zinc-300 hover:bg-zinc-700 hover:text-white'
+              : 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-950'
+          }`}
         >
           {isRoutePreview ? 'Annulla' : 'Esci'}
         </button>

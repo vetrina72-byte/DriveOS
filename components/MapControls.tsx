@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { globalRadarService, WeatherFrame } from "../services/RadarService";
 
-interface WeatherFrame {
-  time: number;
-  path: string;
-}
+
 
 interface MapControlsProps {
+  isNight?: boolean;
   cmode: 'north-up' | 'heading-up';
   bearing: number;
   isSatellite: boolean;
@@ -19,6 +18,7 @@ interface MapControlsProps {
 }
 
 export default function MapControls({
+  isNight = true,
   cmode,
   bearing,
   isSatellite,
@@ -49,42 +49,30 @@ export default function MapControls({
   // Fetch Rainviewer maps json when radar is toggled on
   useEffect(() => {
     if (isWeatherActive) {
+      
       const fetchRadar = async () => {
         try {
-          const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
-          if (!res.ok) throw new Error();
-          const d = await res.json();
-          const currentTime = Math.floor(Date.now() / 1000);
+          const { past, nowcast } = await globalRadarService.fetchFrames();
           
-          let futureFrames = (d.radar?.nowcast || []).map((f: any) => ({ time: f.time, path: f.path }));
-          
-          if (futureFrames.length === 0) {
-            futureFrames = (d.radar?.past || []).filter((f: any) => f.time >= currentTime).map((f: any) => ({ time: f.time, path: f.path }));
-          }
-
-          if (futureFrames.length === 0 && d.radar?.past?.length > 0) {
-            console.warn("Nessun fotogramma di previsione futura disponibile, utilizzo tutti i fotogrammi recenti in alternativa.");
-            // Utilizzo l'intero blocco passato (solitamente 13 frame) per garantire una animazione lunga
-            futureFrames = d.radar.past.map((f: any) => ({ time: f.time, path: f.path }));
-          } else if (futureFrames.length === 0) {
-            console.warn("Nessun fotogramma disponibile.");
+          let frames = [...past, ...nowcast];
+          if (frames.length === 0) {
+            console.warn("Nessun fotogramma radar disponibile.");
             return;
           }
           
-          setWTs(futureFrames);
-          setWNow(0); // Boundary is 0 since all are future frames
+          setWTs(frames);
+          setWNow(past.length > 0 ? past.length - 1 : 0); 
           
-          // Start from the first future frame (now)
-          const initialIdx = 0;
+          const initialIdx = past.length > 0 ? past.length - 1 : 0;
           setWFr(initialIdx);
-          updateFrameInfo(futureFrames, initialIdx, 0);
+          updateFrameInfo(frames, initialIdx, past.length);
           
-          // Enable autoplayer
-          startPlayback(futureFrames, initialIdx, 0);
+          startPlayback(frames, initialIdx, past.length);
         } catch (e) {
-          console.error('[WEATHER] Failed to load RainViewer config', e);
+          console.error('[WEATHER] Failed to load radar config', e);
         }
       };
+
       fetchRadar();
     } else {
       stopPlayback();
@@ -161,8 +149,8 @@ export default function MapControls({
             e.stopPropagation();
             onToggleCompass();
           }}
-          className="w-16 h-16 rounded-2xl border-none shadow-[0_8px_20px_rgba(0,0,0,0.4)] relative overflow-hidden flex items-center justify-center cursor-pointer pointer-events-auto transition-transform active:scale-[0.92] select-none touch-none"
-          style={{ background: '#eee' }}
+          className={`w-16 h-16 rounded-2xl shadow-lg relative overflow-hidden flex items-center justify-center cursor-pointer pointer-events-auto transition-all active:scale-[0.92] select-none touch-none border backdrop-blur-md ${isNight ? "bg-neutral-900/85 border-white/10" : "bg-white/90 border-black/10"}`}
+          
           title={cmode === 'heading-up' ? 'Visualizza Nord in alto' : 'Visualizza direzione di marcia in alto'}
         >
           {cmode === 'north-up' ? (
@@ -171,13 +159,13 @@ export default function MapControls({
               <div 
                 className="w-0 h-0 border-l-[0.4375rem] border-l-transparent border-r-[0.4375rem] border-r-transparent border-b-[1rem] border-b-[#c00] mb-0.5"
               />
-              <div className="font-extrabold text-[1.375rem] text-[#222] leading-none select-none">
+              <div className={`font-extrabold text-[1.375rem] leading-none select-none ${isNight ? "text-white" : "text-[#222]"}`}>
                 N
               </div>
             </div>
           ) : (
             /* Standalone active heading-up state: ch-up */
-            <div className="w-full h-full relative bg-[#f5f5f5] pointer-events-none select-none">
+            <div className={`w-full h-full relative pointer-events-none select-none ${isNight ? "bg-white/5" : "bg-[#f5f5f5]"}`}>
               <div className="absolute inset-0 w-full h-full [mask-image:linear-gradient(to_bottom,black_50%,transparent_95%)] [-webkit-mask-image:linear-gradient(to_bottom,black_50%,transparent_95%)] z-10">
                 <div 
                   className="absolute top-1/2 left-1/2 w-full h-full transition-transform duration-100 ease-linear"
@@ -189,17 +177,17 @@ export default function MapControls({
                     {/* Cardinal letters aligned nicely around the circle */}
                     <div className="absolute inset-0 rotate-[0deg] text-center text-xs font-black text-[#c00] pt-1"><span>N</span></div>
                     <div className="absolute inset-0 rotate-[45deg] text-center pt-1 font-bold"><span>NE</span></div>
-                    <div className="absolute inset-0 rotate-[90deg] text-center pt-1 font-extrabold text-[#333]"><span>E</span></div>
+                    <div className={`absolute inset-0 rotate-[90deg] text-center pt-1 font-extrabold ${isNight ? "text-white/80" : "text-[#333]"}`}><span>E</span></div>
                     <div className="absolute inset-0 rotate-[135deg] text-center pt-1 font-bold"><span>SE</span></div>
-                    <div className="absolute inset-0 rotate-[180deg] text-center pt-1 font-extrabold text-[#333]"><span>S</span></div>
+                    <div className={`absolute inset-0 rotate-[180deg] text-center pt-1 font-extrabold ${isNight ? "text-white/80" : "text-[#333]"}`}><span>S</span></div>
                     <div className="absolute inset-0 rotate-[225deg] text-center pt-1 font-bold"><span>SW</span></div>
-                    <div className="absolute inset-0 rotate-[270deg] text-center pt-1 font-extrabold text-[#333]"><span>W</span></div>
+                    <div className={`absolute inset-0 rotate-[270deg] text-center pt-1 font-extrabold ${isNight ? "text-white/80" : "text-[#333]"}`}><span>W</span></div>
                     <div className="absolute inset-0 rotate-[315deg] text-center pt-1 font-bold"><span>NW</span></div>
                   </div>
                 </div>
               </div>
               {/* Carr: Static needle pointer pointing outwards at the top center */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[62%] w-0 h-0 border-l-[0.5rem] border-l-transparent border-r-[0.5rem] border-r-transparent border-b-[1.125rem] border-b-[#111] z-20" />
+              <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[62%] w-0 h-0 border-l-[0.5rem] border-l-transparent border-r-[0.5rem] border-r-transparent border-b-[1.125rem] z-20 ${isNight ? "border-b-white" : "border-b-[#111]"}`} />
             </div>
           )}
         </button>
@@ -215,10 +203,10 @@ export default function MapControls({
                 e.stopPropagation();
                 onRecenter();
               }}
-              className="w-16 h-16 rounded-2xl border border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0] flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-lg backdrop-blur-md p-0 select-none touch-none"
+              className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-lg backdrop-blur-md p-0 select-none touch-none ${isNight ? "border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0]" : "border-black/10 bg-white/90 hover:bg-zinc-100 text-zinc-800"}`}
               title="Ricentra la visuale"
             >
-              <svg className="w-8 h-8 fill-current text-[#f0f0f0]" viewBox="0 -960 960 960">
+              <svg className={`w-8 h-8 fill-current ${isNight ? "text-[#f0f0f0]" : "text-zinc-800"}`} viewBox="0 -960 960 960">
                 <path d="M439-57v-34q-139-15-235.5-111.5T93-437H59q-17.3 0-29.15-11.79Q18-460.58 18-477.79T29.85-507Q41.7-519 59-519h34q15-139 111.5-235.5T439-865v-34q0-17.3 11.79-29.15 11.79-11.85 29-11.85T509-928.15q12 11.85 12 29.15v34q138 14 234.5 110.5T867-519h34q17.3 0 29.15 11.79 11.85 11.79 11.85 29T930.15-449Q918.3-437 901-437h-34q-14 138-110.5 234.5T521-91v34q0 17.3-11.79 29.15Q497.42-16 480.21-16T451-27.85Q439-39.7 439-57Zm249.5-212.33q86.5-86.33 86.5-208.5T688.67-686.5Q602.34-773 480.17-773T271.5-686.67Q185-600.34 185-478.17t86.33 208.67q86.33 86.5 208.5 86.5t208.67-86.33Z" />
               </svg>
             </button>
@@ -234,11 +222,11 @@ export default function MapControls({
             className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-lg backdrop-blur-md p-0 select-none touch-none ${
               isSatellite
                 ? 'bg-blue-600 border-blue-500 text-white'
-                : 'border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0]'
+                : (isNight ? 'border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0]' : 'border-black/10 bg-white/90 hover:bg-zinc-100 text-zinc-800')
             }`}
             title="Satellite / Mappa Stradale"
           >
-            <svg className={`w-8 h-8 fill-current ${isSatellite ? 'text-white' : 'text-[#f0f0f0]'}`} viewBox="0 -960 960 960">
+            <svg className={`w-8 h-8 fill-current ${isSatellite ? "text-white" : (isNight ? "text-[#f0f0f0]" : "text-zinc-800")}`} viewBox="0 -960 960 960">
               <path d="M480.4-55q-88.87 0-166.12-33.08-77.25-33.09-135.18-91.02-57.93-57.93-91.02-135.12Q55-391.41 55-480.36q0-88.96 33.08-166.29 33.09-77.32 90.86-134.81 57.77-57.48 135.03-91.01Q391.24-906 480.28-906t166.49 33.45q77.44 33.46 134.85 90.81t90.89 134.87Q906-569.34 906-480.27q0 89.01-33.53 166.25t-91.01 134.86q-57.49 57.62-134.83 90.89Q569.28-55 480.4-55Zm-.4-94q125.38 0 216.19-80T805-427q0 2 .5 4.25t.5 2.75q-12 14-28.89 22T740-390h-75q-36.71 0-62.86-26.24Q576-442.48 576-479.33V-524H398v-82.58q0-37.78 26.24-63.6T487.33-696H532v-22q0-21.34 15-48.67Q562-794 582-795q-24.02-6.55-49.57-11.27-25.56-4.73-52.07-4.73Q342-811 245.5-714.69T149-480q0 4 .5 7.5t.5 7.5h104q74 0 126 52t52 125.47V-243H299v48q40 21 85.83 33.5Q430.65-149 480-149Z" />
             </svg>
           </button>
@@ -253,11 +241,11 @@ export default function MapControls({
             className={`w-16 h-16 rounded-2xl border flex items-center justify-center cursor-pointer transition-all active:scale-[0.92] shadow-lg backdrop-blur-md p-0 select-none touch-none ${
               isWeatherActive
                 ? 'bg-blue-600 border-blue-500 text-white'
-                : 'border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0]'
+                : (isNight ? 'border-white/10 bg-neutral-900/85 hover:bg-neutral-800/85 text-[#f0f0f0]' : 'border-black/10 bg-white/90 hover:bg-zinc-100 text-zinc-800')
             }`}
             title="Radar Meteo"
           >
-            <svg className={`w-8 h-8 fill-current ${isWeatherActive ? 'text-white' : 'text-[#f0f0f0]'}`} viewBox="0 -960 960 960">
+            <svg className={`w-8 h-8 fill-current ${isWeatherActive ? 'text-white' : (isNight ? 'text-[#f0f0f0]' : 'text-zinc-800')}`} viewBox="0 -960 960 960">
               <path d="M457-13.64Q440-30.27 440-53q0-11.65 4.5-21.82Q449-85 457-93l26-23q6-6 14.27-6 8.28 0 15.73 6l26 23q7 8 11.5 18.13 4.5 10.12 4.5 21.72Q555-30 538.5-13.5T498 3q-24 0-41-16.64ZM325-101q-12-11.64-12-27.32T325-156l76-76q11-11 27-11t27 11.5q11 11.5 11 27T455-177l-77 77q-11.91 11-26.95 10.5Q336-90 325-101Zm292-47-37-38q-7-7.18-7-17.09t7-16.91l37-38q7.18-7 17.09-7t16.91 7l38 38q7 7.18 7 17.09T689-186l-38 38q-7.18 7-17.09 7T617-148Zm-332-38-38 38q-7.18 7-17.09 7T213-148l-38-38q-7-7.18-7-17.09t7-16.91l38-38q7.18-7 17.09-7t16.91 7l38 38q7 7.18 7 17.09T285-186Zm5-148q-93.52 0-160.26-67T63-561q0-84 58-150t145-75q35.36-56 90.74-89.5Q412.13-909 479.81-909 573-909 638-851t84 144q82 8 128.5 61.47T897-521.49Q897-444 842.75-389 788.5-334 710-334H290Zm0-95h420q38.52 0 65.76-27Q803-483 803-521q0-39-27.24-66T710-614h-77v-47q0-64.47-44.26-108.74Q544.47-814 480-814q-45.63 0-83.98 24.81Q357.68-764.38 340-723l-12.57 29H289q-55.48 2.09-93.74 40.32Q157-615.44 157-561q0 54.07 39 93.04Q235-429 290-429Zm190-192Z"/>
             </svg>
           </button>
@@ -268,16 +256,16 @@ export default function MapControls({
       {isWeatherActive && wTs.length > 0 && (
         <div 
           id="tl-ctrl"
-          className="absolute bottom-[7.5rem] left-1/2 -translate-x-1/2 z-[1002] w-[92%] sm:w-[22rem] pointer-events-auto select-none touch-none"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1002] w-[92%] sm:w-[22rem] pointer-events-auto select-none touch-none"
         >
-          <div className="bg-[#111111]/95 backdrop-blur-xl border border-white/10 px-4 py-3 sm:py-3.5 rounded-2xl flex items-center gap-4 shadow-2xl">
+          <div className={`backdrop-blur-md border px-4 py-3 sm:py-3.5 rounded-2xl flex items-center gap-4 shadow-lg transition-colors ${isNight ? "bg-neutral-900/85 border-white/10" : "bg-white/90 border-black/10"}`}>
             <button 
               id="tl-pp" 
               onClick={(e) => {
                 e.stopPropagation();
                 togglePlayback();
               }}
-              className="w-10 h-10 flex-shrink-0 rounded-full bg-white text-black flex items-center justify-center cursor-pointer hover:bg-neutral-200 transition-colors"
+              className="w-10 h-10 flex-shrink-0 rounded-full bg-blue-600 text-white flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-colors"
             >
               {wPlay ? (
                 <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><rect x="14" y="5" width="3" height="14" rx="1" /><rect x="7" y="5" width="3" height="14" rx="1" /></svg>
@@ -287,14 +275,14 @@ export default function MapControls({
             </button>
             <div className="flex-grow flex flex-col gap-1.5">
               <div className="flex justify-between items-baseline px-0.5">
-                <span className="text-[10px] font-semibold text-white/50 tracking-widest uppercase">Nowcast</span>
-                <span className="text-[13px] font-bold text-white tracking-wide tabular-nums">
+                <span className={`text-[10px] font-semibold tracking-widest uppercase ${isNight ? "text-white/50" : "text-zinc-500"}`}>Storico Radar</span>
+                <span className={`text-[13px] font-bold tracking-wide tabular-nums ${isNight ? "text-white" : "text-zinc-800"}`}>
                   {currentTimeLabel}
                 </span>
               </div>
-              <div className="relative w-full h-1.5 rounded-full bg-white/10 overflow-hidden cursor-pointer group mt-0.5">
+              <div className={`relative w-full h-1.5 rounded-full overflow-hidden cursor-pointer group mt-0.5 ${isNight ? "bg-white/10" : "bg-black/10"}`}>
                 <div 
-                  className="absolute top-0 left-0 h-full bg-[#409cff] transition-all duration-300 ease-linear"
+                  className="absolute top-0 left-0 h-full bg-blue-600 transition-all duration-300 ease-linear"
                   style={{ width: `${currentPercentage}%` }}
                 />
                 <input 

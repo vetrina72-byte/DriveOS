@@ -1,8 +1,19 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ICONS } from '../constants';
 import { FiClock } from 'react-icons/fi';
 import { useNavigation } from '../context/NavigationContext';
+import { globalSearchService } from '../services/SearchService';
+import { LocationInfo } from '../types/maps';
+import {
+  Fuel,
+  ParkingCircle,
+  Utensils,
+  Hotel,
+  Pill,
+  ShoppingBag,
+  Zap,
+  MapPin
+} from 'lucide-react';
 
 export const formatTravelTime = (minutes: number | null): string => {
     if (minutes === null || isNaN(minutes)) return '-- min';
@@ -13,13 +24,6 @@ export const formatTravelTime = (minutes: number | null): string => {
     const remainingMinutes = Math.round(minutes % 60);
     return `${hours} h ${remainingMinutes} min`;
 };
-
-const IconLocationResult = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-        <path d="M12 2C8.13401 2 5 5.13401 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13401 15.866 2 12 2Z" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M12 11C12.5523 11 13 10.5523 13 10C13 9.44772 12.5523 9 12 9C11.4477 9 11 9.44772 11 10C11 10.5523 11.4477 11 12 11Z" fill="#EF4444"/>
-    </svg>
-);
 
 interface RecentPlace {
     name: string;
@@ -36,10 +40,9 @@ const NavigateTool = ({
     nightPlayerButtonColor,
     darkNavigateInputBg,
     isHome = true,
-    showRecentsOnFocus = true
 }: { 
-    isNight: boolean,
-    width: number,
+    isNight: boolean;
+    width: number;
     widgetBgColor: string;
     dayPlayerButtonColor: string;
     nightPlayerButtonColor: string;
@@ -55,7 +58,7 @@ const NavigateTool = ({
     } = useNavigation();
 
     const [query, setQuery] = useState('');
-    const [suggestions, setSuggestions] = useState<{feature: any, distance: number | null}[]>([]);
+    const [suggestions, setSuggestions] = useState<LocationInfo[]>([]);
     const [loading, setLoading] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
@@ -63,8 +66,6 @@ const NavigateTool = ({
     const searchTimeoutRef = useRef<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
-
-    const GEOAPIFY_API_KEY = '0d2c9c7f72c0477eb3260838db72a383';
 
     const baseHeight = 113;
     const expandedHeight = 400;
@@ -88,35 +89,23 @@ const NavigateTool = ({
         localStorage.setItem('recent_destinations', JSON.stringify(newRecents));
     };
 
-    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-        const R = 6371; 
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; 
-    };
-
-    const highlightMatch = (text: string | undefined, query: string) => {
-        if (!query || !text) {
-            return text;
+    const highlightMatch = (text: string | undefined, q: string) => {
+        if (!q || !text) {
+            return text || '';
         }
-        const queryParts = query.trim().split(/\s+/).map(part =>
+        const queryParts = q.trim().split(/\s+/).map(part =>
             part?.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') || ''
         ).filter(part => part.length > 0);
 
         if (queryParts.length === 0) return text;
 
-        const regex = new RegExp(`(${queryParts.join('|')})`, 'gi');
-        const parts = text.split(regex);
+        const regex = new RegExp(`(${queryParts.join('|')})`, 'i');
+        const parts = text.split(new RegExp(`(${queryParts.join('|')})`, 'gi'));
         return (
             <>
                 {parts.map((part, i) =>
-                    queryParts.some(q => new RegExp(`^${q}$`, 'i').test(part)) ? (
-                        <strong key={i}>{part}</strong>
+                    regex.test(part) ? (
+                        <strong key={i} className={isNight ? 'text-white font-extrabold' : 'text-black font-extrabold'}>{part}</strong>
                     ) : (
                         part
                     )
@@ -137,30 +126,19 @@ const NavigateTool = ({
         setLoading(true);
         searchTimeoutRef.current = window.setTimeout(async () => {
             try {
-                const biasParam = currentPosition ? `&bias=proximity:${currentPosition.lng},${currentPosition.lat}` : '';
-                const response = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&lang=it&limit=10&apiKey=${GEOAPIFY_API_KEY}${biasParam}`);
-                const data = await response.json();
-                const features = data.features || [];
-                const suggestionsWithDistance = features.map((feature: any) => {
-                    let distance = null;
-                    if (currentPosition && feature.properties.lat && feature.properties.lon) {
-                        const { lat, lon } = feature.properties;
-                        distance = calculateDistance(currentPosition.lat, currentPosition.lng, lat, lon);
-                    }
-                    return { feature, distance };
-                });
-                setSuggestions(suggestionsWithDistance);
+                const results = await globalSearchService.search(query.trim(), currentPosition || undefined);
+                setSuggestions(results || []);
             } catch (error) {
                 console.error("Autocomplete search failed:", error);
                 setSuggestions([]);
             } finally {
                 setLoading(false);
             }
-        }, 300);
+        }, 250);
 
         return () => {
             if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-        }
+        };
     }, [query, currentPosition]);
 
     useEffect(() => {
@@ -174,11 +152,8 @@ const NavigateTool = ({
         }
     }, [isFocused, isHome]);
 
-    const handleSelect = (feature: any) => {
-        const { lat, lon: lng } = feature.properties;
-        const name = feature.properties.name || feature.properties.formatted;
-        const address = feature.properties.address_line2 || feature.properties.formatted;
-        
+    const handleSelect = (item: LocationInfo) => {
+        const { lat, lng, name, address } = item;
         saveToRecents({ name, address, lat, lng });
         
         setQuery('');
@@ -189,7 +164,7 @@ const NavigateTool = ({
     };
 
     const handleRecentSelect = (place: RecentPlace) => {
-        saveToRecents(place); // Move to top
+        saveToRecents(place);
         setQuery('');
         setSuggestions([]);
         setIsFocused(false);
@@ -217,20 +192,45 @@ const NavigateTool = ({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-    
+
     const theme = {
-        bg: 'var(--player-bg)',
-        border: isNight ? 'border-zinc-700/80' : 'border-zinc-300',
-        inputText: isNight ? 'text-zinc-100' : 'text-zinc-800',
-        placeholderText: isNight ? 'placeholder:text-zinc-500' : 'placeholder:text-zinc-400',
+        bg: isNight ? 'rgba(24, 24, 27, 0.75)' : 'rgba(255, 255, 255, 0.85)',
+        text: isNight ? 'text-zinc-100' : 'text-zinc-900',
+        inputText: isNight ? 'text-zinc-100' : 'text-zinc-900',
+        placeholderText: isNight ? 'placeholder-zinc-400' : 'placeholder-zinc-500',
         iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
-        suggestionHover: isNight ? 'hover:bg-white/10' : 'hover:bg-black/10',
+        suggestionHover: isNight ? 'hover:bg-zinc-700/50' : 'hover:bg-zinc-200/60',
+        border: isNight ? 'border-zinc-700/50' : 'border-zinc-200/80',
         recentsHeader: isNight ? 'text-zinc-400' : 'text-zinc-500',
+    };
+
+    const renderCategoryIcon = (cat?: string) => {
+        switch (cat) {
+            case 'fuel':
+                return <Fuel className="w-5 h-5 text-amber-500" />;
+            case 'parking':
+                return <ParkingCircle className="w-5 h-5 text-blue-500" />;
+            case 'restaurant':
+                return <Utensils className="w-5 h-5 text-rose-500" />;
+            case 'hotel':
+                return <Hotel className="w-5 h-5 text-purple-500" />;
+            case 'pharmacy':
+                return <Pill className="w-5 h-5 text-emerald-500" />;
+            case 'supermarket':
+                return <ShoppingBag className="w-5 h-5 text-orange-500" />;
+            case 'charging':
+                return <Zap className="w-5 h-5 text-cyan-500" />;
+            default:
+                return <MapPin className="w-5 h-5 text-blue-500" />;
+        }
     };
 
     return (
         <div 
+            id="navigate-tool-container"
             ref={containerRef}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             className={`relative backdrop-blur-md rounded-2xl border border-white/10 shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
             style={{ 
                 width: `${(width) / 16}rem`,
@@ -254,8 +254,8 @@ const NavigateTool = ({
                                 setIsFocused(true);
                                 setIsExpanded(true);
                             }}
-                            placeholder="Navigate"
-                            className={`w-full h-10 pl-11 pr-4 rounded-xl text-sm font-medium transition-colors ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center`}
+                            placeholder="Cerca destinazione"
+                            className={`w-full h-10 pl-11 pr-4 rounded-xl text-sm font-medium transition-colors ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center select-text touch-auto pointer-events-auto`}
                             style={isNight ? { backgroundColor: darkNavigateInputBg } : undefined}
                         />
                     </div>
@@ -270,7 +270,7 @@ const NavigateTool = ({
                 </div>
                 
                 <div className={`overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'flex-grow mt-2 opacity-100' : 'hidden'}`}>
-                    {loading && <div className="text-center p-2 text-sm text-zinc-400">Ricerca...</div>}
+                    {loading && <div className="text-center p-2 text-sm text-zinc-400">Ricerca in corso...</div>}
                     
                     {!loading && query.trim().length === 0 && recents.length > 0 && (
                         <>
@@ -299,19 +299,19 @@ const NavigateTool = ({
                         </>
                     )}
 
-                    {!loading && query.trim().length > 0 && suggestions.map(({ feature, distance }) => {
-                        const name = feature.properties.name || feature.properties.formatted;
-                        const address = feature.properties.address_line2;
-                        const avgSpeed = distance && distance > 200 ? 80 : 45;
-                        const estimatedTime = distance !== null ? (distance / avgSpeed) * 60 : null;
+                    {!loading && query.trim().length > 0 && suggestions.map((item, idx) => {
+                        const name = item.name;
+                        const address = item.address;
+                        const distance = item.dk;
+                        const estimatedTime = item.em;
                         return (
                             <button 
-                                key={feature.properties.place_id} 
-                                onMouseDown={() => handleSelect(feature)} 
+                                key={`${item.name}_${idx}`} 
+                                onMouseDown={() => handleSelect(item)} 
                                 className={`w-full text-left p-2.5 rounded-lg flex items-center gap-4 ${theme.suggestionHover}`}
                             >
                                 <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                                    <IconLocationResult className="w-6 h-6" />
+                                    {renderCategoryIcon(item.category)}
                                 </div>
                                 <div className="flex-grow min-w-0">
                                     <p className={`font-medium truncate ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
@@ -323,16 +323,18 @@ const NavigateTool = ({
                                         </p>
                                     )}
                                 </div>
-                                <div className="flex-shrink-0 text-right">
-                                    <p className={`font-semibold text-sm ${isNight ? 'text-zinc-200' : 'text-zinc-700'}`}>
-                                        {distance?.toFixed(1)} km
-                                    </p>
-                                    {estimatedTime !== null && (
-                                        <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                                            ~{formatTravelTime(estimatedTime)}
+                                {distance !== undefined && (
+                                    <div className="flex-shrink-0 text-right">
+                                        <p className={`font-semibold text-sm ${isNight ? 'text-zinc-200' : 'text-zinc-700'}`}>
+                                            {distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`}
                                         </p>
-                                    )}
-                                </div>
+                                        {estimatedTime !== undefined && (
+                                            <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                                ~{formatTravelTime(estimatedTime)}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                             </button>
                         );
                     })}
@@ -347,7 +349,7 @@ const NavigateTool = ({
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                         >
                             <ICONS.home className="w-5 h-5" />
-                            <span>Home</span>
+                            <span>Casa</span>
                         </button>
                          <button 
                             onClick={() => workLocation && onSelectDestination(workLocation)}
@@ -356,7 +358,7 @@ const NavigateTool = ({
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
                          >
                             <ICONS.work className="w-5 h-5" />
-                            <span>Work</span>
+                            <span>Lavoro</span>
                         </button>
                     </div>
                 </div>

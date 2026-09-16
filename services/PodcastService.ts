@@ -315,7 +315,7 @@ export class PodcastService {
         if (!rawId) return [];
 
         // 1. Sanitize dell'ID (rimozione di prefissi spotify:show: o spotify:playlist:)
-        const cleanId = rawId.replace(/^spotify:(show|playlist|episode):/, '').trim();
+        const cleanId = (rawId || '').replace(/^spotify:(show|playlist|episode):/, '').trim();
 
         console.log(`[PodcastService] Avvio recupero per ID: "${cleanId}" (Originale: "${rawId}", Offset: ${offset})`);
 
