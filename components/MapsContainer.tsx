@@ -222,6 +222,8 @@ const MapsContainer = React.memo(({
     navigationTarget,
     homeLocation,
     workLocation,
+    setHomeLocation,
+    setWorkLocation,
     isNavigating: naving,
     setIsNavigating: setNaving,
     isRoutePreview,
@@ -1123,7 +1125,7 @@ const MapsContainer = React.memo(({
 
           try {
             // First snap candidates to the nearest real drivable road network via OSRM nearest
-            const nearestBase = OSRM_URL.replace('/route/v1/driving/', '/nearest/v1/driving/');
+            const nearestBase = (OSRM_URL || 'https://routing.openstreetmap.de/routed-car/route/v1/driving/').replace('/route/v1/driving/', '/nearest/v1/driving/');
             const [snap1, snap2] = await Promise.all([
               fetch(`${nearestBase}${probe1.lng.toFixed(5)},${probe1.lat.toFixed(5)}?number=1`).then(r => r.json()).catch(() => null),
               fetch(`${nearestBase}${probe2.lng.toFixed(5)},${probe2.lat.toFixed(5)}?number=1`).then(r => r.json()).catch(() => null)
@@ -1657,8 +1659,8 @@ const MapsContainer = React.memo(({
     if (src) {
       // Use webp for broader compatibility and reduce flashing by setting opacity delayed
       // Color Scheme 4 is Universal (Green, Yellow, Red)
-      const rawUrl = globalRadarService.getTileUrl(frame.path, "{x}" as any, "{y}" as any, "{z}" as any) || '';
-      const tileUrl = rawUrl.replace("{x}", "{x}").replace("{y}", "{y}").replace("{z}", "{z}");
+      const rawUrl = globalRadarService.getTileUrl(frame.path, "{x}" as any, "{y}" as any, "{z}" as any);
+      const tileUrl = rawUrl ? rawUrl.replace("{x}", "{x}").replace("{y}", "{y}").replace("{z}", "{z}") : '';
       if (tileUrl) {
         src.setTiles([tileUrl]);
       }
@@ -1736,111 +1738,55 @@ const MapsContainer = React.memo(({
 
   // Local state watcher matching geolocation stream with smooth spline integrations
   useEffect(() => {
-    // Also listen to TelemetryStore updates so location is immediately synced
+    // Only listen to TelemetryStore updates so location is immediately synced
     const unsubscribe = TelemetryStore.subscribe(() => {
       const pos = TelemetryStore.position;
+      const gs = TelemetryStore.speed || 0;
+      const nb = TelemetryStore.bearing || 0;
+      
       if (pos) {
+        speedRef.current = gs;
+        tbearRef.current = nb;
         tgtRef.current = { lat: pos.lat, lng: pos.lng };
+        
         if (!rposRef.current) {
           rposRef.current = { lat: pos.lat, lng: pos.lng };
-          mbearRef.current = TelemetryStore.bearing || 0;
-          cbearRef.current = TelemetryStore.bearing || 0;
-          tbearRef.current = TelemetryStore.bearing || 0;
+          mbearRef.current = nb;
+          cbearRef.current = nb;
+        }
+
+        // Automatic center fitting zooming on startup
+        if (!autoZoomedRef.current && mapRef.current) {
+          autoZoomedRef.current = true;
+          followRef.current = true;
+          setIsMapFollowing(true);
+          flyingRef.current = true;
+          mapRef.current.flyTo({
+            center: [pos.lng, pos.lat],
+            zoom: 17,
+            duration: 2500,
+            speed: 0.8,
+            essential: true
+          });
+          mapRef.current.once('moveend', () => {
+            flyingRef.current = false;
+          });
+        }
+
+        if (pendDestRef.current) {
+          const pd = pendDestRef.current;
+          pendDestRef.current = null;
+          setDest(pd.coords, pd.name);
+        }
+
+        if (navingRef.current) {
+          checkRouteDeviations({ lat: pos.lat, lng: pos.lng });
         }
       }
     });
 
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      return () => unsubscribe();
-    }
-
-    const handleGpsUpdate = (p: GeolocationPosition) => {
-      const now = performance.now();
-      const nla = p.coords.latitude;
-      const nlo = p.coords.longitude;
-      let gs = p.coords.speed;
-      const gh = p.coords.heading;
-      let df = 0;
-
-      if (lastGpsPosRef.current) {
-        df = dist(lastGpsPosRef.current.lat, lastGpsPosRef.current.lng, nla, nlo);
-        const dts = (now - lastGpsPosRef.current.ts) / 1000;
-        if ((gs === null || gs < 0) && dts > 0) {
-          gs = df / dts;
-        }
-      }
-
-      const spd = gs || 0;
-      speedRef.current = spd;
-
-      let nb = tbearRef.current;
-      if (gh !== null && !isNaN(gh) && gh >= 0) {
-        nb = gh;
-      } else if (tgtRef.current && df > 1.5 && spd > 0.5) {
-        nb = bear(tgtRef.current.lat, tgtRef.current.lng, nla, nlo);
-      }
-
-      tbearRef.current = nb;
-      tgtRef.current = { lat: nla, lng: nlo };
-      lastGpsPosRef.current = { lat: nla, lng: nlo, ts: now };
-
-      // Keep TelemetryStore synchronized
-      TelemetryStore.setPosition({ lat: nla, lng: nlo });
-      if (nb !== undefined && !isNaN(nb)) {
-        TelemetryStore.setBearing(nb);
-      }
-
-      // Lazy initialize coordinates
-      if (!rposRef.current) {
-        rposRef.current = { lat: nla, lng: nlo };
-        mbearRef.current = nb;
-        cbearRef.current = nb;
-      }
-
-      // Automatic center fitting zooming on startup
-      if (!autoZoomedRef.current && mapRef.current) {
-        autoZoomedRef.current = true;
-        followRef.current = true;
-        setIsMapFollowing(true);
-        flyingRef.current = true;
-        mapRef.current.flyTo({
-          center: [nlo, nla],
-          zoom: 17,
-          duration: 2500,
-          speed: 0.8,
-          essential: true
-        });
-        mapRef.current.once('moveend', () => {
-          flyingRef.current = false;
-        });
-      }
-
-      if (pendDestRef.current) {
-        const pd = pendDestRef.current;
-        pendDestRef.current = null;
-        setDest(pd.coords, pd.name);
-      }
-
-      if (navingRef.current) {
-        checkRouteDeviations({ lat: nla, lng: nlo });
-      }
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      handleGpsUpdate,
-      (err) => console.warn('[GPS Init] Maps getCurrentPosition error', err.message || err),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-    );
-
-    const watchId = navigator.geolocation.watchPosition(
-      handleGpsUpdate,
-      (err) => console.warn('[GPS] Geolocation watches error', err.message || err),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
-    );
-
     return () => {
       unsubscribe();
-      navigator.geolocation.clearWatch(watchId);
     };
   }, [setDest]);
 
@@ -1981,7 +1927,7 @@ const MapsContainer = React.memo(({
       bearingSnap: 0,
       dragRotate: true,
       touchZoomRotate: true,
-      maxTileCacheSize: 100,
+      maxTileCacheSize: 300,
       maxZoom: 20
     });
 
@@ -2379,10 +2325,10 @@ const MapsContainer = React.memo(({
       }, 5000);
     };
 
-    ['mousedown', 'touchstart', 'dragstart', 'movestart', 'rotatestart', 'pitchstart'].forEach((e) => {
+    ['mousedown', 'touchstart', 'dragstart', 'movestart', 'rotatestart', 'pitchstart', 'zoomstart'].forEach((e) => {
       map.on(e, handleStartInt);
     });
-    ['mouseup', 'touchend', 'dragend', 'moveend', 'rotateend', 'pitchend'].forEach((e) => {
+    ['mouseup', 'touchend', 'dragend', 'moveend', 'rotateend', 'pitchend', 'zoomend'].forEach((e) => {
       map.on(e, handleEndInt);
     });
 
@@ -2481,6 +2427,8 @@ const MapsContainer = React.memo(({
               onSelectDestination={selectPlaceFromPanel}
               homeLocation={homeLocation as LocationData}
               workLocation={workLocation as LocationData}
+              setHomeLocation={setHomeLocation}
+              setWorkLocation={setWorkLocation}
               isVisible={!naving}
             />
 

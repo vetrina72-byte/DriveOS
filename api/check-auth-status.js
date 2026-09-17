@@ -67,6 +67,8 @@ export default async function handler(req, res) {
           ? Math.max(60, Math.floor((session.expires_at - Date.now()) / 1000)) 
           : (session.expires_in || 3600);
 
+        console.log(`[AUTH POLL] sessionId = matched: ${sessionId}`);
+        console.log(`[AUTH POLL] authenticated = true`);
         return res.status(200).json({
           authenticated: true,
           status: 'completed',
@@ -78,6 +80,8 @@ export default async function handler(req, res) {
       }
 
       if (session.status === 'scanned' || session.authorizing || session.status === 'authorizing') {
+        console.log(`[AUTH POLL] sessionId = matched: ${sessionId}`);
+        console.log(`[AUTH POLL] authenticated = false (status: scanned)`);
         return res.status(200).json({
           authenticated: false,
           status: 'scanned',
@@ -85,6 +89,9 @@ export default async function handler(req, res) {
         });
       }
     }
+
+    console.log(`[AUTH POLL] sessionId = ${session ? 'matched' : 'not_matched'}: ${sessionId}`);
+    console.log(`[AUTH POLL] authenticated = false`);
 
     // 3. Fallback session manager (for automatic token refresh)
     if (sessionId) {

@@ -341,24 +341,36 @@ const NavigateTool = ({
                 </div>
 
                 <div className={`flex-shrink-0 mt-auto pt-2 border-t ${theme.border}`}>
-                    <div className="flex justify-around items-center">
+                    <div className="flex justify-around items-center gap-2">
                         <button 
-                            onClick={() => homeLocation && onSelectDestination(homeLocation)}
-                            disabled={!homeLocation}
-                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${!homeLocation ? 'opacity-50 cursor-not-allowed' : theme.suggestionHover}`}
+                            onClick={() => {
+                                if (homeLocation) {
+                                    onSelectDestination(homeLocation);
+                                } else {
+                                    window.dispatchEvent(new CustomEvent('reconfigure-location', { detail: 'home' }));
+                                }
+                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${theme.suggestionHover}`}
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
+                            title={homeLocation ? `Naviga a Casa (${homeLocation.name})` : 'Imposta indirizzo di Casa'}
                         >
-                            <ICONS.home className="w-5 h-5" />
-                            <span>Casa</span>
+                            <ICONS.home className="w-4 h-4" />
+                            <span>{homeLocation ? 'Casa' : 'Imposta Casa'}</span>
                         </button>
-                         <button 
-                            onClick={() => workLocation && onSelectDestination(workLocation)}
-                            disabled={!workLocation}
-                            className={`flex items-center gap-2.5 py-1 px-4 rounded-lg text-sm font-semibold transition-colors ${!workLocation ? 'opacity-50 cursor-not-allowed' : theme.suggestionHover}`}
+                        <button 
+                            onClick={() => {
+                                if (workLocation) {
+                                    onSelectDestination(workLocation);
+                                } else {
+                                    window.dispatchEvent(new CustomEvent('reconfigure-location', { detail: 'work' }));
+                                }
+                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${theme.suggestionHover}`}
                             style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
-                         >
-                            <ICONS.work className="w-5 h-5" />
-                            <span>Lavoro</span>
+                            title={workLocation ? `Naviga a Lavoro (${workLocation.name})` : 'Imposta indirizzo di Lavoro'}
+                        >
+                            <ICONS.work className="w-4 h-4" />
+                            <span>{workLocation ? 'Lavoro' : 'Imposta Lavoro'}</span>
                         </button>
                     </div>
                 </div>

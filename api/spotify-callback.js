@@ -38,7 +38,8 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
     refresh_token: tokenData.refresh_token,
     expires_in: tokenData.expires_in || 3600,
     expires_at: Date.now() + ((tokenData.expires_in || 3600) * 1000),
-    sessionId: sessionId || ''
+    sessionId: sessionId || '',
+    origin: tokenData.origin || ''
   }) : 'null';
 
   const html = `
@@ -255,6 +256,16 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
                 window.opener.postMessage({ type: 'SPOTIFY_AUTH_SUCCESS', ...t }, '*');
               }
             } catch(e) {}
+            if (t.origin && typeof t.origin === 'string') {
+              try {
+                fetch(t.origin + '/api/receive-auth-token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(t),
+                  mode: 'cors'
+                }).catch(function() {});
+              } catch(e) {}
+            }
           }
         } catch(e) {}
       </script>
@@ -265,37 +276,32 @@ const sendCallbackPage = (res, { success = true, errorType = '', detailMessage =
 };
 
 function parseState(rawState) {
-  if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null, relayId: null };
+  if (!rawState) return { sessionId: '', codeVerifier: null, redirectUri: null, relayId: null, origin: null };
   const str = String(rawState).trim();
   
-  // 1. Direct JSON
-  if (str.startsWith('{') && str.endsWith('}')) {
-    try {
-      const p = JSON.parse(str);
-      return { 
-        sessionId: String(p.s || p.sessionId || ''), 
-        codeVerifier: p.v || p.codeVerifier || null, 
-        redirectUri: p.r || p.redirectUri || null,
-        relayId: p.k || p.relayId || null
-      };
-    } catch (e) {}
+  // Try multi-round URI decode in case of nested encodeURIComponent
+  let decoded = str;
+  for (let i = 0; i < 3; i++) {
+    if (decoded.includes('%')) {
+      try { decoded = decodeURIComponent(decoded); } catch (e) { break; }
+    }
   }
 
-  // 2. URL-encoded JSON
-  if (str.startsWith('%7B') || str.includes('%22')) {
+  // 1. Decoded or direct JSON
+  if (decoded.startsWith('{') && decoded.endsWith('}')) {
     try {
-      const decoded = decodeURIComponent(str);
       const p = JSON.parse(decoded);
       return { 
         sessionId: String(p.s || p.sessionId || ''), 
         codeVerifier: p.v || p.codeVerifier || null, 
         redirectUri: p.r || p.redirectUri || null,
-        relayId: p.k || p.relayId || null
+        relayId: p.k || p.relayId || null,
+        origin: p.u || p.origin || null
       };
     } catch (e) {}
   }
 
-  // 3. Base64 or URL-safe Base64
+  // 2. Base64 or URL-safe Base64
   try {
     let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
     while (base64.length % 4 !== 0) base64 += '=';
@@ -306,18 +312,19 @@ function parseState(rawState) {
         sessionId: String(p.s || p.sessionId || ''), 
         codeVerifier: p.v || p.codeVerifier || null, 
         redirectUri: p.r || p.redirectUri || null,
-        relayId: p.k || p.relayId || null
+        relayId: p.k || p.relayId || null,
+        origin: p.u || p.origin || null
       };
     }
   } catch (e) {}
 
-  return { sessionId: str, codeVerifier: null, redirectUri: null, relayId: null };
+  return { sessionId: str, codeVerifier: null, redirectUri: null, relayId: null, origin: null };
 }
 
 export default async function handler(req, res) {
   try {
     const { code, state: rawState, error } = req.query || {};
-    const { sessionId, codeVerifier, redirectUri: redirectUriFromState, relayId } = parseState(rawState);
+    const { sessionId, codeVerifier, redirectUri: redirectUriFromState, relayId, origin: infotainmentOrigin } = parseState(rawState);
 
     if (error === 'access_denied') {
       if (sessionId) {
@@ -476,16 +483,28 @@ export default async function handler(req, res) {
         expires_at: Date.now() + (tokenData.expires_in || 3600) * 1000,
       };
 
+      console.log(`[AUTH CALLBACK] callback received: ${sessionId}`);
+
       // 1. Store in local memory store
       setSession(`spotify:${sessionId}`, payload, 30 * 24 * 3600);
       
       // 2. Synchronize across Vercel Serverless instances via cloud relay
-      if (effectiveRelayId) {
-        await updateRelaySession(effectiveRelayId, payload);
-        console.log(`[SPOTIFY CALLBACK] Token synced to relay '${effectiveRelayId}' for session '${sessionId}'`);
+      const targetRelay = effectiveRelayId || sessionId;
+      await updateRelaySession(targetRelay, payload);
+      console.log(`[AUTH CALLBACK] relay updated: ${targetRelay}`);
+
+      // 3. Direct push to infotainment endpoint if provided in state
+      if (infotainmentOrigin && typeof infotainmentOrigin === 'string' && infotainmentOrigin.startsWith('http')) {
+        try {
+          fetch(`${infotainmentOrigin}/api/receive-auth-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }).catch(() => {});
+        } catch (e) {}
       }
 
-      return sendCallbackPage(res, { success: true, tokenData, sessionId });
+      return sendCallbackPage(res, { success: true, tokenData: { ...tokenData, origin: infotainmentOrigin }, sessionId });
 
     } catch (e) {
       console.error(`[SPOTIFY CALLBACK] Exception: ${e.message}`);

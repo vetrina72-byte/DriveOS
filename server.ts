@@ -55,7 +55,42 @@ async function startServer() {
     };
     authStore.set(String(sessionId), sessionData);
     setSession(`spotify:auth:${sessionId}`, sessionData, 900);
+    console.log(`[AUTH QR] session created: ${sessionId}`);
     res.json({ ok: true, relayId });
+  });
+
+  // Direct webhook endpoint to receive authenticated token payload from phone or remote callback
+  app.post('/api/receive-auth-token', async (req, res) => {
+    try {
+      const { sessionId, access_token, refresh_token, expires_in, expires_at } = req.body || {};
+      if (!sessionId || !access_token) {
+        return res.status(400).json({ error: 'missing_token_or_session' });
+      }
+
+      const payload = {
+        authenticated: true,
+        sessionId,
+        access_token,
+        refresh_token: refresh_token || null,
+        expires_in: expires_in || 3600,
+        expires_at: expires_at || (Date.now() + (expires_in || 3600) * 1000)
+      };
+
+      authStore.set(String(sessionId), {
+        status: 'completed',
+        tokens: payload,
+        timestamp: Date.now()
+      });
+      setSession(`spotify:${sessionId}`, payload, 30 * 24 * 3600);
+      await updateRelaySession(sessionId, payload);
+
+      console.log(`[AUTH CALLBACK] callback received: ${sessionId}`);
+      console.log(`[AUTH CALLBACK] relay updated: ${sessionId}`);
+      return res.status(200).json({ ok: true });
+    } catch (err: any) {
+      console.error('[receive-auth-token] Error:', err?.message || err);
+      return res.status(500).json({ error: 'internal_error' });
+    }
   });
 
   app.get('/api/spotify-qr-login', async (req, res) => {
@@ -269,6 +304,8 @@ async function startServer() {
     const sessionData = sid ? authStore.get(sid) : null;
 
     if (sessionData && sessionData.status === 'completed' && sessionData.tokens?.access_token) {
+      console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+      console.log(`[AUTH POLL] authenticated = true`);
       return res.status(200).json({ 
         authenticated: true, 
         status: 'completed',
@@ -280,6 +317,8 @@ async function startServer() {
     }
 
     if (sessionData && (sessionData.status === 'scanned' || (sessionData as any).authorizing)) {
+      console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+      console.log(`[AUTH POLL] authenticated = false (status: scanned)`);
       return res.status(200).json({
         authenticated: false,
         status: 'scanned',
@@ -288,6 +327,8 @@ async function startServer() {
     }
 
     if (sessionData && sessionData.status === 'error') {
+      console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+      console.log(`[AUTH POLL] authenticated = false (status: error)`);
       return res.status(200).json({
         authenticated: false,
         error: sessionData.error
@@ -298,8 +339,8 @@ async function startServer() {
     let stored = sid ? (getSession(`spotify:${sid}`) || getSession(sid)) : null;
     
     // Check cloud relay if not found locally
-    if ((!stored || !stored.access_token) && (targetRelayId || (stored as any)?.relayId)) {
-      const rid = targetRelayId || (stored as any)?.relayId;
+    if ((!stored || !stored.access_token) && (targetRelayId || (stored as any)?.relayId || sid)) {
+      const rid = targetRelayId || (stored as any)?.relayId || sid;
       const relayData = await getRelaySession(rid);
       if (relayData && (relayData as any).access_token) {
         stored = relayData;
@@ -316,6 +357,8 @@ async function startServer() {
     if (stored) {
       if (stored.authenticated && stored.access_token) {
         if (sid) authStore.set(sid, { status: 'completed', tokens: stored, timestamp: Date.now() });
+        console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+        console.log(`[AUTH POLL] authenticated = true`);
         return res.status(200).json({
           authenticated: true,
           status: 'completed',
@@ -326,6 +369,8 @@ async function startServer() {
         });
       }
       if (stored.status === 'scanned' || stored.authorizing) {
+        console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+        console.log(`[AUTH POLL] authenticated = false (status: scanned)`);
         return res.status(200).json({
           authenticated: false,
           status: 'scanned',
@@ -333,6 +378,8 @@ async function startServer() {
         });
       }
       if (stored.error) {
+        console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+        console.log(`[AUTH POLL] authenticated = false (status: error)`);
         return res.status(200).json({
           authenticated: false,
           error: stored.error
@@ -340,6 +387,8 @@ async function startServer() {
       }
     }
 
+    console.log(`[AUTH POLL] sessionId = ${sessionData || stored ? 'matched' : 'not_matched'}: ${sid}`);
+    console.log(`[AUTH POLL] authenticated = false`);
     return res.status(200).json({ authenticated: false, status: 'pending' });
   });
   

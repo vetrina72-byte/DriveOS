@@ -8,13 +8,39 @@ import { useNavigation } from '../context/NavigationContext';
 import { useWeather } from '../context/WeatherContext';
 import { useTelemetryData } from '../hooks/useTelemetry';
 
-// Patch difensiva per prevenire loop infiniti (TypeError: replace of undefined) nel caricamento tile (loadTile / Yg.url)
+// Patch difensiva completa per prevenire TypeError: Cannot read properties of undefined (reading 'replace')
 const originalTemplate = L.Util.template;
 L.Util.template = function (str: any, data: any) {
   if (typeof str !== 'string') {
     return '';
   }
-  return originalTemplate(str, data);
+  return originalTemplate ? originalTemplate(str, data) : '';
+};
+
+const originalTrim = L.Util.trim;
+L.Util.trim = function (str: any) {
+  if (typeof str !== 'string') return '';
+  return originalTrim ? originalTrim(str) : String(str).trim();
+};
+
+const originalSetUrl = L.TileLayer.prototype.setUrl;
+L.TileLayer.prototype.setUrl = function (url: string, noRedraw?: boolean) {
+  if (!url || typeof url !== 'string') {
+    return this;
+  }
+  return originalSetUrl.call(this, url, noRedraw);
+};
+
+const originalGetTileUrl = L.TileLayer.prototype.getTileUrl;
+L.TileLayer.prototype.getTileUrl = function (coords: any) {
+  if (!this._url || typeof this._url !== 'string') {
+    return '';
+  }
+  try {
+    return originalGetTileUrl.call(this, coords);
+  } catch (e) {
+    return '';
+  }
 };
 
 // Function to create a leaflet icon from the React component - UPDATED
@@ -28,18 +54,30 @@ const createVehicleIcon = (bearing: number): L.DivIcon => {
 };
 
 // Component to programmatically update map view without user interaction
-const MapUpdater = ({ position, zoom }: { position: { lat: number; lng: number }, zoom: number }) => {
+const MapUpdater = ({ position, zoom, isVisible }: { position: { lat: number; lng: number }, zoom: number, isVisible: boolean }) => {
     const map = useMap();
     useEffect(() => {
-        if (position) {
+        if (position && map) {
             // Smoothly pan to the new position and set zoom
             map.setView([position.lat, position.lng], zoom, {
                 animate: true,
-                duration: 1,
+                duration: 0.5,
                 noMoveStart: true // Prevents firing 'movestart' which could have side-effects
             });
         }
     }, [position, zoom, map]);
+
+    useEffect(() => {
+        if (isVisible && map) {
+            const timer = setTimeout(() => {
+                try {
+                    map.invalidateSize();
+                } catch (e) {}
+            }, 150);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, map]);
+
     return null;
 };
 
@@ -135,15 +173,27 @@ const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClic
     } as React.CSSProperties;
   }, [top, right, size, fadeStart, fadeEnd, uiScale]);
 
-  if (!position) {
-      return null;
-  }
+  const fallbackPosition = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('last_known_gps_position');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return { lat: 41.9028, lng: 12.4964 };
+  }, []);
+
+  const activePosition = position || fallbackPosition;
   
-  const tileUrl = isNight 
+  const defaultTile = `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`;
+  const tileUrl = (isNight 
     ? `https://api.maptiler.com/maps/darkmatter/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`
     : (useDarkTheme 
         ? `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`
-        : `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`);
+        : `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`)) || defaultTile;
 
   const AnyMapContainer = MapContainer as any;
   const AnyMarker = Marker as any;
@@ -156,7 +206,7 @@ const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClic
       onClick={onClick}
     >
       <AnyMapContainer
-        center={[position.lat, position.lng]}
+        center={[activePosition.lat, activePosition.lng]}
         zoom={zoom}
         className="minimap-leaflet"
         zoomControl={false}
@@ -173,16 +223,16 @@ const MiniMap = ({ isVisible, top, right, size, zoom, fadeStart, fadeEnd, onClic
           attribution="&copy; OpenStreetMap contributors"
           maxZoom={19}
         />
-        {position && (
+        {activePosition && (
             // @ts-ignore
             <AnyMarker
               ref={markerRef}
-              position={[position.lat, position.lng]}
+              position={[activePosition.lat, activePosition.lng]}
               icon={createVehicleIcon(bearing)}
             />
         )}
         <RouteManager useDarkTheme={useDarkTheme} />
-        {position && <MapUpdater position={position} zoom={zoom} />}
+        {activePosition && <MapUpdater position={activePosition} zoom={zoom} isVisible={isVisible} />}
       </AnyMapContainer>
     </div>
   );

@@ -15,7 +15,7 @@ export function buildMapStyle(theme: 'light' | 'dark' | 'satellite'): any {
             protomaps: { type: 'vector', tiles: [`https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=${K}`], maxzoom: 15 }
         },
         layers: [
-            { id: 'sat-layer', type: 'raster', source: 'sat', minzoom: 0, maxzoom: 24 },
+            { id: 'sat-layer', type: 'raster', source: 'sat', minzoom: 0, maxzoom: 24, paint: { 'raster-fade-duration': 600, 'raster-resampling': 'linear' } },
             {
                 id: 'lbl-places', type: 'symbol', source: 'protomaps', 'source-layer': 'places', minzoom: 0,
                 layout: {

@@ -781,6 +781,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
             // Instantly transition UI: set authenticated and provisional user immediately
             const initialUser = { id: 'spotify_user', display_name: 'Spotify User', product: 'premium' };
+            console.log('[AUTH STATE] frontend state changed: authenticated = true');
             setState(s => ({ 
                 ...s, 
                 accessToken: access_token, 

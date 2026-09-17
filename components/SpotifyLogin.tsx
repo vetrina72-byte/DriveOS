@@ -102,9 +102,15 @@ const FeedbackIcon = ({ type, isNight }: { type: 'success' | 'error', isNight: b
     );
 };
 
-function encodeCompositeState(sessionId: string, codeVerifier: string, redirectUri: string, relayId?: string | null): string {
+function encodeCompositeState(sessionId: string, codeVerifier: string, redirectUri: string, relayId?: string | null, origin?: string): string {
   try {
-    const payload = JSON.stringify({ s: sessionId, v: codeVerifier, r: redirectUri, k: relayId || undefined });
+    const payload = JSON.stringify({
+      s: sessionId,
+      v: codeVerifier,
+      r: redirectUri,
+      k: relayId || undefined,
+      u: origin || undefined
+    });
     return encodeURIComponent(payload);
   } catch (e) {
     return sessionId;
@@ -120,12 +126,20 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
   const sidRef = useRef<string>(getSessionId());
   const relayIdRef = useRef<string | null>(null);
   const pollTimer = useRef<number | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
   const isResolvedRef = useRef<boolean>(false);
+  const pollStartRef = useRef<number>(Date.now());
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current) {
       clearInterval(pollTimer.current);
       pollTimer.current = null;
+    }
+    if (sseRef.current) {
+      try {
+        sseRef.current.close();
+      } catch (e) {}
+      sseRef.current = null;
     }
   }, []);
 
@@ -135,6 +149,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     stopPolling();
 
     setUiState('LOADING');
+    console.log(`[AUTH QR] sessionId matched: ${sidRef.current}`);
 
     const expAt = expiresAt || (Date.now() + (expiresIn || 3600) * 1000);
     try {
@@ -158,6 +173,9 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
     isResolvedRef.current = false;
     setScanDetected(false);
     clearError();
+    pollStartRef.current = Date.now();
+    
+    console.log(`[AUTH QR] session created: ${sidRef.current}`);
     
     const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'ecc9e126d442404b92e8081c7d95ecca';
     
@@ -219,22 +237,56 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
       console.warn('[SpotifyLogin] Registration notice:', err);
     }
 
-    // 2. Client-side fallback to create zero-config relay object if backend couldn't create one (using internal relay if needed)
     if (!relayId) {
       relayId = sidRef.current;
+      relayIdRef.current = relayId;
     }
 
-    const compositeState = encodeCompositeState(sidRef.current, codeVerifier, redirectUri, relayId);
+    const compositeState = encodeCompositeState(sidRef.current, codeVerifier, redirectUri, relayId, currentOrigin);
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(compositeState)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256&show_dialog=true`;
 
     setDirectAuthUrl(authUrl);
     setQrCodeUrl(generateQrUrl(authUrl));
     setUiState('ATTESA');
 
-    // 3. Ultra-responsive polling loop combining local relative endpoint and backend endpoint
+    // 2. Real-time EventSource (SSE) push via pub/sub relay
+    if (typeof EventSource !== 'undefined') {
+      try {
+        const cleanSid = String(sidRef.current).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const sse = new EventSource(`https://ntfy.sh/driveos_auth_${cleanSid}/sse`);
+        sseRef.current = sse;
+        sse.onmessage = (evt) => {
+          try {
+            const parsed = JSON.parse(evt.data);
+            if (parsed && parsed.message) {
+              const payload = typeof parsed.message === 'string' ? JSON.parse(parsed.message) : parsed.message;
+              const token = payload?.access_token || payload?.tokens?.access_token;
+              if (token && (payload.authenticated || payload.status === 'completed')) {
+                console.log(`[AUTH QR] sessionId matched (via realtime push): ${sidRef.current}`);
+                handleSuccessfulAuth(
+                  token,
+                  payload.expires_in || payload.tokens?.expires_in,
+                  payload.expires_at || payload.tokens?.expires_at,
+                  payload.refresh_token || payload.tokens?.refresh_token
+                );
+              }
+            }
+          } catch (e) {}
+        };
+      } catch (err) {}
+    }
+
+    // 3. Controlled polling loop (every 2.5s, with 3min max timeout)
     pollTimer.current = window.setInterval(async () => {
       if (isResolvedRef.current) {
         stopPolling();
+        return;
+      }
+
+      // Check max timeout (180 seconds = 3 minutes)
+      if (Date.now() - pollStartRef.current > 180000) {
+        stopPolling();
+        setUiState('ERRORE_RETE');
         return;
       }
 
@@ -247,11 +299,16 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
         const res = await fetch(`/api/check-auth-status?${queryStr}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json().catch(() => null);
+          const isMatched = !!data?.status;
+          const isAuth = !!(data?.authenticated || data?.access_token);
+          
           if (data?.status === 'scanned' || data?.authorizing) {
             setScanDetected(true);
           }
           const token = data?.access_token || data?.tokens?.access_token;
           if (token && (data.authenticated || data.status === 'completed')) {
+            console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+            console.log(`[AUTH POLL] authenticated = true`);
             handleSuccessfulAuth(
               token, 
               data.expires_in || data.tokens?.expires_in, 
@@ -274,6 +331,8 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
             }
             const token = data?.access_token || data?.tokens?.access_token;
             if (token && (data.authenticated || data.status === 'completed')) {
+              console.log(`[AUTH POLL] sessionId = matched: ${sid}`);
+              console.log(`[AUTH POLL] authenticated = true`);
               handleSuccessfulAuth(
                 token, 
                 data.expires_in || data.tokens?.expires_in, 
@@ -285,7 +344,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
           }
         } catch (e) {}
       }
-    }, 1000);
+    }, 2500);
   }, [clearError, handleSuccessfulAuth, stopPolling]);
 
   // Instant cross-tab & storage listeners

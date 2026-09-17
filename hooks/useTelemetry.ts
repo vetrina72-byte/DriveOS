@@ -5,7 +5,8 @@ export function useTelemetryData() {
   const [data, setData] = useState({
     position: TelemetryStore.position,
     bearing: TelemetryStore.bearing,
-    simulatedRemainingDistance: TelemetryStore.simulatedRemainingDistance
+    simulatedRemainingDistance: TelemetryStore.simulatedRemainingDistance,
+    gpsState: TelemetryStore.gpsState
   });
 
   useEffect(() => {
@@ -13,7 +14,8 @@ export function useTelemetryData() {
       setData({
         position: TelemetryStore.position,
         bearing: TelemetryStore.bearing,
-        simulatedRemainingDistance: TelemetryStore.simulatedRemainingDistance
+        simulatedRemainingDistance: TelemetryStore.simulatedRemainingDistance,
+        gpsState: TelemetryStore.gpsState
       });
     });
   }, []);

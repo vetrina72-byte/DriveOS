@@ -104,18 +104,20 @@ const AUTOMOTIVE_CATEGORIES: CategoryMapping[] = [
   }
 ];
 
-function detectCategory(query: string): CategoryMapping | null {
+function detectCategory(query: string): { cat: CategoryMapping; isExactMatch: boolean } | null {
   const q = query.trim().toLowerCase();
   for (const cat of AUTOMOTIVE_CATEGORIES) {
     for (const kw of cat.keywords) {
+      if (q === kw) {
+        return { cat, isExactMatch: true };
+      }
       if (
-        q === kw ||
         q.startsWith(kw + ' ') ||
         q.endsWith(' ' + kw) ||
         q.includes(' ' + kw + ' ') ||
         q.includes(kw)
       ) {
-        return cat;
+        return { cat, isExactMatch: false };
       }
     }
   }
@@ -149,10 +151,10 @@ export class GeoapifyAutomotiveSearchProvider implements ISearchProvider {
         }
       };
 
-      // 1. If category recognized: Query Places API around reference position
-      if (detectedCat) {
+      // 1. If category recognized AND it's an exact match: Query Places API around reference position
+      if (detectedCat?.isExactMatch) {
         try {
-          const catStr = detectedCat.geoapifyCategories.join(',');
+          const catStr = detectedCat.cat.geoapifyCategories.join(',');
           const placesUrl = `https://api.geoapify.com/v2/places?categories=${encodeURIComponent(
             catStr
           )}&filter=circle:${refLng},${refLat},25000&bias=proximity:${refLng},${refLat}&limit=15&apiKey=${this.apiKey}`;
@@ -162,16 +164,16 @@ export class GeoapifyAutomotiveSearchProvider implements ISearchProvider {
             const placesData = await placesRes.json();
             for (const f of placesData.features || []) {
               const p = f.properties;
-              const name = p.name || p.brand || p.address_line1 || detectedCat.defaultLabel;
+              const name = p.name || p.brand || p.address_line1 || detectedCat.cat.defaultLabel;
               const address = p.address_line2 || [p.street, p.city].filter(Boolean).join(', ') || p.formatted || '';
               addResult({
                 lat: p.lat,
                 lng: p.lon,
                 name: name,
                 address: address,
-                category: detectedCat.category,
+                category: detectedCat.cat.category,
                 isShop: true,
-                type: p.categories?.[0] || detectedCat.category
+                type: p.categories?.[0] || detectedCat.cat.category
               });
             }
           }
@@ -181,8 +183,8 @@ export class GeoapifyAutomotiveSearchProvider implements ISearchProvider {
       }
 
       // 2. Query Geocode Search (handles specific addresses, business names, cities, landmarks)
-      // Only run geocode if not a pure category search or if category produced very few results
-      if (!detectedCat || results.length < 3) {
+      // Only run geocode if not a pure exact category search or if category produced very few results
+      if (!detectedCat?.isExactMatch || results.length < 3) {
         try {
           const bias = `&bias=proximity:${refLng},${refLat}`;
           const searchUrl = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(
@@ -219,7 +221,7 @@ export class GeoapifyAutomotiveSearchProvider implements ISearchProvider {
                   lng: p.lon,
                   name: name,
                   address: address,
-                  category: detectedCat?.category || cat,
+                  category: detectedCat?.cat.category || cat,
                   isShop: cat !== 'address' && cat !== 'place',
                   type: p.result_type
                 });

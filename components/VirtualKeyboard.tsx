@@ -427,100 +427,96 @@ const VirtualKeyboard = ({
     const micKeyConfig = getMicKeyConfig();
 
     return (
-        <AnimatePresence>
-            {isVisible && (
-                <motion.div
-                    key="keyboard-backdrop"
-                    className="fixed inset-0 z-[9000] flex items-end pointer-events-none"
-                    style={{ pointerEvents: 'none' }}
-                    initial={{ backgroundColor: 'rgba(0,0,0,0)' }}
-                    animate={{ backgroundColor: 'rgba(0,0,0,0)' }}
-                    exit={{ backgroundColor: 'rgba(0,0,0,0)' }}
-                    transition={{ duration: 0.3 }}
-                >
-                    <motion.div
-                        id="virtual-keyboard"
-                        className={`w-full py-2 ${themeClasses} pointer-events-auto`}
-                        initial={{ y: '100%' }}
-                        animate={{ y: '0%' }}
-                        exit={{ y: '100%' }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        style={{ ...keyboardStyle, pointerEvents: 'auto' }}
-                    >
-                        <div className="flex h-full w-full gap-6">
-                            <div className="flex flex-col flex-[3.5] h-full" style={{ gap: `${(virtualKeyboardKeyGapY) / 16}rem` }}>
-                                {currentMainLayout.map((row, rowIndex) => (
-                                    <div key={rowIndex} className="flex justify-center w-full flex-1" style={{ gap: `${(virtualKeyboardKeyGapX) / 16}rem` }}>
-                                        {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
-                                        {layoutMode === 'letters' && rowIndex === 2 && (
-                                             <Key key="left-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                        )}
-                                        {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
-                                        {layoutMode === 'symbols' && rowIndex === 2 && <div style={{flex: 1.5}}/>}
+        <motion.div
+            key="keyboard-backdrop"
+            className="fixed inset-0 z-[9000] flex items-end pointer-events-none"
+            style={{ pointerEvents: 'none' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+        >
+            <motion.div
+                id="virtual-keyboard"
+                className={`w-full py-2 ${themeClasses} pointer-events-auto`}
+                initial={{ y: '100%' }}
+                animate={{ y: '0%' }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                style={{ ...keyboardStyle, pointerEvents: 'auto' }}
+            >
+                <div className="flex h-full w-full gap-6">
+                    <div className="flex flex-col flex-[3.5] h-full" style={{ gap: `${(virtualKeyboardKeyGapY) / 16}rem` }}>
+                        {currentMainLayout.map((row, rowIndex) => (
+                            <div key={rowIndex} className="flex justify-center w-full flex-1" style={{ gap: `${(virtualKeyboardKeyGapX) / 16}rem` }}>
+                                {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                {layoutMode === 'letters' && rowIndex === 2 && (
+                                     <Key key="left-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                                )}
+                                {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                {layoutMode === 'symbols' && rowIndex === 2 && <div style={{flex: 1.5}}/>}
 
-                                        {row.map((key) => (
-                                            <Key key={key} keyConfig={key} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                        ))}
-                                        
-                                        {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
-                                        {layoutMode === 'letters' && rowIndex === 2 && (
-                                            <>
-                                                <Key key="right-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                                <motion.button
-                                                    onMouseDown={handleBackspacePressStart}
-                                                    onMouseUp={handleBackspacePressEnd}
-                                                    onMouseLeave={handleBackspacePressEnd}
-                                                    onTouchStart={handleBackspacePressStart}
-                                                    onTouchEnd={handleBackspacePressEnd}
-                                                    className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
-                                                    style={{ flex: '1.5', fontSize: `${(virtualKeyboardKeySize) / 16}rem`, fontWeight: virtualKeyboardKeyFontWeight }}
-                                                    aria-label="Backspace"
-                                                >
-                                                    <FiDelete />
-                                                </motion.button>
-                                            </>
-                                        )}
-                                        {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
-                                        {layoutMode === 'symbols' && rowIndex === 2 && (
-                                            <motion.button
-                                                onMouseDown={handleBackspacePressStart}
-                                                onMouseUp={handleBackspacePressEnd}
-                                                onMouseLeave={handleBackspacePressEnd}
-                                                onTouchStart={handleBackspacePressStart}
-                                                onTouchEnd={handleBackspacePressEnd}
-                                                className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
-                                                style={{ flex: '1.5', fontSize: `${(virtualKeyboardKeySize) / 16}rem`, fontWeight: virtualKeyboardKeyFontWeight }}
-                                                aria-label="Backspace"
-                                            >
-                                                <FiDelete />
-                                            </motion.button>
-                                        )}
-                                    </div>
+                                {row.map((key) => (
+                                    <Key key={key} keyConfig={key} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                                 ))}
-                                <div className="flex justify-center w-full flex-1" style={{ gap: `${(virtualKeyboardKeyGapX) / 16}rem` }}>
-                                    <Key keyConfig={{ key: layoutToggleKey.key, label: layoutToggleKey.label, flex: layoutToggleKey.flex }} onClick={handleKeyPress} isNight={isNight} fontSize={layoutToggleKey.fontSize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                    <Key keyConfig={{ key: 'Mic', ...micKeyConfig, flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                    <Key keyConfig={{ key: 'Space', label: '', flex: '8' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                    <Key keyConfig={{ key: 'Enter', label: 'Enter', flex: '2.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                </div>
+                                
+                                {layoutMode === 'letters' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                {layoutMode === 'letters' && rowIndex === 2 && (
+                                    <>
+                                        <Key key="right-shift" keyConfig={{ key: 'Shift', label: getShiftIcon(), flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                                        <motion.button
+                                            onMouseDown={handleBackspacePressStart}
+                                            onMouseUp={handleBackspacePressEnd}
+                                            onMouseLeave={handleBackspacePressEnd}
+                                            onTouchStart={handleBackspacePressStart}
+                                            onTouchEnd={handleBackspacePressEnd}
+                                            className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
+                                            style={{ flex: '1.5', fontSize: `${(virtualKeyboardKeySize) / 16}rem`, fontWeight: virtualKeyboardKeyFontWeight }}
+                                            aria-label="Backspace"
+                                        >
+                                            <FiDelete />
+                                        </motion.button>
+                                    </>
+                                )}
+                                {layoutMode === 'symbols' && rowIndex === 1 && <div style={{flex: 0.5}}/>}
+                                {layoutMode === 'symbols' && rowIndex === 2 && (
+                                    <motion.button
+                                        onMouseDown={handleBackspacePressStart}
+                                        onMouseUp={handleBackspacePressEnd}
+                                        onMouseLeave={handleBackspacePressEnd}
+                                        onTouchStart={handleBackspacePressStart}
+                                        onTouchEnd={handleBackspacePressEnd}
+                                        className={`${backspaceBaseStyle} ${backspaceThemeStyle}`}
+                                        style={{ flex: '1.5', fontSize: `${(virtualKeyboardKeySize) / 16}rem`, fontWeight: virtualKeyboardKeyFontWeight }}
+                                        aria-label="Backspace"
+                                    >
+                                        <FiDelete />
+                                    </motion.button>
+                                )}
                             </div>
-                            
-                            <div className="grid grid-cols-3 grid-rows-4 flex-[1] h-full" style={{ gap: `${(virtualKeyboardKeyGapY) / 16}rem ${(virtualKeyboardKeyGapX) / 16}rem` }}>
-                                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(key => (
-                                    <Key key={`num-${key}`} keyConfig={key} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                ))}
-                                <div />
-                                <Key keyConfig="0" onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
-                                <div />
-                            </div>
+                        ))}
+                        <div className="flex justify-center w-full flex-1" style={{ gap: `${(virtualKeyboardKeyGapX) / 16}rem` }}>
+                            <Key keyConfig={{ key: layoutToggleKey.key, label: layoutToggleKey.label, flex: layoutToggleKey.flex }} onClick={handleKeyPress} isNight={isNight} fontSize={layoutToggleKey.fontSize} fontWeight={virtualKeyboardKeyFontWeight} />
+                            <Key keyConfig={{ key: 'Mic', ...micKeyConfig, flex: '1.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                            <Key keyConfig={{ key: 'Space', label: '', flex: '8' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                            <Key keyConfig={{ key: 'Enter', label: 'Enter', flex: '2.5' }} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
                         </div>
-                    </motion.div>
-                </motion.div>
-            )}
-        </AnimatePresence>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 grid-rows-4 flex-[1] h-full" style={{ gap: `${(virtualKeyboardKeyGapY) / 16}rem ${(virtualKeyboardKeyGapX) / 16}rem` }}>
+                        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(key => (
+                            <Key key={`num-${key}`} keyConfig={key} onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                        ))}
+                        <div />
+                        <Key keyConfig="0" onClick={handleKeyPress} isNight={isNight} fontSize={virtualKeyboardKeySize} fontWeight={virtualKeyboardKeyFontWeight} />
+                        <div />
+                    </div>
+                </div>
+            </motion.div>
+        </motion.div>
     );
 };
 
