@@ -863,7 +863,7 @@ export default function DebugControls({
               </div>
               <div>
                 <label className="block font-medium text-xs text-zinc-400">Inclinazione Luce Z (Direzione): {dirLightPosZ?.toFixed(2)}</label>
-                <input type="range" min="-30" max="30" step="0.1" value={dirLightPosZ ?? 7.70} onChange={(e) => setDirLightPosZ(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
+                <input type="range" min="-30" max="30" step="0.1" value={dirLightPosZ ?? 0.00} onChange={(e) => setDirLightPosZ(Number(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded appearance-none cursor-pointer" />
               </div>
               <div>
                 <label className="block font-medium text-xs text-zinc-400">Moltiplicatore Intensità Luce: {dirLightIntensity?.toFixed(2)}</label>

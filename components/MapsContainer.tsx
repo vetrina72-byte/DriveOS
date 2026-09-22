@@ -10,12 +10,17 @@ import SearchPanel from './SearchPanel';
 import NavigationHUD from './NavigationHUD';
 import TripStatsHUD from './TripStatsHUD';
 import MapControls from './MapControls';
+import { POIPreviewCard } from './POIPreviewCard';
+import { resolveBrand } from './BrandResolver';
 import { buildMapStyle, dist, bear, OSRM_URL } from './MapEngineUtils';
+import { CosmicStarfield } from './CosmicStarfield';
 import { useUIConfig } from '../context/UIConfigContext';
-import { RouteOption, RoadHazard } from '../types/maps';
+import { RouteOption, RoadHazard, LocationInfo, AutomotiveCategory } from '../types/maps';
 import { fetchRoadHazardsForRoute } from '../services/RoadHazardService';
 import { analyzeRouteTraffic, buildTrafficGeoJSON } from '../services/TrafficService';
 import { TelemetryStore } from '../context/TelemetryStore';
+import { calculateTomTomRoute, getTomTomApiKey } from '../services/TomTomService';
+import { globalSearchService } from '../services/SearchService';
 
 interface StepInfo {
   maneuver: {
@@ -69,6 +74,98 @@ function createDestinationMarkerElement(name: string, isNight: boolean): HTMLEle
   return container;
 }
 
+function getPOIIconAndColor(cat?: AutomotiveCategory): { bg: string; svg: string } {
+  switch (cat) {
+    case 'fuel':
+      return {
+        bg: '#F59E0B',
+        svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v17"/><path d="M14 13h2a2 2 0 0 1 2 2v3.5a1.5 1.5 0 0 0 3 0V9a2.4 2.4 0 0 0-2.4-2.4H17"/><path d="M3 11h10"/><circle cx="8" cy="7" r="1.5"/></svg>'
+      };
+    case 'charging':
+      return {
+        bg: '#06B6D4',
+        svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+      };
+    case 'parking':
+      return {
+        bg: '#2563EB',
+        svg: '<span style="font-weight:900;font-size:13px;line-height:1;color:#FFFFFF;font-family:sans-serif;">P</span>'
+      };
+    case 'restaurant':
+      return {
+        bg: '#E11D48',
+        svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2v6a3 3 0 0 1-3 3 3 3 0 0 1-3-3V2"/><path d="M22 2v20"/><path d="M16 11v11"/><path d="M2 2v8a2 2 0 0 0 2 2h2v10"/><path d="M6 2v6"/></svg>'
+      };
+    case 'pharmacy':
+      return {
+        bg: '#10B981',
+        svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>'
+      };
+    case 'supermarket':
+      return {
+        bg: '#F97316',
+        svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>'
+      };
+    case 'hotel':
+      return {
+        bg: '#8B5CF6',
+        svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>'
+      };
+    default:
+      return {
+        bg: '#3B82F6',
+        svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>'
+      };
+  }
+}
+
+// Interactive automotive POI marker with category/brand indicator
+function createPOIMarkerElement(poi: LocationInfo, isNight: boolean, onClick: () => void): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'poi-marker-container flex flex-col items-center select-none cursor-pointer group';
+  container.style.transformOrigin = 'bottom center';
+
+  const cleanName = (poi.name || '').trim();
+  const brand = resolveBrand(poi.brand, poi.name, poi.category);
+  const { bg, svg } = getPOIIconAndColor(poi.category);
+
+  const markerBg = brand?.bgColor || bg;
+  const logoUrl = brand?.logoUrl;
+
+  container.innerHTML = `
+    <div class="relative flex flex-col items-center hover:scale-110 transition-transform duration-150" style="transform: translateZ(0);">
+      ${cleanName ? `
+      <div class="px-2 py-0.5 mb-1 rounded-md text-[10.5px] font-bold tracking-tight border shadow-sm whitespace-nowrap max-w-[12rem] truncate pointer-events-none ${
+        isNight
+          ? 'bg-zinc-900/95 text-zinc-100 border-zinc-700/80 shadow-black/40'
+          : 'bg-white/95 text-zinc-900 border-zinc-300/80 shadow-zinc-400/20'
+      }">
+        ${cleanName}
+      </div>` : ''}
+
+      <div class="relative flex flex-col items-center">
+        <div class="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-md border border-black/15 overflow-hidden p-1">
+          ${logoUrl ? `
+            <img src="${logoUrl}" alt="${cleanName}" referrerpolicy="no-referrer" class="w-full h-full object-contain transition-opacity duration-150" onerror="this.onerror=null;this.parentElement.innerHTML='${svg.replace(/'/g, "\\'")}'" />
+          ` : `
+            <div style="background-color: ${bg};" class="w-full h-full rounded-lg flex items-center justify-center text-white">
+              ${svg}
+            </div>
+          `}
+        </div>
+        <div class="w-0 h-0 border-l-[3.5px] border-l-transparent border-r-[3.5px] border-r-transparent border-t-[4.5px] border-t-zinc-700/60 -mt-[0.5px]"></div>
+      </div>
+    </div>
+  `;
+
+  container.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+
+  return container;
+}
+
 // Speed camera (autovelox) badge marker
 function createSpeedCameraMarkerElement(hazard: RoadHazard, isNight: boolean): HTMLElement {
   const container = document.createElement('div');
@@ -76,8 +173,8 @@ function createSpeedCameraMarkerElement(hazard: RoadHazard, isNight: boolean): H
   container.setAttribute('title', `Autovelox ${hazard.speedLimit ? `• Limite ${hazard.speedLimit} km/h` : ''}`);
 
   container.innerHTML = `
-    <div class="relative flex items-center justify-center filter drop-shadow-md hover:scale-110 transition-transform">
-      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-600 border border-white text-white font-extrabold text-[10px] shadow-lg">
+    <div class="relative flex items-center justify-center hover:scale-105 transition-transform">
+      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-600 border border-white text-white font-extrabold text-[10px] shadow-sm">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
           <circle cx="12" cy="13" r="3"/>
@@ -85,7 +182,6 @@ function createSpeedCameraMarkerElement(hazard: RoadHazard, isNight: boolean): H
         <span>${hazard.speedLimit ? `${hazard.speedLimit}` : 'VELOX'}</span>
       </div>
     </div>
-    <div class="w-2.5 h-1 bg-black/30 rounded-full blur-[0.5px] -mt-0.5"></div>
   `;
   return container;
 }
@@ -97,14 +193,13 @@ function createTrafficSignalMarkerElement(hazard: RoadHazard, isNight: boolean):
   container.setAttribute('title', 'Semaforo');
 
   container.innerHTML = `
-    <div class="relative flex items-center justify-center filter drop-shadow-md hover:scale-110 transition-transform">
-      <div class="flex flex-col items-center gap-0.5 px-1 py-1 rounded-md bg-zinc-950 border border-zinc-600 text-white shadow-lg">
-        <div class="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.8)]"></div>
+    <div class="relative flex items-center justify-center hover:scale-105 transition-transform">
+      <div class="flex flex-col items-center gap-0.5 px-1 py-1 rounded-md bg-zinc-950 border border-zinc-700 text-white shadow-sm">
+        <div class="w-1.5 h-1.5 rounded-full bg-red-500"></div>
         <div class="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
         <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
       </div>
     </div>
-    <div class="w-2.5 h-1 bg-black/30 rounded-full blur-[0.5px] -mt-0.5"></div>
   `;
   return container;
 }
@@ -116,15 +211,14 @@ function createRoadworksMarkerElement(hazard: RoadHazard, isNight: boolean): HTM
   container.setAttribute('title', hazard.description || 'Lavori in corso');
 
   container.innerHTML = `
-    <div class="relative flex items-center justify-center filter drop-shadow-md hover:scale-110 transition-transform">
-      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500 border border-white text-zinc-950 font-black text-[10px] shadow-lg">
+    <div class="relative flex items-center justify-center hover:scale-105 transition-transform">
+      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500 border border-white text-zinc-950 font-black text-[10px] shadow-sm">
         <svg class="w-3.5 h-3.5 fill-current text-zinc-950" viewBox="0 0 24 24">
           <path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 10h2v4h-2zm0 6h2v2h-2z"/>
         </svg>
         <span>LAVORI</span>
       </div>
     </div>
-    <div class="w-2.5 h-1 bg-black/30 rounded-full blur-[0.5px] -mt-0.5"></div>
   `;
   return container;
 }
@@ -136,8 +230,8 @@ function createDetourMarkerElement(hazard: RoadHazard, isNight: boolean): HTMLEl
   container.setAttribute('title', hazard.description || 'Deviazione');
 
   container.innerHTML = `
-    <div class="relative flex items-center justify-center filter drop-shadow-md hover:scale-110 transition-transform">
-      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-600 border border-white text-white font-extrabold text-[10px] shadow-lg">
+    <div class="relative flex items-center justify-center hover:scale-105 transition-transform">
+      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-600 border border-white text-white font-extrabold text-[10px] shadow-sm">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="m16 3 4 4-4 4"/>
           <path d="M20 7H9a4 4 0 0 0-4 4v10"/>
@@ -145,7 +239,6 @@ function createDetourMarkerElement(hazard: RoadHazard, isNight: boolean): HTMLEl
         <span>DEVIAZIONE</span>
       </div>
     </div>
-    <div class="w-2.5 h-1 bg-black/30 rounded-full blur-[0.5px] -mt-0.5"></div>
   `;
   return container;
 }
@@ -157,8 +250,8 @@ function createHazardMarkerElement(hazard: RoadHazard, isNight: boolean): HTMLEl
   container.setAttribute('title', hazard.description || 'Attenzione su questo tratto');
 
   container.innerHTML = `
-    <div class="relative flex items-center justify-center filter drop-shadow-md hover:scale-110 transition-transform">
-      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-600 border border-white text-white font-extrabold text-[10px] shadow-lg">
+    <div class="relative flex items-center justify-center hover:scale-105 transition-transform">
+      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-600 border border-white text-white font-extrabold text-[10px] shadow-sm">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
           <line x1="12" y1="9" x2="12" y2="13"/>
@@ -167,7 +260,6 @@ function createHazardMarkerElement(hazard: RoadHazard, isNight: boolean): HTMLEl
         <span>ATTENZIONE</span>
       </div>
     </div>
-    <div class="w-2.5 h-1 bg-black/30 rounded-full blur-[0.5px] -mt-0.5"></div>
   `;
   return container;
 }
@@ -179,8 +271,8 @@ function createTrafficCongestionMarkerElement(hazard: RoadHazard, isNight: boole
   container.setAttribute('title', hazard.description || 'Rallentamento per traffico');
 
   container.innerHTML = `
-    <div class="relative flex items-center justify-center filter drop-shadow-md hover:scale-110 transition-transform">
-      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-600 border border-white text-white font-black text-[10px] shadow-lg animate-pulse">
+    <div class="relative flex items-center justify-center hover:scale-105 transition-transform">
+      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-600 border border-white text-white font-black text-[10px] shadow-sm">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <circle cx="12" cy="12" r="10"/>
           <line x1="8" y1="12" x2="16" y2="12"/>
@@ -188,7 +280,6 @@ function createTrafficCongestionMarkerElement(hazard: RoadHazard, isNight: boole
         <span>CODA</span>
       </div>
     </div>
-    <div class="w-2.5 h-1 bg-black/30 rounded-full blur-[0.5px] -mt-0.5"></div>
   `;
   return container;
 }
@@ -244,8 +335,11 @@ const MapsContainer = React.memo(({
   
   const destMarkRef = useRef<maplibregl.Marker | null>(null);
   const proxMarkRef = useRef<maplibregl.Marker | null>(null);
+  const poiMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const [selectedPOI, setSelectedPOI] = useState<LocationInfo | null>(null);
   const destinationNameRef = useRef<string>('');
   const routeAnimIdRef = useRef<number | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Dead reckoning, bearing, and geolocationsRefs
   const initialPos = TelemetryStore.position;
@@ -297,25 +391,69 @@ const MapsContainer = React.memo(({
     congestion?: number;
   }>({ cameras: 0, signals: 0, roadworks: 0, hazards: 0, congestion: 0 });
 
+  // Map Point Picker State for Casa / Lavoro
+  const [pickingMapType, setPickingMapType] = useState<'home' | 'work' | null>(null);
+  const pickingMapTypeRef = useRef<'home' | 'work' | null>(null);
+  pickingMapTypeRef.current = pickingMapType;
+  const [pointPickToast, setPointPickToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleStartPicker = (e: any) => {
+      const type = e.detail?.type || 'home';
+      setPickingMapType(type);
+    };
+    window.addEventListener('start-map-point-picker' as any, handleStartPicker);
+    return () => {
+      window.removeEventListener('start-map-point-picker' as any, handleStartPicker);
+    };
+  }, []);
+
   // Focus and inspect individual navigation turn / step on the map
   const handleFocusStep = useCallback((location: [number, number], stepName?: string) => {
     if (!mapRef.current) return;
+
+    let targetLng = Number(location?.[0]);
+    let targetLat = Number(location?.[1]);
+    if (isNaN(targetLng) || isNaN(targetLat)) return;
+
+    // Automatic normalization if [lat, lng] was passed instead of [lng, lat]
+    if (targetLng > 30 && targetLat < 25) {
+      const tmp = targetLng;
+      targetLng = targetLat;
+      targetLat = tmp;
+    }
 
     // Temporarily pause vehicle tracking so the user can inspect this turn
     followRef.current = false;
     setIsMapFollowing(false);
     interactRef.current = true;
-    if (interactTimerRef.current) clearTimeout(interactTimerRef.current);
+    flyingRef.current = true;
+
+    if (recTimerRef.current) {
+      clearTimeout(recTimerRef.current);
+      recTimerRef.current = null;
+    }
+    if (interactTimerRef.current) {
+      clearTimeout(interactTimerRef.current);
+      interactTimerRef.current = null;
+    }
 
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-    const leftPadding = isMobile ? 20 : 380; // Keep clear from Navigation HUD
+    const leftPadding = isMobile ? 30 : 420; // Keep clear from Navigation HUD
 
-    mapRef.current.easeTo({
-      center: [location[0], location[1]],
+    mapRef.current.flyTo({
+      center: [targetLng, targetLat],
       zoom: 17.5,
-      pitch: 45,
-      duration: 1000,
-      padding: { top: 120, bottom: 120, left: leftPadding, right: 60 },
+      pitch: 35,
+      bearing: mapRef.current.getBearing(),
+      speed: 1.5,
+      curve: 1.2,
+      essential: true,
+      padding: { top: 120, bottom: 100, left: leftPadding, right: 60 },
+    });
+
+    mapRef.current.once('moveend', () => {
+      flyingRef.current = false;
     });
 
     if (stepFocusMarkerRef.current) {
@@ -324,29 +462,42 @@ const MapsContainer = React.memo(({
     }
 
     const el = document.createElement('div');
-    el.className = 'step-focus-pin pointer-events-none flex flex-col items-center select-none';
+    el.className = 'step-focus-pin pointer-events-none flex flex-col items-center select-none z-[60]';
     el.innerHTML = `
-      <div class="relative flex items-center justify-center">
-        <div class="w-12 h-12 rounded-full bg-blue-500/30 animate-ping absolute"></div>
-        <div class="w-7 h-7 rounded-full bg-blue-600 border-2 border-white shadow-2xl flex items-center justify-center text-white text-xs font-black">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
+      <div class="flex flex-col items-center transform -translate-y-2">
+        ${stepName ? `
+          <div class="px-3 py-1 mb-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold shadow-md border border-white/30 whitespace-nowrap max-w-[260px] truncate">
+            ${stepName}
+          </div>
+        ` : ''}
+        <div class="relative flex items-center justify-center">
+          <div class="w-8 h-8 rounded-full bg-blue-600 border-2 border-white shadow-md flex items-center justify-center text-white text-xs font-black">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </div>
         </div>
       </div>
     `;
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([location[0], location[1]])
+      .setLngLat([targetLng, targetLat])
       .addTo(mapRef.current);
     stepFocusMarkerRef.current = marker;
 
-    // Auto cleanup pin after 12 seconds
-    setTimeout(() => {
+    // Auto resume tracking after 14 seconds of inspection
+    recTimerRef.current = setTimeout(() => {
       if (stepFocusMarkerRef.current === marker) {
         marker.remove();
         stepFocusMarkerRef.current = null;
       }
-    }, 12000);
+      if (navingRef.current) {
+        followRef.current = true;
+        setIsMapFollowing(true);
+        interactRef.current = false;
+        flyingRef.current = false;
+        if (smoothRecRef.current) smoothRecRef.current();
+      }
+    }, 14000);
   }, []);
 
   // Helper functions for DOM updates
@@ -382,21 +533,27 @@ const MapsContainer = React.memo(({
   };
 
   const [cmode, setCmode] = useState<'north-up' | 'heading-up'>('north-up');
+  const [is3D, setIs3D] = useState<boolean>(false);
   const [bearing, setBearing] = useState(0);
+  const [currentPitch, setCurrentPitch] = useState<number>(0);
   const [isSatellite, setIsSatellite] = useState(false);
   const [isWeatherActive, setIsWeatherActive] = useState(false);
   const [isMapFollowing, setIsMapFollowing] = useState(true);
   const [currentZoom, setCurrentZoom] = useState(14);
 
   // Custom additions for authentic maps template
-  const [currentStreet, setCurrentStreet] = useState<string>('');
+  const [currentStreet, setCurrentStreet] = useState<string>('Viale Andrea Doria');
   const lastGeocodeTimeRef = useRef<number>(0);
 
   // Sync ref values for render frame loops
   const cmodeRef = useRef<'north-up' | 'heading-up'>('north-up');
+  const is3DRef = useRef<boolean>(false);
+  const ccamPitchRef = useRef<number>(0);
+  const ccamBearRef = useRef<number>(0);
   const followRef = useRef<boolean>(true);
   const interactRef = useRef<boolean>(false);
   const flyingRef = useRef<boolean>(false);
+  const flightSeqRef = useRef<number>(0);
   const isWeatherActiveRef = useRef<boolean>(false);
   const recTimerRef = useRef<NodeJS.Timeout | null>(null);
   const startTrackTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -409,6 +566,7 @@ const MapsContainer = React.memo(({
   const savedModeRef = useRef<'north-up' | 'heading-up' | null>(null);
   const prevCmodeRef = useRef<'north-up' | 'heading-up'>('north-up');
   const weatherSlotRef = useRef<'A' | 'B'>('A');
+  const flyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Physics animation variables for drawer slide sheet
   const physics = useRef({
@@ -416,18 +574,41 @@ const MapsContainer = React.memo(({
       targetX: 100,
       startX: 100,
       animStartTime: 0,
+      animDuration: 350,
       isDragging: false,
       isInteracting: false,
       dragStartX: 0,
       dragStartCurrentX: 0,
       panelWidth: 0,
-      animationId: 0
+      animationId: 0,
+      lastClientX: 0,
+      lastTime: 0,
+      velocityX: 0
   });
 
   const ANIMATION_SPEED = 0.18; 
   const CLOSE_THRESHOLD_PERCENT = 25;
 
   // Global CSS bouncing animations
+  useEffect(() => {
+    const handleOpenRadar = () => {
+      setIsWeatherActive(true);
+      isWeatherActiveRef.current = true;
+      if (mapRef.current) {
+        mapRef.current.setMaxZoom(7.5);
+        mapRef.current.flyTo({
+          zoom: 5.8,
+          pitch: 0,
+          duration: 2000,
+          essential: true,
+          easing: (t) => 1 - Math.pow(1 - t, 3)
+        });
+      }
+    };
+    window.addEventListener('open-weather-radar', handleOpenRadar);
+    return () => window.removeEventListener('open-weather-radar', handleOpenRadar);
+  }, []);
+
   useEffect(() => {
     const styles = `
       @keyframes pin-bounce {
@@ -489,10 +670,11 @@ const MapsContainer = React.memo(({
         if (state.targetX !== newTargetX || state.animStartTime === 0) {
             state.startX = state.currentX;
             state.targetX = newTargetX;
+            state.animDuration = sceneTransitionSpeed * 1000;
             state.animStartTime = performance.now();
         }
     }
-  }, [isOpen]);
+  }, [isOpen, sceneTransitionSpeed]);
 
   // Drawer slide frame cycle animation
   useEffect(() => {
@@ -503,10 +685,14 @@ const MapsContainer = React.memo(({
         if (!state.isDragging) {
             if (state.animStartTime > 0) {
                 const elapsed = performance.now() - state.animStartTime;
-                const duration = sceneTransitionSpeed * 1000; // ms
+                const duration = state.animDuration || (sceneTransitionSpeed * 1000); // ms
                 const t = Math.min(elapsed / duration, 1.0);
-                const easeT = 1 - Math.pow(1 - t, 4);
+                const easeT = 1 - Math.pow(1 - t, 3.5); // smoother cubic ease-out
                 state.currentX = state.startX + (state.targetX - state.startX) * easeT;
+                if (t >= 1.0) {
+                  state.currentX = state.targetX;
+                  state.animStartTime = 0;
+                }
             } else {
                 state.currentX = state.targetX;
             }
@@ -518,7 +704,7 @@ const MapsContainer = React.memo(({
             
             onDragProgress?.(visualProgress);
 
-            if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.5) {
+            if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.2) {
                 state.isInteracting = false;
                 onDragProgress?.(null);
             }
@@ -538,7 +724,7 @@ const MapsContainer = React.memo(({
 
     physics.current.animationId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(physics.current.animationId);
-  }, [onDragProgress]);
+  }, [onDragProgress, sceneTransitionSpeed]);
 
   // Handle slide drag starts
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -554,12 +740,23 @@ const MapsContainer = React.memo(({
     state.dragStartX = e.clientX;
     state.dragStartCurrentX = state.currentX;
     state.panelWidth = panelRef.current.offsetWidth || window.innerWidth * 0.66;
+    state.lastClientX = e.clientX;
+    state.lastTime = performance.now();
+    state.velocityX = 0;
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     const state = physics.current;
     if (!state.isDragging) return;
     e.stopPropagation();
+
+    const now = performance.now();
+    const dt = now - state.lastTime;
+    if (dt > 8) {
+      state.velocityX = (e.clientX - state.lastClientX) / dt;
+      state.lastClientX = e.clientX;
+      state.lastTime = now;
+    }
 
     const deltaPx = e.clientX - state.dragStartX;
     const deltaPercent = (deltaPx / state.panelWidth) * 100;
@@ -572,19 +769,28 @@ const MapsContainer = React.memo(({
 
   const handlePointerUp = (e: React.PointerEvent) => {
     e.stopPropagation();
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
     
     const state = physics.current;
+    if (!state.isDragging) return;
+
     state.isDragging = false;
 
-    if (state.currentX > CLOSE_THRESHOLD_PERCENT) {
+    // Determine close intent by threshold OR swipe velocity
+    const shouldClose = state.velocityX > 0.35 || (state.currentX > CLOSE_THRESHOLD_PERCENT && state.velocityX > -0.25);
+
+    if (shouldClose) {
         state.startX = state.currentX;
         state.targetX = 100;
+        state.animDuration = Math.max(180, Math.min(400, (100 - state.currentX) * 3));
         state.animStartTime = performance.now();
         if (isOpen) onClose();
     } else {
         state.startX = state.currentX;
         state.targetX = 0;
+        state.animDuration = Math.max(180, Math.min(350, state.currentX * 3));
         state.animStartTime = performance.now();
     }
   };
@@ -807,29 +1013,51 @@ const MapsContainer = React.memo(({
     }
   };
 
-  // Interpolate line coordinates proportionally by physical distance for a smooth, natural drawing trace
-  const interpolateLineStringByDistance = (coords: [number, number][], progress: number): [number, number][] => {
+  // Pre-computes cumulative distances along a LineString to eliminate heavy per-frame trig calculations
+  const precomputeLineDistances = (coords: [number, number][]) => {
+    if (!coords || coords.length < 2) {
+      return { dists: new Float64Array(0), totalDist: 0 };
+    }
+    const len = coords.length;
+    const dists = new Float64Array(len);
+    let total = 0;
+    for (let i = 1; i < len; i++) {
+      const p1 = coords[i - 1];
+      const p2 = coords[i];
+      const cosLat = Math.cos(((p1[1] + p2[1]) * Math.PI) / 720);
+      const dx = (p2[0] - p1[0]) * cosLat;
+      const dy = p2[1] - p1[1];
+      total += Math.hypot(dx, dy);
+      dists[i] = total;
+    }
+    return { dists, totalDist: total };
+  };
+
+  // Interpolate line coordinates using binary search over precalculated distances (O(log N))
+  const interpolateLineFast = (
+    coords: [number, number][],
+    dists: Float64Array,
+    totalDist: number,
+    progress: number
+  ): [number, number][] => {
     if (!coords || coords.length < 2) return coords || [];
     if (progress <= 0) return [coords[0], coords[0]];
-    if (progress >= 1) return coords;
-
-    const dists: number[] = [0];
-    let totalDist = 0;
-    for (let i = 1; i < coords.length; i++) {
-      const dx = (coords[i][0] - coords[i - 1][0]) * Math.cos((coords[i][1] * Math.PI) / 360);
-      const dy = coords[i][1] - coords[i - 1][1];
-      totalDist += Math.hypot(dx, dy);
-      dists.push(totalDist);
-    }
-
-    if (totalDist === 0) return coords;
+    if (progress >= 1 || totalDist <= 0) return coords;
 
     const targetDist = progress * totalDist;
-    let idx = 0;
-    while (idx < dists.length - 1 && dists[idx + 1] < targetDist) {
-      idx++;
+    // Binary search
+    let low = 0;
+    let high = dists.length - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (dists[mid] < targetDist) {
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
     }
 
+    const idx = Math.max(0, Math.min(coords.length - 2, low - 1));
     const dStart = dists[idx];
     const dEnd = dists[idx + 1];
     const span = dEnd - dStart;
@@ -842,11 +1070,25 @@ const MapsContainer = React.memo(({
       p1[1] + (p2[1] - p1[1]) * frac,
     ];
 
+    // For extremely long routes (>800 pts), downsample earlier points to preserve 60fps rendering
+    if (coords.length > 800) {
+      const stepSize = Math.max(1, Math.floor(coords.length / 400));
+      const sampled: [number, number][] = [];
+      for (let i = 0; i <= idx; i += stepSize) {
+        sampled.push(coords[i]);
+      }
+      if (sampled[sampled.length - 1] !== coords[idx]) {
+        sampled.push(coords[idx]);
+      }
+      sampled.push(tip);
+      return sampled;
+    }
+
     return [...coords.slice(0, idx + 1), tip];
   };
 
-  // Animation frame handler for route tracing across the road network
-  const animateRouteDrawing = useCallback((allRoutes: any[], selectedIndex: number, animDuration = 1500) => {
+  // Animation frame handler for route tracing across the road network (lag-free, hardware-accelerated)
+  const animateRouteDrawing = useCallback((allRoutes: any[], selectedIndex: number, animDuration = 1200) => {
     if (!mapRef.current || !mapRef.current.getSource('routes-source')) return;
 
     if (routeAnimIdRef.current) {
@@ -854,17 +1096,36 @@ const MapsContainer = React.memo(({
       routeAnimIdRef.current = null;
     }
 
+    // Precalculate all route distance arrays ONCE before starting the animation loop
+    const precomputed = allRoutes.map((r) => {
+      const coords = r.geometry.coordinates as [number, number][];
+      const { dists, totalDist } = precomputeLineDistances(coords);
+      return { coords, dists, totalDist };
+    });
+
+    const maxPoints = Math.max(...allRoutes.map(r => r.geometry.coordinates?.length || 0));
+    // For very long intercity routes, slightly adjust duration for smooth cinematic pacing
+    const adjustedDuration = maxPoints > 2000 ? 1500 : animDuration;
+    const minFrameInterval = maxPoints > 1000 ? 24 : 14; // Limit to ~40fps for massive lines to avoid worker queue lag
+
     const startTime = performance.now();
+    let lastRenderTime = 0;
 
     const step = (now: number) => {
       const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / animDuration);
+      const progress = Math.min(1, elapsed / adjustedDuration);
       // Smooth cubic ease out
       const ease = 1 - Math.pow(1 - progress, 3);
 
+      if (progress < 1 && (now - lastRenderTime < minFrameInterval)) {
+        routeAnimIdRef.current = requestAnimationFrame(step);
+        return;
+      }
+      lastRenderTime = now;
+
       const features = allRoutes.map((r, i) => {
-        const fullCoords = r.geometry.coordinates;
-        const drawnCoords = interpolateLineStringByDistance(fullCoords, ease);
+        const item = precomputed[i];
+        const drawnCoords = interpolateLineFast(item.coords, item.dists, item.totalDist, ease);
         return {
           type: 'Feature',
           geometry: {
@@ -886,16 +1147,13 @@ const MapsContainer = React.memo(({
           type: 'FeatureCollection',
           features
         });
-        if (mapRef.current.getLayer('vehicle-layer')) {
-          mapRef.current.moveLayer('vehicle-layer');
-        }
       }
 
       if (progress < 1) {
         routeAnimIdRef.current = requestAnimationFrame(step);
       } else {
         routeAnimIdRef.current = null;
-        // Final complete geometry
+        // Final complete geometry at end of animation
         if (mapRef.current && mapRef.current.getSource('routes-source')) {
           const finalFeatures = allRoutes.map((r, i) => ({
             type: 'Feature',
@@ -910,9 +1168,6 @@ const MapsContainer = React.memo(({
             type: 'FeatureCollection',
             features: finalFeatures
           });
-          if (mapRef.current.getLayer('vehicle-layer')) {
-            mapRef.current.moveLayer('vehicle-layer');
-          }
         }
       }
     };
@@ -1049,6 +1304,14 @@ const MapsContainer = React.memo(({
       if (shouldFitBounds && mapRef.current && !navingRef.current) {
         setIsRoutePreview(true);
         isRoutePreviewRef.current = true;
+        followRef.current = false;
+        setIsMapFollowing(false);
+        flyingRef.current = true;
+
+        if (recTimerRef.current) {
+          clearTimeout(recTimerRef.current);
+          recTimerRef.current = null;
+        }
         
         // Compute bounding box containing all routes
         let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
@@ -1079,100 +1342,185 @@ const MapsContainer = React.memo(({
             pitch: 0 
           }
         );
+
+        mapRef.current.once('moveend', () => {
+          flyingRef.current = false;
+        });
       }
   }, [updateHUD, animateRouteDrawing, isNight]);
 
-  // Fetch travel route vectors using OSM open API OSRM services or Mapbox
+  // Fetch travel route vectors using TomTom, Mapbox, or OSRM services
   const fetchRoute = useCallback(async (start: { lat: number; lng: number }, end: { lat: number; lng: number }) => {
     if (!start || !end) return;
     const currentId = ++activeFetchIdRef.current;
     
+    // 1. First attempt with TomTom Routing API (for real-time traffic speeds, accurate delay & lane guidance)
+    const ttKey = getTomTomApiKey();
+    if (ttKey) {
+      try {
+        const ttRoutes = await calculateTomTomRoute(start, end, ttKey);
+        if (ttRoutes && ttRoutes.length > 0 && activeFetchIdRef.current === currentId) {
+          routesRef.current = ttRoutes;
+          setRoutes(ttRoutes);
+
+          const fastest = ttRoutes[0];
+          const fastestSteps = fastest.legs?.flatMap((l: any) => l.steps || []) || [];
+          const fastestHasMotorway = fastest.hasMotorway || fastestSteps.some((s: any) => {
+            const n = (s.name || '').toLowerCase();
+            const ref = (s.ref || '').toLowerCase();
+            return ref.startsWith('a') || ref.startsWith('e') || n.includes('autostrada') || n.includes('tangenziale') || n.includes('raccordo') || n.includes('gra');
+          });
+
+          const computedOptions: RouteOption[] = ttRoutes.map((r: any, idx: number) => {
+            const steps = r.legs?.flatMap((l: any) => l.steps || []) || [];
+            const hasMotorway = r.hasMotorway || steps.some((s: any) => {
+              const n = (s.name || '').toLowerCase();
+              const ref = (s.ref || '').toLowerCase();
+              return ref.startsWith('a') || ref.startsWith('e') || n.includes('autostrada') || n.includes('tangenziale') || n.includes('raccordo') || n.includes('gra');
+            });
+
+            const hasFerry = r.hasFerry || steps.some((s: any) => {
+              const n = (s.name || '').toLowerCase();
+              const ref = (s.ref || '').toLowerCase();
+              const mode = (s.mode || '').toLowerCase();
+              const t = (s.maneuver?.type || '').toLowerCase();
+              return mode === 'ferry' || t.includes('ferry') || n.includes('traghetto') || n.includes('ferry') || n.includes('imbarco') || ref.includes('ferry') || ref.includes('traghetto');
+            });
+
+            const timeDiffSec = r.duration - fastest.duration;
+            const timeDiffMinutes = Math.max(0, Math.round(timeDiffSec / 60));
+            const distDiffKm = Math.round(((r.distance - fastest.distance) / 1000) * 10) / 10;
+            const summary = r.legs?.[0]?.summary || '';
+            const significantRoad = steps.find((s: any) => (s.ref && s.ref.length > 1) || (s.name && s.name.length > 3))?.ref || summary.split(',')[0];
+
+            let label = 'Percorso consigliato';
+            let tag = '';
+            let gainSummary = '';
+            let whyChoose = '';
+            let badgeType: 'fastest' | 'scenic' | 'toll_free' | 'shortest' | 'alternative' = 'alternative';
+
+            const delayMin = Math.round((r.trafficInfo?.delaySeconds || 0) / 60);
+            const liveTrafficAvailable = r.trafficInfo?.available;
+
+            if (idx === 0) {
+              badgeType = 'fastest';
+              label = 'Più veloce';
+              if (hasFerry) {
+                tag = hasMotorway ? 'Autostrada + Traghetto' : 'Traghetto veicoli';
+                whyChoose = 'Itinerario ottimale con imbarco traghetto veicoli.';
+              } else if (liveTrafficAvailable) {
+                if (delayMin > 1) {
+                  tag = (hasMotorway ? 'Autostrada • ' : '') + `+${delayMin} min ritardo traffico`;
+                  whyChoose = `Percorso più rapido TomTom, include ${delayMin} min di ritardo stimato per traffico.`;
+                } else {
+                  tag = (hasMotorway ? 'Autostrada • ' : '') + 'Traffico scorrevole';
+                  whyChoose = 'Itinerario TomTom ottimale con traffico scorrevole e analisi in tempo reale.';
+                }
+              } else {
+                tag = hasMotorway ? 'Autostrada' : (significantRoad ? `Via ${significantRoad}` : 'Arteria principale');
+                whyChoose = 'Itinerario a scorrimento rapido per raggiungere la destinazione nel minor tempo.';
+              }
+
+              if (ttRoutes.length > 1) {
+                const timeSaved = Math.round((ttRoutes[1].duration - fastest.duration) / 60);
+                gainSummary = timeSaved > 0 ? `Risparmi ${timeSaved} min` : 'Percorso ottimale';
+              } else {
+                gainSummary = 'Percorso ottimale';
+              }
+            } else {
+              if ((fastest.hasTollRoad || fastestHasMotorway) && !r.hasTollRoad && !hasMotorway) {
+                badgeType = 'toll_free';
+                label = `Senza pedaggio (+${timeDiffMinutes} min)`;
+                tag = 'Zero pedaggi • Strade statali SS/SP';
+                gainSummary = 'Nessun pedaggio';
+                whyChoose = `Itinerario senza pedaggi (+${timeDiffMinutes} min): viabilità ordinaria senza costi autostradali.`;
+              } else if (!hasMotorway && fastestHasMotorway) {
+                badgeType = 'scenic';
+                label = `Statale / Panoramico (+${timeDiffMinutes} min)`;
+                tag = 'Strada Statale ordinaria';
+                gainSummary = `+${timeDiffMinutes} min • Guida statale`;
+                whyChoose = `Itinerario su viabilità statale ordinaria (+${timeDiffMinutes} min): alternativa alle autostrade a pedaggio.`;
+              } else if (distDiffKm < -0.5) {
+                badgeType = 'shortest';
+                label = `Più breve (${Math.abs(distDiffKm)} km in meno)`;
+                tag = 'Minor chilometraggio';
+                gainSummary = `${Math.abs(distDiffKm)} km in meno`;
+                whyChoose = `Itinerario chilometricamente più corto (${Math.abs(distDiffKm)} km in meno).`;
+              } else {
+                badgeType = 'alternative';
+                label = significantRoad ? `Via ${significantRoad} (+${timeDiffMinutes} min)` : `Alternativa (+${timeDiffMinutes} min)`;
+                tag = significantRoad ? `Via ${significantRoad}` : (hasMotorway ? 'Via Autostrada' : 'Percorso alternativo');
+                gainSummary = distDiffKm < 0 ? `${Math.abs(distDiffKm)} km in meno` : `+${timeDiffMinutes} min`;
+                whyChoose = `Variante TomTom (${significantRoad || 'alternativa'}) in caso di congestione sul percorso primario.`;
+              }
+            }
+
+            return {
+              index: idx,
+              distance: r.distance,
+              duration: r.duration,
+              summary,
+              hasMotorway,
+              hasFerry,
+              timeDiffMinutes,
+              distDiffKm,
+              label,
+              tag,
+              gainSummary,
+              whyChoose,
+              badgeType,
+              geometry: r.geometry,
+              steps
+            };
+          });
+
+          setRouteOptions(computedOptions);
+          setSelectedRouteIndex(0);
+          selectedRouteIndexRef.current = 0;
+
+          // Clear any active navigation route line before previewing routes
+          if (mapRef.current && mapRef.current.getSource('route')) {
+            (mapRef.current.getSource('route') as any).setData({
+              type: 'FeatureCollection',
+              features: []
+            });
+          }
+
+          // Apply TomTom route with full hud updates, camera framing and hazard tracking
+          applyRoute(ttRoutes, 0, true, true);
+          return;
+        }
+      } catch (err) {
+        console.warn('TomTom route failed, falling back to Mapbox/OSRM:', err);
+      }
+    }
+
+    // 2. Fallback to Mapbox or OSRM
     const mapboxToken =
       (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_MAPBOX_TOKEN) ||
       (typeof process !== 'undefined' && process.env && process.env.VITE_MAPBOX_TOKEN) ||
       '';
+    const distApproxKm = dist(start.lat, start.lng, end.lat, end.lng) / 1000;
+    const alternativesParam = distApproxKm > 60 ? 'alternatives=true' : 'alternatives=2';
+
     let url = '';
     if (mapboxToken) {
       url = `https://api.mapbox.com/directions/v5/mapbox/driving/${start.lng},${start.lat};${end.lng},${end.lat}?alternatives=true&geometries=geojson&steps=true&overview=full&access_token=${mapboxToken}`;
     } else {
-      url = `${OSRM_URL}${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=true&annotations=false&alternatives=3`;
+      url = `${OSRM_URL}${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=true&annotations=false&${alternativesParam}`;
     }
-    
+
     try {
-      const res = await fetch(url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
       if (activeFetchIdRef.current !== currentId) return; // Discard stale fetch promises
 
       if (!data.routes || !data.routes.length) throw new Error('Route empty');
       
       let rawRoutes: any[] = [...data.routes];
-
-      // If OSRM returned fewer than 2 routes, check for sensible road alternatives snapped to real car roads
-      if (rawRoutes.length < 2 && start && end) {
-        const dLng = end.lng - start.lng;
-        const dLat = end.lat - start.lat;
-        const dTotal = Math.sqrt(dLng * dLng + dLat * dLat);
-
-        if (dTotal > 0.02) { // more than ~2 km
-          const midLng = (start.lng + end.lng) / 2;
-          const midLat = (start.lat + end.lat) / 2;
-          const nx = -dLat / dTotal;
-          const ny = dLng / dTotal;
-          const offsetDist = Math.min(0.10, Math.max(0.025, dTotal * 0.12));
-
-          const probe1 = { lng: midLng + nx * offsetDist, lat: midLat + ny * offsetDist };
-          const probe2 = { lng: midLng - nx * offsetDist, lat: midLat - ny * offsetDist };
-
-          try {
-            // First snap candidates to the nearest real drivable road network via OSRM nearest
-            const nearestBase = (OSRM_URL || 'https://routing.openstreetmap.de/routed-car/route/v1/driving/').replace('/route/v1/driving/', '/nearest/v1/driving/');
-            const [snap1, snap2] = await Promise.all([
-              fetch(`${nearestBase}${probe1.lng.toFixed(5)},${probe1.lat.toFixed(5)}?number=1`).then(r => r.json()).catch(() => null),
-              fetch(`${nearestBase}${probe2.lng.toFixed(5)},${probe2.lat.toFixed(5)}?number=1`).then(r => r.json()).catch(() => null)
-            ]);
-
-            const validWaypoints: { lng: number; lat: number; name: string }[] = [];
-            if (snap1?.code === 'Ok' && snap1.waypoints?.[0]?.distance < 800) {
-              const wp = snap1.waypoints[0];
-              validWaypoints.push({ lng: wp.location[0], lat: wp.location[1], name: wp.name || '' });
-            }
-            if (snap2?.code === 'Ok' && snap2.waypoints?.[0]?.distance < 800) {
-              const wp = snap2.waypoints[0];
-              validWaypoints.push({ lng: wp.location[0], lat: wp.location[1], name: wp.name || '' });
-            }
-
-            if (validWaypoints.length > 0 && activeFetchIdRef.current === currentId) {
-              const candPromises = validWaypoints.map(wp =>
-                fetch(`${OSRM_URL}${start.lng},${start.lat};${wp.lng.toFixed(5)},${wp.lat.toFixed(5)};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=true&annotations=false`)
-                  .then(r => r.json())
-                  .catch(() => null)
-              );
-
-              const candResults = await Promise.all(candPromises);
-
-              if (activeFetchIdRef.current === currentId) {
-                for (const res of candResults) {
-                  const cand = res?.routes?.[0];
-                  if (!cand || !cand.geometry || (!cand.steps?.length && !cand.legs?.[0]?.steps?.length)) continue;
-
-                  // Strict sensible route criteria:
-                  // Must not exceed 1.65x duration or 1.45x distance, and must provide a meaningful variation
-                  const durRatio = cand.duration / rawRoutes[0].duration;
-                  const distRatio = cand.distance / rawRoutes[0].distance;
-                  const isDistinct = Math.abs(cand.duration - rawRoutes[0].duration) > 40 || Math.abs(cand.distance - rawRoutes[0].distance) > 400;
-
-                  if (durRatio >= 1.02 && durRatio <= 1.65 && distRatio <= 1.45 && isDistinct) {
-                    rawRoutes.push(cand);
-                    if (rawRoutes.length >= 3) break;
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('Alternative route candidate notice:', e);
-          }
-        }
-      }
 
       // Sort routes by duration ascending: Route 0 is ALWAYS the fastest route
       rawRoutes.sort((a, b) => a.duration - b.duration);
@@ -1196,6 +1544,14 @@ const MapsContainer = React.memo(({
           return ref.startsWith('a') || ref.startsWith('e') || n.includes('autostrada') || n.includes('tangenziale') || n.includes('raccordo') || n.includes('gra');
         });
 
+        const hasFerry = steps.some((s: any) => {
+          const n = (s.name || '').toLowerCase();
+          const ref = (s.ref || '').toLowerCase();
+          const mode = (s.mode || '').toLowerCase();
+          const t = (s.maneuver?.type || '').toLowerCase();
+          return mode === 'ferry' || t.includes('ferry') || n.includes('traghetto') || n.includes('ferry') || n.includes('imbarco') || ref.includes('ferry') || ref.includes('traghetto');
+        });
+
         const timeDiffSec = r.duration - fastest.duration;
         const timeDiffMinutes = Math.max(0, Math.round(timeDiffSec / 60));
         const distDiffKm = Math.round(((r.distance - fastest.distance) / 1000) * 10) / 10;
@@ -1211,41 +1567,46 @@ const MapsContainer = React.memo(({
         if (idx === 0) {
           badgeType = 'fastest';
           label = 'Più veloce';
-          tag = hasMotorway ? 'Autostrada • Massima velocità' : (significantRoad ? `Via ${significantRoad}` : 'Arteria principale');
+          if (hasFerry) {
+            tag = hasMotorway ? 'Autostrada + Traghetto auto' : 'Traghetto auto incluso';
+            whyChoose = 'Itinerario ottimale con imbarco traghetto veicoli: include traversata marittima con vettura al seguito.';
+          } else {
+            tag = hasMotorway ? 'Autostrada • Massima velocità' : (significantRoad ? `Via ${significantRoad}` : 'Arteria principale');
+            whyChoose = 'Itinerario a scorrimento rapido: consigliato per raggiungere la destinazione nel minor tempo possibile.';
+          }
           if (rawRoutes.length > 1) {
             const timeSaved = Math.round((rawRoutes[1].duration - fastest.duration) / 60);
             gainSummary = timeSaved > 0 ? `Risparmi ${timeSaved} min` : 'Percorso ottimale';
           } else {
             gainSummary = 'Percorso ottimale';
           }
-          whyChoose = 'Itinerario a scorrimento rapido: consigliato per raggiungere la destinazione nel minor tempo possibile.';
         } else {
           if (fastestHasMotorway && !hasMotorway) {
             badgeType = 'toll_free';
             label = `Senza pedaggio (+${timeDiffMinutes} min)`;
-            tag = 'Zero pedaggi • Strade statali SS/SP';
+            tag = hasFerry ? 'Zero pedaggi • Con traghetto' : 'Zero pedaggi • Strade statali SS/SP';
             gainSummary = 'Nessun pedaggio';
-            whyChoose = `Itinerario senza pedaggi (+${timeDiffMinutes} min): azzera i costi dei caselli autostradali viaggiando su viabilità statale ordinaria.`;
+            whyChoose = `Itinerario senza pedaggi (+${timeDiffMinutes} min): azzera i costi dei caselli autostradali viaggiando su viabilità statale ordinaria${hasFerry ? ' con imbarco traghetto' : ''}.`;
           } else if (timeDiffMinutes >= 3 && !hasMotorway) {
             badgeType = 'scenic';
             label = `Panoramico (+${timeDiffMinutes} min)`;
-            tag = 'Guida rilassante • Paesaggio';
+            tag = hasFerry ? 'Guida rilassante • Con traghetto' : 'Guida rilassante • Paesaggio';
             gainSummary = `+${timeDiffMinutes} min • Guida panoramica`;
-            whyChoose = `Itinerario panoramico (+${timeDiffMinutes} min): consigliato per godersi il paesaggio e una guida rilassante su strade secondarie, evitando traffico pesante e gallerie.`;
+            whyChoose = `Itinerario panoramico (+${timeDiffMinutes} min): consigliato per godersi il paesaggio e una guida rilassante${hasFerry ? ', include tratta in traghetto' : ''}.`;
           } else if (distDiffKm < -0.5) {
             badgeType = 'shortest';
             label = `Più breve (${Math.abs(distDiffKm)} km in meno)`;
-            tag = 'Minor chilometraggio';
+            tag = hasFerry ? 'Minor km • Con traghetto' : 'Minor chilometraggio';
             gainSummary = `${Math.abs(distDiffKm)} km in meno`;
-            whyChoose = `Itinerario più corto (${Math.abs(distDiffKm)} km in meno): consigliato per ridurre i chilometri totali e minimizzare i consumi di carburante.`;
+            whyChoose = `Itinerario più corto (${Math.abs(distDiffKm)} km in meno): riduce i chilometri totali${hasFerry ? ' tramite traghetto' : ''}.`;
           } else {
             badgeType = 'alternative';
             label = significantRoad ? `Via ${significantRoad} (+${timeDiffMinutes} min)` : `Alternativa (+${timeDiffMinutes} min)`;
-            tag = significantRoad ? `Via ${significantRoad}` : (hasMotorway ? 'Via Autostrada' : 'Percorso alternativo');
+            tag = significantRoad ? `Via ${significantRoad}${hasFerry ? ' • Traghetto' : ''}` : (hasMotorway ? 'Via Autostrada' : (hasFerry ? 'Traghetto auto' : 'Percorso alternativo'));
             gainSummary = distDiffKm < 0 ? `${Math.abs(distDiffKm)} km in meno` : `+${timeDiffMinutes} min`;
             whyChoose = significantRoad
-              ? `Variante viaria via ${significantRoad} (+${timeDiffMinutes} min): consigliata per evitare rallentamenti o traffico sulla direttrice primaria.`
-              : `Percorso alternativo secondario (+${timeDiffMinutes} min): utile come variante di scorrimento in caso di rallentamenti.`;
+              ? `Variante viaria via ${significantRoad} (+${timeDiffMinutes} min): variante di scorrimento utile in caso di traffico${hasFerry ? ' (include traghetto)' : ''}.`
+              : `Percorso alternativo secondario (+${timeDiffMinutes} min): variante di scorrimento utile in caso di rallentamenti${hasFerry ? ' (include traghetto)' : ''}.`;
           }
         }
 
@@ -1255,6 +1616,7 @@ const MapsContainer = React.memo(({
           duration: r.duration,
           summary,
           hasMotorway,
+          hasFerry,
           timeDiffMinutes,
           distDiffKm,
           label,
@@ -1335,6 +1697,16 @@ const MapsContainer = React.memo(({
     destinationNameRef.current = name;
     setDestinationName(name);
 
+    // Stop auto-following and clear any recenter timers so camera will smoothly transition to the route
+    followRef.current = false;
+    setIsMapFollowing(false);
+    isRoutePreviewRef.current = true;
+    setIsRoutePreview(true);
+    if (recTimerRef.current) {
+      clearTimeout(recTimerRef.current);
+      recTimerRef.current = null;
+    }
+
     if (mapRef.current) {
       if (destMarkRef.current) {
         destMarkRef.current.remove();
@@ -1370,6 +1742,9 @@ const MapsContainer = React.memo(({
     isPendingStartRef.current = false;
     activeFetchIdRef.current++;
 
+    isRoutePreviewRef.current = false;
+    setIsRoutePreview(false);
+
     destRef.current = null;
     destinationNameRef.current = '';
     geoRef.current = null;
@@ -1398,6 +1773,9 @@ const MapsContainer = React.memo(({
 
     hazardMarkersRef.current.forEach(m => m.remove());
     hazardMarkersRef.current = [];
+    poiMarkersRef.current.forEach(m => m.remove());
+    poiMarkersRef.current = [];
+    setSelectedPOI(null);
     setRoadHazards([]);
     roadHazardsRef.current = [];
     setUpcomingHazard(null);
@@ -1446,13 +1824,13 @@ const MapsContainer = React.memo(({
           smoothRecRef.current();
         } else {
           flyingRef.current = true;
-          mapRef.current.flyTo({
+          mapRef.current.easeTo({
             center: [rposRef.current.lng, rposRef.current.lat],
             zoom: cmodeRef.current === 'heading-up' ? 16 : 14,
             bearing: cmodeRef.current === 'heading-up' ? cbearRef.current : 0,
-            duration: 1800,
+            duration: 1600,
             essential: true,
-            easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+            easing: (t) => 1 - Math.pow(1 - t, 3.5)
           });
           mapRef.current.once('moveend', () => {
             flyingRef.current = false;
@@ -1470,35 +1848,106 @@ const MapsContainer = React.memo(({
   // Recenter map camera on active vehicle location Ref point
   const smoothRec = useCallback(() => {
     if (!rposRef.current || !mapRef.current) return;
-    mapRef.current.stop();
-    followRef.current = true;
-    setIsMapFollowing(true);
+
+    if (recTimerRef.current) {
+      clearTimeout(recTimerRef.current);
+      recTimerRef.current = null;
+    }
+
+    const isWeather = isWeatherActiveRef.current;
+    if (isWeather) {
+      // Keep weather radar active; restrict maxZoom to radar overview level
+      if (mapRef.current) {
+        mapRef.current.setMaxZoom(7.5);
+      }
+    } else if (mapRef.current) {
+      mapRef.current.setMaxZoom(20);
+    }
+
+    const flightId = ++flightSeqRef.current;
     flyingRef.current = true;
+    followRef.current = false;
+    setIsMapFollowing(true);
 
-    const tz = cmodeRef.current === 'heading-up' ? 16 : 14;
+    // If the map was rotated away from north-up during user exploration, restore the previous mode (e.g. north-up)
+    if (savedModeRef.current) {
+      cmodeRef.current = savedModeRef.current;
+      setCmode(savedModeRef.current);
+    }
+
     const tb = cmodeRef.current === 'heading-up' ? cbearRef.current : 0;
+    // Always preserve 3D mode (pitch 45°) if 3D is active, even when weather radar is visible
+    const tp = is3DRef.current ? 45 : 0;
     const tll: [number, number] = [rposRef.current.lng, rposRef.current.lat];
-    const cc = mapRef.current.getCenter();
-    const cZoom = mapRef.current.getZoom();
+    // For weather radar, zoom to radar overview level (7.0) so radar remains visible without zooming in excessively
+    const tz = isWeather ? 7.0 : 16.0;
 
-    const d = dist(cc.lat, cc.lng, tll[1], tll[0]);
-    const zDiff = Math.abs(cZoom - tz);
+    ccamPitchRef.current = tp;
+    ccamBearRef.current = tb;
 
-    const useFlyTo = d > 2000 || zDiff > 2.5;
-    const anim = useFlyTo ? mapRef.current.flyTo : mapRef.current.easeTo;
-    const duration = useFlyTo ? Math.min(3500, Math.max(2000, d / 11)) : 1500;
+    // Stop any conflicting animation
+    mapRef.current.stop();
 
-    anim.call(mapRef.current, {
-      center: tll,
-      zoom: tz,
-      bearing: tb,
-      duration: duration,
-      essential: true,
-      easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-    });
+    // Calculate distance and zoom difference to determine whether the camera is close
+    const curCenter = mapRef.current.getCenter();
+    const curZoom = mapRef.current.getZoom();
+    const dLat = (curCenter.lat - tll[1]) * 111320;
+    const dLng = (curCenter.lng - tll[0]) * 111320 * Math.cos((curCenter.lat * Math.PI) / 180);
+    const distMeters = Math.hypot(dLat, dLng);
+    const zoomDiff = Math.abs(curZoom - tz);
+
+    // Smooth dynamic ease-out curve: elegant initial movement that decelerates with velvet precision
+    const smoothEaseOut = (t: number) => {
+      return 1 - Math.pow(1 - t, 3.5);
+    };
+
+    if (distMeters < 3500 && zoomDiff < 4) {
+      // Normal close-range recenter: slightly slower (~1350ms) with dynamic ease-out landing
+      mapRef.current.easeTo({
+        center: tll,
+        zoom: tz,
+        bearing: tb,
+        pitch: tp,
+        duration: 1350,
+        easing: smoothEaseOut,
+        essential: true
+      });
+    } else {
+      // Long-range recenter: smooth cruising flyTo with dynamic ease-out arrival
+      mapRef.current.flyTo({
+        center: tll,
+        zoom: tz,
+        bearing: tb,
+        pitch: tp,
+        speed: 0.85,
+        curve: 1.3,
+        essential: true,
+        easing: smoothEaseOut
+      });
+    }
+
+    if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
+    flyTimerRef.current = setTimeout(() => {
+      if (flightSeqRef.current === flightId) {
+        flyingRef.current = false;
+        followRef.current = true;
+        if (mapRef.current) {
+          ccamPitchRef.current = mapRef.current.getPitch();
+          ccamBearRef.current = mapRef.current.getBearing();
+        }
+      }
+    }, 6000);
 
     mapRef.current.once('moveend', () => {
-      flyingRef.current = false;
+      if (flightSeqRef.current === flightId) {
+        if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
+        flyingRef.current = false;
+        followRef.current = true;
+        if (mapRef.current) {
+          ccamPitchRef.current = mapRef.current.getPitch();
+          ccamBearRef.current = mapRef.current.getBearing();
+        }
+      }
     });
   }, []);
 
@@ -1515,7 +1964,8 @@ const MapsContainer = React.memo(({
         mapRef.current.fitBounds(bounds, {
           padding: { top: 110, bottom: 90, left: leftPadding, right: 80 },
           animate: true,
-          duration: 800
+          duration: 800,
+          easing: (t) => 1 - Math.pow(1 - t, 3.5)
         });
         followRef.current = false;
         setIsMapFollowing(false);
@@ -1525,18 +1975,82 @@ const MapsContainer = React.memo(({
     }
   }, [isRoutePreview, smoothRec]);
 
-  // Compass interaction triggers
+  // Compass interaction triggers - switches orientation (North-up vs Heading-up, or resets to North when rotated)
   const handleToggleCompass = useCallback(() => {
-    if (isRoutePreview) return; // Prevent changing during preview
     if (!mapRef.current) return;
-    mapRef.current.stop();
-    flyingRef.current = false;
-    
-    const newMode = cmodeRef.current === 'heading-up' ? 'north-up' : 'heading-up';
+
+    const curBearing = mapRef.current.getBearing();
+    const isRotated = Math.abs(curBearing) > 1.5;
+
+    // If map was rotated away from North, return directly to North-up
+    let newMode: 'north-up' | 'heading-up' = 'north-up';
+    let targetBearing = 0;
+
+    if (isRotated) {
+      newMode = 'north-up';
+      targetBearing = 0;
+    } else {
+      newMode = cmodeRef.current === 'heading-up' ? 'north-up' : 'heading-up';
+      targetBearing = newMode === 'heading-up' ? cbearRef.current : 0;
+    }
+
     cmodeRef.current = newMode;
     setCmode(newMode);
-    smoothRec();
-  }, [smoothRec, isRoutePreview]);
+    ccamBearRef.current = targetBearing;
+
+    mapRef.current.easeTo({
+      bearing: targetBearing,
+      duration: 450,
+      essential: true,
+      easing: (t) => 1 - Math.pow(1 - t, 3)
+    });
+
+    if (!followRef.current && !flyingRef.current) {
+      if (recTimerRef.current) clearTimeout(recTimerRef.current);
+      recTimerRef.current = setTimeout(() => {
+        if (isWeatherActiveRef.current || isRoutePreviewRef.current) return;
+        if (smoothRecRef.current) smoothRecRef.current();
+      }, 10000);
+    }
+  }, []);
+
+  // Independent 3D perspective toggle (45° tilt vs 0° flat overhead 2D)
+  const handleToggle3D = useCallback(() => {
+    if (!mapRef.current) return;
+
+    const next3D = !is3DRef.current;
+    is3DRef.current = next3D;
+    setIs3D(next3D);
+
+    const targetPitch = next3D ? 45 : 0;
+
+    if (!followRef.current && !flyingRef.current) {
+      if (recTimerRef.current) clearTimeout(recTimerRef.current);
+      recTimerRef.current = setTimeout(() => {
+        if (isWeatherActiveRef.current || isRoutePreviewRef.current) return;
+        if (smoothRecRef.current) smoothRecRef.current();
+      }, 10000);
+    }
+
+    if (flyingRef.current) {
+      // Smoothly update camera pitch in-flight without restarting flyTo or speeding up camera movement
+      ccamPitchRef.current = targetPitch;
+      mapRef.current.easeTo({
+        pitch: targetPitch,
+        duration: 400,
+        essential: true,
+        easing: (t) => 1 - Math.pow(1 - t, 3)
+      });
+    } else if (!followRef.current) {
+      ccamPitchRef.current = targetPitch;
+      mapRef.current.easeTo({
+        pitch: targetPitch,
+        duration: 400,
+        essential: true,
+        easing: (t) => 1 - Math.pow(1 - t, 3)
+      });
+    }
+  }, []);
 
   // Satellite layer toggle layout styling updater
   const handleToggleSatellite = useCallback(() => {
@@ -1549,14 +2063,16 @@ const MapsContainer = React.memo(({
       if (mapRef.current.getZoom() > 19) {
          mapRef.current.easeTo({ zoom: 19, duration: 600 });
       }
-      mapRef.current.setStyle(buildMapStyle('satellite'));
+      mapRef.current.setStyle(buildMapStyle(isNight ? 'satellite-night' : 'satellite'));
     } else {
       mapRef.current.setMaxZoom(20);
       mapRef.current.setStyle(buildMapStyle(isNight ? 'dark' : 'light'));
     }
 
     mapRef.current.once('style.load', () => {
-       mapRef.current?.setProjection({ type: 'globe' } as any);
+       try {
+         mapRef.current?.setProjection({ type: 'globe' } as any);
+       } catch (e) {}
        // Redraw active pathways geoRef coordinate trace layers
        if (geoRef.current && mapRef.current?.getSource('route')) {
          (mapRef.current.getSource('route') as any).setData({
@@ -1657,8 +2173,7 @@ const MapsContainer = React.memo(({
 
     const src = mapRef.current.getSource(sourceId) as any;
     if (src) {
-      // Use webp for broader compatibility and reduce flashing by setting opacity delayed
-      // Color Scheme 4 is Universal (Green, Yellow, Red)
+      // Use webp for broader compatibility and smooth transition
       const rawUrl = globalRadarService.getTileUrl(frame.path, "{x}" as any, "{y}" as any, "{z}" as any);
       const tileUrl = rawUrl ? rawUrl.replace("{x}", "{x}").replace("{y}", "{y}").replace("{z}", "{z}") : '';
       if (tileUrl) {
@@ -1666,17 +2181,14 @@ const MapsContainer = React.memo(({
       }
     }
 
-    // Set new layer to visible immediately
-    mapRef.current.setPaintProperty(layerId, 'raster-opacity', 0.85);
-    
-    // Delay hiding the old layer to allow new tiles to fetch without flashing
+    // Smooth atomic cross-fade after short buffer time for tiles to load in memory
     setTimeout(() => {
-      if (mapRef.current && weatherSlotRef.current === ns) {
+      if (mapRef.current) {
+        mapRef.current.setPaintProperty(layerId, 'raster-opacity', 0.55);
         mapRef.current.setPaintProperty(currentLayerId, 'raster-opacity', 0);
+        weatherSlotRef.current = ns;
       }
-    }, 600);
-
-    weatherSlotRef.current = ns;
+    }, 150);
   }, []);
 
   const lastNavTargetRef = useRef<LocationData | null>(null);
@@ -1699,16 +2211,15 @@ const MapsContainer = React.memo(({
     }
   }, [navigationTarget, setDest, clearRoute]);
 
-  // Reverse geocodes the vehicle position to track current street
+  // Reverse geocodes the vehicle position to track current street persistently
   useEffect(() => {
-    if (!naving || !rposRef.current) {
-      setCurrentStreet('');
+    if (!rposRef.current) {
       return;
     }
 
     const updateStreet = async () => {
       const now = Date.now();
-      if (now - lastGeocodeTimeRef.current < 15000) return; // rate limit 15s
+      if (now - lastGeocodeTimeRef.current < 8000) return; // rate limit 8s
       lastGeocodeTimeRef.current = now;
 
       try {
@@ -1734,7 +2245,7 @@ const MapsContainer = React.memo(({
     };
 
     updateStreet();
-  }, [naving, currentStepIndex]);
+  }, [naving, currentStepIndex, rposRef.current?.lat, rposRef.current?.lng]);
 
   // Local state watcher matching geolocation stream with smooth spline integrations
   useEffect(() => {
@@ -1862,16 +2373,37 @@ const MapsContainer = React.memo(({
           }
         }
 
-        if (mapRef.current && followRef.current && !interactRef.current && !flyingRef.current && !isWeatherActiveRef.current) {
+        if (mapRef.current && followRef.current && !isRoutePreviewRef.current && !interactRef.current && !flyingRef.current && !isWeatherActiveRef.current) {
           const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
           const targetFps = isMobile ? 30 : 60;
           const frameTime = 1000 / targetFps;
           
+          // Continuous smooth camera pitch interpolation (exponential easing)
+          const targetPitch = is3DRef.current ? 45 : 0;
+          const pitchDiff = targetPitch - ccamPitchRef.current;
+          if (Math.abs(pitchDiff) > 0.05) {
+            ccamPitchRef.current += pitchDiff * (1 - Math.exp(-9.0 * dt));
+          } else {
+            ccamPitchRef.current = targetPitch;
+          }
+
+          // Continuous smooth camera bearing interpolation (shortest circular angle) when in heading-up mode
+          if (cmodeRef.current === 'heading-up') {
+            const targetBearing = cbearRef.current;
+            const currentBearVal = mapRef.current.getBearing();
+            const bearDiff = (((targetBearing - currentBearVal) % 360) + 540) % 360 - 180;
+            if (Math.abs(bearDiff) > 0.1) {
+              ccamBearRef.current = currentBearVal + bearDiff * (1 - Math.exp(-7.0 * dt));
+            } else {
+              ccamBearRef.current = targetBearing;
+            }
+          }
+
           if (!(mapRef.current as any)._lastMapUpdate || t - (mapRef.current as any)._lastMapUpdate >= frameTime) {
-            const b = cmodeRef.current === 'heading-up' ? cbearRef.current : 0;
             mapRef.current.jumpTo({
               center: [rposRef.current.lng, rposRef.current.lat],
-              bearing: b,
+              bearing: ccamBearRef.current,
+              pitch: ccamPitchRef.current,
               zoom: mapRef.current.getZoom()
             });
             (mapRef.current as any)._lastMapUpdate = t;
@@ -1918,16 +2450,17 @@ const MapsContainer = React.memo(({
       center: [initLng, initLat],
       zoom: initZoom,
       attributionControl: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-      maxPitch: 0,
+      pitchWithRotate: true,
+      touchPitch: true,
+      maxPitch: 65,
       minPitch: 0,
-      fadeDuration: 300,
+      pitch: 0,
+      fadeDuration: 400,
       minZoom: 1.8,
       bearingSnap: 0,
       dragRotate: true,
       touchZoomRotate: true,
-      maxTileCacheSize: 300,
+      maxTileCacheSize: 1000,
       maxZoom: 20
     });
 
@@ -1945,8 +2478,45 @@ const MapsContainer = React.memo(({
     });
     resObs.observe(mapContainerRef.current);
 
-    // Creates virtual vehicle indicator with exact geometric center alignment
-    const svgStr = `<svg viewBox="227 429 960 960" xmlns="http://www.w3.org/2000/svg"><path fill="#FDFCFC" d="M639.979065,551.815125 C645.168152,540.088928 650.026184,528.629089 655.273071,517.350159 C668.813538,488.243103 708.591675,477.322784 735.566650,494.553101 C749.156494,503.233704 756.313721,515.993591 762.405273,530.085083 C787.421509,587.954773 812.641113,645.736633 837.759827,703.562134 C862.019897,759.411072 886.220703,815.285706 910.497864,871.127136 C934.243469,925.745850 958.087769,980.321533 981.824341,1034.944092 C1007.415466,1093.834229 1032.934204,1152.755859 1058.479614,1211.665894 C1065.145508,1227.038086 1072.164307,1242.270264 1078.359985,1257.829956 C1086.983032,1279.485596 1080.075684,1304.759277 1061.833496,1320.765991 C1044.998657,1335.537842 1018.689575,1338.636230 998.807922,1327.514404 C973.012146,1313.083984 947.494507,1298.156738 921.845398,1283.463745 C896.915344,1269.182495 871.943359,1254.974487 847.039307,1240.648193 C818.390015,1224.167480 789.808044,1207.569946 761.171631,1191.066895 C743.616943,1180.949951 726.045654,1170.860352 708.373291,1160.952148 C707.027161,1160.197388 704.456543,1160.359009 703.057556,1161.154419 C677.210327,1175.849976 651.469910,1190.733276 625.675842,1205.522827 C600.896851,1219.730347 576.053467,1233.825806 551.291382,1248.062500 C526.381775,1262.384155 501.560059,1276.858398 476.657715,1291.192383 C455.215363,1303.535034 433.836731,1315.996338 412.205383,1328.000488 C388.054901,1341.402466 353.937225,1332.084717 339.430542,1308.918579 C327.287811,1289.527344 327.550873,1270.051636 336.589294,1249.539062 C360.004272,1196.398804 382.947418,1143.050781 406.116211,1089.801880 C430.474152,1033.819946 454.903503,977.869019 479.249084,921.881653 C499.687012,874.880615 520.035400,827.840698 540.448792,780.828918 C568.990845,715.096863 597.555237,649.374451 626.113342,583.649353 C630.675232,573.150452 635.254150,562.658875 639.979065,551.815125z"/><path fill="#F53C3F" d="M707.985596,1098.275757 C688.642273,1109.299561 669.273499,1120.278809 649.961304,1131.356812 C616.268066,1150.684448 582.601135,1170.058105 548.939514,1189.440918 C526.323425,1202.463379 503.680634,1215.440674 481.153290,1228.615234 C464.812622,1238.171875 442.888977,1236.842773 429.660736,1225.171021 C413.332520,1210.763794 408.560883,1191.014648 416.835876,1171.967651 C458.874298,1075.205688 500.913940,978.444153 542.963440,881.686951 C583.817871,787.679565 624.699951,693.684204 665.529053,599.665771 C671.380615,586.191162 681.000549,576.917969 695.215637,572.960754 C698.969604,571.915771 703.108154,572.252441 707.527222,572.474731 C707.984741,748.088440 707.985168,923.182068 707.985596,1098.275757z"/><path fill="#F56568" d="M708.263672,1098.452148 C707.985168,923.182068 707.984741,748.088440 707.981567,572.530945 C723.690674,570.855591 740.974609,582.015869 748.093933,598.283508 C762.495178,631.190430 776.757996,664.157898 791.081543,697.098694 C823.043579,770.604004 855.015137,844.105225 886.968018,917.614563 C899.828613,947.201050 912.631531,976.812622 925.493591,1006.398438 C949.338867,1061.248291 973.180847,1116.099487 997.079346,1170.926025 C1008.930359,1198.113892 994.624023,1227.342163 966.153687,1233.567993 C952.263794,1236.605469 940.130798,1231.951416 928.216003,1225.023193 C880.917236,1197.519775 833.427551,1170.344727 785.995544,1143.070557 C760.191284,1128.232910 734.360596,1113.440918 708.263672,1098.452148z"/></svg>`;
+    // Creates virtual vehicle indicator with authentic 3D extruded volumetric depth
+    const svgStr = `<svg viewBox="227 410 960 990" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="nav-arrow-shadow" x="-20%" y="-15%" width="140%" height="150%">
+          <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.48" />
+        </filter>
+        <linearGradient id="wall-grad-left" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#9B1C1E" />
+          <stop offset="100%" stop-color="#5E0F11" />
+        </linearGradient>
+        <linearGradient id="wall-grad-right" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#B22225" />
+          <stop offset="100%" stop-color="#6A1012" />
+        </linearGradient>
+        <linearGradient id="bezel-wall" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#E2E8F0" />
+          <stop offset="100%" stop-color="#94A3B8" />
+        </linearGradient>
+        <linearGradient id="face-grad-left" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#FF5252" />
+          <stop offset="100%" stop-color="#D92427" />
+        </linearGradient>
+        <linearGradient id="face-grad-right" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#FF7575" />
+          <stop offset="100%" stop-color="#EE383B" />
+        </linearGradient>
+      </defs>
+      <g filter="url(#nav-arrow-shadow)">
+        <g transform="translate(0, 20)">
+          <path fill="#718096" opacity="0.9" d="M639.979065,551.815125 C645.168152,540.088928 650.026184,528.629089 655.273071,517.350159 C668.813538,488.243103 708.591675,477.322784 735.566650,494.553101 C749.156494,503.233704 756.313721,515.993591 762.405273,530.085083 C787.421509,587.954773 812.641113,645.736633 837.759827,703.562134 C862.019897,759.411072 886.220703,815.285706 910.497864,871.127136 C934.243469,925.745850 958.087769,980.321533 981.824341,1034.944092 C1007.415466,1093.834229 1032.934204,1152.755859 1058.479614,1211.665894 C1065.145508,1227.038086 1072.164307,1242.270264 1078.359985,1257.829956 C1086.983032,1279.485596 1080.075684,1304.759277 1061.833496,1320.765991 C1044.998657,1335.537842 1018.689575,1338.636230 998.807922,1327.514404 C973.012146,1313.083984 947.494507,1298.156738 921.845398,1283.463745 C896.915344,1269.182495 871.943359,1254.974487 847.039307,1240.648193 C818.390015,1224.167480 789.808044,1207.569946 761.171631,1191.066895 C743.616943,1180.949951 726.045654,1170.860352 708.373291,1160.952148 C707.027161,1160.197388 704.456543,1160.359009 703.057556,1161.154419 C677.210327,1175.849976 651.469910,1190.733276 625.675842,1205.522827 C600.896851,1219.730347 576.053467,1233.825806 551.291382,1248.062500 C526.381775,1262.384155 501.560059,1276.858398 476.657715,1291.192383 C455.215363,1303.535034 433.836731,1315.996338 412.205383,1328.000488 C388.054901,1341.402466 353.937225,1332.084717 339.430542,1308.918579 C327.287811,1289.527344 327.550873,1270.051636 336.589294,1249.539062 C360.004272,1196.398804 382.947418,1143.050781 406.116211,1089.801880 C430.474152,1033.819946 454.903503,977.869019 479.249084,921.881653 C499.687012,874.880615 520.035400,827.840698 540.448792,780.828918 C568.990845,715.096863 597.555237,649.374451 626.113342,583.649353 C630.675232,573.150452 635.254150,562.658875 639.979065,551.815125z"/>
+        </g>
+        <path fill="url(#bezel-wall)" d="M412.205383,1328.000488 L412.205383,1348.000488 C433.836731,1335.996338 455.215363,1323.535034 476.657715,1311.192383 C501.560059,1296.858398 526.381775,1282.384155 551.291382,1268.062500 C576.053467,1253.825806 600.896851,1239.730347 625.675842,1225.522827 C651.469910,1210.733276 677.210327,1195.849976 703.057556,1181.154419 C704.456543,1180.359009 707.027161,1180.197388 708.373291,1180.952148 C726.045654,1190.860352 743.616943,1200.949951 761.171631,1211.066895 C789.808044,1227.569946 818.390015,1244.167480 847.039307,1260.648193 C871.943359,1274.974487 896.915344,1289.182495 921.845398,1303.463745 C947.494507,1318.156738 973.012146,1333.083984 998.807922,1347.514404 L998.807922,1327.514404 C973.012146,1313.083984 947.494507,1298.156738 921.845398,1283.463745 C896.915344,1269.182495 871.943359,1254.974487 847.039307,1240.648193 C818.390015,1224.167480 789.808044,1207.569946 761.171631,1191.066895 C743.616943,1180.949951 726.045654,1170.860352 708.373291,1160.952148 C707.027161,1160.197388 704.456543,1160.359009 703.057556,1161.154419 C677.210327,1175.849976 651.469910,1190.733276 625.675842,1205.522827 C600.896851,1219.730347 576.053467,1233.825806 551.291382,1248.062500 C526.381775,1262.384155 501.560059,1276.858398 476.657715,1291.192383 C455.215363,1303.535034 433.836731,1315.996338 412.205383,1328.000488 Z" />
+        <path fill="#FFFFFF" d="M639.979065,551.815125 C645.168152,540.088928 650.026184,528.629089 655.273071,517.350159 C668.813538,488.243103 708.591675,477.322784 735.566650,494.553101 C749.156494,503.233704 756.313721,515.993591 762.405273,530.085083 C787.421509,587.954773 812.641113,645.736633 837.759827,703.562134 C862.019897,759.411072 886.220703,815.285706 910.497864,871.127136 C934.243469,925.745850 958.087769,980.321533 981.824341,1034.944092 C1007.415466,1093.834229 1032.934204,1152.755859 1058.479614,1211.665894 C1065.145508,1227.038086 1072.164307,1242.270264 1078.359985,1257.829956 C1086.983032,1279.485596 1080.075684,1304.759277 1061.833496,1320.765991 C1044.998657,1335.537842 1018.689575,1338.636230 998.807922,1327.514404 C973.012146,1313.083984 947.494507,1298.156738 921.845398,1283.463745 C896.915344,1269.182495 871.943359,1254.974487 847.039307,1240.648193 C818.390015,1224.167480 789.808044,1207.569946 761.171631,1191.066895 C743.616943,1180.949951 726.045654,1170.860352 708.373291,1160.952148 C707.027161,1160.197388 704.456543,1160.359009 703.057556,1161.154419 C677.210327,1175.849976 651.469910,1190.733276 625.675842,1205.522827 C600.896851,1219.730347 576.053467,1233.825806 551.291382,1248.062500 C526.381775,1262.384155 501.560059,1276.858398 476.657715,1291.192383 C455.215363,1303.535034 433.836731,1315.996338 412.205383,1328.000488 C388.054901,1341.402466 353.937225,1332.084717 339.430542,1308.918579 C327.287811,1289.527344 327.550873,1270.051636 336.589294,1249.539062 C360.004272,1196.398804 382.947418,1143.050781 406.116211,1089.801880 C430.474152,1033.819946 454.903503,977.869019 479.249084,921.881653 C499.687012,874.880615 520.035400,827.840698 540.448792,780.828918 C568.990845,715.096863 597.555237,649.374451 626.113342,583.649353 C630.675232,573.150452 635.254150,562.658875 639.979065,551.815125z"/>
+        <path fill="url(#wall-grad-left)" d="M481.153290,1228.615234 L481.153290,1244.615234 C503.680634,1231.440674 526.323425,1218.463379 548.939514,1205.440918 C582.601135,1186.058105 616.268066,1166.684448 649.961304,1147.356812 C669.273499,1136.278809 688.642273,1125.299561 707.985596,1114.275757 L707.985596,1098.275757 C688.642273,1109.299561 669.273499,1120.278809 649.961304,1131.356812 C616.268066,1150.684448 582.601135,1170.058105 548.939514,1189.440918 C526.323425,1202.463379 503.680634,1215.440674 481.153290,1228.615234 Z" />
+        <path fill="url(#wall-grad-right)" d="M708.263672,1098.452148 L708.263672,1114.452148 C734.360596,1129.440918 760.191284,1144.232910 785.995544,1159.070557 C833.427551,1186.344727 880.917236,1213.519775 928.216003,1241.023193 C940.130798,1247.951416 952.263794,1252.605469 966.153687,1249.567993 L966.153687,1233.567993 C952.263794,1236.605469 940.130798,1231.951416 928.216003,1225.023193 C880.917236,1197.519775 833.427551,1170.344727 785.995544,1143.070557 C760.191284,1128.232910 734.360596,1113.440918 708.263672,1098.452148 Z" />
+        <path fill="url(#face-grad-left)" d="M707.985596,1098.275757 C688.642273,1109.299561 669.273499,1120.278809 649.961304,1131.356812 C616.268066,1150.684448 582.601135,1170.058105 548.939514,1189.440918 C526.323425,1202.463379 503.680634,1215.440674 481.153290,1228.615234 C464.812622,1238.171875 442.888977,1236.842773 429.660736,1225.171021 C413.332520,1210.763794 408.560883,1191.014648 416.835876,1171.967651 C458.874298,1075.205688 500.913940,978.444153 542.963440,881.686951 C583.817871,787.679565 624.699951,693.684204 665.529053,599.665771 C671.380615,586.191162 681.000549,576.917969 695.215637,572.960754 C698.969604,571.915771 703.108154,572.252441 707.527222,572.474731 C707.984741,748.088440 707.985168,923.182068 707.985596,1098.275757z"/>
+        <path fill="url(#face-grad-right)" d="M708.263672,1098.452148 C707.985168,923.182068 707.984741,748.088440 707.981567,572.530945 C723.690674,570.855591 740.974609,582.015869 748.093933,598.283508 C762.495178,631.190430 776.757996,664.157898 791.081543,697.098694 C823.043579,770.604004 855.015137,844.105225 886.968018,917.614563 C899.828613,947.201050 912.631531,976.812622 925.493591,1006.398438 C949.338867,1061.248291 973.180847,1116.099487 997.079346,1170.926025 C1008.930359,1198.113892 994.624023,1227.342163 966.153687,1233.567993 C952.263794,1236.605469 940.130798,1231.951416 928.216003,1225.023193 C880.917236,1197.519775 833.427551,1170.344727 785.995544,1143.070557 C760.191284,1128.232910 734.360596,1113.440918 708.263672,1098.452148z"/>
+      </g>
+    </svg>`;
     const img = new Image(128, 128);
     img.onload = () => {
       if (mapRef.current && !mapRef.current.hasImage('vehicle-arrow')) {
@@ -1958,7 +2528,13 @@ const MapsContainer = React.memo(({
 
 
     const addLayers = () => {
-      // 1. Weather raster layers (background beneath routes)
+      // Find the first symbol or route layer to insert weather radar UNDER
+      const styleLayers = map.getStyle()?.layers || [];
+      const firstSymbolOrRouteLayer = styleLayers.find(l => 
+        l.id.includes('route') || l.id.includes('label') || l.id.includes('symbol') || l.type === 'symbol'
+      )?.id;
+
+      // 1. Weather raster layers (background beneath routes, labels, and pins)
       ['A', 'B'].forEach((s) => {
         const si = `w-${s}`;
         const li = `wl-${s}`;
@@ -1974,8 +2550,12 @@ const MapsContainer = React.memo(({
             id: li,
             type: 'raster',
             source: si,
-            paint: { 'raster-opacity': 0, 'raster-fade-duration': 400 }
-          });
+            paint: { 
+              'raster-opacity': 0, 
+              'raster-fade-duration': 400,
+              'raster-resampling': 'linear'
+            }
+          }, firstSymbolOrRouteLayer);
         }
       });
 
@@ -1993,8 +2573,8 @@ const MapsContainer = React.memo(({
           source: 'routes-source',
           filter: ['==', ['get', 'is_selected'], false],
           paint: {
-            'line-color': isNight ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.18)',
-            'line-width': 8
+            'line-color': isNight ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.15)',
+            'line-width': 7.5
           },
           layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
@@ -2007,21 +2587,7 @@ const MapsContainer = React.memo(({
           filter: ['==', ['get', 'is_selected'], false],
           paint: {
             'line-color': isNight ? '#64748B' : '#94A3B8',
-            'line-width': 5.5
-          },
-          layout: { 'line-cap': 'round', 'line-join': 'round' }
-        });
-
-        // Selected route outer glow
-        map.addLayer({
-          id: 'routes-selected-glow',
-          type: 'line',
-          source: 'routes-source',
-          filter: ['==', ['get', 'is_selected'], true],
-          paint: {
-            'line-color': isNight ? 'rgba(59,130,246,0.38)' : 'rgba(37,99,235,0.28)',
-            'line-width': 16,
-            'line-blur': 5
+            'line-width': 5
           },
           layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
@@ -2033,8 +2599,8 @@ const MapsContainer = React.memo(({
           source: 'routes-source',
           filter: ['==', ['get', 'is_selected'], true],
           paint: {
-            'line-color': isNight ? '#090D16' : '#FFFFFF',
-            'line-width': 9.5
+            'line-color': isNight ? '#0B1220' : '#FFFFFF',
+            'line-width': 8.5
           },
           layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
@@ -2047,7 +2613,7 @@ const MapsContainer = React.memo(({
           filter: ['==', ['get', 'is_selected'], true],
           paint: {
             'line-color': isNight ? '#3B82F6' : '#2563EB',
-            'line-width': 7
+            'line-width': 6
           },
           layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
@@ -2061,14 +2627,13 @@ const MapsContainer = React.memo(({
         });
 
         map.addLayer({
-          id: 'r-glow',
+          id: 'r-casing',
           type: 'line',
           source: 'route',
           filter: ['==', ['get', 'consumed'], false],
           paint: {
-            'line-color': 'rgba(59,130,246,.3)',
-            'line-width': 14,
-            'line-blur': 6
+            'line-color': isNight ? '#0B1220' : '#FFFFFF',
+            'line-width': 8.5
           },
           layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
@@ -2079,8 +2644,8 @@ const MapsContainer = React.memo(({
           source: 'route',
           filter: ['==', ['get', 'consumed'], false],
           paint: {
-            'line-color': '#3B82F6',
-            'line-width': 7
+            'line-color': isNight ? '#3B82F6' : '#2563EB',
+            'line-width': 6
           },
           layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
@@ -2091,30 +2656,18 @@ const MapsContainer = React.memo(({
           source: 'route',
           filter: ['==', ['get', 'consumed'], true],
           paint: {
-            'line-color': 'rgba(100,105,115,.55)',
-            'line-width': 7
+            'line-color': isNight ? 'rgba(100,116,139,0.45)' : 'rgba(148,163,184,0.55)',
+            'line-width': 5
           },
           layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
       }
 
-      // 4. Live traffic congestion overlay layers (moderate = amber, heavy = red)
+      // 4. Live traffic congestion overlay layers (crisp automotive line without neon glow)
       if (!map.getSource('traffic-source')) {
         map.addSource('traffic-source', {
           type: 'geojson',
           data: { type: 'FeatureCollection', features: [] }
-        });
-
-        map.addLayer({
-          id: 'traffic-glow',
-          type: 'line',
-          source: 'traffic-source',
-          paint: {
-            'line-color': ['get', 'glow_color'],
-            'line-width': 14,
-            'line-blur': 4,
-          },
-          layout: { 'line-cap': 'round', 'line-join': 'round' }
         });
 
         map.addLayer({
@@ -2152,7 +2705,7 @@ const MapsContainer = React.memo(({
           source: 'vehicle-source',
           layout: {
             'icon-image': 'vehicle-arrow',
-            'icon-size': 0.28,
+            'icon-size': 0.23,
             'icon-pitch-alignment': 'map',
             'icon-rotation-alignment': 'map',
             'icon-rotate': ['get', 'bearing'],
@@ -2160,10 +2713,7 @@ const MapsContainer = React.memo(({
             'icon-ignore-placement': true
           },
           paint: {
-            'icon-opacity': 1,
-            'icon-halo-color': 'rgba(0,0,0,0.5)',
-            'icon-halo-width': 2,
-            'icon-halo-blur': 1
+            'icon-opacity': 1
           }
         });
       }
@@ -2239,6 +2789,7 @@ const MapsContainer = React.memo(({
 
     // Allow user to click directly on an alternative route on map
     const handleAltClick = (e: any) => {
+      if (pickingMapTypeRef.current) return;
       if (e.features && e.features[0]) {
         const routeIdx = e.features[0].properties?.route_index;
         if (typeof routeIdx === 'number') {
@@ -2247,6 +2798,48 @@ const MapsContainer = React.memo(({
       }
     };
 
+    const handleGeneralMapClick = async (e: maplibregl.MapMouseEvent) => {
+      if (pickingMapTypeRef.current) {
+        const targetType = pickingMapTypeRef.current;
+        const lat = e.lngLat.lat;
+        const lng = e.lngLat.lng;
+        setPickingMapType(null);
+        pickingMapTypeRef.current = null;
+
+        try {
+          const rev = await globalSearchService.reverseGeocode(lat, lng);
+          const resolvedName = rev?.name || rev?.address || (targetType === 'home' ? 'Casa (Mappa)' : 'Lavoro (Mappa)');
+          const newLoc: LocationData = {
+            lat,
+            lng,
+            name: resolvedName,
+          };
+          if (targetType === 'home') {
+            setHomeLocation(newLoc);
+            setPointPickToast(`Posizione Casa impostata: ${resolvedName.split(',')[0]}`);
+          } else {
+            setWorkLocation(newLoc);
+            setPointPickToast(`Posizione Lavoro impostata: ${resolvedName.split(',')[0]}`);
+          }
+        } catch {
+          const newLoc: LocationData = {
+            lat,
+            lng,
+            name: targetType === 'home' ? 'Casa (Mappa)' : 'Lavoro (Mappa)',
+          };
+          if (targetType === 'home') {
+            setHomeLocation(newLoc);
+            setPointPickToast('Posizione Casa salvata.');
+          } else {
+            setWorkLocation(newLoc);
+            setPointPickToast('Posizione Lavoro salvata.');
+          }
+        }
+        setTimeout(() => setPointPickToast(null), 4000);
+      }
+    };
+
+    map.on('click', handleGeneralMapClick);
     map.on('click', 'routes-alt', handleAltClick);
     map.on('click', 'routes-alt-casing', handleAltClick);
 
@@ -2258,7 +2851,8 @@ const MapsContainer = React.memo(({
       map.getCanvas().style.cursor = '';
     });
 
-    const handleStartInt = () => {
+    const handleStartInt = (e?: any) => {
+      if (e && !e.originalEvent && e.type !== 'wheel') return;
       flyingRef.current = false;
       if (followRef.current) {
         savedModeRef.current = cmodeRef.current;
@@ -2266,16 +2860,29 @@ const MapsContainer = React.memo(({
       followRef.current = false;
       interactRef.current = true;
       setIsMapFollowing(false);
+      window.dispatchEvent(new CustomEvent('map-user-interaction'));
 
-      if (recTimerRef.current) clearTimeout(recTimerRef.current);
+      if (recTimerRef.current) {
+        clearTimeout(recTimerRef.current);
+        recTimerRef.current = null;
+      }
       if (isPendingStartRef.current && startTrackTimerRef.current) {
          clearTimeout(startTrackTimerRef.current);
       }
     };
 
-    const handleEndInt = () => {
+    const handleEndInt = (e?: any) => {
+      if (e && !e.originalEvent && e.type !== 'wheel') return;
       interactRef.current = false;
-      if (recTimerRef.current) clearTimeout(recTimerRef.current);
+      if (recTimerRef.current) {
+        clearTimeout(recTimerRef.current);
+        recTimerRef.current = null;
+      }
+
+      if (mapRef.current) {
+        ccamPitchRef.current = mapRef.current.getPitch();
+        ccamBearRef.current = mapRef.current.getBearing();
+      }
 
       if (isPendingStartRef.current) {
          startTrackTimerRef.current = setTimeout(() => {
@@ -2284,52 +2891,25 @@ const MapsContainer = React.memo(({
          return;
       }
 
+      // During route preview, do not auto-recenter
+      if (isRoutePreviewRef.current) {
+        return;
+      }
+
+      // After 10 seconds of inactivity, automatically return to vehicle position and restore official 2D/3D perspective
       recTimerRef.current = setTimeout(() => {
-        if (isWeatherActiveRef.current) return;
-        
-        if (navingRef.current) {
-          followRef.current = true;
-          setIsMapFollowing(true);
-          if (savedModeRef.current === 'heading-up') {
-            cmodeRef.current = 'heading-up';
-            setCmode('heading-up');
-          } else {
-            cmodeRef.current = 'north-up';
-            setCmode('north-up');
-          }
-          if (smoothRecRef.current) smoothRecRef.current();
-        } else if (geoRef.current && geoRef.current.length > 0) {
-          const bounds = geoRef.current.reduce(
-            (b: maplibregl.LngLatBounds, c: [number, number]) => b.extend(c),
-            new maplibregl.LngLatBounds(geoRef.current[0], geoRef.current[0])
-          );
-          map.fitBounds(bounds, {
-            padding: { top: 220, bottom: 320, left: 140, right: 140 },
-            animate: true,
-            duration: 800
-          });
-          followRef.current = false;
-          setIsMapFollowing(false);
-        } else {
-          followRef.current = true;
-          setIsMapFollowing(true);
-          if (savedModeRef.current === 'heading-up') {
-            cmodeRef.current = 'heading-up';
-            setCmode('heading-up');
-          } else {
-            cmodeRef.current = 'north-up';
-            setCmode('north-up');
-          }
-          if (smoothRecRef.current) smoothRecRef.current();
+        if (isWeatherActiveRef.current || isRoutePreviewRef.current) return;
+        if (smoothRecRef.current) {
+          smoothRecRef.current();
         }
-      }, 5000);
+      }, 10000);
     };
 
-    ['mousedown', 'touchstart', 'dragstart', 'movestart', 'rotatestart', 'pitchstart', 'zoomstart'].forEach((e) => {
-      map.on(e, handleStartInt);
+    ['dragstart', 'rotatestart', 'pitchstart', 'touchstart', 'mousedown'].forEach((e) => {
+      map.on(e as any, handleStartInt);
     });
-    ['mouseup', 'touchend', 'dragend', 'moveend', 'rotateend', 'pitchend', 'zoomend'].forEach((e) => {
-      map.on(e, handleEndInt);
+    ['dragend', 'rotateend', 'pitchend', 'touchend', 'mouseup'].forEach((e) => {
+      map.on(e as any, handleEndInt);
     });
 
     let wheelDebounce: any = null;
@@ -2346,7 +2926,22 @@ const MapsContainer = React.memo(({
     });
 
     map.on('rotate', () => {
-      setBearing(map.getBearing());
+      const b = map.getBearing();
+      setBearing(b);
+      ccamBearRef.current = b;
+      // When user rotates the map away from north, switch temporarily to heading-up (compass mode)
+      if (interactRef.current && Math.abs(b) > 1.0) {
+        if (cmodeRef.current !== 'heading-up') {
+          cmodeRef.current = 'heading-up';
+          setCmode('heading-up');
+        }
+      }
+    });
+
+    map.on('pitch', () => {
+      const p = map.getPitch();
+      setCurrentPitch(p);
+      ccamPitchRef.current = p;
     });
 
     return () => {
@@ -2357,14 +2952,30 @@ const MapsContainer = React.memo(({
       }
       if (recTimerRef.current) clearTimeout(recTimerRef.current);
       if (startTrackTimerRef.current) clearTimeout(startTrackTimerRef.current);
+      if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
     };
   }, []);
 
   // Dynamics styling synchronization for theme changes (avoid map recreation)
   useEffect(() => {
-    if (mapRef.current && !isSatellite) {
-      mapRef.current.setStyle(buildMapStyle(isNight ? 'dark' : 'light'));
+    if (mapRef.current) {
+      if (isSatellite) {
+        mapRef.current.setStyle(buildMapStyle(isNight ? 'satellite-night' : 'satellite'));
+      } else {
+        mapRef.current.setStyle(buildMapStyle(isNight ? 'dark' : 'light'));
+      }
     }
+  }, [isNight, isSatellite]);
+
+  // Handle live TomTom API key updates
+  useEffect(() => {
+    const handleKeyChange = () => {
+      if (mapRef.current) {
+        mapRef.current.setStyle(buildMapStyle(isSatellite ? (isNight ? 'satellite-night' : 'satellite') : (isNight ? 'dark' : 'light')));
+      }
+    };
+    window.addEventListener('tomtom-key-updated', handleKeyChange);
+    return () => window.removeEventListener('tomtom-key-updated', handleKeyChange);
   }, [isNight, isSatellite]);
 
   // Triggers map.resize() on visibility toggle
@@ -2377,8 +2988,69 @@ const MapsContainer = React.memo(({
   const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
 
   const selectPlaceFromPanel = (item: any) => {
+    poiMarkersRef.current.forEach(m => m.remove());
+    poiMarkersRef.current = [];
+    setSelectedPOI(null);
     onSelectDestination({ lat: item.lat, lng: item.lng, name: item.name });
   };
+
+  const handleCategoryResults = useCallback((category: AutomotiveCategory | null, results: LocationInfo[]) => {
+    // Clear existing POI markers
+    poiMarkersRef.current.forEach(m => m.remove());
+    poiMarkersRef.current = [];
+
+    if (!category || !results || results.length === 0) {
+      setSelectedPOI(null);
+      return;
+    }
+
+    if (!mapRef.current) return;
+
+    // Create markers on the map
+    results.slice(0, 15).forEach((poi) => {
+      const el = createPOIMarkerElement(poi, isNight, () => {
+        setSelectedPOI(poi);
+        mapRef.current?.easeTo({
+          center: [poi.lng, poi.lat],
+          zoom: Math.max(mapRef.current.getZoom(), 14.5),
+          duration: 600,
+        });
+      });
+
+      const m = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([poi.lng, poi.lat])
+        .addTo(mapRef.current!);
+      poiMarkersRef.current.push(m);
+    });
+
+    // Fit map bounds to encompass current position and the POIs
+    try {
+      const bounds = new maplibregl.LngLatBounds();
+      if (rposRef.current) {
+        bounds.extend([rposRef.current.lng, rposRef.current.lat]);
+      }
+      results.slice(0, 8).forEach(p => bounds.extend([p.lng, p.lat]));
+      const container = mapRef.current.getContainer();
+      const cWidth = container?.clientWidth || 900;
+      const leftPadding = cWidth > 750 ? 390 : 120;
+      mapRef.current.fitBounds(bounds, {
+        padding: { top: 100, bottom: 90, left: leftPadding, right: 90 },
+        maxZoom: 15.5,
+        duration: 800
+      });
+    } catch (e) {
+      console.warn('Could not fit bounds for POIs', e);
+    }
+  }, [isNight]);
+
+  const handleSelectPOIPreview = useCallback((poi: LocationInfo) => {
+    setSelectedPOI(poi);
+    mapRef.current?.easeTo({
+      center: [poi.lng, poi.lat],
+      zoom: 15,
+      duration: 600,
+    });
+  }, []);
 
   return (
     <div 
@@ -2410,13 +3082,22 @@ const MapsContainer = React.memo(({
             />
         </div>
 
-        {/* Core WebGL Map container */}
-        <div className="relative w-full h-full overflow-hidden bg-[#050505]">
+        {/* Core WebGL Map container with Space Cosmos Starfield background */}
+        <div 
+          className="relative w-full h-full overflow-hidden bg-black"
+          onPointerMove={() => window.dispatchEvent(new CustomEvent('map-user-interaction'))}
+          onTouchStart={() => window.dispatchEvent(new CustomEvent('map-user-interaction'))}
+          onPointerDown={() => window.dispatchEvent(new CustomEvent('map-user-interaction'))}
+        >
             <h1 id="maps-player-title" className="sr-only">Maps Player</h1>
             
+            {/* Cosmic Starfield Universe background (static micro stars behind globe and horizon) */}
+            <CosmicStarfield isNight={isNight} />
+
             {/* Core WebGL Map container */}
             <div 
               ref={mapContainerRef} 
+              style={{ backgroundColor: 'transparent' }}
               className="w-full h-full absolute inset-0 [&_.maplibregl-canvas]:transition-opacity [&_.maplibregl-canvas]:duration-300 [&_.maplibregl-canvas]:ease-in-out [&_.maplibregl-ctrl-logo]:!hidden [&_.maplibregl-ctrl-attrib]:!hidden" 
             />
 
@@ -2430,7 +3111,59 @@ const MapsContainer = React.memo(({
               setHomeLocation={setHomeLocation}
               setWorkLocation={setWorkLocation}
               isVisible={!naving}
+              currentStreet={currentStreet}
+              onCategoryResults={handleCategoryResults}
+              onSelectPOIPreview={handleSelectPOIPreview}
+              onOpenChange={setIsSearchOpen}
             />
+
+            {/* Interactive POI Preview Card */}
+            {selectedPOI && !naving && (
+              <div className="absolute top-3 left-3 sm:top-5 sm:left-[24.5rem] z-[2000] w-[calc(100%-1.5rem)] sm:w-[21rem] max-w-[21rem] pointer-events-auto animate-slide-up">
+                <POIPreviewCard
+                  poi={selectedPOI}
+                  onClose={() => setSelectedPOI(null)}
+                  onSetDestination={(poi) => {
+                    selectPlaceFromPanel(poi);
+                  }}
+                  isNavigating={naving}
+                />
+              </div>
+            )}
+
+            {/* Map Point Picker Top Floating Banner for Casa / Lavoro */}
+            {pickingMapType && (
+              <div
+                id="map-point-picker-banner"
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-[2500] px-4 py-2.5 rounded-2xl backdrop-blur-xl border shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-auto bg-neutral-900/90 text-white border-white/20"
+              >
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping shrink-0" />
+                <span className="text-xs sm:text-sm font-semibold whitespace-nowrap">
+                  Tocca la mappa per posizionare {pickingMapType === 'home' ? 'Casa' : 'Lavoro'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickingMapType(null);
+                    pickingMapTypeRef.current = null;
+                  }}
+                  className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 transition-colors cursor-pointer"
+                >
+                  Annulla
+                </button>
+              </div>
+            )}
+
+            {/* Confirmation Toast */}
+            {pointPickToast && (
+              <div
+                id="point-pick-toast"
+                className="absolute top-16 left-1/2 -translate-x-1/2 z-[2500] px-4 py-2 rounded-xl backdrop-blur-xl border shadow-xl flex items-center gap-2 animate-in fade-in zoom-in duration-200 pointer-events-none bg-emerald-950/90 text-emerald-200 border-emerald-500/40 text-xs sm:text-sm font-medium"
+              >
+                <span>✓</span>
+                <span>{pointPickToast}</span>
+              </div>
+            )}
 
             {/* Upper active navigation directions overlay */}
             <NavigationHUD 
@@ -2451,12 +3184,16 @@ const MapsContainer = React.memo(({
             {/* Map Controls (Right floating panels & weather radar controllers) */}
             <MapControls 
               isNight={isNight}
+              isNavigating={naving}
+              isSearchOpen={isSearchOpen}
               cmode={cmode}
+              is3D={is3D}
               bearing={bearing}
               isSatellite={isSatellite}
               isWeatherActive={isWeatherActive}
               isMapFollowing={isMapFollowing}
               onToggleCompass={handleToggleCompass}
+              onToggle3D={handleToggle3D}
               onToggleSatellite={handleToggleSatellite}
               onToggleWeather={handleToggleWeather}
               onRecenter={handleRecenter}
@@ -2486,16 +3223,16 @@ const MapsContainer = React.memo(({
             {(currentStreet || isWeatherActive) && (
               <div 
                 id="street-box" 
-                className={`absolute bottom-6 right-6 z-[1001] backdrop-blur-md border rounded-xl px-4 py-2.5 text-xs font-semibold shadow-lg select-none leading-none flex items-center gap-3 transition-colors ${isNight ? "bg-zinc-950/90 border-white/10 text-zinc-200" : "bg-white/90 border-black/10 text-zinc-800"}`}
+                className={`absolute bottom-3.5 right-3.5 sm:bottom-6 sm:right-6 z-[1001] backdrop-blur-md border rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-semibold shadow-lg select-none leading-none flex items-center gap-2.5 sm:gap-3 transition-colors ${isNight ? "bg-zinc-950/90 border-white/10 text-zinc-200" : "bg-white/90 border-black/10 text-zinc-800"}`}
               >
                 {currentStreet && (
                   <>
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
                     <span>{currentStreet}</span>
                   </>
                 )}
                 {isWeatherActive && (
-                  <span className={`tabular-nums ${currentStreet ? 'border-l border-white/20 pl-3' : ''}`}>
+                  <span className={`tabular-nums ${currentStreet ? 'border-l border-white/20 pl-2.5 sm:pl-3' : ''}`}>
                     Zoom: {currentZoom.toFixed(1)}
                   </span>
                 )}

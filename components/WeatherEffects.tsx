@@ -1,16 +1,12 @@
 import React, { useMemo, useRef, useEffect, useCallback } from 'react';
-import { useFrame, ThreeElements } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Points, PointMaterial } from '@react-three/drei';
 import type { WeatherParams } from '../types';
 
-// Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
 const PointLight = 'pointLight' as any;
-const InstancedMesh = 'instancedMesh' as any;
-const BoxGeometry = 'boxGeometry' as any;
-const MeshBasicMaterial = 'meshBasicMaterial' as any;
 
-const LERP_FACTOR = 0.02; // Smoothing factor for transitions
+const LERP_FACTOR = 0.05; // Fast smoothing factor
 
 const Lightning = ({ isActive }: { isActive: boolean }) => {
   const lightRef = useRef<THREE.PointLight>(null);
@@ -18,7 +14,6 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
   const timeoutId = useRef<number | null>(null);
 
   const scheduleNextFlash = useCallback(() => {
-    // We only schedule the *next* flash if we are still active.
     if (!isActive) return;
     const randomDelay = Math.random() * 17000 + 8000;
     timeoutId.current = window.setTimeout(() => {
@@ -29,18 +24,15 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
   }, [isActive]);
 
   useEffect(() => {
-    // This effect starts and stops the entire lightning process.
     if (isActive) {
-      const initialDelay = Math.random() * 5000 + 5000;
+      const initialDelay = Math.random() * 3000 + 3000;
       timeoutId.current = window.setTimeout(() => {
-        // Trigger the very first flash, which then calls scheduleNextFlash recursively.
         const numFlashes = Math.random() > 0.7 ? 1 : (Math.random() > 0.4 ? 2 : 3);
         flashState.current = { active: true, flashes: numFlashes };
         scheduleNextFlash();
       }, initialDelay);
     }
     
-    // Cleanup function: This runs when isActive becomes false OR when the component unmounts.
     return () => {
       if (timeoutId.current) clearTimeout(timeoutId.current);
     };
@@ -48,7 +40,7 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
 
   useFrame((_, delta) => {
     if (!lightRef.current) return;
-    const cappedDelta = Math.min(delta, 0.1);
+    const cappedDelta = Math.min(delta, 0.05);
     const decayRate = 8;
 
     if (flashState.current.active) {
@@ -64,7 +56,7 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
       if (flashState.current.flashes > 0) {
           flashState.current.active = false;
           setTimeout(() => {
-              if (isActive) { // Check if still active before re-flashing
+              if (isActive) {
                 flashState.current.active = true;
               }
           }, 100 + Math.random() * 150);
@@ -77,98 +69,13 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
     }
   });
 
-  // Fix: Replaced 'pointLight' with locally defined 'PointLight' constant to fix JSX.IntrinsicElements error
-  return <PointLight ref={lightRef} color={0xccccff} intensity={0} decay={2} distance={400} />;
+  return <PointLight ref={lightRef} color={0xffffff} intensity={0} decay={2} distance={400} />;
 };
 
-
-const RainStreaks = ({ targetDensity, targetSpeed }: { targetDensity: number, targetSpeed: number }) => {
-    const meshRef = useRef<THREE.InstancedMesh>(null!);
-    const dummy = useMemo(() => new THREE.Object3D(), []);
-    const MAX_COUNT = 12000;
-
-    const currentDensity = useRef(0);
-    const currentSpeed = useRef(0);
-    const currentLength = useRef(0.05);
-
-    const particles = useMemo(() => {
-        const temp = [];
-        for (let i = 0; i < MAX_COUNT; i++) {
-            temp.push({
-                position: new THREE.Vector3(
-                    (Math.random() - 0.5) * 100,
-                    (Math.random() * 1.5 - 0.5) * 55, // Staggered start: range [-27.5, 82.5]
-                    (Math.random() - 0.5) * 100
-                ),
-                velocityFactor: 0.75 + Math.random() * 0.5, // Individual speed multiplier
-            });
-        }
-        return temp;
-    }, []);
-
-    const geometryRef = useRef<THREE.BoxGeometry>(null!);
-    
-    useEffect(() => {
-        if (!meshRef.current) return;
-        for (let i = 0; i < MAX_COUNT; i++) {
-            dummy.position.copy(particles[i].position);
-            dummy.updateMatrix();
-            meshRef.current.setMatrixAt(i, dummy.matrix);
-        }
-        meshRef.current.instanceMatrix.needsUpdate = true;
-        meshRef.current.count = 0;
-    }, [particles, dummy]);
-
-
-    useFrame((_, delta) => {
-        if (!meshRef.current || !geometryRef.current) return;
-        const cappedDelta = Math.min(delta, 0.1); // Prevent freeze bug
-        
-        currentDensity.current = THREE.MathUtils.lerp(currentDensity.current, targetDensity, LERP_FACTOR);
-        currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, targetSpeed, LERP_FACTOR);
-        
-        const targetLength = THREE.MathUtils.lerp(0.05, 0.12, Math.min(1, currentSpeed.current / 15));
-        currentLength.current = THREE.MathUtils.lerp(currentLength.current, targetLength, LERP_FACTOR);
-
-        if (Math.abs(geometryRef.current.parameters.height - currentLength.current) > 0.001) {
-             geometryRef.current.dispose();
-             const newGeom = new THREE.BoxGeometry(0.02, currentLength.current, 0.02);
-             meshRef.current.geometry = newGeom;
-             geometryRef.current = newGeom;
-        }
-
-        const activeCount = Math.floor(currentDensity.current * MAX_COUNT);
-        meshRef.current.count = activeCount;
-
-        if (activeCount < 1) return;
-
-        for (let i = 0; i < activeCount; i++) {
-            const particle = particles[i];
-            particle.position.y -= currentSpeed.current * particle.velocityFactor * cappedDelta;
-            if (particle.position.y < -5) {
-                particle.position.y = 50;
-                particle.position.x = (Math.random() - 0.5) * 100;
-                particle.position.z = (Math.random() - 0.5) * 100;
-            }
-            dummy.position.copy(particle.position);
-            dummy.updateMatrix();
-            meshRef.current.setMatrixAt(i, dummy.matrix);
-        }
-        meshRef.current.instanceMatrix.needsUpdate = true;
-    });
-
-    return (
-        // Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error
-        <InstancedMesh ref={meshRef} args={[undefined, undefined, MAX_COUNT]}>
-            <BoxGeometry ref={geometryRef} args={[0.02, 0.05, 0.02]} />
-            <MeshBasicMaterial color="#a0b0f0" transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false}/>
-        </InstancedMesh>
-    );
-};
-
-const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number, targetSpeed: number }) => {
+// Ultra-lightweight Points rain system for maximum performance (0 lag, 60fps)
+const RainStreaks = ({ targetDensity, targetSpeed }: { targetDensity: number; targetSpeed: number }) => {
     const pointsRef = useRef<THREE.Points>(null!);
-    const MAX_COUNT = 10000;
+    const MAX_COUNT = 800; // Ultra performant particle count
     const velocitiesRef = useRef(new Float32Array(MAX_COUNT * 3));
     const currentDensity = useRef(0);
     const currentSpeed = useRef(0);
@@ -178,17 +85,17 @@ const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number, targetSpe
         const vel = velocitiesRef.current;
         for (let i = 0; i < MAX_COUNT; i++) {
             const i3 = i * 3;
-            pos[i3] = (Math.random() - 0.5) * 100;
-            pos[i3 + 1] = (Math.random() * 1.5 - 0.5) * 55;
-            pos[i3 + 2] = (Math.random() - 0.5) * 100;
+            pos[i3] = (Math.random() - 0.5) * 80;
+            pos[i3 + 1] = Math.random() * 45 - 5;
+            pos[i3 + 2] = (Math.random() - 0.5) * 80;
             
-            vel[i3] = (Math.random() - 0.5) * 0.4; // Sideways drift
-            vel[i3 + 1] = -(Math.random() * 0.5 + 0.75); // Base downward velocity
-            vel[i3 + 2] = (Math.random() - 0.5) * 0.4; // Forward/backward drift
+            vel[i3] = -0.1 - Math.random() * 0.2; // slight wind angle
+            vel[i3 + 1] = -(15 + Math.random() * 10); // fast drop speed
+            vel[i3 + 2] = (Math.random() - 0.5) * 0.1;
         }
         return pos;
     }, []);
-    
+
     useEffect(() => {
         if (pointsRef.current) {
             pointsRef.current.geometry.setDrawRange(0, 0);
@@ -196,29 +103,31 @@ const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number, targetSpe
     }, []);
 
     useFrame((_, delta) => {
-        if (!pointsRef.current || !velocitiesRef.current) return;
-        const cappedDelta = Math.min(delta, 0.1); // Prevent freeze bug
-        
+        if (!pointsRef.current) return;
+
         currentDensity.current = THREE.MathUtils.lerp(currentDensity.current, targetDensity, LERP_FACTOR);
         currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, targetSpeed, LERP_FACTOR);
+
         const activeCount = Math.floor(currentDensity.current * MAX_COUNT);
         pointsRef.current.geometry.setDrawRange(0, activeCount);
-        
+
         if (activeCount < 1) return;
 
+        const cappedDelta = Math.min(delta, 0.05);
         const pos = pointsRef.current.geometry.attributes.position.array as Float32Array;
         const velocities = velocitiesRef.current;
-        
+        const speedMult = Math.max(0.8, currentSpeed.current / 10);
+
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
-            pos[i3] += velocities[i3] * cappedDelta;
-            pos[i3 + 1] += velocities[i3 + 1] * currentSpeed.current * cappedDelta;
-            pos[i3 + 2] += velocities[i3 + 2] * cappedDelta;
-            
+            pos[i3] += velocities[i3] * cappedDelta * speedMult;
+            pos[i3 + 1] += velocities[i3 + 1] * cappedDelta * speedMult;
+            pos[i3 + 2] += velocities[i3 + 2] * cappedDelta * speedMult;
+
             if (pos[i3 + 1] < -5) {
-                pos[i3] = (Math.random() - 0.5) * 100;
-                pos[i3 + 1] = 50;
-                pos[i3 + 2] = (Math.random() - 0.5) * 100;
+                pos[i3] = (Math.random() - 0.5) * 80;
+                pos[i3 + 1] = 40;
+                pos[i3 + 2] = (Math.random() - 0.5) * 80;
             }
         }
         pointsRef.current.geometry.attributes.position.needsUpdate = true;
@@ -226,29 +135,38 @@ const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number, targetSpe
 
     return (
         <Points ref={pointsRef} positions={positions} stride={3} frustumCulled={false}>
-            <PointMaterial transparent color="#ffffff" size={0.18} sizeAttenuation depthWrite={false} blending={THREE.AdditiveBlending} />
+            <PointMaterial
+                transparent
+                color="#a5c9ff"
+                size={0.12}
+                sizeAttenuation
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                opacity={0.65}
+            />
         </Points>
     );
 };
 
-const Hail = ({ targetDensity }: { targetDensity: number }) => {
+const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number; targetSpeed: number }) => {
     const pointsRef = useRef<THREE.Points>(null!);
-    const MAX_COUNT = 1500;
+    const MAX_COUNT = 400;
     const velocitiesRef = useRef(new Float32Array(MAX_COUNT * 3));
     const currentDensity = useRef(0);
+    const currentSpeed = useRef(0);
 
     const positions = useMemo(() => {
         const pos = new Float32Array(MAX_COUNT * 3);
         const vel = velocitiesRef.current;
         for (let i = 0; i < MAX_COUNT; i++) {
             const i3 = i * 3;
-            pos[i3] = (Math.random() - 0.5) * 100;
-            pos[i3 + 1] = (Math.random() * 1.5 - 0.5) * 55;
-            pos[i3 + 2] = (Math.random() - 0.5) * 100;
+            pos[i3] = (Math.random() - 0.5) * 80;
+            pos[i3 + 1] = Math.random() * 45 - 5;
+            pos[i3 + 2] = (Math.random() - 0.5) * 80;
             
-            vel[i3] = (Math.random() - 0.5) * 2;
-            vel[i3 + 1] = - (Math.random() * 20 + 60);
-            vel[i3 + 2] = (Math.random() - 0.5) * 2;
+            vel[i3] = (Math.random() - 0.5) * 0.3;
+            vel[i3 + 1] = -(Math.random() * 0.8 + 0.6);
+            vel[i3 + 2] = (Math.random() - 0.5) * 0.3;
         }
         return pos;
     }, []);
@@ -260,8 +178,71 @@ const Hail = ({ targetDensity }: { targetDensity: number }) => {
     }, []);
 
     useFrame((_, delta) => {
-        if (!pointsRef.current || !velocitiesRef.current) return;
-        const cappedDelta = Math.min(delta, 0.1); // Prevent freeze bug
+        if (!pointsRef.current) return;
+        
+        currentDensity.current = THREE.MathUtils.lerp(currentDensity.current, targetDensity, LERP_FACTOR);
+        currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, targetSpeed, LERP_FACTOR);
+        const activeCount = Math.floor(currentDensity.current * MAX_COUNT);
+        pointsRef.current.geometry.setDrawRange(0, activeCount);
+        
+        if (activeCount < 1) return;
+
+        const cappedDelta = Math.min(delta, 0.05);
+        const pos = pointsRef.current.geometry.attributes.position.array as Float32Array;
+        const velocities = velocitiesRef.current;
+        
+        for (let i = 0; i < activeCount; i++) {
+            const i3 = i * 3;
+            pos[i3] += velocities[i3] * cappedDelta;
+            pos[i3 + 1] += velocities[i3 + 1] * (currentSpeed.current || 1) * cappedDelta;
+            pos[i3 + 2] += velocities[i3 + 2] * cappedDelta;
+            
+            if (pos[i3 + 1] < -5) {
+                pos[i3] = (Math.random() - 0.5) * 80;
+                pos[i3 + 1] = 40;
+                pos[i3 + 2] = (Math.random() - 0.5) * 80;
+            }
+        }
+        pointsRef.current.geometry.attributes.position.needsUpdate = true;
+    });
+
+    return (
+        <Points ref={pointsRef} positions={positions} stride={3} frustumCulled={false}>
+            <PointMaterial transparent color="#ffffff" size={0.18} sizeAttenuation depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.8} />
+        </Points>
+    );
+};
+
+const Hail = ({ targetDensity }: { targetDensity: number }) => {
+    const pointsRef = useRef<THREE.Points>(null!);
+    const MAX_COUNT = 150;
+    const velocitiesRef = useRef(new Float32Array(MAX_COUNT * 3));
+    const currentDensity = useRef(0);
+
+    const positions = useMemo(() => {
+        const pos = new Float32Array(MAX_COUNT * 3);
+        const vel = velocitiesRef.current;
+        for (let i = 0; i < MAX_COUNT; i++) {
+            const i3 = i * 3;
+            pos[i3] = (Math.random() - 0.5) * 80;
+            pos[i3 + 1] = Math.random() * 45 - 5;
+            pos[i3 + 2] = (Math.random() - 0.5) * 80;
+            
+            vel[i3] = (Math.random() - 0.5) * 1.5;
+            vel[i3 + 1] = -(Math.random() * 15 + 35);
+            vel[i3 + 2] = (Math.random() - 0.5) * 1.5;
+        }
+        return pos;
+    }, []);
+    
+    useEffect(() => {
+        if (pointsRef.current) {
+            pointsRef.current.geometry.setDrawRange(0, 0);
+        }
+    }, []);
+
+    useFrame((_, delta) => {
+        if (!pointsRef.current) return;
         
         currentDensity.current = THREE.MathUtils.lerp(currentDensity.current, targetDensity, LERP_FACTOR);
         const activeCount = Math.floor(currentDensity.current * MAX_COUNT);
@@ -269,6 +250,7 @@ const Hail = ({ targetDensity }: { targetDensity: number }) => {
         
         if (activeCount < 1) return;
 
+        const cappedDelta = Math.min(delta, 0.05);
         const pos = pointsRef.current.geometry.attributes.position.array as Float32Array;
         const velocities = velocitiesRef.current;
         
@@ -279,9 +261,9 @@ const Hail = ({ targetDensity }: { targetDensity: number }) => {
             pos[i3 + 2] += velocities[i3 + 2] * cappedDelta;
             
             if (pos[i3 + 1] < -5) {
-                pos[i3] = (Math.random() - 0.5) * 100;
-                pos[i3 + 1] = 50;
-                pos[i3 + 2] = (Math.random() - 0.5) * 100;
+                pos[i3] = (Math.random() - 0.5) * 80;
+                pos[i3 + 1] = 40;
+                pos[i3 + 2] = (Math.random() - 0.5) * 80;
             }
         }
         pointsRef.current.geometry.attributes.position.needsUpdate = true;
@@ -289,11 +271,10 @@ const Hail = ({ targetDensity }: { targetDensity: number }) => {
 
     return (
         <Points ref={pointsRef} positions={positions} stride={3} frustumCulled={false}>
-            <PointMaterial transparent color="#e0ffff" size={0.2} sizeAttenuation depthWrite={false} blending={THREE.AdditiveBlending} />
+            <PointMaterial transparent color="#e2e8f0" size={0.16} sizeAttenuation depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.8} />
         </Points>
     );
 };
-
 
 export default function WeatherEffects({ targetParams, effectiveWeatherCondition }: { targetParams: WeatherParams; effectiveWeatherCondition: string; }) {
     const isThunderstorm = effectiveWeatherCondition === 'Temporale';
@@ -305,5 +286,5 @@ export default function WeatherEffects({ targetParams, effectiveWeatherCondition
             <Hail targetDensity={targetParams.hailDensity} />
             <Lightning isActive={isThunderstorm} />
         </>
-    )
+    );
 }

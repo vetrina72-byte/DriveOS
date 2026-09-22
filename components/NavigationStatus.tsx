@@ -48,7 +48,7 @@ export default function NavigationStatus({ width, widgetBgColor }: NavigationSta
   const trackRef = useRef<HTMLDivElement>(null);
   const arrowIndicatorRef = useRef<HTMLDivElement>(null);
   const isNewTrip = useRef(false);
-  const ARROW_SIZE = 44;
+  const ARROW_SIZE = 22;
 
   useEffect(() => {
     const unsubscribe = routeStore.subscribe(coords => {

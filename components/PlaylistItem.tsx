@@ -103,6 +103,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
             alt={item.name} 
             className="w-full h-full rounded-md object-cover shadow-lg"
             loading="lazy"
+            decoding="async"
             onError={handleImageError}
           />
         ) : (
@@ -117,4 +118,4 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   );
 };
 
-export default PlaylistItem;
+export default React.memo(PlaylistItem);

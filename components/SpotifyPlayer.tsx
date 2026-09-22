@@ -20,9 +20,11 @@ import GenresView from './GenresView';
 import CategoryPlaylistsView from './CategoryPlaylistsView';
 import NewReleasesView from './NewReleasesView';
 import { PodcastService } from '../services/PodcastService';
+import AiDjView from './AiDjView';
 
 export type ViewType = 
     | 'home' 
+    | 'ai-dj'
     | 'playlists' 
     | 'artists' 
     | 'search' 
@@ -227,8 +229,11 @@ const SpotifyPlayer = ({
             }
             
             if (isOpen) {
-                const timer = setTimeout(() => triggerHomeContentFetch(), sceneTransitionSpeed * 1000);
-                return () => clearTimeout(timer);
+                // Defer fetching until panel slide-in animation completes (~300ms) to ensure 60fps opening
+                const fetchTimer = setTimeout(() => {
+                    triggerHomeContentFetch();
+                }, 350);
+                return () => clearTimeout(fetchTimer);
             } else {
                 const timer = setTimeout(() => {
                     setView({ type: 'home' });
@@ -289,6 +294,10 @@ const SpotifyPlayer = ({
         e.currentTarget.releasePointerCapture(e.pointerId);
         
         const state = physics.current;
+        // CRITICAL FIX: Only process drop logic if we were actually dragging.
+        // Prevents premature close trigger on startup/mount when pointer event is released.
+        if (!state.isDragging) return;
+
         state.isDragging = false;
         // DO NOT call onDragProgress(null) here. 
         // The loop will handle it once the animation settles.
@@ -363,7 +372,7 @@ const SpotifyPlayer = ({
     const renderContent = () => {
         if (error) return (<div className={`text-center flex flex-col items-center gap-4 ${isNight ? 'text-red-400' : 'text-red-600'}`}><p>Error: {error}</p><SpotifyLogin isNight={isNight} /></div>);
         if (isAuthenticated && user) {
-            const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists', 'search', 'new-releases'].includes(view.type);
+            const isDetailView = ['playlist', 'album', 'artist', 'show', 'categoryPlaylists', 'search', 'new-releases', 'ai-dj'].includes(view.type);
             return (
                 <div className="flex flex-col w-full h-full min-h-0">
                     <TopNavBar isNight={isNight} activeView={view.type} onNavigate={handleNavigate} onSearch={handleSearch} onBack={handleBack} showBackButton={isDetailView} />
@@ -371,8 +380,10 @@ const SpotifyPlayer = ({
                         <ContentArea isNight={isNight} onSelectItem={handleSelectItem} loading={homeContentLoading} error={homeContentError} user={user}
                             continueListeningItems={continueListeningItems} newReleases={newReleases} userPlaylists={userPlaylists} madeForYouPlaylists={madeForYouPlaylists}
                             topArtists={topArtists} chartsPlaylists={chartsPlaylists} genresCategories={genresCategories} recommendedShows={recommendedShows}
-                            partyPlaylists={partyPlaylists} topTracks={topTracks} artistRadioTracks={artistRadioTracks} trackRecommendations={trackRecommendations} savedAlbums={savedAlbums} madeForYou={madeForYou} />
+                            partyPlaylists={partyPlaylists} topTracks={topTracks} artistRadioTracks={artistRadioTracks} trackRecommendations={trackRecommendations} savedAlbums={savedAlbums} madeForYou={madeForYou}
+                            onOpenDjView={() => changeView({ type: 'ai-dj' })} />
                     )}
+                    {view.type === 'ai-dj' && <AiDjView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'playlists' && <PlaylistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'artists' && <ArtistListView isNight={isNight} onSelectItem={handleSelectItem} />}
                     {view.type === 'albums' && <AlbumGridView isNight={isNight} onSelectItem={handleSelectItem} />}
@@ -392,7 +403,7 @@ const SpotifyPlayer = ({
     };
 
     // Styling
-    const backgroundColor = isNight ? '#000000' : '#f7f7f7';
+    const backgroundColor = isNight ? '#121212' : '#ffffff';
     const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
 
     // --- CONDITIONAL HANDLE STYLES & POSITIONING ---

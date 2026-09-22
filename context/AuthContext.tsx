@@ -82,6 +82,17 @@ interface AuthContextType extends Omit<AuthState, 'lastVolume'> {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
+    const initialVolume = (() => {
+        try {
+            const saved = localStorage.getItem('app_infotainment_volume');
+            if (saved !== null) {
+                const parsed = parseFloat(saved);
+                if (!isNaN(parsed)) return Math.max(0, Math.min(1, parsed));
+            }
+        } catch (e) {}
+        return 0.35;
+    })();
+
     const [state, setState] = useState<AuthState>({
         accessToken: localStorage.getItem('accessToken'),
         expiresAt: Number(localStorage.getItem('expiresAt') || '0'),
@@ -89,9 +100,9 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         isAuthenticated: !!localStorage.getItem('accessToken'),
         isLoading: true,
         error: null,
-        volume: 1,
-        isMuted: false,
-        lastVolume: 1,
+        volume: initialVolume,
+        isMuted: initialVolume === 0,
+        lastVolume: initialVolume > 0 ? initialVolume : 0.35,
     });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     
@@ -161,6 +172,19 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const [homeContentError, setHomeContentError] = useState<string | null>(null);
     const [hasFetchedHomeContent, setHasFetchedHomeContent] = useState(false);
     
+    const loadCachedList = (key: string): MediaItem[] => {
+        if (typeof window !== 'undefined') {
+            try {
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed)) return parsed;
+                }
+            } catch (e) {}
+        }
+        return [];
+    };
+
     const [continueListeningItems, setContinueListeningItems] = useState<MediaItem[]>(() => {
         let items: MediaItem[] = [];
         if (typeof window !== 'undefined') {
@@ -182,19 +206,19 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         return items.slice(0, 10);
     });
 
-    const [newReleases, setNewReleases] = useState<MediaItem[]>([]);
-    const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>([]);
-    const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>([]);
-    const [topArtists, setTopArtists] = useState<MediaItem[]>([]);
-    const [chartsPlaylists, setChartsPlaylists] = useState<MediaItem[]>([]);
-    const [genresCategories, setGenresCategories] = useState<MediaItem[]>([]);
-    const [recommendedShows, setRecommendedShows] = useState<MediaItem[]>([]);
-    const [partyPlaylists, setPartyPlaylists] = useState<MediaItem[]>([]);
-    const [topTracks, setTopTracks] = useState<MediaItem[]>([]);
+    const [newReleases, setNewReleases] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_new_releases'));
+    const [userPlaylists, setUserPlaylists] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_user_playlists'));
+    const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_made_for_you_pl'));
+    const [topArtists, setTopArtists] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_top_artists'));
+    const [chartsPlaylists, setChartsPlaylists] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_charts'));
+    const [genresCategories, setGenresCategories] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_genres'));
+    const [recommendedShows, setRecommendedShows] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_shows'));
+    const [partyPlaylists, setPartyPlaylists] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_party'));
+    const [topTracks, setTopTracks] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_top_tracks'));
     const [artistRadioTracks, setArtistRadioTracks] = useState<MediaItem[]>([]);
     const [trackRecommendations, setTrackRecommendations] = useState<MediaItem[]>([]);
-    const [savedAlbums, setSavedAlbums] = useState<MediaItem[]>([]);
-    const [madeForYou, setMadeForYou] = useState<MediaItem[]>([]);
+    const [savedAlbums, setSavedAlbums] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_saved_albums'));
+    const [madeForYou, setMadeForYou] = useState<MediaItem[]>(() => loadCachedList('spotify_cache_made_for_you_new'));
 
     const sessionIdRef = useRef<string>(getSessionId());
     const refreshTimeoutId = useRef<number | null>(null);
@@ -427,6 +451,23 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             remotePollIntervalRef.current = null;
         }
 
+        // Check if there is an in-flight user play/pause toggle action to avoid stale SDK states overriding UI
+        const lastActionTs = parseInt(localStorage.getItem("last_action_ts") || "0", 10);
+        const lastActionTargetPaused = localStorage.getItem("last_action_target_paused");
+        const isRecentUserToggle = Date.now() - lastActionTs < 2000;
+
+        let effectivePaused = newState.paused;
+        if (isRecentUserToggle && lastActionTargetPaused !== null) {
+            const expectedPaused = lastActionTargetPaused === "true";
+            if (newState.paused !== expectedPaused) {
+                // Incoming SDK event is stale (dispatched before the pause/play command took effect)
+                effectivePaused = expectedPaused;
+            } else {
+                // SDK has successfully matched the requested target; clear the pending action flag
+                localStorage.removeItem("last_action_target_paused");
+            }
+        }
+
         setNowPlaying(s => {
             if (s.source !== 'spotify' && s.source !== null) return { ...s, spotifyState: newState };
             
@@ -434,7 +475,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
             const newTrack = newState?.track_window?.current_track || (newState as any)?.item;
             const prevTrack = s.spotifyState?.track_window?.current_track || (s.spotifyState as any)?.item;
 
-            let resolvedState = { ...newState, isLoading: false };
+            let resolvedState = { ...newState, paused: effectivePaused, isLoading: false };
             if (newTrack && prevTrack) {
                 const prevImages = prevTrack.album?.images || prevTrack.images;
                 if ((!newTrack.album?.images || newTrack.album.images.length === 0) && prevImages?.length) {
@@ -526,37 +567,20 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const processRecentPlays = useCallback(async (items: any[]): Promise<MediaItem[]> => {
         const unifiedList: MediaItem[] = [];
         const addedUris = new Set<string>();
-        const contextDetailsCache = new Map<string, any>();
         const likedSongsItem: MediaItem = { id: 'liked-songs', name: 'Brani che ti piacciono', type: 'playlist', uri: 'special:liked-songs', description: 'La tua collezione personale.' };
-
-        const contextUrisToFetch = [...new Set(items.filter(item => item.context?.uri && (item.context.type === 'album' || item.context.type === 'playlist')).map(item => item.context.uri))] as string[];
-        if (contextUrisToFetch.length > 0) {
-            const albumIds = contextUrisToFetch.filter(uri => uri.includes(':album:')).map(uri => uri.split(':')[2]);
-            const playlistIds = contextUrisToFetch.filter(uri => uri.includes(':playlist:')).map(uri => uri.split(':')[2]);
-            const promises = [];
-            if (albumIds.length > 0) {
-                promises.push(apiClient.get(`/albums?ids=${albumIds.join(',')}`).then(res => {
-                    res.data.albums.forEach((album: any) => { if (album) contextDetailsCache.set(album.uri, album); });
-                }).catch(() => {}));
-            }
-            if (playlistIds.length > 0) {
-                const playlistPromises = playlistIds.map(id => apiClient.get(`/playlists/${id}`).then(res => {
-                    contextDetailsCache.set(res.data.uri, res.data);
-                }).catch(() => {}));
-                promises.push(Promise.all(playlistPromises));
-            }
-            await Promise.all(promises);
-        }
 
         for (const item of items) {
             if (!item.track) continue;
             let itemToAdd: MediaItem | null = null;
-            if (item.context?.type === 'collection') { itemToAdd = likedSongsItem; } 
-            else if (item.context?.uri && contextDetailsCache.has(item.context.uri)) {
-                const contextDetails = contextDetailsCache.get(item.context.uri)!;
-                itemToAdd = (contextDetails.type === 'playlist' && contextDetails.owner.id === 'spotify') ? item.track : contextDetails;
-            } else { itemToAdd = item.track; }
-            if (itemToAdd?.uri && !addedUris.has(itemToAdd.uri)) { unifiedList.push(itemToAdd); addedUris.add(itemToAdd.uri); }
+            if (item.context?.type === 'collection') {
+                itemToAdd = likedSongsItem;
+            } else if (item.track) {
+                itemToAdd = item.track;
+            }
+            if (itemToAdd?.uri && !addedUris.has(itemToAdd.uri)) {
+                unifiedList.push(itemToAdd);
+                addedUris.add(itemToAdd.uri);
+            }
         }
         return unifiedList.slice(0, 10);
     }, []);
@@ -565,75 +589,89 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const fetchRecentlyPlayed = useCallback(async () => {
         if (!state.user) return;
         try {
-            const recents = await apiClient.get('/me/player/recently-played?limit=50');
+            const recents = await apiClient.get('/me/player/recently-played?limit=25');
             const processedItemsFromApi = await processRecentPlays(recents.data.items);
             setContinueListeningItems(currentItems => {
                 const optimisticItem = latestOptimisticItem.current || (currentItems.length > 0 ? currentItems[0] : null);
                 if (!optimisticItem) return processedItemsFromApi;
                 const combinedList = [optimisticItem, ...processedItemsFromApi.filter(item => item.uri !== optimisticItem.uri)];
                 const uniqueUris = new Set<string>();
-                return combinedList.filter(item => { if (!item?.uri || uniqueUris.has(item.uri)) return false; uniqueUris.add(item.uri); return true; }).slice(0, 10);
+                const result = combinedList.filter(item => { if (!item?.uri || uniqueUris.has(item.uri)) return false; uniqueUris.add(item.uri); return true; }).slice(0, 10);
+                try { localStorage.setItem('continueListeningItems', JSON.stringify(result)); } catch (e) {}
+                return result;
             });
         } catch (err) {}
     }, [state.user, processRecentPlays]);
     
     const fetchData = useCallback(async () => {
         if (!state.user) return;
-        if (!hasFetchedHomeContent) setHomeContentLoading(true);
+        // Don't show full-page loading if we already have cached items
+        const hasAnyCached = userPlaylists.length > 0 || topArtists.length > 0 || newReleases.length > 0;
+        if (!hasAnyCached) {
+            setHomeContentLoading(true);
+        }
         setHomeContentError(null);
-        try {
-            const promises = [
-                apiClient.get('/me/playlists?limit=10'),
-                apiClient.get('/me/top/artists?time_range=medium_term&limit=10'),
-                apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'),
-                apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'),
-                apiClient.get(`/browse/new-releases?country=IT&limit=10`),
-                apiClient.get('/browse/categories?country=IT&limit=20'),
-                apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'),
-                apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'),
-                apiClient.get('/me/top/tracks?limit=20&time_range=long_term'),
-                apiClient.get('/me/albums?limit=10'),
-                apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'),
-                // Added recently played call here for unified loading
-                apiClient.get('/me/player/recently-played?limit=50'),
-            ];
-            const results = await Promise.allSettled(promises);
-            const [playlists, artists, madeForYouPl, charts, newRels, genres, shows, parties, topTr, savedAlbs, madeForYouNew, recents] = results;
-            
-            if (playlists.status === 'fulfilled') setUserPlaylists(playlists.value.data.items);
-            if (artists.status === 'fulfilled') setTopArtists(artists.value.data.items);
-            if (madeForYouPl.status === 'fulfilled') setMadeForYouPlaylists(madeForYouPl.value.data.playlists.items);
-            if (madeForYouNew.status === 'fulfilled') setMadeForYou(madeForYouNew.value.data.playlists.items);
-            if (charts.status === 'fulfilled') setChartsPlaylists(charts.value.data.playlists.items);
-            if (parties.status === 'fulfilled') setPartyPlaylists(parties.value.data.playlists.items);
-            if (newRels.status === 'fulfilled') setNewReleases(newRels.value.data.albums.items);
-            if (genres.status === 'fulfilled') setGenresCategories(genres.value.data.categories.items.map((c: any) => ({ ...c, type: 'category' })));
-            if (shows.status === 'fulfilled') setRecommendedShows(shows.value.data.shows.items);
-            if (topTr.status === 'fulfilled') setTopTracks(topTr.value.data.items);
-            if (savedAlbs.status === 'fulfilled') setSavedAlbums(savedAlbs.value.data.items.map((i: any) => i.album).filter(Boolean));
-            
-            // Process recent plays directly here
-            if (recents.status === 'fulfilled') {
-                const processedItemsFromApi = await processRecentPlays(recents.value.data.items);
-                setContinueListeningItems(currentItems => {
-                    const optimisticItem = latestOptimisticItem.current || (currentItems.length > 0 ? currentItems[0] : null);
-                    if (!optimisticItem) return processedItemsFromApi;
-                    const combinedList = [optimisticItem, ...processedItemsFromApi.filter(item => item.uri !== optimisticItem.uri)];
-                    const uniqueUris = new Set<string>();
-                    return combinedList.filter(item => { if (!item?.uri || uniqueUris.has(item.uri)) return false; uniqueUris.add(item.uri); return true; }).slice(0, 10);
-                });
-            }
 
-            setHasFetchedHomeContent(true);
-        } catch (err) { setHomeContentError("Could not load content."); } finally { setHomeContentLoading(false); }
-    }, [state.user, hasFetchedHomeContent, processRecentPlays]);
+        const safeFetch = async (
+            promise: Promise<any>, 
+            setter: (data: any) => void, 
+            storageKey: string, 
+            extractor: (data: any) => any
+        ) => {
+            try {
+                const res = await promise;
+                const data = extractor(res.data);
+                if (data && Array.isArray(data) && data.length > 0) {
+                    setter(data);
+                    try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch (e) {}
+                }
+            } catch (e) {
+                // Non-blocking
+            }
+        };
+
+        const fetchOperations = [
+            safeFetch(apiClient.get('/me/playlists?limit=10'), setUserPlaylists, 'spotify_cache_user_playlists', d => d?.items),
+            safeFetch(apiClient.get('/me/top/artists?time_range=medium_term&limit=10'), setTopArtists, 'spotify_cache_top_artists', d => d?.items),
+            safeFetch(apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'), setMadeForYouPlaylists, 'spotify_cache_made_for_you_pl', d => d?.playlists?.items),
+            safeFetch(apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'), setChartsPlaylists, 'spotify_cache_charts', d => d?.playlists?.items),
+            safeFetch(apiClient.get('/browse/new-releases?country=IT&limit=10'), setNewReleases, 'spotify_cache_new_releases', d => d?.albums?.items),
+            safeFetch(apiClient.get('/browse/categories?country=IT&limit=20'), setGenresCategories, 'spotify_cache_genres', d => d?.categories?.items?.map((c: any) => ({ ...c, type: 'category' }))),
+            safeFetch(apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'), setRecommendedShows, 'spotify_cache_shows', d => d?.shows?.items),
+            safeFetch(apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'), setPartyPlaylists, 'spotify_cache_party', d => d?.playlists?.items),
+            safeFetch(apiClient.get('/me/top/tracks?limit=20&time_range=long_term'), setTopTracks, 'spotify_cache_top_tracks', d => d?.items),
+            safeFetch(apiClient.get('/me/albums?limit=10'), setSavedAlbums, 'spotify_cache_saved_albums', d => d?.items?.map((i: any) => i.album).filter(Boolean)),
+            safeFetch(apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'), setMadeForYou, 'spotify_cache_made_for_you_new', d => d?.playlists?.items),
+            (async () => {
+                try {
+                    const recents = await apiClient.get('/me/player/recently-played?limit=25');
+                    if (recents.data?.items) {
+                        const processed = await processRecentPlays(recents.data.items);
+                        setContinueListeningItems(currentItems => {
+                            const optimisticItem = latestOptimisticItem.current || (currentItems.length > 0 ? currentItems[0] : null);
+                            if (!optimisticItem) return processed;
+                            const combined = [optimisticItem, ...processed.filter(item => item.uri !== optimisticItem.uri)];
+                            const unique = new Set<string>();
+                            const result = combined.filter(item => { if (!item?.uri || unique.has(item.uri)) return false; unique.add(item.uri); return true; }).slice(0, 10);
+                            try { localStorage.setItem('continueListeningItems', JSON.stringify(result)); } catch (e) {}
+                            return result;
+                        });
+                    }
+                } catch (e) {}
+            })()
+        ];
+
+        // Progressive resolution: as each finishes, UI is already updated!
+        await Promise.allSettled(fetchOperations);
+        setHasFetchedHomeContent(true);
+        setHomeContentLoading(false);
+    }, [state.user, processRecentPlays, userPlaylists.length, topArtists.length, newReleases.length]);
 
     const triggerHomeContentFetch = useCallback(() => {
-        if (state.user) { 
-            // Only call fetchData, which now includes recently played
+        if (state.user && !hasFetchedHomeContent) { 
             fetchData(); 
         }
-    }, [state.user, fetchData]);
+    }, [state.user, hasFetchedHomeContent, fetchData]);
 
     const resetHomeContent = useCallback(() => {
         setHasFetchedHomeContent(false); setNewReleases([]); setUserPlaylists([]); setMadeForYouPlaylists([]);
@@ -1094,35 +1132,11 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
     }, [isPlayerSdkReady]);
 
-    // NEW: Volume Sync Effect
+    // Enforce stored app volume onto Spotify SDK player whenever ready or volume state changes
     useEffect(() => {
         if (!isPlayerSdkReady) return;
-
-        const interval = setInterval(async () => {
-            const player = getPlayerInstance();
-            if (!player) return;
-            
-            try {
-                const currentSdkVolume = await player.getVolume();
-                setState(prev => {
-                    // Update only if significant difference to avoid UI jitter or conflict with local drag
-                    if (Math.abs(prev.volume - currentSdkVolume) > 0.02) {
-                        return { 
-                            ...prev, 
-                            volume: currentSdkVolume, 
-                            isMuted: currentSdkVolume === 0,
-                            lastVolume: currentSdkVolume > 0 ? currentSdkVolume : prev.lastVolume 
-                        };
-                    }
-                    return prev;
-                });
-            } catch (e) {
-                // Silent catch for volume retrieval errors
-            }
-        }, 2000);
-
-        return () => clearInterval(interval);
-    }, [isPlayerSdkReady]);
+        setVolumeFinalPlayer(state.volume).catch(() => {});
+    }, [isPlayerSdkReady, state.volume]);
 
     useEffect(() => {
         if (!state.isAuthenticated || !state.accessToken) { getPlayerInstance()?.disconnect(); return; }
@@ -1150,12 +1164,14 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
     const setVolumeLive = useCallback((rawValue: number) => {
         const clampedVolume = Math.max(0, Math.min(1, rawValue));
         setState(s => ({ ...s, volume: clampedVolume, isMuted: clampedVolume === 0, ...(clampedVolume > 0 && { lastVolume: clampedVolume }) }));
+        try { localStorage.setItem('app_infotainment_volume', clampedVolume.toString()); } catch (e) {}
         setVolumeThrottled(clampedVolume);
     }, []);
 
     const setVolumeFinal = useCallback((rawValue: number) => {
         const clampedVolume = Math.max(0, Math.min(1, rawValue));
         setState(s => ({ ...s, volume: clampedVolume, isMuted: clampedVolume === 0, ...(clampedVolume > 0 && { lastVolume: clampedVolume }) }));
+        try { localStorage.setItem('app_infotainment_volume', clampedVolume.toString()); } catch (e) {}
         setVolumeFinalPlayer(clampedVolume).catch(() => {});
     }, []);
 

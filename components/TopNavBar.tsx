@@ -4,10 +4,14 @@ import { FiSearch, FiChevronLeft, FiSend } from 'react-icons/fi';
 import { ViewType } from './SpotifyPlayer';
 import { UserProfileMenu } from './UserProfileMenu';
 
-const navLinks = ["Home", "Playlist", "Artisti", "Album", "Podcast", "Generi e Mood"];
+export const wikiSpotifyLogoUrl = "https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg";
+export const officialSpotifyDjLogoUrl = "https://lexicon-assets.spotifycdn.com/DJ-Beta-CoverArt-300.jpg";
+
+const navLinks = ["Home", "AI DJ", "Playlist", "Artisti", "Album", "Podcast", "Generi e Mood"];
 
 const linkToViewMap: { [key: string]: ViewType } = {
     "Home": 'home',
+    "AI DJ": 'ai-dj',
     "Playlist": 'playlists',
     "Artisti": 'artists',
     "Album": 'albums',
@@ -24,7 +28,7 @@ interface TopNavBarProps {
     showBackButton: boolean;
 }
 
-const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBackButton }: TopNavBarProps) => {
+const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBack, showBackButton }: TopNavBarProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   
   const textColor = 'var(--text-primary)';
@@ -77,7 +81,7 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
       
       {/* Right side: Navigation Links & User Profile */}
       <div className="flex items-center gap-3 ml-auto flex-shrink-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none">
           {navLinks.map((link) => {
             const linkView = linkToViewMap[link];
             if (!linkView) return null;
@@ -109,6 +113,8 @@ const TopNavBar = ({ isNight, activeView, onNavigate, onSearch, onBack, showBack
       </div>
     </nav>
   );
-};
+});
+
+TopNavBar.displayName = 'TopNavBar';
 
 export default TopNavBar;

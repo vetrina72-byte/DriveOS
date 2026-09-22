@@ -48,8 +48,15 @@ const PlaylistListView = ({ isNight, onSelectItem }: { isNight: boolean, onSelec
             try {
                 // Fetch up to 50 playlists for a more complete list
                 const response = await apiClient.get('/me/playlists?limit=50');
+                // Filter out DJ Spotify items so DJ is strictly a feature button, not a playlist
+                const filteredItems = (response.data?.items || []).filter((pl: SpotifyItem) => 
+                  pl &&
+                  pl.id !== 'spotify-dj' &&
+                  !pl.uri?.includes('37i9dQZF1EYkqdzj48dyYq') &&
+                  !pl.name?.toLowerCase().includes('spotify dj')
+                );
                 // Prepend the special "Liked Songs" item to the user's playlists
-                setPlaylists([likedSongsItem, ...response.data.items]);
+                setPlaylists([likedSongsItem, ...filteredItems]);
             } catch (err) {
                 console.error('Failed to fetch playlists', err);
                 setError('Could not load your playlists.');

@@ -1,7 +1,9 @@
 import React from 'react';
+import { Play, Pause, Sparkles, ArrowRight } from 'lucide-react';
 import ContentCarousel from './ContentCarousel';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
-import type { SpotifyUser } from '@/context/AuthContext';
+import { useAuth, type SpotifyUser } from '@/context/AuthContext';
+import { wikiSpotifyLogoUrl, officialSpotifyDjLogoUrl } from './TopNavBar';
 
 // Helper for dynamic greeting
 const getGreeting = () => {
@@ -49,12 +51,29 @@ interface ContentAreaProps {
     trackRecommendations: MediaItem[];
     savedAlbums: MediaItem[];
     madeForYou: MediaItem[];
+    onPlayDJ?: () => void;
+    onOpenDjView?: () => void;
 }
 
+// Helper to filter out DJ items from standard carousels
+const filterDjItems = (items: MediaItem[]) => {
+  if (!Array.isArray(items)) return [];
+  return items.filter(item => 
+    item && 
+    item.id !== 'spotify-dj' && 
+    !item.uri?.includes('37i9dQZF1EYkqdzj48dyYq') &&
+    !item.name?.toLowerCase().includes('spotify dj') &&
+    item.name?.trim().toLowerCase() !== 'dj' &&
+    item.name?.trim().toLowerCase() !== 'dj spotify'
+  );
+};
+
 // Main Component
-const ContentArea = ({ 
+const ContentArea = React.memo(({ 
     isNight, 
     onSelectItem, 
+    onPlayDJ,
+    onOpenDjView,
     loading,
     error,
     user,
@@ -75,8 +94,45 @@ const ContentArea = ({
 }: ContentAreaProps) => {
   
   const greeting = getGreeting();
+  const { nowPlaying } = useAuth();
 
-  if (loading) {
+  const isDjActive = React.useMemo(() => {
+    if (!nowPlaying?.spotifyState) return false;
+    const state = nowPlaying.spotifyState;
+    const contextUri = state.context?.uri || '';
+    const currentTrack = state.track_window?.current_track;
+    const currentUri = currentTrack?.uri || '';
+    return contextUri.includes('37i9dQZF1EYkqdzj48dyYq') || currentUri.includes('37i9dQZF1EYkqdzj48dyYq');
+  }, [nowPlaying]);
+
+  const isDjPlaying = React.useMemo(() => {
+    return isDjActive && !nowPlaying?.spotifyState?.paused;
+  }, [isDjActive, nowPlaying]);
+
+  const filteredContinue = React.useMemo(() => filterDjItems(continueListeningItems), [continueListeningItems]);
+  const filteredMadeForYou = React.useMemo(() => filterDjItems(madeForYou), [madeForYou]);
+  const filteredMadeForYouPlaylists = React.useMemo(() => filterDjItems(madeForYouPlaylists), [madeForYouPlaylists]);
+  const filteredUserPlaylists = React.useMemo(() => filterDjItems(userPlaylists), [userPlaylists]);
+  const filteredCharts = React.useMemo(() => filterDjItems(chartsPlaylists), [chartsPlaylists]);
+  const filteredParty = React.useMemo(() => filterDjItems(partyPlaylists), [partyPlaylists]);
+  const filteredTopArtists = React.useMemo(() => filterDjItems(topArtists), [topArtists]);
+  const filteredNewReleases = React.useMemo(() => filterDjItems(newReleases), [newReleases]);
+  const filteredShows = React.useMemo(() => filterDjItems(recommendedShows), [recommendedShows]);
+  const filteredTopTracks = React.useMemo(() => filterDjItems(topTracks), [topTracks]);
+  const filteredArtistRadio = React.useMemo(() => filterDjItems(artistRadioTracks), [artistRadioTracks]);
+  const filteredTrackRecs = React.useMemo(() => filterDjItems(trackRecommendations), [trackRecommendations]);
+  const filteredSavedAlbums = React.useMemo(() => filterDjItems(savedAlbums), [savedAlbums]);
+  const filteredGenres = React.useMemo(() => filterDjItems(genresCategories), [genresCategories]);
+
+  const hasAnyContent = (
+    filteredContinue.length > 0 ||
+    filteredMadeForYou.length > 0 ||
+    filteredUserPlaylists.length > 0 ||
+    filteredNewReleases.length > 0 ||
+    filteredCharts.length > 0
+  );
+
+  if (loading && !hasAnyContent) {
       return (
           <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
               <h1 className="text-3xl font-bold mb-8 px-6 text-transparent animate-pulse bg-gray-600/20 w-1/2 rounded-md h-9">.</h1>
@@ -87,97 +143,194 @@ const ContentArea = ({
       );
   }
 
-  if (error) {
+  if (error && !hasAnyContent) {
       return <div className="flex-grow flex justify-center items-center text-red-400">{error}</div>;
   }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
       <h1 
-        className="text-3xl font-bold mb-8 px-6"
+        className="text-3xl font-bold mb-6 px-6"
         style={{ color: 'var(--heading-color)' }}
       >
         {greeting}, {user?.display_name}!
       </h1>
+
+      {/* Spotify DJ Feature Card with Clean Black & White Aesthetic */}
+      <div className="px-6 mb-8">
+        <div 
+          className={`relative overflow-hidden rounded-2xl p-5 border transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+            isNight 
+              ? 'bg-[#121212] border-zinc-800 hover:border-zinc-700 shadow-lg' 
+              : 'bg-white border-zinc-200 hover:border-zinc-300 shadow-sm'
+          }`}
+        >
+          <div 
+            onClick={() => onOpenDjView?.()}
+            className="flex items-center gap-4 relative z-10 cursor-pointer group"
+          >
+            <div className="flex-shrink-0 relative">
+              <img 
+                src={officialSpotifyDjLogoUrl} 
+                alt="Spotify AI DJ Logo" 
+                className="w-14 h-14 rounded-xl flex-shrink-0 object-cover shadow-md border border-white/10 group-hover:scale-105 transition-transform" 
+                referrerPolicy="no-referrer" 
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-base font-bold group-hover:text-[#1db954] transition-colors ${isNight ? 'text-white' : 'text-zinc-900'}`}>
+                  Spotify AI DJ
+                </span>
+                {isDjActive && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                    isNight 
+                      ? 'bg-zinc-800 text-zinc-300 border-zinc-700' 
+                      : 'bg-zinc-100 text-zinc-700 border-zinc-300'
+                  }`}>
+                    {isDjPlaying ? 'In riproduzione' : 'In pausa'}
+                  </span>
+                )}
+              </div>
+              <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-600'} max-w-md leading-relaxed`}>
+                La tua guida musicale personale con selezione intelligente dei brani e commenti vocali dedicati.
+              </p>
+            </div>
+          </div>
+
+          <div className="relative z-10 flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => onOpenDjView?.()}
+              className={`px-3.5 py-2 rounded-full font-bold text-xs transition-colors border cursor-pointer ${
+                isNight 
+                  ? 'bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700' 
+                  : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border-zinc-300'
+              }`}
+            >
+              Scopri AI DJ
+            </button>
+
+            <button
+              onClick={() => {
+                if (onPlayDJ) {
+                  onPlayDJ();
+                } else {
+                  onSelectItem({
+                    id: 'spotify-dj',
+                    name: 'DJ Spotify',
+                    type: 'playlist',
+                    uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq',
+                    description: 'Spotify AI DJ'
+                  });
+                }
+              }}
+              className={`flex-shrink-0 px-5 py-2.5 rounded-full font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 text-black cursor-pointer ${
+                isDjPlaying
+                  ? 'bg-white hover:bg-zinc-200 shadow-md'
+                  : 'bg-[#1db954] hover:bg-[#1ed760] active:scale-95 shadow-md shadow-emerald-500/10'
+              }`}
+            >
+              {isDjPlaying ? (
+                <>
+                  <Pause className="w-3.5 h-3.5 fill-current" />
+                  Pausa
+                </>
+              ) : isDjActive ? (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  Riprendi
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  Avvia DJ
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
       
-      {continueListeningItems.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '100ms' }}>
-              <ContentCarousel title="Continua ad ascoltare" items={continueListeningItems} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
+      {filteredContinue.length > 0 && (
+          <div>
+              <ContentCarousel title="Continua ad ascoltare" items={filteredContinue} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
           </div>
       )}
-       {madeForYou.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '120ms' }}>
-              <ContentCarousel title="Realizzato per te" items={madeForYou} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you-new" />
+       {filteredMadeForYou.length > 0 && (
+          <div>
+              <ContentCarousel title="Realizzato per te" items={filteredMadeForYou} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you-new" />
           </div>
       )}
-       {madeForYouPlaylists.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '150ms' }}>
-              <ContentCarousel title="Le playlist create per te" items={madeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
+       {filteredMadeForYouPlaylists.length > 0 && (
+          <div>
+              <ContentCarousel title="Le playlist create per te" items={filteredMadeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
           </div>
       )}
-      {userPlaylists.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '200ms' }}>
-              <ContentCarousel title="Le tue playlist" items={userPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
+      {filteredUserPlaylists.length > 0 && (
+          <div>
+              <ContentCarousel title="Le tue playlist" items={filteredUserPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
           </div>
       )}
-      {chartsPlaylists.length > 0 && (
-           <div className="animate-fadeInUp" style={{ animationDelay: '250ms' }}>
-              <ContentCarousel title="Classifiche" items={chartsPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
+      {filteredCharts.length > 0 && (
+          <div>
+              <ContentCarousel title="Classifiche" items={filteredCharts} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
           </div>
       )}
-      {partyPlaylists.length > 0 && (
-        <div className="animate-fadeInUp" style={{ animationDelay: '280ms' }}>
+      {filteredParty.length > 0 && (
+        <div>
             <ContentCarousel 
                 title="Musica da cantare" 
-                items={partyPlaylists} 
+                items={filteredParty} 
                 isNight={isNight} 
                 onSelectItem={onSelectItem} 
                 keyPrefix="party-playlists" 
             />
         </div>
       )}
-      {topArtists.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
-              <ContentCarousel title="I tuoi artisti del momento" items={topArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
+      {filteredTopArtists.length > 0 && (
+          <div>
+              <ContentCarousel title="I tuoi artisti del momento" items={filteredTopArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
           </div>
       )}
-      {newReleases.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '350ms' }}>
-              <ContentCarousel title="Nuove uscite" items={newReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
+      {filteredNewReleases.length > 0 && (
+          <div>
+              <ContentCarousel title="Nuove uscite" items={filteredNewReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
           </div>
       )}
-      {recommendedShows.length > 0 && (
-           <div className="animate-fadeInUp" style={{ animationDelay: '400ms' }}>
-              <ContentCarousel title="Podcast consigliati" items={recommendedShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
+      {filteredShows.length > 0 && (
+          <div>
+              <ContentCarousel title="Podcast consigliati" items={filteredShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
           </div>
       )}
-      {topTracks.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '500ms' }}>
-              <ContentCarousel title="Un tuffo nel passato" items={topTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-tracks" />
+      {filteredTopTracks.length > 0 && (
+          <div>
+              <ContentCarousel title="Un tuffo nel passato" items={filteredTopTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-tracks" />
           </div>
       )}
-      {artistRadioTracks.length > 0 && topArtists.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '550ms' }}>
-              <ContentCarousel title={`Radio di ${topArtists[0].name}`} items={artistRadioTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="artist-radio" />
+      {filteredArtistRadio.length > 0 && topArtists.length > 0 && (
+          <div>
+              <ContentCarousel title={`Radio di ${topArtists[0].name}`} items={filteredArtistRadio} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="artist-radio" />
           </div>
       )}
-      {trackRecommendations.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '600ms' }}>
-              <ContentCarousel title="Potrebbe piacerti anche" items={trackRecommendations} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="track-recs" />
+      {filteredTrackRecs.length > 0 && (
+          <div>
+              <ContentCarousel title="Potrebbe piacerti anche" items={filteredTrackRecs} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="track-recs" />
           </div>
       )}
-      {savedAlbums.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '650ms' }}>
-              <ContentCarousel title="I tuoi album salvati" items={savedAlbums} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="saved-albums" />
+      {filteredSavedAlbums.length > 0 && (
+          <div>
+              <ContentCarousel title="I tuoi album salvati" items={filteredSavedAlbums} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="saved-albums" />
           </div>
       )}
-      {genresCategories.length > 0 && (
-          <div className="animate-fadeInUp" style={{ animationDelay: '450ms' }}>
-              <ContentCarousel title="Esplora per generi e mood" items={genresCategories} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
+      {filteredGenres.length > 0 && (
+          <div>
+              <ContentCarousel title="Esplora per generi e mood" items={filteredGenres} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
           </div>
       )}
     </div>
   );
-};
+});
+
+ContentArea.displayName = 'ContentArea';
 
 export default ContentArea;

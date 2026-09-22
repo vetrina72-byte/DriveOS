@@ -475,7 +475,7 @@ function SpotifyLogin({ isNight = true }: SpotifyLoginProps) {
                 </motion.div>
               ) : (
                 <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-white/5 border border-white/10 w-fit">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#1DB954] shadow-[0_0_8px_#1DB954] animate-pulse" />
+                  <div className="w-2 h-2 rounded-full bg-[#1DB954]" />
                   <span className={`text-xs font-semibold ${theme.subtitle}`}>In attesa di scansione...</span>
                 </div>
               )}

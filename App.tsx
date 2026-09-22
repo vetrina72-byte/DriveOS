@@ -89,19 +89,23 @@ export type SceneColors = {
 export const initialSceneColors: SceneColors = {
   day: {
     'Cielo sereno': { sky: '#ffffff', floor: '#ffffff' },
-    'Pioggia': { sky: '#595b5f', floor: '#8a8a8a' },
-    'Temporale': { sky: '#454b59', floor: '#222222' },
-    'Neve': { sky: '#ababab', floor: '#eeeeee' },
-    'Grandine': { sky: '#a1a1aa', floor: '#d4d4d8' },
-    'Nebbia': { sky: '#b0b8c0', floor: '#b0b8c0' },
+    'Pioggerella': { sky: '#f0f0f0', floor: '#f4f4f4' },
+    'Nebbia': { sky: '#e4e4e4', floor: '#ebebeb' },
+    'Pioggia': { sky: '#d6d6d6', floor: '#dedede' },
+    'Grandine': { sky: '#c8c8c8', floor: '#d2d2d2' },
+    'Neve': { sky: '#e2e2e2', floor: '#ececec' },
+    'Pioggia forte': { sky: '#b8b8b8', floor: '#c4c4c4' },
+    'Temporale': { sky: '#a2a2a2', floor: '#aeaeae' },
   },
   night: {
     'Cielo sereno': { sky: '#000000', floor: '#000000' },
-    'Pioggia': { sky: '#000000', floor: '#000000' },
-    'Temporale': { sky: '#000000', floor: '#000000' },
-    'Neve': { sky: '#000000', floor: '#000000' },
-    'Grandine': { sky: '#000000', floor: '#000000' },
+    'Pioggerella': { sky: '#000000', floor: '#000000' },
     'Nebbia': { sky: '#000000', floor: '#000000' },
+    'Pioggia': { sky: '#000000', floor: '#000000' },
+    'Grandine': { sky: '#000000', floor: '#000000' },
+    'Neve': { sky: '#000000', floor: '#000000' },
+    'Pioggia forte': { sky: '#000000', floor: '#000000' },
+    'Temporale': { sky: '#000000', floor: '#000000' },
   }
 };
 
@@ -282,7 +286,8 @@ function AppContent() {
 
   const handleSpotifyDrag = useCallback((progress: number | null) => {
     if (isSwitchingRef.current) return;
-    dragProgressRef.current = progress;
+    // We intentionally DO NOT update dragProgressRef here because Spotify/Radio/Theater
+    // always close back to the Maps app (appOpenConfig state), so the 3D scene should NOT tilt.
     const isDragging = progress !== null;
     if (isDragging !== dragActiveRef.current) {
       dragActiveRef.current = isDragging;
@@ -387,6 +392,16 @@ function AppContent() {
 
   const handleToggleFavorite = useCallback((station: RadioStation) => {
     setFavoriteStationUUIDs(prev => prev.includes(station.stationuuid) ? prev.filter(uuid => uuid !== station.stationuuid) : [...prev, station.stationuuid]);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenRadarEvent = () => {
+      activeAppRef.current = 'maps';
+      setActiveApp('maps');
+      setIsMapsLayered(false);
+    };
+    window.addEventListener('open-weather-radar', handleOpenRadarEvent);
+    return () => window.removeEventListener('open-weather-radar', handleOpenRadarEvent);
   }, []);
 
   const moveAppToLauncher = (appId: string) => {
@@ -738,7 +753,7 @@ function AppContent() {
         redPanelOrientation={redPanelOrientation}
       />
       <TopStatusBar tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} isMapVisible={shouldShowMap}/>
-      <WeatherModal tempUnit={tempUnit}/>
+      <WeatherModal tempUnit={tempUnit} setTempUnit={setTempUnit}/>
       <MiniMap isVisible={activeApp === null && !isCanvasInteracting} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>

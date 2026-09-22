@@ -65,9 +65,9 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [carShadowOffsetY, setCarShadowOffsetY] = useState(0.02);
   const [carShadowOffsetX, setCarShadowOffsetX] = useState(0.0);
   const [carShadowOffsetZ, setCarShadowOffsetZ] = useState(0.0);
-  const [dirLightPosX, setDirLightPosX] = useState(-0.30);
+  const [dirLightPosX, setDirLightPosX] = useState(0.0);
   const [dirLightPosY, setDirLightPosY] = useState(40.00);
-  const [dirLightPosZ, setDirLightPosZ] = useState(7.70);
+  const [dirLightPosZ, setDirLightPosZ] = useState(0.0);
   const [dirLightIntensity, setDirLightIntensity] = useState(2.40);
   const [spotLightPosX, setSpotLightPosX] = useState(0.0);
   const [spotLightPosY, setSpotLightPosY] = useState(10.0);
@@ -105,7 +105,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
-  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(3.6);
+  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(1.9);
   const [spinnerSize, setSpinnerSize] = useState(18);
   const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
   const [debugSpinner, setDebugSpinner] = useState(false);

@@ -130,11 +130,9 @@ export default function TopStatusBar({
 
   const temperatureText = convertAndFormatTemp(weatherData?.current.temperature, tempUnit);
   
-  const lowerCond = weatherCondition.toLowerCase();
-  const isGloomyDay = !isNight && (lowerCond.includes('pioggia') || lowerCond.includes('temporale') || lowerCond.includes('rovescio'));
   const isSatellite = mapStyle === 'satellite';
   const isSatelliteAndVisible = isSatellite && isMapVisible;
-  const textColor = (isNight || isGloomyDay || isSatelliteAndVisible) ? 'text-white' : 'text-gray-800';
+  const textColor = (isNight || isSatelliteAndVisible) ? 'text-white' : 'text-gray-800';
   const shadowClass = isSatelliteAndVisible ? 'text-shadow' : '';
 
   return (

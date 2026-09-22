@@ -371,9 +371,9 @@ function SceneController({
   spotLightPosX = 0.0,
   spotLightPosY = 5.0,
   spotLightPosZ = 0.0,
-  dirLightPosX = -0.30,
+  dirLightPosX = 0.0,
   dirLightPosY = 40.0,
-  dirLightPosZ = 7.70,
+  dirLightPosZ = 0.0,
   onInteractionChange,
   dragProgress,
   sceneTransitionSpeed,
@@ -1312,12 +1312,9 @@ function EnvironmentController({
   const getWeatherKey = useCallback((condition: string): string => {
     const lowerCond = condition.toLowerCase();
     if (lowerCond.includes("temporale")) return "Temporale";
-    if (
-      lowerCond.includes("pioggia") ||
-      lowerCond.includes("rovescio") ||
-      lowerCond.includes("pioggerella")
-    )
-      return "Pioggia";
+    if (lowerCond.includes("pioggia forte") || lowerCond.includes("rovescio")) return "Pioggia forte";
+    if (lowerCond.includes("pioggerella") || lowerCond.includes("pioggia leggera")) return "Pioggerella";
+    if (lowerCond.includes("pioggia")) return "Pioggia";
     if (lowerCond.includes("grandine")) return "Grandine";
     if (lowerCond.includes("neve")) return "Neve";
     if (lowerCond.includes("nebbia")) return "Nebbia";
@@ -1334,28 +1331,14 @@ function EnvironmentController({
     
     let gradientCss = "";
     if (!isNight) {
-      // Giorno (Day) sky shades
-      if (weatherKey === "Cielo sereno") {
-        gradientCss = `linear-gradient(to bottom, #ffffff 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Pioggia") {
-        gradientCss = `linear-gradient(to bottom, #414347 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Temporale") {
-        gradientCss = `linear-gradient(to bottom, #2e3137 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Neve") {
-        gradientCss = `linear-gradient(to bottom, #8a8a8a 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Grandine") {
-        gradientCss = `linear-gradient(to bottom, #7f7f85 0%, ${hexColor} 100%)`;
-      } else if (weatherKey === "Nebbia") {
-        gradientCss = `linear-gradient(to bottom, #949ca4 0%, ${hexColor} 100%)`;
-      } else {
-        gradientCss = `linear-gradient(to bottom, #ffffff 0%, ${hexColor} 100%)`;
-      }
+      // Giorno (Day) is always clean white
+      gradientCss = `linear-gradient(to bottom, #ffffff 0%, ${hexColor} 100%)`;
     } else {
-      // Notte (Night) sky shades
+      // Notte (Night) sky shades - strictly monochrome pure black and deep dark tones
       if (weatherKey === "Cielo sereno") {
-        gradientCss = `linear-gradient(to bottom, #030408 0%, ${hexColor} 100%)`;
+        gradientCss = `linear-gradient(to bottom, #000000 0%, ${hexColor} 100%)`;
       } else {
-        gradientCss = `linear-gradient(to bottom, #010204 0%, ${hexColor} 100%)`;
+        gradientCss = `linear-gradient(to bottom, #000000 0%, ${hexColor} 100%)`;
       }
     }
 
@@ -1438,30 +1421,40 @@ function EnvironmentController({
       targetFog = { near: fogNear, far: fogFar };
 
       if (weatherKey === "Temporale") {
-        targetAmbientIntensity *= 0.5;
-        targetDirectionalIntensity = 0.1;
-        targetEnvIntensity = 0.6;
-        targetMirror = 0;
+        targetAmbientIntensity *= 0.60;
+        targetDirectionalIntensity *= 0.35;
+        targetEnvIntensity *= 0.65;
+        targetMirror = 0.25;
+      } else if (weatherKey === "Pioggia forte") {
+        targetAmbientIntensity *= 0.70;
+        targetDirectionalIntensity *= 0.45;
+        targetEnvIntensity *= 0.75;
+        targetMirror = 0.35;
       } else if (weatherKey === "Pioggia") {
-        targetAmbientIntensity *= 0.4;
-        targetDirectionalIntensity *= 0.1;
-        targetEnvIntensity *= 0.5;
-        targetMirror = 0;
+        targetAmbientIntensity *= 0.80;
+        targetDirectionalIntensity *= 0.60;
+        targetEnvIntensity *= 0.82;
+        targetMirror = 0.45;
+      } else if (weatherKey === "Pioggerella") {
+        targetAmbientIntensity *= 0.90;
+        targetDirectionalIntensity *= 0.80;
+        targetEnvIntensity *= 0.90;
+        targetMirror = 0.65;
       } else if (weatherKey === "Grandine") {
-        targetAmbientIntensity *= 0.5;
-        targetDirectionalIntensity *= 0.2;
-        targetEnvIntensity *= 0.6;
-        targetMirror = 0.1;
+        targetAmbientIntensity *= 0.78;
+        targetDirectionalIntensity *= 0.65;
+        targetEnvIntensity *= 0.80;
+        targetMirror = 0.4;
       } else if (weatherKey === "Neve") {
-        targetAmbientIntensity *= 0.8;
-        targetDirectionalIntensity *= 0.4;
-        targetEnvIntensity *= 1.2;
-        targetMirror = 0.2;
+        targetAmbientIntensity *= 0.90;
+        targetDirectionalIntensity *= 0.80;
+        targetEnvIntensity *= 1.10;
+        targetMirror = 0.5;
       } else if (weatherKey === "Nebbia") {
-        targetAmbientIntensity *= 0.6;
-        targetDirectionalIntensity *= 0.2;
-        targetEnvIntensity *= 0.8;
-        targetMirror = 0.1;
+        targetAmbientIntensity *= 0.85;
+        targetDirectionalIntensity *= 0.65;
+        targetEnvIntensity *= 0.85;
+        targetMirror = 0.35;
       }
     }
 
@@ -1618,9 +1611,9 @@ function VehicleCanvas({
   carShadowOffsetY = 0.02,
   carShadowOffsetX = 0.0,
   carShadowOffsetZ = 0.0,
-  dirLightPosX = -0.30,
+  dirLightPosX = 0.0,
   dirLightPosY = 40.00,
-  dirLightPosZ = 7.70,
+  dirLightPosZ = 0.0,
   dirLightIntensity = 2.40,
   spotLightPosX = 0.0,
   spotLightPosY = 5.0,
@@ -1653,40 +1646,6 @@ function VehicleCanvas({
   const directionalLightRef = useRef<THREE.DirectionalLight>(null!);
   const frontLightTarget = useMemo(() => new THREE.Object3D(), []);
   const shadowRef = useRef<THREE.Mesh>(null!);
-
-  const [renderIdle, setRenderIdle] = useState(false);
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    
-    const checkIdleState = () => {
-      if (isAppOpen) {
-        timer = setTimeout(() => setRenderIdle(true), sceneTransitionSpeed * 1000 + 100);
-      } else {
-        setRenderIdle(false);
-      }
-    };
-    
-    checkIdleState();
-
-    const handleDragState = (e: Event) => {
-      const customEvent = e as CustomEvent<boolean>;
-      if (customEvent.detail === true) {
-        // Dragging started, wake up the render loop immediately
-        clearTimeout(timer);
-        setRenderIdle(false);
-      } else {
-        // Dragging ended, check if we need to idle again
-        checkIdleState();
-      }
-    };
-
-    window.addEventListener('app-drag-state', handleDragState);
-
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('app-drag-state', handleDragState);
-    };
-  }, [isAppOpen, sceneTransitionSpeed]);
 
   // Generate a procedural noise/grain texture to break up the perfect glass reflections
   const noiseTexture = useMemo(() => {
@@ -1857,7 +1816,7 @@ function VehicleCanvas({
         style={{ zIndex: 0, touchAction: "none" }}
         shadows={typeof window !== 'undefined' && window.innerWidth > 1024 ? { type: THREE.PCFSoftShadowMap } : false}
         dpr={[1, Math.min(window.devicePixelRatio, 1.5)]}
-        frameloop={renderIdle && dragProgress.current === null ? "demand" : "always"}
+        frameloop="always"
         camera={{
           fov: 48,
           near: 0.5,

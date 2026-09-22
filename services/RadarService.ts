@@ -18,7 +18,10 @@ export class RainViewerProvider implements IRadarProvider {
       const past = (d.radar?.past || [])
         .filter((f: any) => f && f.path)
         .map((f: any) => ({ time: f.time, path: f.path }));
-      return { past, nowcast: [] };
+      const nowcast = (d.radar?.nowcast || [])
+        .filter((f: any) => f && f.path)
+        .map((f: any) => ({ time: f.time, path: f.path }));
+      return { past, nowcast };
     } catch (e) {
       console.error('[WEATHER] Failed to load RainViewer config', e);
       return { past: [], nowcast: [] };
@@ -27,7 +30,9 @@ export class RainViewerProvider implements IRadarProvider {
 
   getTileUrl(path: string, x: number | string, y: number | string, z: number | string): string {
     if (!path) return '';
-    return `https://tilecache.rainviewer.com${path}/512/${z}/${x}/${y}/4/1_1.webp`;
+    // Scheme 8: Emerald/Green Tesla-style radar palette
+    // Options 1_1: Smooth tile interpolation (1) + Snow/Ice rendering (1)
+    return `https://tilecache.rainviewer.com${path}/512/${z}/${x}/${y}/8/1_1.webp`;
   }
 }
 

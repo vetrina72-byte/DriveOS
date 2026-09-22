@@ -337,6 +337,10 @@ const Theater = ({
         e.currentTarget.releasePointerCapture(e.pointerId);
         
         const state = physics.current;
+        // CRITICAL FIX: Only process drop logic if we were actually dragging.
+        // Prevents premature close trigger on startup/mount.
+        if (!state.isDragging) return;
+
         state.isDragging = false;
         // DO NOT call onDragProgress(null) here.
 

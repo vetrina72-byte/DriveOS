@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { WeatherData, WeatherParams } from '../types';
 import { HOT_TEMP, COLD_TEMP } from '../components/WeatherIcon';
+import { TelemetryStore } from './TelemetryStore';
 
 export type WeatherStatus = 'idle' | 'locating' | 'fetching' | 'success' | 'error';
 
@@ -34,23 +35,131 @@ const degToCompass = (num: number) => {
     return arr[(val % 8)];
 };
 
-const timestampToHHMM = (ts: number) => {
-    const date = new Date(ts * 1000);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
+const format12hTo24h = (time12h: string): string => {
+    if (!time12h) return '--:--';
+    const match = time12h.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return time12h;
+    let [_, hoursStr, minutesStr, ampm] = match;
+    let hours = parseInt(hoursStr, 10);
+    if (ampm.toUpperCase() === 'PM' && hours < 12) hours += 12;
+    if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
+    return `${hours.toString().padStart(2, '0')}:${minutesStr}`;
 };
 
-const wmoCodeToCondition = (code: number): string => {
+const mapWeatherApiCondition = (text: string): string => {
+    if (!text) return 'Parzialmente nuvoloso';
+    const lower = text.toLowerCase();
+    if (lower.includes('sereno') || lower.includes('sole') || lower.includes('clear') || lower.includes('sunny')) {
+        return lower.includes('prevalentemente') ? 'Prevalentemente sereno' : 'Cielo sereno';
+    }
+    if (lower.includes('parzialmente') || lower.includes('partly')) return 'Parzialmente nuvoloso';
+    if (lower.includes('coperto') || lower.includes('overcast')) return 'Coperto';
+    if (lower.includes('nuvolo') || lower.includes('cloudy')) return 'Parzialmente nuvoloso';
+    if (lower.includes('temporale') || lower.includes('thunder')) return 'Temporale';
+    if (lower.includes('forte') && (lower.includes('pioggia') || lower.includes('rain'))) return 'Pioggia forte';
+    if (lower.includes('leggera') || lower.includes('pioggerella') || lower.includes('drizzle') || lower.includes('light rain')) return 'Pioggia leggera';
+    if (lower.includes('pioggia') || lower.includes('rain') || lower.includes('rovesc')) return 'Pioggia';
+    if (lower.includes('neve') || lower.includes('snow') || lower.includes('blizzard')) return 'Neve';
+    if (lower.includes('nebbia') || lower.includes('fog') || lower.includes('mist')) return 'Nebbia';
+    return text;
+};
+
+const wmoCodeToCondition = (code: number, precip: number = 0, precipProb: number = 0): string => {
+    // If WMO code indicates drizzle or rain, but measured precipitation is 0mm and probability is low, report clouds rather than false rain
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+        if (precip <= 0.05 && precipProb < 35) {
+            return (code >= 3 || precipProb > 20) ? 'Coperto' : 'Parzialmente nuvoloso';
+        }
+    }
     const mapping: { [key: number]: string } = {
-        0: 'Cielo sereno', 1: 'Prevalentemente sereno', 2: 'Parzialmente nuvoloso', 3: 'Coperto',
-        45: 'Nebbia', 48: 'Nebbia', 51: 'Pioggerella', 53: 'Pioggerella', 55: 'Pioggerella',
-        56: 'Pioggerella', 57: 'Pioggerella', 61: 'Pioggia leggera', 63: 'Pioggia', 65: 'Pioggia forte',
-        66: 'Pioggia', 67: 'Pioggia', 71: 'Neve leggera', 73: 'Neve', 75: 'Neve forte', 77: 'Grandine',
-        80: 'Rovescio', 81: 'Rovescio', 82: 'Rovescio', 85: 'Neve', 86: 'Neve', 95: 'Temporale',
-        96: 'Temporale', 99: 'Temporale',
+        0: 'Cielo sereno',
+        1: 'Prevalentemente sereno',
+        2: 'Parzialmente nuvoloso',
+        3: 'Coperto',
+        45: 'Nebbia',
+        48: 'Nebbia',
+        51: 'Pioggerella',
+        53: 'Pioggerella',
+        55: 'Pioggerella',
+        56: 'Pioggerella',
+        57: 'Pioggerella',
+        61: 'Pioggia leggera',
+        63: 'Pioggia',
+        65: 'Pioggia forte',
+        66: 'Pioggia',
+        67: 'Pioggia forte',
+        71: 'Neve leggera',
+        73: 'Neve',
+        75: 'Neve forte',
+        77: 'Grandine',
+        80: 'Rovescio',
+        81: 'Rovescio',
+        82: 'Pioggia forte',
+        85: 'Neve',
+        86: 'Neve forte',
+        95: 'Temporale',
+        96: 'Temporale',
+        99: 'Temporale',
     };
     return mapping[code] ?? 'Parzialmente nuvoloso';
+};
+
+const fetchLocationName = async (lat: number, lon: number): Promise<string> => {
+    try {
+        const bdcRes = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=it`
+        );
+        if (bdcRes.ok) {
+            const bdcData = await bdcRes.json();
+            const name = bdcData.city || bdcData.locality || bdcData.principalSubdivision;
+            if (name) return name;
+        }
+    } catch (e) {}
+
+    try {
+        const nomRes = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10`
+        );
+        if (nomRes.ok) {
+            const nomData = await nomRes.json();
+            const name = nomData.address?.city || nomData.address?.town || nomData.address?.village || nomData.address?.county;
+            if (name) return name;
+        }
+    } catch (e) {}
+
+    return 'Posizione attuale';
+};
+
+const fetchIpLocation = async (): Promise<{ lat: number; lon: number; city: string } | null> => {
+    try {
+        const res = await fetch('https://ipapi.co/json/');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.latitude && data.longitude) {
+                return {
+                    lat: data.latitude,
+                    lon: data.longitude,
+                    city: data.city || data.region || 'Posizione rilevata'
+                };
+            }
+        }
+    } catch (e) {}
+
+    try {
+        const res = await fetch('https://ip-api.com/json/?fields=status,country,city,lat,lon');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'success' && data.lat && data.lon) {
+                return {
+                    lat: data.lat,
+                    lon: data.lon,
+                    city: data.city || 'Posizione rilevata'
+                };
+            }
+        }
+    } catch (e) {}
+
+    return null;
 };
 
 interface WeatherContextType {
@@ -104,30 +213,47 @@ export const WeatherProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const { isNight, effectiveWeatherCondition, isHot, isCold } = useMemo(() => {
     const now = effectiveTime;
-    let night: boolean;
-    let condition: string;
+    let night = false;
+    let condition = 'Cielo sereno';
 
-    if (weatherData?.details?.sunrise && weatherData?.details?.sunset) {
-        const sunriseDate = new Date(now.getTime());
-        const sunsetDate = new Date(now.getTime());
+    if (weatherData) {
+      // Find closest hourly forecast item for effectiveTime
+      const nowTimestamp = Math.floor(now.getTime() / 1000);
+      const hourlyData = weatherData.hourly.find(h => Math.abs(h.dt - nowTimestamp) < 1800) 
+        || weatherData.hourly.find(h => new Date(h.dt * 1000).getHours() === now.getHours()) 
+        || weatherData.hourly[0];
+
+      if (weatherData.details.sunrise && weatherData.details.sunset) {
         const [sr_h, sr_m] = weatherData.details.sunrise.split(':').map(Number);
         const [ss_h, ss_m] = weatherData.details.sunset.split(':').map(Number);
+        const sunriseDate = new Date(now.getTime());
+        const sunsetDate = new Date(now.getTime());
         sunriseDate.setHours(sr_h, sr_m, 0, 0);
         sunsetDate.setHours(ss_h, ss_m, 0, 0);
+        
         night = now.getTime() < sunriseDate.getTime() || now.getTime() >= sunsetDate.getTime();
-        const isCloudy = /nuvol|nebbia|coperto/i.test(weatherData.current.condition);
+        
+        const rawCond = (timeOverride === null) 
+          ? weatherData.current.condition 
+          : (hourlyData ? hourlyData.condition : weatherData.current.condition);
+        const isCloudy = /nuvol|nebbia|coperto/i.test(rawCond);
+
         if (now.getHours() === sunriseDate.getHours()) {
           condition = isCloudy ? 'Cloudy Sunrise' : 'Sunrise';
         } else if (now.getHours() === sunsetDate.getHours()) {
           condition = isCloudy ? 'Cloudy Sunset' : 'Sunset';
         } else {
-          condition = weatherData.current.condition;
+          condition = rawCond;
         }
-    } else {
+      } else {
         const hour = now.getHours();
-        const month = now.getMonth();
-        night = hour < (month >= 3 && month <= 8 ? 6 : 7) || hour >= (month >= 3 && month <= 8 ? 20 : 17);
-        condition = 'Nuvoloso';
+        night = hour < 6 || hour >= 20;
+        condition = hourlyData ? hourlyData.condition : weatherData.current.condition;
+      }
+    } else {
+      const hour = now.getHours();
+      night = hour < 6 || hour >= 20;
+      condition = 'Cielo sereno';
     }
 
     const finalCondition = weatherConditionOverride || condition;
@@ -142,100 +268,218 @@ export const WeatherProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [effectiveTime, weatherData, weatherConditionOverride]);
 
   const useDarkTheme = useMemo(() => {
-    return isNight || /temporale|pioggia|rovescio|grandine|neve|nebbia/i.test(effectiveWeatherCondition.toLowerCase());
-  }, [isNight, effectiveWeatherCondition]);
+    return isNight;
+  }, [isNight]);
 
   const targetWeatherParams = useMemo(() => {
     return weatherConfig[effectiveWeatherCondition] || weatherConfig['Default'];
   }, [effectiveWeatherCondition]);
 
-  const fetchWeatherData = useCallback(async (latitude: number, longitude: number) => {
+  const fetchWeatherData = useCallback(async (latitude: number, longitude: number, overrideCityName?: string) => {
       setWeatherStatus('fetching');
       setWeatherError(null);
       try {
-          const [weatherResponse, locationResponse] = await Promise.all([
-              fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`),
-              fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`).catch(() => null)
-          ]);
+          const apiKey = (import.meta as any).env?.VITE_WEATHERAPI_KEY || (process as any).env?.VITE_WEATHERAPI_KEY || (process as any).env?.WEATHERAPI_KEY || '63e9f45688534b4ca8d120000242209';
           
+          const weatherPromise = fetch(
+              `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${latitude},${longitude}&days=2&aqi=no&alerts=no&lang=it`
+          );
+          
+          const locationPromise = overrideCityName 
+              ? Promise.resolve(overrideCityName) 
+              : fetchLocationName(latitude, longitude);
+
+          const [weatherResponse, reverseGeocodedCity] = await Promise.all([
+              weatherPromise,
+              locationPromise
+          ]);
+
           if (!weatherResponse.ok) {
               throw new Error(`Meteo non disponibile (${weatherResponse.status})`);
           }
-          
+
           const weatherApiData = await weatherResponse.json();
-          let locationName = 'Posizione attuale';
-          if (locationResponse && locationResponse.ok) {
-              try {
-                  const locationData = await locationResponse.json();
-                  locationName = locationData.address?.city || locationData.address?.town || locationData.address?.village || locationData.address?.county || 'Posizione attuale';
-              } catch (e) {
-                  // Ignore JSON parse errors from rate-limited geocoding responses
-              }
+          if (weatherApiData.error) {
+              throw new Error(`WeatherAPI Error: ${weatherApiData.error.message || 'Errore recupero dati'}`);
           }
-          if (weatherApiData.error) throw new Error(`Open-Meteo Error: ${weatherApiData.reason}`);
-          
+
+          const currentObj = weatherApiData.current || {};
+          const forecastDays = weatherApiData.forecast?.forecastday || [];
+          const todayDay = forecastDays[0]?.day || {};
+          const todayAstro = forecastDays[0]?.astro || {};
+
+          const finalLocationName = overrideCityName || weatherApiData.location?.name || reverseGeocodedCity;
+
+          try {
+              localStorage.setItem('last_known_weather_loc', JSON.stringify({
+                  lat: latitude,
+                  lon: longitude,
+                  name: finalLocationName
+              }));
+          } catch (e) {}
+
+          const currentTemp = Math.round(currentObj.temp_c ?? 0);
+          const minTemp = Math.round(todayDay.mintemp_c ?? currentTemp);
+          const maxTemp = Math.round(todayDay.maxtemp_c ?? currentTemp);
+          const rawConditionText = currentObj.condition?.text || 'Parzialmente nuvoloso';
+          const mappedCondition = mapWeatherApiCondition(rawConditionText);
+
+          let allHours: any[] = [];
+          if (forecastDays[0]?.hour) {
+              allHours = [...forecastDays[0].hour];
+          }
+          if (forecastDays[1]?.hour) {
+              allHours = [...allHours, ...forecastDays[1].hour];
+          }
+
+          const hourlyMapped = allHours.map((h: any) => {
+              const dtSeconds = h.time_epoch || Math.floor(new Date(h.time).getTime() / 1000);
+              const hourDate = new Date(dtSeconds * 1000);
+              const hoursStr = hourDate.getHours().toString().padStart(2, '0') + ':00';
+              return {
+                  time: hoursStr,
+                  dt: dtSeconds,
+                  temperature: Math.round(h.temp_c ?? 0),
+                  condition: mapWeatherApiCondition(h.condition?.text || '')
+              };
+          });
+
+          const currentRainProb = Math.round(
+              todayDay.daily_chance_of_rain ?? (currentObj.precip_mm > 0 ? 80 : 0)
+          );
+
           const mappedData: Omit<WeatherData, 'lastUpdated'> = {
-              locationName,
+              locationName: finalLocationName,
               current: {
-                  temperature: Math.round(weatherApiData.current.temperature_2m),
-                  condition: wmoCodeToCondition(weatherApiData.current.weather_code),
-                  high: Math.round(weatherApiData.daily.temperature_2m_max[0]),
-                  low: Math.round(weatherApiData.daily.temperature_2m_min[0])
+                  temperature: currentTemp,
+                  condition: mappedCondition,
+                  high: maxTemp,
+                  low: minTemp
               },
-              hourly: weatherApiData.hourly.time.map((isoTime: string, index: number) => ({
-                  time: new Date(isoTime).getHours().toString().padStart(2, '0') + ':00',
-                  dt: new Date(isoTime).getTime() / 1000,
-                  temperature: Math.round(weatherApiData.hourly.temperature_2m[index]),
-                  condition: wmoCodeToCondition(weatherApiData.hourly.weather_code[index])
-              })),
+              hourly: hourlyMapped,
               details: {
-                  chanceOfRain: Math.round(weatherApiData.current.precipitation_probability ?? 0),
-                  humidity: Math.round(weatherApiData.current.relative_humidity_2m),
-                  wind: `${Math.round(weatherApiData.current.wind_speed_10m)} km/h ${degToCompass(weatherApiData.current.wind_direction_10m)}`,
-                  sunrise: timestampToHHMM(new Date(weatherApiData.daily.sunrise[0]).getTime() / 1000),
-                  sunset: timestampToHHMM(new Date(weatherApiData.daily.sunset[0]).getTime() / 1000)
+                  chanceOfRain: currentRainProb,
+                  humidity: Math.round(currentObj.humidity ?? 0),
+                  wind: `${Math.round(currentObj.wind_kph ?? 0)} km/h ${currentObj.wind_dir || ''}`,
+                  sunrise: format12hTo24h(todayAstro.sunrise),
+                  sunset: format12hTo24h(todayAstro.sunset)
               }
           };
+
           setWeatherData({ ...mappedData, lastUpdated: new Date() });
           setWeatherStatus('success');
       } catch (error: any) {
-          setWeatherError(error.message || "Impossibile recuperare i dati.");
-          setWeatherData(null);
+          setWeatherError(error.message || "Impossibile recuperare i dati meteo.");
           setWeatherStatus('error');
       }
   }, []);
 
   const requestWeather = useCallback(() => {
-    setWeatherData(null);
     setWeatherError(null);
-    setWeatherStatus('locating');
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                if (position.coords.accuracy > 1500) {
-                    setWeatherError("Posizione troppo imprecisa.");
-                    setWeatherStatus('error');
-                    return;
+
+    const tryBrowserLocation = (timeoutMs = 1500) => {
+        return new Promise<{ lat: number; lon: number } | null>((resolve) => {
+            if (!navigator.geolocation) {
+                resolve(null);
+                return;
+            }
+            let resolved = false;
+            const timer = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    resolve(null);
                 }
-                fetchWeatherData(position.coords.latitude, position.coords.longitude);
-            },
-            (error) => {
-                setWeatherError("Impossibile ottenere la posizione.");
-                setWeatherStatus('error');
-            },
-            { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
-        );
-    } else {
-        setWeatherError("Geolocalizzazione non supportata.");
-        setWeatherStatus('error');
-    }
+            }, timeoutMs);
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    if (!resolved) {
+                        resolved = true;
+                        clearTimeout(timer);
+                        resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                    }
+                },
+                () => {
+                    if (!resolved) {
+                        resolved = true;
+                        clearTimeout(timer);
+                        resolve(null);
+                    }
+                },
+                { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 600000 }
+            );
+        });
+    };
+
+    (async () => {
+        // Priority 1: Map Telemetry position (direct position from the map engine)
+        if (TelemetryStore.position) {
+            await fetchWeatherData(TelemetryStore.position.lat, TelemetryStore.position.lng);
+            return;
+        }
+
+        let hasCachedLoc = false;
+        try {
+            const saved = localStorage.getItem('last_known_weather_loc');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed.lat && parsed.lon) {
+                    hasCachedLoc = true;
+                    fetchWeatherData(parsed.lat, parsed.lon, parsed.name);
+                }
+            }
+        } catch (e) {}
+
+        if (!hasCachedLoc) {
+            setWeatherStatus('locating');
+        }
+
+        // Try GPS location (up to 3 seconds for real device accuracy)
+        const gpsLoc = await tryBrowserLocation(3000);
+        if (gpsLoc) {
+            await fetchWeatherData(gpsLoc.lat, gpsLoc.lon);
+            return;
+        }
+
+        // Fallback to IP geolocation if GPS is unavailable
+        const ipLoc = await fetchIpLocation();
+        if (ipLoc) {
+            await fetchWeatherData(ipLoc.lat, ipLoc.lon, ipLoc.city);
+            return;
+        }
+
+        if (!hasCachedLoc) {
+            await fetchWeatherData(41.9028, 12.4964, 'Roma');
+        }
+    })();
   }, [fetchWeatherData]);
 
+  // Sync automatically with Map's TelemetryStore position & custom map location events
   useEffect(() => {
     requestWeather();
+
+    const unsubscribe = TelemetryStore.subscribe(() => {
+      const pos = TelemetryStore.position;
+      if (pos && pos.lat && pos.lng) {
+        fetchWeatherData(pos.lat, pos.lng);
+      }
+    });
+
+    const handleMapLocationEvent = (e: any) => {
+      if (e.detail && typeof e.detail.lat === 'number' && typeof e.detail.lng === 'number') {
+        fetchWeatherData(e.detail.lat, e.detail.lng, e.detail.name);
+      }
+    };
+
+    window.addEventListener('update-weather-location', handleMapLocationEvent);
     const intervalId = setInterval(requestWeather, 15 * 60 * 1000);
-    return () => clearInterval(intervalId);
-  }, [requestWeather]);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('update-weather-location', handleMapLocationEvent);
+      clearInterval(intervalId);
+    };
+  }, [requestWeather, fetchWeatherData]);
 
   const handleWeatherClick = useCallback(() => {
     setWeatherModalOpen(true);

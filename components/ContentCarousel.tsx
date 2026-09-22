@@ -1,30 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import PlaylistItem, { SpotifyItem as MediaItem } from './PlaylistItem';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { motion } from 'framer-motion';
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05
-    }
-  }
-};
-
-const itemVariants = {
-  hidden: { y: 20, opacity: 0 },
-  visible: {
-    y: 0,
-    opacity: 1,
-    transition: {
-      duration: 0.3
-    }
-  }
-};
-
-const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: MediaItem[], isNight: boolean, onSelectItem: (item: MediaItem, context?: MediaItem[]) => void, keyPrefix: string }) => {
+const ContentCarousel = React.memo(({ title, items, isNight, onSelectItem, keyPrefix }: { title: string, items: MediaItem[], isNight: boolean, onSelectItem: (item: MediaItem, context?: MediaItem[]) => void, keyPrefix: string }) => {
   const validItems = Array.isArray(items) ? items.filter(item => item && item.id) : [];
 
   if (validItems.length === 0) return null;
@@ -48,19 +26,18 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
     if (!el) return;
     checkScrollability();
     el.addEventListener('scroll', checkScrollability, { passive: true });
-    window.addEventListener('resize', checkScrollability);
+    window.addEventListener('resize', checkScrollability, { passive: true });
     
-    const resizeObserver = new ResizeObserver(checkScrollability);
+    let resizeObserver: ResizeObserver | null = new ResizeObserver(checkScrollability);
     resizeObserver.observe(el);
-
-    const mutationObserver = new MutationObserver(checkScrollability);
-    mutationObserver.observe(el, { childList: true, subtree: true });
 
     return () => {
       el.removeEventListener('scroll', checkScrollability);
       window.removeEventListener('resize', checkScrollability);
-      resizeObserver.disconnect();
-      mutationObserver.disconnect();
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
     };
   }, [checkScrollability]);
 
@@ -72,7 +49,7 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
   };
 
   return (
-    <section className="mb-8 relative">
+    <section className="mb-8 relative will-change-transform">
       <h2 
         className="text-2xl font-bold mb-4 px-6" 
         style={{ color: `var(--heading-color)` }}
@@ -97,21 +74,21 @@ const ContentCarousel = ({ title, items, isNight, onSelectItem, keyPrefix }: { t
           <FiChevronRight className={`w-6 h-6 ${buttonIconColor}`} />
       </button>
 
-      <motion.div
+      <div
         ref={scrollRef}
-        className="spotify-carousel gap-4 px-6"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
+        className="spotify-carousel gap-4 px-6 overflow-x-auto flex scroll-smooth hide-scrollbar"
       >
         {validItems.map((item, index) => (
-          <motion.div className="py-2 flex-shrink-0 w-44" variants={itemVariants} key={`${keyPrefix}-${item.id || index}`}>
+          <div className="py-2 flex-shrink-0 w-44" key={`${keyPrefix}-${item.id || index}`}>
             <PlaylistItem item={item} isNight={isNight} onSelectItem={(selectedItem) => onSelectItem(selectedItem, items)} />
-          </motion.div>
+          </div>
         ))}
-      </motion.div>
+      </div>
     </section>
   );
-};
+});
+
+ContentCarousel.displayName = 'ContentCarousel';
 
 export default ContentCarousel;
+

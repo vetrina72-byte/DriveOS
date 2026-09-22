@@ -14,7 +14,9 @@ import {
   Info,
   Construction,
   GitFork,
-  TrafficCone
+  TrafficCone,
+  Ship,
+  Footprints
 } from 'lucide-react';
 import { RouteOption, RoadHazard } from '../types/maps';
 
@@ -84,7 +86,7 @@ export default function TripStatsHUD({
   return (
     <div
       id="nav-bottom-hud"
-      className={`absolute bottom-6 left-6 z-[1003] w-[24.5rem] max-w-[calc(100vw-36px)] backdrop-blur-md border rounded-2xl shadow-2xl p-4 animate-fade-in transition-all duration-300 pointer-events-auto ${
+      className={`absolute bottom-3 left-3 sm:bottom-6 sm:left-6 z-[1003] w-[calc(100%-1.5rem)] sm:w-[24.5rem] max-w-[24.5rem] backdrop-blur-md border rounded-xl sm:rounded-2xl shadow-2xl p-3 sm:p-4 animate-fade-in transition-all duration-300 pointer-events-auto ${
         isNight
           ? 'bg-neutral-900/95 border-white/15 text-white shadow-black/60'
           : 'bg-white/95 border-zinc-300/80 text-zinc-900 shadow-slate-400/50'
@@ -92,7 +94,7 @@ export default function TripStatsHUD({
     >
       {/* Real-time Proximity Hazard Alert (Navigation Mode) */}
       {isActive && upcomingHazard && upcomingHazard.distanceMeters <= 700 && (
-        <div className={`mb-3 p-2.5 rounded-xl border flex items-center gap-2.5 animate-pulse ${
+        <div className={`mb-3 p-2.5 rounded-xl border flex items-center gap-2.5 ${
           upcomingHazard.hazard.type === 'speed_camera'
             ? isNight 
               ? 'bg-rose-950/80 border-rose-500/40 text-rose-200' 
@@ -257,7 +259,7 @@ export default function TripStatsHUD({
             )}
             {hazardsSummary.signals > 0 && (
               <span className="inline-flex items-center gap-1 text-amber-500 font-bold">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block" />
+                <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
                 {hazardsSummary.signals} {hazardsSummary.signals === 1 ? 'Semaforo' : 'Semafori'}
               </span>
             )}
@@ -273,6 +275,30 @@ export default function TripStatsHUD({
                 {hazardsSummary.hazards} Pericolo
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Last-Mile Pedestrian Access Notice */}
+      {((isRoutePreview && activeRoute?.lastMileWalk?.isWalkingRequired) || (isActive && routes[selectedRouteIndex]?.lastMileWalk?.isWalkingRequired)) && (
+        <div className={`mb-3 p-2.5 rounded-xl border flex items-start gap-2.5 ${
+          isNight 
+            ? 'bg-amber-950/70 border-amber-500/50 text-amber-200' 
+            : 'bg-amber-50 border-amber-300 text-amber-900'
+        }`}>
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500 text-white flex-shrink-0 mt-0.5 shadow-sm">
+            <Footprints className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0 text-xs">
+            <div className="font-bold flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+              <span>Tratto finale a piedi</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 font-extrabold border border-amber-500/30">
+                {routes[selectedRouteIndex]?.lastMileWalk?.distanceMeters || activeRoute?.lastMileWalk?.distanceMeters} m
+              </span>
+            </div>
+            <div className="text-[11px] leading-snug mt-0.5 opacity-90">
+              {routes[selectedRouteIndex]?.lastMileWalk?.warningMessage || activeRoute?.lastMileWalk?.warningMessage || 'Destinazione raggiungibile solo a piedi negli ultimi metri (strada non percorribile in auto).'}
+            </div>
           </div>
         </div>
       )}
@@ -296,6 +322,8 @@ export default function TripStatsHUD({
             {routes.map((rt) => {
               const isSelected = rt.index === selectedRouteIndex;
               const badgeType = rt.badgeType || (rt.index === 0 ? 'fastest' : 'alternative');
+              const hasRealDelay = rt.trafficDelaySeconds && rt.trafficDelaySeconds > 60;
+              const delayMins = hasRealDelay ? Math.round((rt.trafficDelaySeconds || 0) / 60) : 0;
 
               return (
                 <button
@@ -304,25 +332,25 @@ export default function TripStatsHUD({
                     e.stopPropagation();
                     onSelectRoute?.(rt.index);
                   }}
-                  className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1.5 ${
+                  className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col gap-1.5 ${
                     isSelected
                       ? isNight
-                        ? 'bg-blue-600/20 border-blue-500/80 text-white shadow-md ring-1 ring-blue-500/50'
-                        : 'bg-blue-50/90 border-blue-500 text-blue-950 shadow-md ring-1 ring-blue-400/50'
+                        ? 'bg-zinc-800/90 border-white/30 text-white shadow-sm'
+                        : 'bg-zinc-100 border-zinc-400 text-zinc-900 shadow-sm'
                       : isNight
-                      ? 'bg-zinc-800/40 border-white/5 text-zinc-300 hover:bg-zinc-800/80'
-                      : 'bg-zinc-50/90 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      ? 'bg-zinc-900/40 border-white/5 text-zinc-300 hover:bg-zinc-800/60'
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
                   }`}
                 >
                   {/* Top line: Radio check, Duration, ETA & Distinct Badges */}
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {isSelected ? (
-                        <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                       ) : (
-                        <Circle className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                        <Circle className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
                       )}
-                      <span className={`text-[13px] font-black ${isSelected ? (isNight ? 'text-blue-300' : 'text-blue-950') : ''}`}>
+                      <span className={`text-[13px] font-black ${isSelected ? (isNight ? 'text-white' : 'text-zinc-950') : ''}`}>
                         {formatDuration(rt.duration)}
                       </span>
                       <span className="text-zinc-400 text-xs">•</span>
@@ -331,89 +359,74 @@ export default function TripStatsHUD({
                       </span>
                     </div>
 
-                    {/* Distinct Route Typology Badge */}
+                    {/* Distinct Route Typology Badge - Clean Apple-like monochrome */}
                     <div className="flex items-center gap-1">
+                      {rt.hasFerry && (
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          isNight ? 'bg-zinc-800 text-zinc-100 border border-white/15' : 'bg-zinc-200 text-zinc-900 border border-zinc-300'
+                        }`}>
+                          <Ship className="w-3 h-3 text-current" />
+                          Traghetto
+                        </span>
+                      )}
                       {badgeType === 'fastest' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                          <Zap className="w-3 h-3" />
-                          PIÙ VELOCE
-                        </span>
-                      ) : badgeType === 'scenic' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30">
-                          <Compass className="w-3 h-3" />
-                          PANORAMICO
-                        </span>
-                      ) : badgeType === 'toll_free' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30">
-                          <ShieldCheck className="w-3 h-3" />
-                          NO PEDAGGI
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          isNight ? 'bg-zinc-800 text-zinc-100 border border-white/15' : 'bg-zinc-200 text-zinc-900 border border-zinc-300'
+                        }`}>
+                          <Zap className="w-3 h-3 text-current" />
+                          Più veloce
                         </span>
                       ) : badgeType === 'shortest' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/30">
-                          <Milestone className="w-3 h-3" />
-                          PIÙ BREVE
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          isNight ? 'bg-zinc-800 text-zinc-100 border border-white/15' : 'bg-zinc-200 text-zinc-900 border border-zinc-300'
+                        }`}>
+                          <Milestone className="w-3 h-3 text-current" />
+                          Più breve
                         </span>
-                      ) : (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-500/15 text-zinc-500">
-                          {rt.label}
+                      ) : badgeType === 'toll_free' ? (
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          isNight ? 'bg-zinc-800 text-zinc-100 border border-white/15' : 'bg-zinc-200 text-zinc-900 border border-zinc-300'
+                        }`}>
+                          <ShieldCheck className="w-3 h-3 text-current" />
+                          No pedaggi
+                        </span>
+                      ) : null}
+
+                      {/* Walking indicator if route ends with pedestrian walk */}
+                      {rt.lastMileWalk?.isWalkingRequired && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                          <Footprints className="w-3 h-3 text-amber-500" />
+                          +{rt.lastMileWalk.distanceMeters}m a piedi
                         </span>
                       )}
 
                       {/* Time delta relative to fastest */}
                       {rt.timeDiffMinutes > 0 && badgeType !== 'fastest' && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-500/15 text-zinc-600 dark:text-zinc-400">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
+                          isNight ? 'bg-zinc-800/80 text-zinc-400' : 'bg-zinc-200/80 text-zinc-600'
+                        }`}>
                           +{rt.timeDiffMinutes} min
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Road Tag and Time/Cost Advantage */}
-                  <div className="flex items-center justify-between text-[11px] font-medium pl-6">
-                    <span className={`truncate ${isSelected ? (isNight ? 'text-blue-200' : 'text-blue-800') : (isNight ? 'text-zinc-400' : 'text-zinc-500')}`}>
-                      {rt.tag || rt.label}
+                  {/* Road Tag and Factual Traffic Condition */}
+                  <div className="flex items-center justify-between text-[11px] font-medium pl-5">
+                    <span className={`truncate ${isSelected ? (isNight ? 'text-zinc-200 font-semibold' : 'text-zinc-800 font-semibold') : (isNight ? 'text-zinc-400' : 'text-zinc-500')}`}>
+                      {rt.tag || rt.label || 'Via principale'}
                     </span>
 
-                    {rt.gainSummary && (
-                      <span className={`flex-shrink-0 text-[10px] font-semibold ${isSelected ? (isNight ? 'text-blue-300' : 'text-blue-700') : (isNight ? 'text-zinc-400' : 'text-zinc-500')}`}>
-                        {rt.gainSummary}
+                    {hasRealDelay ? (
+                      <span className="flex-shrink-0 text-[10px] font-bold text-amber-500 dark:text-amber-400">
+                        +{delayMins} min traffico
+                      </span>
+                    ) : (
+                      <span className="flex-shrink-0 text-[10px] font-medium opacity-70">
+                        Traffico regolare
                       </span>
                     )}
                   </div>
-
-                  {/* Why Choose this route explanation banner */}
-                  {rt.whyChoose && (
-                    <div className={`mt-1 text-[10.5px] leading-snug px-2 py-1.5 rounded-lg flex items-start gap-1.5 ${
-                      isSelected
-                        ? isNight 
-                          ? 'bg-blue-950/60 text-blue-200 border border-blue-500/20' 
-                          : 'bg-blue-100/70 text-blue-900 border border-blue-200'
-                        : isNight 
-                          ? 'bg-zinc-900/60 text-zinc-400 border border-white/5' 
-                          : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
-                    }`}>
-                      <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-blue-500" />
-                      <span>{rt.whyChoose}</span>
-                    </div>
-                  )}
-
-                  {/* Hazard count indicators if available for this alternative */}
-                  {((rt.speedCamerasCount ?? 0) > 0 || (rt.trafficSignalsCount ?? 0) > 0) && (
-                    <div className="flex items-center gap-3 text-[10px] font-semibold pl-6 pt-0.5 opacity-80">
-                      {(rt.speedCamerasCount ?? 0) > 0 && (
-                        <span className="flex items-center gap-1 text-rose-500">
-                          <Camera className="w-2.5 h-2.5" />
-                          {rt.speedCamerasCount} {rt.speedCamerasCount === 1 ? 'Autovelox' : 'Autovelox'}
-                        </span>
-                      )}
-                      {(rt.trafficSignalsCount ?? 0) > 0 && (
-                        <span className="flex items-center gap-1 text-amber-500">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                          {rt.trafficSignalsCount} {rt.trafficSignalsCount === 1 ? 'Semaforo' : 'Semafori'}
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </button>
               );
             })}

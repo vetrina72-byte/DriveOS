@@ -8,6 +8,7 @@ import { useUIConfig } from '../context/UIConfigContext';
 import { 
     FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
 } from 'react-icons/fi';
+import { Sparkles } from 'lucide-react';
 import { 
     IoGameControllerOutline
 } from 'react-icons/io5';
@@ -514,7 +515,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
             
             <button 
                 onClick={onTakeControl}
-                className="flex-shrink-0 ml-4 px-5 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-full text-sm transition-transform active:scale-95 shadow-lg whitespace-nowrap"
+                className="flex-shrink-0 ml-4 px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-full text-sm transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:shadow-[0_0_22px_rgba(16,185,129,0.6)] whitespace-nowrap"
             >
                 Ascolta qui
             </button>
@@ -713,6 +714,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         artists: string;
     } | null>(null);
 
+    const [djToast, setDjToast] = useState<string | null>(null);
+
+    const isDjActive = useMemo(() => {
+        if (source !== 'spotify' || !playerState) return false;
+        const contextUri = playerState.context?.uri || '';
+        const currentTrack = playerState.track_window?.current_track;
+        const currentUri = currentTrack?.uri || '';
+        const trackName = currentTrack?.name?.toLowerCase() || '';
+
+        return contextUri.includes('37i9dQZF1EYkqdzj48dyYq') || 
+               currentUri.includes('37i9dQZF1EYkqdzj48dyYq') || 
+               trackName.includes('dj spotify') || 
+               trackName === 'dj';
+    }, [source, playerState]);
+
     const { sceneTransitionSpeed = 1.10 } = useUIConfig();
 
     // --- ANIMATION LOGIC FOR PLAYER SIZE/POSITION ---
@@ -722,6 +738,146 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const lastIsAnyAppOpen = useRef(isAnyAppOpen);
     const startT = useRef(isAnyAppOpen ? 0 : 1);
     const animStartTime = useRef(0);
+
+    const playingStateRef = useRef({ isPlaying: false });
+    const glowAngleRef = useRef(0);
+    const glowIntensityRef = useRef(0);
+    const rhythmPhaseRef = useRef(0);
+    const djToastRef = useRef<HTMLDivElement>(null);
+    const glowWavesRef = useRef<HTMLDivElement>(null);
+    const orb1Ref = useRef<HTMLDivElement>(null);
+    const orb2Ref = useRef<HTMLDivElement>(null);
+    const orb3Ref = useRef<HTMLDivElement>(null);
+
+    const isDjActiveRef = useRef(isDjActive);
+    useEffect(() => {
+        isDjActiveRef.current = isDjActive;
+    }, [isDjActive]);
+
+    const isNightRef = useRef(isNight);
+    useEffect(() => {
+        isNightRef.current = isNight;
+    }, [isNight]);
+
+    const playerStateRef = useRef(playerState);
+    useEffect(() => {
+        playerStateRef.current = playerState;
+    }, [playerState]);
+
+    const currentTrackId = useMemo(() => {
+        const track = playerState?.track_window?.current_track ?? (playerState as any)?.item;
+        if (!track) return null;
+        if (track.id) return track.id;
+        if (track.uri) {
+            const parts = track.uri.split(':');
+            return parts[parts.length - 1];
+        }
+        return null;
+    }, [playerState]);
+
+    const spotifyAnalysisCacheRef = useRef<Record<string, any>>({});
+    const spotifyAnalysisRef = useRef<any>(null);
+    const spotifyFeaturesCacheRef = useRef<Record<string, any>>({});
+    const spotifyFeaturesRef = useRef<any>(null);
+
+    useEffect(() => {
+        if (!currentTrackId || source !== 'spotify') {
+            spotifyAnalysisRef.current = null;
+            spotifyFeaturesRef.current = null;
+            return;
+        }
+
+        if (spotifyAnalysisCacheRef.current[currentTrackId]) {
+            spotifyAnalysisRef.current = spotifyAnalysisCacheRef.current[currentTrackId];
+        } else {
+            apiClient.get(`/audio-analysis/${currentTrackId}`)
+                .then(res => {
+                    if (res.data) {
+                        spotifyAnalysisCacheRef.current[currentTrackId] = res.data;
+                        spotifyAnalysisRef.current = res.data;
+                        console.log("[Spotify Reactivity] Successfully loaded real audio analysis for track:", currentTrackId);
+                    }
+                })
+                .catch(err => {
+                    console.warn("[Spotify Reactivity] Failed to fetch audio analysis:", err);
+                    spotifyAnalysisRef.current = null;
+                });
+        }
+
+        if (spotifyFeaturesCacheRef.current[currentTrackId]) {
+            spotifyFeaturesRef.current = spotifyFeaturesCacheRef.current[currentTrackId];
+        } else {
+            apiClient.get(`/audio-features/${currentTrackId}`)
+                .then(res => {
+                    if (res.data) {
+                        spotifyFeaturesCacheRef.current[currentTrackId] = res.data;
+                        spotifyFeaturesRef.current = res.data;
+                        console.log("[Spotify Reactivity] Successfully loaded real audio features (BPM:", res.data.tempo, "Energy:", res.data.energy, ") for track:", currentTrackId);
+                    }
+                })
+                .catch(err => {
+                    console.warn("[Spotify Reactivity] Failed to fetch audio features:", err);
+                    spotifyFeaturesRef.current = null;
+                });
+        }
+    }, [currentTrackId, source]);
+
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const sourceNodeRef = useRef<any>(null);
+
+    // Web Audio Peak Detection (Metodo 2) and Beat Trigger refs
+    const filterRef = useRef<BiquadFilterNode | null>(null);
+    const localRmsHistoryRef = useRef<number[]>([]);
+    const localRmsThresholdRef = useRef<number>(0.15);
+    const lastLocalBeatTimeRef = useRef<number>(0);
+    const lastBeatStartRef = useRef<number>(-1);
+    const beatProgressRef = useRef<number>(0);
+    const lastFrameTimeRef = useRef<number>(performance.now());
+
+    const initAudioAnalyser = useCallback(() => {
+        if (analyserRef.current || !audioRef.current) return;
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const ctx = new AudioContextClass();
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 64; // Small fft size is perfect for fast bass/beat extraction
+            
+            // Create low-pass filter (20Hz to 140Hz for bass/kick detection)
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(140, ctx.currentTime);
+            
+            const sourceNode = ctx.createMediaElementSource(audioRef.current);
+            
+            // Connect to analyser through the low-pass filter so analyser ONLY receives bass frequencies
+            sourceNode.connect(filter);
+            filter.connect(analyser);
+            
+            // Connect source directly to destination so user hears normal, unfiltered sound
+            sourceNode.connect(ctx.destination);
+
+            audioContextRef.current = ctx;
+            analyserRef.current = analyser;
+            filterRef.current = filter;
+            sourceNodeRef.current = sourceNode;
+            console.log("[Spotify Reactivity] Successfully initialized Web Audio low-pass analyser for peak detection.");
+        } catch (err) {
+            console.warn("Could not construct Web Audio analyser with low-pass filter:", err);
+        }
+    }, []);
+
+    const isPlayingGlobal = source === 'spotify' ? !playerState?.paused : (source === 'youtube' ? isYouTubePlaying : (source === 'radio' ? isRadioPlaying : false));
+
+    useEffect(() => {
+        playingStateRef.current.isPlaying = isPlayingGlobal;
+        if (isPlayingGlobal) {
+            initAudioAnalyser();
+            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                audioContextRef.current.resume().catch(() => {});
+            }
+        }
+    }, [isPlayingGlobal, initAudioAnalyser]);
 
     // Sync isAnyAppOpen changes to start an animation using the exact same power4.out easing/timing as subapps
     useEffect(() => {
@@ -780,6 +936,217 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerContainerRef.current.style.bottom = `${(currentBottom) / 16}rem`;
                 playerContainerRef.current.style.left = `calc(${pct}% + ${(offsetPx) / 16}rem)`;
                 playerContainerRef.current.style.transform = 'none';
+
+                // Posiziona il pop-up Cambia Mood (djToast) dinamicamente esattamente centrato sopra il player
+                if (djToastRef.current) {
+                    djToastRef.current.style.bottom = `calc(${(currentBottom + currentHeight) / 16}rem + 16px)`;
+                    djToastRef.current.style.left = `calc(${pct}% + ${(offsetPx + currentWidth / 2) / 16}rem)`;
+                }
+
+                // --- PREMIUM MULTI-EFFECT AI DJ GLOW (MUSIC-REACTIVE COLOR SPECTRUM + ORBITAL SWIRL + HARMONIC PULSE) ---
+                const isDjActiveVal = isDjActiveRef.current;
+                const isPlaying = playingStateRef.current.isPlaying;
+                
+                // Intensità del glow progressiva (aumenta o diminuisce gradualmente) - ATTIVA SOLO PER AI DJ
+                if (isDjActiveVal && isPlaying) {
+                    glowIntensityRef.current = Math.min(1.0, glowIntensityRef.current + 0.05);
+                } else {
+                    glowIntensityRef.current = Math.max(0.0, glowIntensityRef.current - 0.05);
+                }
+                const intensity = glowIntensityRef.current;
+                
+                // Calculate real frame delta for smooth ease-out attenuation of beatProgress
+                const nowMs = performance.now();
+                const deltaSec = Math.min(0.1, (nowMs - lastFrameTimeRef.current) / 1000);
+                lastFrameTimeRef.current = nowMs;
+
+                // Decay the beat progress with a smooth ease-out curve
+                beatProgressRef.current = Math.max(0, beatProgressRef.current - deltaSec * 4.5); // full decay in ~220ms
+                const beatFactor = beatProgressRef.current;
+
+                if (intensity > 0.01) {
+                    // Estrazione delle frequenze musicali (bassi, medi, alti)
+                    let finalBass = 0.20;
+                    let finalMid = 0.20;
+                    let finalTreble = 0.15;
+
+                    if (isPlaying) {
+                        if (source === 'spotify') {
+                            const pState = playerStateRef.current;
+                            let currentPosSec = 0;
+                            if (pState) {
+                                // 180ms of latency buffer compensation to align visual glow perfectly with real speaker output
+                                const latencyCompensation = 180;
+                                const timeSinceUpdate = pState.paused ? 0 : (Date.now() - pState.timestamp);
+                                currentPosSec = Math.max(0, (pState.position + timeSinceUpdate - latencyCompensation) / 1000);
+                            }
+
+                            const analysis = spotifyAnalysisRef.current;
+                            const features = spotifyFeaturesRef.current;
+                            
+                            // Dynamic tempo and audio metrics fetched from the active Spotify song
+                            const tempo = features?.tempo || analysis?.track?.tempo || 120;
+                            const energy = features?.energy || 0.6;
+                            const danceability = features?.danceability || 0.5;
+
+                            if (analysis && currentPosSec > 0) {
+                                // Scansione lineare gap-free dei segmenti audio caricati dal progetto interno
+                                let segment = null;
+                                const segments = analysis.segments || [];
+                                for (let i = 0; i < segments.length; i++) {
+                                    if (currentPosSec >= segments[i].start) {
+                                        segment = segments[i];
+                                    } else {
+                                        break;
+                                    }
+                                }
+
+                                // Scansione lineare gap-free dei battiti audio caricati dal progetto interno (Metodo 1)
+                                let beat = null;
+                                const beats = analysis.beats || [];
+                                for (let i = 0; i < beats.length; i++) {
+                                    if (currentPosSec >= beats[i].start) {
+                                        beat = beats[i];
+                                    } else {
+                                        break;
+                                    }
+                                }
+
+                                if (segment) {
+                                    // Loudness: typical ranges from -60dB (silent) to 0dB (max). Map -40dB..-3dB into 0.05..1.0
+                                    const loudnessDb = segment.loudness_max ?? -20;
+                                    const normLoudness = Math.max(0.05, Math.min(1, (loudnessDb + 40) / 37));
+
+                                    // Pitches (chromatic scale: 12 values between 0..1 representing pitch prominence)
+                                    const bassWeight = segment.pitches ? (segment.pitches[0] + segment.pitches[1] + segment.pitches[11]) / 3 : 0.5;
+                                    const midWeight = segment.pitches ? (segment.pitches[2] + segment.pitches[3] + segment.pitches[4] + segment.pitches[5] + segment.pitches[6]) / 5 : 0.5;
+                                    const trebleWeight = segment.pitches ? (segment.pitches[7] + segment.pitches[8] + segment.pitches[9] + segment.pitches[10]) / 4 : 0.5;
+
+                                    if (beat) {
+                                        // Trigger beat bump/kick strictly at the start of the beat!
+                                        if (beat.start !== lastBeatStartRef.current) {
+                                            beatProgressRef.current = 1.0;
+                                            lastBeatStartRef.current = beat.start;
+                                        }
+                                    }
+
+                                    // Real physical values mapped directly to final outputs
+                                    finalBass = Math.max(0.12, (normLoudness * 0.35) + (beatFactor * 0.50) + (bassWeight * 0.15));
+                                    finalMid = Math.max(0.10, (normLoudness * 0.30) + (midWeight * 0.50) + (beatFactor * 0.20));
+                                    finalTreble = Math.max(0.05, (normLoudness * 0.30) + (trebleWeight * 0.50));
+                                } else {
+                                    // Stable resting fallback
+                                    finalBass = 0.15 + beatFactor * 0.50;
+                                    finalMid = 0.12 + beatFactor * 0.30;
+                                    finalTreble = 0.08 + beatFactor * 0.20;
+                                }
+                            } else {
+                                // Stable resting fallback
+                                finalBass = 0.15 + beatFactor * 0.50;
+                                finalMid = 0.12 + beatFactor * 0.30;
+                                finalTreble = 0.08 + beatFactor * 0.20;
+                            }
+                        } else if (analyserRef.current) {
+                            // Real-time audio frequency/time-domain analysis with Peak Detection on Bass (Metodo 2)
+                            const bufferLength = analyserRef.current.fftSize;
+                            const timeData = new Uint8Array(bufferLength);
+                            analyserRef.current.getByteTimeDomainData(timeData);
+                            
+                            // Calculate RMS (energy) of the lowpass filtered bass signal
+                            let sum = 0;
+                            for (let i = 0; i < bufferLength; i++) {
+                                const val = (timeData[i] - 128) / 128;
+                                sum += val * val;
+                            }
+                            const rms = Math.sqrt(sum / bufferLength);
+                            
+                            // Keep a running history of RMS to compute dynamic threshold
+                            if (!localRmsHistoryRef.current) {
+                                localRmsHistoryRef.current = [];
+                            }
+                            localRmsHistoryRef.current.push(rms);
+                            if (localRmsHistoryRef.current.length > 60) {
+                                localRmsHistoryRef.current.shift();
+                            }
+                            
+                            const avgRms = localRmsHistoryRef.current.reduce((a, b) => a + b, 0) / localRmsHistoryRef.current.length;
+                            const dynamicThreshold = Math.max(0.06, avgRms * 1.35);
+                            
+                            // Peak detection trigger
+                            const nowMs = performance.now();
+                            if (rms > dynamicThreshold && rms > localRmsThresholdRef.current && (nowMs - lastLocalBeatTimeRef.current > 220)) {
+                                beatProgressRef.current = 1.0;
+                                lastLocalBeatTimeRef.current = nowMs;
+                            }
+                            
+                            localRmsThresholdRef.current = rms;
+                            
+                            // Map the filtered RMS directly to finalBass to drive the visual pulse intensity
+                            finalBass = Math.max(0.12, rms * 4.0);
+                            finalMid = Math.max(0.10, rms * 2.0);
+                            finalTreble = Math.max(0.05, rms * 1.0);
+                        } else {
+                            // Stable resting fallback
+                            finalBass = 0.15 + beatFactor * 0.50;
+                            finalMid = 0.12 + beatFactor * 0.30;
+                            finalTreble = 0.08 + beatFactor * 0.20;
+                        }
+
+                        // Increment accumulated rhythm phase strictly proportional to the music intensity
+                        rhythmPhaseRef.current += (0.01 + finalBass * 0.022);
+                    } else {
+                        // In pause, return slowly to standard resting state with ease-out
+                        finalBass = 0.12;
+                        finalMid = 0.10;
+                        finalTreble = 0.05;
+                    }
+
+                    const reactiveBass = finalBass * intensity;
+                    const reactiveMid = finalMid * intensity;
+                    const reactiveTreble = finalTreble * intensity;
+
+                    const phase = rhythmPhaseRef.current;
+
+                    // Spostamento Orbitale (Swirl) dei centri delle ombre reattivo AL RITMO ACCUMULATO (si blocca se in pausa)
+                    const xOffset1 = Math.cos(phase * 1.8) * 8 * reactiveBass;
+                    const yOffset1 = Math.sin(phase * 1.4) * 6 * reactiveBass;
+                    
+                    const xOffset2 = Math.sin(phase * 1.5) * -10 * reactiveMid;
+                    const yOffset2 = Math.cos(phase * 1.1) * 8 * reactiveMid;
+                    
+                    // Colori Cangianti (Color Shifting) nello spettro dell'AI DJ guidati dal ritmo accumulato
+                    // Emerald spectrum for AI DJ, gorgeous Indigo/Violet/Fuchsia for standard playback
+                    const hue1 = isDjActiveVal ? (140 + Math.sin(phase * 0.5) * 20) : (260 + Math.sin(phase * 0.5) * 25); 
+                    const hue2 = isDjActiveVal ? (165 + Math.cos(phase * 0.3) * 25) : (320 + Math.cos(phase * 0.3) * 30); 
+                    const hue3 = isDjActiveVal ? (115 + Math.sin(phase * 0.7) * 15) : (220 + Math.sin(phase * 0.7) * 20); 
+                    
+                    // Calcolo dinamico di blur e spread basato sul beatFactor "bump" reale e la musica
+                    const b1 = 14 + (beatFactor * 26) + (reactiveBass * 10);
+                    const s1 = 1.5 + (beatFactor * 8.0) + (reactiveBass * 2.0);
+
+                    const b2 = 22 + (beatFactor * 32) + (reactiveMid * 12);
+                    const s2 = 2.0 + (beatFactor * 10.0) + (reactiveMid * 2.5);
+                    
+                    const shadow1 = `${xOffset1}px ${yOffset1}px ${b1}px ${s1}px hsla(${hue1}, 80%, 48%, ${0.65 * intensity})`;
+                    const shadow2 = `${xOffset2}px ${yOffset2}px ${b2}px ${s2}px hsla(${hue2}, 75%, 45%, ${0.55 * intensity})`;
+                    const shadow3 = `0 0 ${10 + (beatFactor * 15) + (reactiveTreble * 10)}px ${0.5 + (beatFactor * 3) + (reactiveTreble * 2.0)}px hsla(${hue3}, 85%, 50%, ${0.40 * intensity})`;
+
+                    playerContainerRef.current.style.boxShadow = `${shadow1}, ${shadow2}, ${shadow3}`;
+                    playerContainerRef.current.style.borderColor = `hsla(${hue1}, 80%, 48%, ${0.4 * intensity})`;
+                    playerContainerRef.current.style.background = !isNightRef.current ? widgetBgColor : 'var(--player-bg)';
+
+                    // Dynamic scale bump (physics bounce effect) on beat trigger
+                    const currentScale = 1.0 + beatFactor * 0.022;
+                    playerContainerRef.current.style.transform = `scale(${currentScale})`;
+                } else {
+                    // Standard shadow (shadow-xl style with subtle border ring emulation)
+                    playerContainerRef.current.style.boxShadow = isNightRef.current 
+                        ? '0 20px 40px -15px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08)' 
+                        : '0 20px 40px -15px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)';
+                    playerContainerRef.current.style.borderColor = '';
+                    playerContainerRef.current.style.background = !isNightRef.current ? widgetBgColor : 'var(--player-bg)';
+                    playerContainerRef.current.style.transform = 'none';
+                }
             }
 
             animationFrameId = requestAnimationFrame(loop);
@@ -1093,8 +1460,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         localStorage.setItem("last_action_ts", String(now));
 
         if (source === 'spotify') {
-            const isCurrentlyPaused = playerState?.paused || !isPlayerActive;
+            const isCurrentlyPaused = Boolean(playerState?.paused);
+            const targetPaused = !isCurrentlyPaused;
             const previousSpotifyState = playerState;
+
+            localStorage.setItem("last_action_target_paused", String(targetPaused));
 
             // OPTIMISTIC UI: Aggiornamento istantaneo al click (0ms di ritardo)
             setNowPlaying(prev => {
@@ -1105,7 +1475,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     ...prev,
                     spotifyState: {
                         ...prev.spotifyState,
-                        paused: !isCurrentlyPaused,
+                        paused: targetPaused,
                         position: newPos,
                         timestamp: Date.now()
                     }
@@ -1236,6 +1606,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         }
     };
+
+    const handleChangeDjGenre = useCallback(() => {
+        setDjToast("DJ Spotify: Cambio atmosfera...");
+        handleNextTrack();
+        setTimeout(() => {
+            setDjToast(null);
+        }, 2800);
+    }, [handleNextTrack]);
     
     const handlePrevTrack = async () => {
         if (source === 'spotify') {
@@ -1560,7 +1938,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 <div className={`truncate ${isAnyAppOpen ? 'text-[10px] sm:text-xs' : 'text-xs'}`} style={{ color: 'var(--text-secondary)' }}>{artists}</div>
                             </div>
                         </div>
-                        <div className={`flex items-center flex-shrink-0 pl-2 ${isAnyAppOpen ? 'gap-2 sm:gap-5' : 'gap-5'}`}>
+                        <div className={`flex items-center flex-shrink-0 pl-2 ${isAnyAppOpen ? 'gap-2 sm:gap-3' : 'gap-3'}`}>
+                            {isDjActive && (
+                                <button
+                                    onClick={handleChangeDjGenre}
+                                    title="Cambia Genere (Spotify AI DJ)"
+                                    className="group flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/25 hover:border-emerald-500/50 transition-all duration-300 ease-in-out active:scale-95 cursor-pointer shadow-[0_4px_16px_rgba(16,185,129,0.35)] hover:shadow-[0_6px_22px_rgba(16,185,129,0.55)]"
+                                >
+                                    <Sparkles className="w-3.5 h-3.5 text-emerald-400 group-hover:text-emerald-300 transition-colors duration-300" />
+                                    <span className="whitespace-nowrap">Cambia Mood</span>
+                                </button>
+                            )}
                             <div className="flex items-center" style={{ gap: `${(spinnerShuffleGap) / 16}rem`}}>
                                 <button
                                     onClick={handleToggleShuffle}
@@ -1684,7 +2072,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <>
             <div 
                 ref={playerContainerRef}
-                className={`fixed z-[2000] backdrop-blur-md rounded-xl shadow-lg overflow-hidden max-w-[calc(100vw-32px)] transition-all duration-500 ${themeClasses}`}
+                className={`fixed z-[2000] backdrop-blur-md rounded-xl overflow-hidden max-w-[calc(100vw-32px)] transition-all duration-500 border ${themeClasses} shadow-xl ${
+                    isDjActive 
+                        ? 'ring-1 ring-emerald-500/40' 
+                        : (isNight ? 'ring-1 ring-white/10' : 'ring-1 ring-black/5')
+                }`}
                 style={{
                     // Style is now handled directly by the animation loop in useEffect
                     background: !isNight ? widgetBgColor : 'var(--player-bg)',
@@ -1695,7 +2087,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     left: isAnyAppOpen ? `${(dockedConfig.left) / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
                 }}
             >
-                <div className="relative w-full h-full">
+                 <div className="relative w-full h-full">
                     {(nowPlaying.isLoading || debugSpinner) && (
                         <div className="player-spinner-overlay" style={spinnerStyle}>
                             <div className="spinner-visual" style={spinnerVisualDivStyle}></div>
@@ -1736,6 +2128,31 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     width={queuePopoverWidth}
                     offsetX={queuePopoverOffsetX}
                 />
+            )}
+            {djToast && (
+                <>
+                    <style>{`
+                        @keyframes dj-toast-in {
+                            0% { transform: translate(-50%, 12px) scale(0.92); opacity: 0; }
+                            100% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+                        }
+                        .dj-toast-animate {
+                            animation: dj-toast-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                        }
+                    `}</style>
+                    <div 
+                        ref={djToastRef}
+                        className="fixed dj-toast-animate px-4 py-2.5 rounded-full bg-zinc-900/90 backdrop-blur-lg text-zinc-100 border border-white/5 text-[11px] font-bold tracking-wide shadow-[0_10px_35px_rgba(0,0,0,0.55)] z-[9999] flex items-center gap-2 pointer-events-none"
+                        style={{
+                            left: '50%',
+                            bottom: '8rem',
+                            transform: 'translateX(-50%)',
+                        }}
+                    >
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{djToast}</span>
+                    </div>
+                </>
             )}
         </>
     );

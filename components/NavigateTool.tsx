@@ -194,7 +194,7 @@ const NavigateTool = ({
     }, []);
 
     const theme = {
-        bg: isNight ? 'rgba(24, 24, 27, 0.75)' : 'rgba(255, 255, 255, 0.85)',
+        bg: isNight ? 'var(--player-bg, #212121)' : (widgetBgColor || 'rgba(255, 255, 255, 0.85)'),
         text: isNight ? 'text-zinc-100' : 'text-zinc-900',
         inputText: isNight ? 'text-zinc-100' : 'text-zinc-900',
         placeholderText: isNight ? 'placeholder-zinc-400' : 'placeholder-zinc-500',
@@ -231,11 +231,11 @@ const NavigateTool = ({
             ref={containerRef}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
-            className={`relative backdrop-blur-md rounded-2xl border border-white/10 shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
+            className={`relative backdrop-blur-md rounded-xl ${isNight ? 'border border-white/10' : 'border border-black/5'} shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
             style={{ 
                 width: `${(width) / 16}rem`,
                 height: `${(isExpanded ? expandedHeight : baseHeight) / 16}rem`,
-                background: !isNight ? widgetBgColor : theme.bg
+                background: !isNight ? widgetBgColor : 'var(--player-bg, #212121)'
             }}
         >
              <div className="p-3 flex flex-col h-full overflow-hidden">
@@ -274,7 +274,10 @@ const NavigateTool = ({
                     
                     {!loading && query.trim().length === 0 && recents.length > 0 && (
                         <>
-                            <div className={`px-2 py-1 text-xs font-bold uppercase tracking-wider ${theme.recentsHeader}`}>Recenti</div>
+                            <div className={`px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider flex items-center gap-1.5 ${theme.recentsHeader}`}>
+                              <FiClock className="w-3.5 h-3.5 opacity-70" />
+                              <span>Destinazioni Recenti</span>
+                            </div>
                             {recents.map((place, i) => (
                                 <button
                                     key={`recent-${i}`}
@@ -289,7 +292,7 @@ const NavigateTool = ({
                                             {place.name}
                                         </p>
                                         {place.address && (
-                                            <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                             <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                                                 {place.address}
                                             </p>
                                         )}
@@ -351,7 +354,7 @@ const NavigateTool = ({
                                 }
                             }}
                             className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${theme.suggestionHover}`}
-                            style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
+                            style={{ color: isNight ? (homeLocation ? nightPlayerButtonColor : '#a1a1aa') : dayPlayerButtonColor }}
                             title={homeLocation ? `Naviga a Casa (${homeLocation.name})` : 'Imposta indirizzo di Casa'}
                         >
                             <ICONS.home className="w-4 h-4" />
@@ -366,7 +369,7 @@ const NavigateTool = ({
                                 }
                             }}
                             className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${theme.suggestionHover}`}
-                            style={{ color: isNight ? nightPlayerButtonColor : dayPlayerButtonColor }}
+                            style={{ color: isNight ? (workLocation ? nightPlayerButtonColor : '#a1a1aa') : dayPlayerButtonColor }}
                             title={workLocation ? `Naviga a Lavoro (${workLocation.name})` : 'Imposta indirizzo di Lavoro'}
                         >
                             <ICONS.work className="w-4 h-4" />
