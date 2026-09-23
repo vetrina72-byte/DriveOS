@@ -87,24 +87,30 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
             if (!linkView) return null;
             
             const isActive = activeView === linkView;
-            const linkColor = isActive ? textColor : secondaryTextColor;
-            const fontWeight = isActive ? 'font-bold' : 'font-semibold';
+            const isDj = link === "AI DJ";
+            const linkColor = isDj && !isActive ? (isNight ? '#1ed760' : '#16a34a') : (isActive ? textColor : secondaryTextColor);
+            const fontWeight = isActive || isDj ? 'font-bold' : 'font-semibold';
 
             return (
-              <a
-                key={link}
-                href="#"
-                onClick={(e) => { e.preventDefault(); onNavigate(linkView); }}
-                className={`px-3.5 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors duration-200 ${fontWeight} ${
-                  isActive 
-                    ? (isNight ? 'bg-white/15' : 'bg-black/10') 
-                    : hoverBg
-                }`}
-                style={{ color: linkColor }}
-              >
-                {link}
-              </a>
-            )
+              <div key={link} className="relative inline-flex items-center">
+                <a
+                  href="#"
+                  onClick={(e) => { 
+                    e.preventDefault(); 
+                    if (isDj) console.log('[AI DJ FLOW] USER CLICK -> TopNavBar navigate to AI DJ');
+                    onNavigate(linkView); 
+                  }}
+                  className={`relative z-10 px-3.5 py-1.5 rounded-full text-sm whitespace-nowrap transition-all duration-200 ${fontWeight} ${
+                    isActive 
+                      ? (isNight ? 'bg-white/15' : 'bg-black/10') 
+                      : hoverBg
+                  } ${isDj ? (isActive ? 'border border-[#1db954]' : 'border border-[#1db954]/40 hover:border-[#1db954]/80') : ''}`}
+                  style={{ color: linkColor }}
+                >
+                  {link}
+                </a>
+              </div>
+            );
           })}
         </div>
 

@@ -4,6 +4,7 @@ import ContentCarousel from './ContentCarousel';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
 import { useAuth, type SpotifyUser } from '@/context/AuthContext';
 import { wikiSpotifyLogoUrl, officialSpotifyDjLogoUrl } from './TopNavBar';
+import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjAudioAnalyzer } from '../services/AiDjAudioAnalyzer';
 
 // Helper for dynamic greeting
 const getGreeting = () => {
@@ -94,20 +95,45 @@ const ContentArea = React.memo(({
 }: ContentAreaProps) => {
   
   const greeting = getGreeting();
-  const { nowPlaying } = useAuth();
+  const { nowPlaying, play, pauseSpotify } = useAuth();
 
   const isDjActive = React.useMemo(() => {
     if (!nowPlaying?.spotifyState) return false;
-    const state = nowPlaying.spotifyState;
-    const contextUri = state.context?.uri || '';
-    const currentTrack = state.track_window?.current_track;
-    const currentUri = currentTrack?.uri || '';
-    return contextUri.includes('37i9dQZF1EYkqdzj48dyYq') || currentUri.includes('37i9dQZF1EYkqdzj48dyYq');
+    return isSpotifyAiDj(nowPlaying.spotifyState);
   }, [nowPlaying]);
 
   const isDjPlaying = React.useMemo(() => {
-    return isDjActive && !nowPlaying?.spotifyState?.paused;
+    return isDjActive && isSpotifyAiDjPlaying(nowPlaying?.spotifyState);
   }, [isDjActive, nowPlaying]);
+
+  const handleToggleDjPlayback = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    console.log('[AI DJ FLOW] USER CLICK -> AI DJ START HANDLER (ContentArea hero button)');
+    if (!aiDjAudioAnalyzer.isLoopbackActive()) {
+      aiDjAudioAnalyzer.startLoopbackCapture().catch((err) => {
+        console.error('[AI DJ CAPTURE] startLoopbackCapture rejected from ContentArea:', err);
+      });
+    }
+    if (onPlayDJ) {
+      onPlayDJ();
+      return;
+    }
+    if (isDjPlaying) {
+      pauseSpotify();
+    } else if (isDjActive) {
+      play({ context_uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' });
+    } else {
+      const djItem: MediaItem = {
+        id: 'spotify-dj',
+        name: 'DJ Spotify',
+        type: 'playlist',
+        uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq',
+        description: 'Spotify AI DJ',
+        imageUrl: officialSpotifyDjLogoUrl,
+      };
+      play({ context_uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' }, djItem);
+    }
+  };
 
   const filteredContinue = React.useMemo(() => filterDjItems(continueListeningItems), [continueListeningItems]);
   const filteredMadeForYou = React.useMemo(() => filterDjItems(madeForYou), [madeForYou]);
@@ -211,19 +237,7 @@ const ContentArea = React.memo(({
             </button>
 
             <button
-              onClick={() => {
-                if (onPlayDJ) {
-                  onPlayDJ();
-                } else {
-                  onSelectItem({
-                    id: 'spotify-dj',
-                    name: 'DJ Spotify',
-                    type: 'playlist',
-                    uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq',
-                    description: 'Spotify AI DJ'
-                  });
-                }
-              }}
+              onClick={handleToggleDjPlayback}
               className={`flex-shrink-0 px-5 py-2.5 rounded-full font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 text-black cursor-pointer ${
                 isDjPlaying
                   ? 'bg-white hover:bg-zinc-200 shadow-md'

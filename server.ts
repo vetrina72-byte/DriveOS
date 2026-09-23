@@ -21,6 +21,10 @@ async function startServer() {
     origin: true,
     credentials: true 
   }));
+  app.use((req, res, next) => {
+    res.setHeader('Permissions-Policy', 'display-capture=*');
+    next();
+  });
   app.use(express.json());
   app.use(cookieParser());
 

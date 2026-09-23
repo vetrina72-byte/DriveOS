@@ -1,9 +1,11 @@
-import React from 'react';
-import { Play, Pause, Radio, Sparkles, Volume2, Music, Disc } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, Pause, Radio, Sparkles, Volume2, Music, Disc, Activity } from 'lucide-react';
 import { officialSpotifyDjLogoUrl } from './TopNavBar';
 import { useAuth } from '../context/AuthContext';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
 import ContentCarousel from './ContentCarousel';
+import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjAudioAnalyzer } from '../services/AiDjAudioAnalyzer';
+import { AiDjAudioMonitor } from './AiDjAudioMonitor';
 
 interface AiDjViewProps {
   isNight: boolean;
@@ -33,25 +35,23 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
   // Check if current playback is Spotify AI DJ
   const isDjActive = React.useMemo(() => {
     if (!nowPlaying?.spotifyState) return false;
-    const state = nowPlaying.spotifyState;
-    const contextUri = state.context?.uri || '';
-    const currentTrack = state.track_window?.current_track;
-    const currentUri = currentTrack?.uri || '';
-    const trackName = currentTrack?.name?.toLowerCase() || '';
-
-    return contextUri.includes('37i9dQZF1EYkqdzj48dyYq') || 
-           currentUri.includes('37i9dQZF1EYkqdzj48dyYq') || 
-           trackName.includes('dj spotify') || 
-           trackName === 'dj';
+    return isSpotifyAiDj(nowPlaying.spotifyState);
   }, [nowPlaying]);
 
   const isDjPlaying = React.useMemo(() => {
-    return isDjActive && !nowPlaying?.spotifyState?.paused;
+    return isDjActive && isSpotifyAiDjPlaying(nowPlaying?.spotifyState);
   }, [isDjActive, nowPlaying]);
 
   const currentTrack = nowPlaying?.spotifyState?.track_window?.current_track;
 
-  const handleToggleDj = () => {
+  const handleToggleDj = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    console.log('[AI DJ FLOW] USER CLICK -> AI DJ START HANDLER (AiDjView hero button)');
+    if (!aiDjAudioAnalyzer.isLoopbackActive()) {
+      aiDjAudioAnalyzer.startLoopbackCapture().catch((err) => {
+        console.error('[AI DJ CAPTURE] startLoopbackCapture rejected from AiDjView:', err);
+      });
+    }
     if (isDjPlaying) {
       pauseSpotify();
     } else if (isDjActive) {
@@ -76,16 +76,19 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
       description: 'L\'AI DJ introduce i brani in italiano con curiosità sugli artisti, aneddoti e novità musicali.',
     },
     {
-      icon: <Sparkles className="w-5 h-5" />,
-      title: 'Algoritmo Su Misura',
-      description: 'Combina la tua cronologia d\'ascolto con nuove scoperte selezionate per il tuo mood attuale.',
+      icon: <Activity className="w-5 h-5 text-emerald-400" />,
+      title: 'Glow Smeraldo Esclusivo',
+      description: 'Il player si illumina con l\'iconico glow verde smeraldo quando Spotify AI DJ è attivo.',
     },
     {
       icon: <Disc className="w-5 h-5" />,
       title: 'Cambia Atmosfera al Volo',
-      description: 'Tocca il pulsante Cambia Genere durante la riproduzione per passare ad un nuovo mood musicale.',
+      description: 'Tocca il pulsante Cambia Mood durante la riproduzione per passare ad un nuovo genere musicale.',
     },
   ];
+
+  // Internal debug flag: keep false in production so no diagnostic UI is visible
+  const SHOW_DEBUG_AUDIO_MONITOR = false;
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto pb-10 hide-scrollbar px-6 pt-2">
@@ -119,7 +122,7 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
                 <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                   isDjPlaying 
                     ? 'bg-[#1db954]/20 text-[#1db954] border border-[#1db954]/30' 
-                    : isNight 
+                    : isDjActive 
                       ? 'bg-zinc-800 text-zinc-300 border border-zinc-700' 
                       : 'bg-zinc-100 text-zinc-700 border border-zinc-300'
                 }`}>
@@ -140,8 +143,8 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
             </div>
           </div>
 
-          {/* Right: Primary Action Button */}
-          <div className="flex-shrink-0 w-full sm:w-auto flex flex-col items-center gap-2.5">
+          {/* Right: Primary Action Button & Loopback Audio Toggle */}
+          <div className="flex-shrink-0 w-full sm:w-auto flex flex-col items-center sm:items-end gap-2.5">
             <button
               onClick={handleToggleDj}
               className={`w-full sm:w-auto px-8 py-3.5 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2.5 active:scale-95 cursor-pointer shadow-lg ${
@@ -169,7 +172,7 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
             </button>
 
             <span className={`text-[11px] font-medium ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-              {isDjActive ? 'Sessione DJ attiva' : 'Tocca per iniziare'}
+              {isDjActive ? (isDjPlaying ? 'In riproduzione' : 'In pausa') : 'Tocca per iniziare'}
             </span>
           </div>
         </div>
@@ -199,16 +202,26 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
 
             <div className="flex items-center gap-2">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${
-                isNight 
-                  ? 'bg-zinc-800 text-zinc-200 border-zinc-700' 
-                  : 'bg-zinc-100 text-zinc-800 border-zinc-300'
+                isDjPlaying
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : isNight 
+                    ? 'bg-zinc-800 text-zinc-400 border-zinc-700' 
+                    : 'bg-zinc-100 text-zinc-600 border-zinc-300'
               }`}>
-                <Volume2 className="w-3.5 h-3.5 text-[#1db954]" /> In riproduzione via AI DJ
+                <Volume2 className={`w-3.5 h-3.5 ${isDjPlaying ? 'text-emerald-400' : 'text-zinc-400'}`} />
+                {isDjPlaying ? 'Sessione DJ attiva' : 'In pausa'}
               </span>
             </div>
           </div>
         )}
       </div>
+
+      {/* Internal diagnostic monitor (rendered only if SHOW_DEBUG_AUDIO_MONITOR is true) */}
+      {SHOW_DEBUG_AUDIO_MONITOR && (
+        <div className="mb-8">
+          <AiDjAudioMonitor isDjActive={isDjActive} isDjPlaying={isDjPlaying} isNight={isNight} />
+        </div>
+      )}
 
       {/* Feature Explanation Section */}
       <div className="mb-10">

@@ -404,7 +404,7 @@ export default function DebugControls({
     setNavigateToolWidth(340);
     setPlayerControlsSize(18);
     setPlayerControlsGap(100);
-    setPlayerControlsVerticalPosition(2);
+    setPlayerControlsVerticalPosition(1.9);
     setDayPlayerButtonColor('#454545');
     setNightPlayerButtonColor('#ffffff');
     setWidgetBgHex('#ffffff');

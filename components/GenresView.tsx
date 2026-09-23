@@ -105,6 +105,42 @@ const GenresView = ({ isNight, onSelectItem }: { isNight: boolean, onSelectItem:
         <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar flex flex-col">
             <h2 className={`text-3xl font-bold mb-6 ${textColor}`}>Generi e Mood</h2>
 
+            {/* AI DJ Feature Button in Categories with Clean Subtle Underglow */}
+            <div 
+                onClick={() => onSelectItem({
+                    id: 'spotify-dj',
+                    name: 'DJ Spotify',
+                    type: 'playlist',
+                    uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq',
+                    description: 'Spotify AI DJ'
+                })}
+                className="mb-6 cursor-pointer group"
+            >
+                <div className={`p-4 rounded-xl flex items-center justify-between border transition-all duration-300 ${
+                    isNight 
+                        ? 'bg-[#181818] border-zinc-700/80 hover:border-emerald-500/50 shadow-[0_4px_16px_rgba(0,0,0,0.4),0_4px_14px_rgba(29,185,84,0.18)] hover:shadow-[0_6px_22px_rgba(29,185,84,0.3)]' 
+                        : 'bg-zinc-50 border-zinc-200 hover:border-emerald-500/50 shadow-[0_4px_14px_rgba(22,163,74,0.15)] hover:shadow-[0_6px_20px_rgba(22,163,74,0.25)]'
+                }`}>
+                    <div className="flex items-center gap-3.5">
+                        <img 
+                            src="https://lexicon-assets.spotifycdn.com/DJ-Beta-CoverArt-300.jpg" 
+                            alt="Spotify AI DJ" 
+                            className="w-12 h-12 rounded-lg object-cover shadow-md" 
+                        />
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-base font-bold ${textColor}`}>Spotify AI DJ</span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1db954]/20 text-[#1db954] border border-[#1db954]/30 uppercase">In evidenza</span>
+                            </div>
+                            <p className={`text-xs ${themeColor}`}>La tua guida musicale personale con selezione intelligente di brani</p>
+                        </div>
+                    </div>
+                    <div className="px-4 py-2 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black font-bold text-xs flex items-center gap-1.5 transition-transform active:scale-95 shadow-md shadow-emerald-500/20">
+                        <span>Avvia AI DJ</span>
+                    </div>
+                </div>
+            </div>
+
             {error && categories.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                     <FiFolder className={`w-14 h-14 mb-3 opacity-40 ${themeColor}`} />

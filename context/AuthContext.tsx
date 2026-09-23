@@ -7,6 +7,7 @@ import { SpotifyItem as MediaItem } from '../components/PlaylistItem';
 import { getSessionId } from '../lib/sessionId';
 import { initSpotifyPlayerOnce, setVolumeThrottled, setVolumeFinal as setVolumeFinalPlayer, getPlayerInstance, getDeviceId, safePlay } from '../lib/spotify-player';
 import { PodcastService } from '../services/PodcastService';
+import { aiDjAudioAnalyzer } from '../services/AiDjAudioAnalyzer';
 
 export interface SpotifyUser {
     display_name: string;
@@ -908,6 +909,10 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         const hasLoadedTrack = Boolean(nowPlaying.spotifyState?.track_window?.current_track);
 
         let effectiveOptions: PlayOptions = { ...options };
+
+        if (options?.context_uri?.includes('37i9dQZF1EYkqdzj48dyYq') || itemForOptimisticUpdate?.id === 'spotify-dj') {
+            console.log('[AI DJ FLOW] AuthContext play() called with Spotify AI DJ URI');
+        }
 
         if (isResume) {
             if (!hasLoadedTrack) {

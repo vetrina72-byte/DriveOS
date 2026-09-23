@@ -329,6 +329,11 @@ const SpotifyPlayer = ({
 
     const handleSelectItem = (item: MediaItem) => {
         if (item.id === 'liked-songs') { changeView({ type: 'playlist', id: 'liked-songs' }); return; }
+        if (item.id === 'spotify-dj' || item.uri?.includes('37i9dQZF1EYkqdzj48dyYq') || item.name?.toLowerCase().includes('spotify dj') || item.name?.toLowerCase() === 'dj spotify') {
+            console.log('[AI DJ FLOW] USER CLICK -> AI DJ SELECT ITEM -> OPEN AI DJ VIEW');
+            changeView({ type: 'ai-dj' });
+            return;
+        }
         if (['playlist', 'album', 'artist', 'show'].includes(item.type)) { changeView({ type: item.type as any, id: item.id, title: item.name }); }
         else if (item.type === 'category') {
             if (item.id === 'new-releases' || item.name?.toLowerCase() === 'nuove uscite') changeView({ type: 'new-releases' });

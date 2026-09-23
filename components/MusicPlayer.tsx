@@ -8,7 +8,7 @@ import { useUIConfig } from '../context/UIConfigContext';
 import { 
     FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
 } from 'react-icons/fi';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Activity } from 'lucide-react';
 import { 
     IoGameControllerOutline
 } from 'react-icons/io5';
@@ -19,6 +19,7 @@ import { BsList } from 'react-icons/bs';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
+import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjAudioAnalyzer } from '../services/AiDjAudioAnalyzer';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -715,19 +716,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     } | null>(null);
 
     const [djToast, setDjToast] = useState<string | null>(null);
+    const [isLoopbackLive, setIsLoopbackLive] = useState(aiDjAudioAnalyzer.isLoopbackActive());
+    const [isCapturingLoopback, setIsCapturingLoopback] = useState(false);
+
+    useEffect(() => {
+        const unsubscribe = aiDjAudioAnalyzer.subscribe(() => {
+            setIsLoopbackLive(aiDjAudioAnalyzer.isLoopbackActive());
+        });
+        return unsubscribe;
+    }, []);
 
     const isDjActive = useMemo(() => {
         if (source !== 'spotify' || !playerState) return false;
-        const contextUri = playerState.context?.uri || '';
-        const currentTrack = playerState.track_window?.current_track;
-        const currentUri = currentTrack?.uri || '';
-        const trackName = currentTrack?.name?.toLowerCase() || '';
-
-        return contextUri.includes('37i9dQZF1EYkqdzj48dyYq') || 
-               currentUri.includes('37i9dQZF1EYkqdzj48dyYq') || 
-               trackName.includes('dj spotify') || 
-               trackName === 'dj';
+        return isSpotifyAiDj(playerState);
     }, [source, playerState]);
+
+    const isDjPlaying = useMemo(() => {
+        return Boolean(isDjActive && isSpotifyAiDjPlaying(playerState));
+    }, [isDjActive, playerState]);
 
     const { sceneTransitionSpeed = 1.10 } = useUIConfig();
 
@@ -740,19 +746,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const animStartTime = useRef(0);
 
     const playingStateRef = useRef({ isPlaying: false });
-    const glowAngleRef = useRef(0);
-    const glowIntensityRef = useRef(0);
-    const rhythmPhaseRef = useRef(0);
     const djToastRef = useRef<HTMLDivElement>(null);
-    const glowWavesRef = useRef<HTMLDivElement>(null);
-    const orb1Ref = useRef<HTMLDivElement>(null);
-    const orb2Ref = useRef<HTMLDivElement>(null);
-    const orb3Ref = useRef<HTMLDivElement>(null);
 
     const isDjActiveRef = useRef(isDjActive);
     useEffect(() => {
         isDjActiveRef.current = isDjActive;
     }, [isDjActive]);
+
+    const isDjPlayingRef = useRef(isDjPlaying);
+    useEffect(() => {
+        isDjPlayingRef.current = isDjPlaying;
+    }, [isDjPlaying]);
 
     const isNightRef = useRef(isNight);
     useEffect(() => {
@@ -764,120 +768,40 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         playerStateRef.current = playerState;
     }, [playerState]);
 
-    const currentTrackId = useMemo(() => {
-        const track = playerState?.track_window?.current_track ?? (playerState as any)?.item;
-        if (!track) return null;
-        if (track.id) return track.id;
-        if (track.uri) {
-            const parts = track.uri.split(':');
-            return parts[parts.length - 1];
-        }
-        return null;
-    }, [playerState]);
-
-    const spotifyAnalysisCacheRef = useRef<Record<string, any>>({});
-    const spotifyAnalysisRef = useRef<any>(null);
-    const spotifyFeaturesCacheRef = useRef<Record<string, any>>({});
-    const spotifyFeaturesRef = useRef<any>(null);
-
+    // Lifecycle for AI DJ Audio Analyzer:
+    // ACTIVATED ONLY when Spotify AI DJ is both active AND actively playing audio.
+    // In any other situation (normal song, playlist, album, pause, or DJ closed),
+    // the audio analyzer is stopped immediately!
     useEffect(() => {
-        if (!currentTrackId || source !== 'spotify') {
-            spotifyAnalysisRef.current = null;
-            spotifyFeaturesRef.current = null;
-            return;
-        }
-
-        if (spotifyAnalysisCacheRef.current[currentTrackId]) {
-            spotifyAnalysisRef.current = spotifyAnalysisCacheRef.current[currentTrackId];
+        if (isDjPlaying && source === 'spotify') {
+            aiDjAudioAnalyzer.startAnalysis();
         } else {
-            apiClient.get(`/audio-analysis/${currentTrackId}`)
-                .then(res => {
-                    if (res.data) {
-                        spotifyAnalysisCacheRef.current[currentTrackId] = res.data;
-                        spotifyAnalysisRef.current = res.data;
-                        console.log("[Spotify Reactivity] Successfully loaded real audio analysis for track:", currentTrackId);
-                    }
-                })
-                .catch(err => {
-                    console.warn("[Spotify Reactivity] Failed to fetch audio analysis:", err);
-                    spotifyAnalysisRef.current = null;
-                });
+            aiDjAudioAnalyzer.stopAnalysis();
         }
+    }, [isDjPlaying, source]);
 
-        if (spotifyFeaturesCacheRef.current[currentTrackId]) {
-            spotifyFeaturesRef.current = spotifyFeaturesCacheRef.current[currentTrackId];
+    const handleToggleLoopback = async () => {
+        if (isLoopbackLive) {
+            aiDjAudioAnalyzer.stopLoopbackCapture();
         } else {
-            apiClient.get(`/audio-features/${currentTrackId}`)
-                .then(res => {
-                    if (res.data) {
-                        spotifyFeaturesCacheRef.current[currentTrackId] = res.data;
-                        spotifyFeaturesRef.current = res.data;
-                        console.log("[Spotify Reactivity] Successfully loaded real audio features (BPM:", res.data.tempo, "Energy:", res.data.energy, ") for track:", currentTrackId);
-                    }
-                })
-                .catch(err => {
-                    console.warn("[Spotify Reactivity] Failed to fetch audio features:", err);
-                    spotifyFeaturesRef.current = null;
-                });
+            setIsCapturingLoopback(true);
+            try {
+                await aiDjAudioAnalyzer.startLoopbackCapture();
+            } finally {
+                setIsCapturingLoopback(false);
+            }
         }
-    }, [currentTrackId, source]);
+    };
 
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const analyserRef = useRef<AnalyserNode | null>(null);
-    const sourceNodeRef = useRef<any>(null);
-
-    // Web Audio Peak Detection (Metodo 2) and Beat Trigger refs
-    const filterRef = useRef<BiquadFilterNode | null>(null);
-    const localRmsHistoryRef = useRef<number[]>([]);
-    const localRmsThresholdRef = useRef<number>(0.15);
-    const lastLocalBeatTimeRef = useRef<number>(0);
-    const lastBeatStartRef = useRef<number>(-1);
-    const beatProgressRef = useRef<number>(0);
-    const lastFrameTimeRef = useRef<number>(performance.now());
-
-    const initAudioAnalyser = useCallback(() => {
-        if (analyserRef.current || !audioRef.current) return;
-        try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            const ctx = new AudioContextClass();
-            const analyser = ctx.createAnalyser();
-            analyser.fftSize = 64; // Small fft size is perfect for fast bass/beat extraction
-            
-            // Create low-pass filter (20Hz to 140Hz for bass/kick detection)
-            const filter = ctx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(140, ctx.currentTime);
-            
-            const sourceNode = ctx.createMediaElementSource(audioRef.current);
-            
-            // Connect to analyser through the low-pass filter so analyser ONLY receives bass frequencies
-            sourceNode.connect(filter);
-            filter.connect(analyser);
-            
-            // Connect source directly to destination so user hears normal, unfiltered sound
-            sourceNode.connect(ctx.destination);
-
-            audioContextRef.current = ctx;
-            analyserRef.current = analyser;
-            filterRef.current = filter;
-            sourceNodeRef.current = sourceNode;
-            console.log("[Spotify Reactivity] Successfully initialized Web Audio low-pass analyser for peak detection.");
-        } catch (err) {
-            console.warn("Could not construct Web Audio analyser with low-pass filter:", err);
-        }
-    }, []);
-
-    const isPlayingGlobal = source === 'spotify' ? !playerState?.paused : (source === 'youtube' ? isYouTubePlaying : (source === 'radio' ? isRadioPlaying : false));
+    const isPlayingGlobal = source === 'spotify' 
+        ? !playerState?.paused 
+        : (source === 'youtube' ? isYouTubePlaying : (source === 'radio' ? isRadioPlaying : false));
 
     useEffect(() => {
         playingStateRef.current.isPlaying = isPlayingGlobal;
-        if (isPlayingGlobal) {
-            initAudioAnalyser();
-            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-                audioContextRef.current.resume().catch(() => {});
-            }
-        }
-    }, [isPlayingGlobal, initAudioAnalyser]);
+    }, [isPlayingGlobal]);
+
+    const lastFrameTimeRef = useRef<number>(performance.now());
 
     // Sync isAnyAppOpen changes to start an animation using the exact same power4.out easing/timing as subapps
     useEffect(() => {
@@ -943,209 +867,74 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     djToastRef.current.style.left = `calc(${pct}% + ${(offsetPx + currentWidth / 2) / 16}rem)`;
                 }
 
-                // --- PREMIUM MULTI-EFFECT AI DJ GLOW (MUSIC-REACTIVE COLOR SPECTRUM + ORBITAL SWIRL + HARMONIC PULSE) ---
+                // --- AI DJ BASE GLOW & AUDIO-REACTIVE ENGINE ---
                 const isDjActiveVal = isDjActiveRef.current;
-                const isPlaying = playingStateRef.current.isPlaying;
-                
-                // Intensità del glow progressiva (aumenta o diminuisce gradualmente) - ATTIVA SOLO PER AI DJ
-                if (isDjActiveVal && isPlaying) {
-                    glowIntensityRef.current = Math.min(1.0, glowIntensityRef.current + 0.05);
-                } else {
-                    glowIntensityRef.current = Math.max(0.0, glowIntensityRef.current - 0.05);
-                }
-                const intensity = glowIntensityRef.current;
-                
-                // Calculate real frame delta for smooth ease-out attenuation of beatProgress
+                const isDjPlayingVal = isDjPlayingRef.current;
+
                 const nowMs = performance.now();
                 const deltaSec = Math.min(0.1, (nowMs - lastFrameTimeRef.current) / 1000);
                 lastFrameTimeRef.current = nowMs;
 
-                // Decay the beat progress with a smooth ease-out curve
-                beatProgressRef.current = Math.max(0, beatProgressRef.current - deltaSec * 4.5); // full decay in ~220ms
-                const beatFactor = beatProgressRef.current;
+                // The player container is ALWAYS COMPLETELY STATIC.
+                // NO scale, NO bounce, NO transform, NO movement.
+                playerContainerRef.current.style.transform = 'none';
 
-                if (intensity > 0.01) {
-                    // Estrazione delle frequenze musicali (bassi, medi, alti)
-                    let finalBass = 0.20;
-                    let finalMid = 0.20;
-                    let finalTreble = 0.15;
+                const solidBg = isNightRef.current ? '#212121' : (widgetBgColor || '#ffffff');
+                const baseShadow = isNightRef.current 
+                    ? '0 20px 40px -15px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08)' 
+                    : '0 20px 40px -15px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)';
 
-                    if (isPlaying) {
-                        if (source === 'spotify') {
-                            const pState = playerStateRef.current;
-                            let currentPosSec = 0;
-                            if (pState) {
-                                // 180ms of latency buffer compensation to align visual glow perfectly with real speaker output
-                                const latencyCompensation = 180;
-                                const timeSinceUpdate = pState.paused ? 0 : (Date.now() - pState.timestamp);
-                                currentPosSec = Math.max(0, (pState.position + timeSinceUpdate - latencyCompensation) / 1000);
-                            }
+                if (isDjActiveVal && source === 'spotify') {
+                    // BASE GLOW: Always visible whenever Spotify AI DJ is active
+                    let blur1 = 18;
+                    let spread1 = 2;
+                    let alpha1 = 0.35;
 
-                            const analysis = spotifyAnalysisRef.current;
-                            const features = spotifyFeaturesRef.current;
-                            
-                            // Dynamic tempo and audio metrics fetched from the active Spotify song
-                            const tempo = features?.tempo || analysis?.track?.tempo || 120;
-                            const energy = features?.energy || 0.6;
-                            const danceability = features?.danceability || 0.5;
+                    let blur2 = 32;
+                    let spread2 = 4;
+                    let alpha2 = 0.22;
 
-                            if (analysis && currentPosSec > 0) {
-                                // Scansione lineare gap-free dei segmenti audio caricati dal progetto interno
-                                let segment = null;
-                                const segments = analysis.segments || [];
-                                for (let i = 0; i < segments.length; i++) {
-                                    if (currentPosSec >= segments[i].start) {
-                                        segment = segments[i];
-                                    } else {
-                                        break;
-                                    }
-                                }
+                    let borderAlpha = 0.30;
 
-                                // Scansione lineare gap-free dei battiti audio caricati dal progetto interno (Metodo 1)
-                                let beat = null;
-                                const beats = analysis.beats || [];
-                                for (let i = 0; i < beats.length; i++) {
-                                    if (currentPosSec >= beats[i].start) {
-                                        beat = beats[i];
-                                    } else {
-                                        break;
-                                    }
-                                }
+                    // If Spotify AI DJ is actively playing, query real audio metrics (PCM waveform & FFT)
+                    if (isDjPlayingVal) {
+                        const metrics = aiDjAudioAnalyzer.getMetrics(deltaSec, true);
 
-                                if (segment) {
-                                    // Loudness: typical ranges from -60dB (silent) to 0dB (max). Map -40dB..-3dB into 0.05..1.0
-                                    const loudnessDb = segment.loudness_max ?? -20;
-                                    const normLoudness = Math.max(0.05, Math.min(1, (loudnessDb + 40) / 37));
+                        // If real audio loopback is connected with live signal, modulate over the Base Glow:
+                        // - Bass / Low frequencies: directly expands the glow (spread and blur)
+                        // - RMS (Signal Energy): directly intensifies brightness and opacity
+                        if (metrics.isLoopbackActive && (metrics.rms > 0.005 || metrics.bass > 0.005)) {
+                            const glowExpansion = metrics.bass; // 0.0 - 1.0 (FFT low frequencies)
+                            const glowIntensity = metrics.rms;  // 0.0 - 1.0 (PCM waveform RMS)
 
-                                    // Pitches (chromatic scale: 12 values between 0..1 representing pitch prominence)
-                                    const bassWeight = segment.pitches ? (segment.pitches[0] + segment.pitches[1] + segment.pitches[11]) / 3 : 0.5;
-                                    const midWeight = segment.pitches ? (segment.pitches[2] + segment.pitches[3] + segment.pitches[4] + segment.pitches[5] + segment.pitches[6]) / 5 : 0.5;
-                                    const trebleWeight = segment.pitches ? (segment.pitches[7] + segment.pitches[8] + segment.pitches[9] + segment.pitches[10]) / 4 : 0.5;
+                            blur1 = 18 + glowExpansion * 30 + glowIntensity * 12;
+                            spread1 = 2 + glowExpansion * 10 + glowIntensity * 3;
+                            alpha1 = Math.min(0.85, 0.35 + glowIntensity * 0.40 + glowExpansion * 0.15);
 
-                                    if (beat) {
-                                        // Trigger beat bump/kick strictly at the start of the beat!
-                                        if (beat.start !== lastBeatStartRef.current) {
-                                            beatProgressRef.current = 1.0;
-                                            lastBeatStartRef.current = beat.start;
-                                        }
-                                    }
+                            blur2 = 32 + glowExpansion * 42 + glowIntensity * 16;
+                            spread2 = 4 + glowExpansion * 14 + glowIntensity * 4;
+                            alpha2 = Math.min(0.70, 0.22 + glowIntensity * 0.35 + glowExpansion * 0.15);
 
-                                    // Real physical values mapped directly to final outputs
-                                    finalBass = Math.max(0.12, (normLoudness * 0.35) + (beatFactor * 0.50) + (bassWeight * 0.15));
-                                    finalMid = Math.max(0.10, (normLoudness * 0.30) + (midWeight * 0.50) + (beatFactor * 0.20));
-                                    finalTreble = Math.max(0.05, (normLoudness * 0.30) + (trebleWeight * 0.50));
-                                } else {
-                                    // Stable resting fallback
-                                    finalBass = 0.15 + beatFactor * 0.50;
-                                    finalMid = 0.12 + beatFactor * 0.30;
-                                    finalTreble = 0.08 + beatFactor * 0.20;
-                                }
-                            } else {
-                                // Stable resting fallback
-                                finalBass = 0.15 + beatFactor * 0.50;
-                                finalMid = 0.12 + beatFactor * 0.30;
-                                finalTreble = 0.08 + beatFactor * 0.20;
-                            }
-                        } else if (analyserRef.current) {
-                            // Real-time audio frequency/time-domain analysis with Peak Detection on Bass (Metodo 2)
-                            const bufferLength = analyserRef.current.fftSize;
-                            const timeData = new Uint8Array(bufferLength);
-                            analyserRef.current.getByteTimeDomainData(timeData);
-                            
-                            // Calculate RMS (energy) of the lowpass filtered bass signal
-                            let sum = 0;
-                            for (let i = 0; i < bufferLength; i++) {
-                                const val = (timeData[i] - 128) / 128;
-                                sum += val * val;
-                            }
-                            const rms = Math.sqrt(sum / bufferLength);
-                            
-                            // Keep a running history of RMS to compute dynamic threshold
-                            if (!localRmsHistoryRef.current) {
-                                localRmsHistoryRef.current = [];
-                            }
-                            localRmsHistoryRef.current.push(rms);
-                            if (localRmsHistoryRef.current.length > 60) {
-                                localRmsHistoryRef.current.shift();
-                            }
-                            
-                            const avgRms = localRmsHistoryRef.current.reduce((a, b) => a + b, 0) / localRmsHistoryRef.current.length;
-                            const dynamicThreshold = Math.max(0.06, avgRms * 1.35);
-                            
-                            // Peak detection trigger
-                            const nowMs = performance.now();
-                            if (rms > dynamicThreshold && rms > localRmsThresholdRef.current && (nowMs - lastLocalBeatTimeRef.current > 220)) {
-                                beatProgressRef.current = 1.0;
-                                lastLocalBeatTimeRef.current = nowMs;
-                            }
-                            
-                            localRmsThresholdRef.current = rms;
-                            
-                            // Map the filtered RMS directly to finalBass to drive the visual pulse intensity
-                            finalBass = Math.max(0.12, rms * 4.0);
-                            finalMid = Math.max(0.10, rms * 2.0);
-                            finalTreble = Math.max(0.05, rms * 1.0);
-                        } else {
-                            // Stable resting fallback
-                            finalBass = 0.15 + beatFactor * 0.50;
-                            finalMid = 0.12 + beatFactor * 0.30;
-                            finalTreble = 0.08 + beatFactor * 0.20;
+                            borderAlpha = Math.min(0.85, 0.30 + glowIntensity * 0.45);
                         }
-
-                        // Increment accumulated rhythm phase strictly proportional to the music intensity
-                        rhythmPhaseRef.current += (0.01 + finalBass * 0.022);
-                    } else {
-                        // In pause, return slowly to standard resting state with ease-out
-                        finalBass = 0.12;
-                        finalMid = 0.10;
-                        finalTreble = 0.05;
                     }
 
-                    const reactiveBass = finalBass * intensity;
-                    const reactiveMid = finalMid * intensity;
-                    const reactiveTreble = finalTreble * intensity;
+                    // Centered shadows at 0px 0px (Completely static, no orbit, no swirling)
+                    const shadow1 = `0px 0px ${blur1.toFixed(1)}px ${spread1.toFixed(1)}px hsla(142, 78%, 46%, ${alpha1.toFixed(3)})`;
+                    const shadow2 = `0px 0px ${blur2.toFixed(1)}px ${spread2.toFixed(1)}px hsla(158, 80%, 42%, ${alpha2.toFixed(3)})`;
 
-                    const phase = rhythmPhaseRef.current;
-
-                    // Spostamento Orbitale (Swirl) dei centri delle ombre reattivo AL RITMO ACCUMULATO (si blocca se in pausa)
-                    const xOffset1 = Math.cos(phase * 1.8) * 8 * reactiveBass;
-                    const yOffset1 = Math.sin(phase * 1.4) * 6 * reactiveBass;
-                    
-                    const xOffset2 = Math.sin(phase * 1.5) * -10 * reactiveMid;
-                    const yOffset2 = Math.cos(phase * 1.1) * 8 * reactiveMid;
-                    
-                    // Colori Cangianti (Color Shifting) nello spettro dell'AI DJ guidati dal ritmo accumulato
-                    // Emerald spectrum for AI DJ, gorgeous Indigo/Violet/Fuchsia for standard playback
-                    const hue1 = isDjActiveVal ? (140 + Math.sin(phase * 0.5) * 20) : (260 + Math.sin(phase * 0.5) * 25); 
-                    const hue2 = isDjActiveVal ? (165 + Math.cos(phase * 0.3) * 25) : (320 + Math.cos(phase * 0.3) * 30); 
-                    const hue3 = isDjActiveVal ? (115 + Math.sin(phase * 0.7) * 15) : (220 + Math.sin(phase * 0.7) * 20); 
-                    
-                    // Calcolo dinamico di blur e spread basato sul beatFactor "bump" reale e la musica
-                    const b1 = 14 + (beatFactor * 26) + (reactiveBass * 10);
-                    const s1 = 1.5 + (beatFactor * 8.0) + (reactiveBass * 2.0);
-
-                    const b2 = 22 + (beatFactor * 32) + (reactiveMid * 12);
-                    const s2 = 2.0 + (beatFactor * 10.0) + (reactiveMid * 2.5);
-                    
-                    const shadow1 = `${xOffset1}px ${yOffset1}px ${b1}px ${s1}px hsla(${hue1}, 80%, 48%, ${0.65 * intensity})`;
-                    const shadow2 = `${xOffset2}px ${yOffset2}px ${b2}px ${s2}px hsla(${hue2}, 75%, 45%, ${0.55 * intensity})`;
-                    const shadow3 = `0 0 ${10 + (beatFactor * 15) + (reactiveTreble * 10)}px ${0.5 + (beatFactor * 3) + (reactiveTreble * 2.0)}px hsla(${hue3}, 85%, 50%, ${0.40 * intensity})`;
-
-                    playerContainerRef.current.style.boxShadow = `${shadow1}, ${shadow2}, ${shadow3}`;
-                    playerContainerRef.current.style.borderColor = `hsla(${hue1}, 80%, 48%, ${0.4 * intensity})`;
-                    playerContainerRef.current.style.background = !isNightRef.current ? widgetBgColor : 'var(--player-bg)';
-
-                    // Dynamic scale bump (physics bounce effect) on beat trigger
-                    const currentScale = 1.0 + beatFactor * 0.022;
-                    playerContainerRef.current.style.transform = `scale(${currentScale})`;
+                    playerContainerRef.current.style.boxShadow = `${shadow1}, ${shadow2}, ${baseShadow}`;
+                    playerContainerRef.current.style.borderColor = `hsla(142, 80%, 48%, ${borderAlpha.toFixed(3)})`;
+                    playerContainerRef.current.style.background = solidBg;
+                    playerContainerRef.current.style.backgroundColor = solidBg;
+                    playerContainerRef.current.style.opacity = '1';
                 } else {
-                    // Standard shadow (shadow-xl style with subtle border ring emulation)
-                    playerContainerRef.current.style.boxShadow = isNightRef.current 
-                        ? '0 20px 40px -15px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08)' 
-                        : '0 20px 40px -15px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)';
+                    // Standard shadow and borders - 100% normal Spotify player appearance
+                    playerContainerRef.current.style.boxShadow = baseShadow;
                     playerContainerRef.current.style.borderColor = '';
-                    playerContainerRef.current.style.background = !isNightRef.current ? widgetBgColor : 'var(--player-bg)';
-                    playerContainerRef.current.style.transform = 'none';
+                    playerContainerRef.current.style.background = solidBg;
+                    playerContainerRef.current.style.backgroundColor = solidBg;
+                    playerContainerRef.current.style.opacity = '1';
                 }
             }
 
@@ -1464,6 +1253,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const targetPaused = !isCurrentlyPaused;
             const previousSpotifyState = playerState;
 
+            if (isDjActive && !aiDjAudioAnalyzer.isLoopbackActive()) {
+                console.log('[AI DJ FLOW] USER CLICK -> AI DJ START HANDLER (MusicPlayer toggle play)');
+                aiDjAudioAnalyzer.startLoopbackCapture().catch((err) => {
+                    console.error('[AI DJ CAPTURE] startLoopbackCapture rejected from MusicPlayer play:', err);
+                });
+            }
+
             localStorage.setItem("last_action_target_paused", String(targetPaused));
 
             // OPTIMISTIC UI: Aggiornamento istantaneo al click (0ms di ritardo)
@@ -1483,6 +1279,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             });
 
             if (isCurrentlyPaused) {
+                if (isDjActive && !aiDjAudioAnalyzer.isLoopbackActive()) {
+                    aiDjAudioAnalyzer.startLoopbackCapture().catch(() => {});
+                }
                 // Resume in background
                 (async () => {
                     try {
@@ -1608,6 +1407,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
 
     const handleChangeDjGenre = useCallback(() => {
+        console.log('[AI DJ FLOW] USER CLICK -> AI DJ START HANDLER (MusicPlayer change mood)');
+        if (!aiDjAudioAnalyzer.isLoopbackActive()) {
+            aiDjAudioAnalyzer.startLoopbackCapture().catch((err) => {
+                console.error('[AI DJ CAPTURE] startLoopbackCapture rejected from MusicPlayer change mood:', err);
+            });
+        }
         setDjToast("DJ Spotify: Cambio atmosfera...");
         handleNextTrack();
         setTimeout(() => {
@@ -2072,14 +1877,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <>
             <div 
                 ref={playerContainerRef}
-                className={`fixed z-[2000] backdrop-blur-md rounded-xl overflow-hidden max-w-[calc(100vw-32px)] transition-all duration-500 border ${themeClasses} shadow-xl ${
+                className={`fixed z-[2000] rounded-xl overflow-hidden max-w-[calc(100vw-32px)] transition-all duration-500 border ${themeClasses} ${isNight ? 'bg-[#212121]' : 'bg-white'} shadow-xl ${
                     isDjActive 
                         ? 'ring-1 ring-emerald-500/40' 
                         : (isNight ? 'ring-1 ring-white/10' : 'ring-1 ring-black/5')
                 }`}
                 style={{
-                    // Style is now handled directly by the animation loop in useEffect
-                    background: !isNight ? widgetBgColor : 'var(--player-bg)',
+                    // Background rimane solido e mai trasparente
+                    background: isNight ? '#212121' : (widgetBgColor || '#ffffff'),
+                    backgroundColor: isNight ? '#212121' : (widgetBgColor || '#ffffff'),
+                    opacity: 1,
                     // Initial styles before JS takes over
                     width: isAnyAppOpen ? `${(dockedConfig.width) / 16}rem` : `${(floatingConfig.width) / 16}rem`,
                     height: isAnyAppOpen ? `${(dockedConfig.height) / 16}rem` : `${(floatingConfig.height) / 16}rem`,
