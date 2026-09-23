@@ -674,17 +674,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const w = entry.contentRect.width;
                 setContainerWidth(w);
 
-                // Dynamic layout mode selection based strictly on actual measured player width with hysteresis
-                // Thresholds: Enter compact below 510px, exit compact above 525px
+                // Dynamic layout mode selection based strictly on actual player width with hysteresis
+                // Thresholds: Enter compact below 420px, exit compact above 435px
                 setIsCompactLayout((prevIsCompact) => {
-                    let nextCompact = prevIsCompact;
                     if (prevIsCompact) {
-                        nextCompact = w < 525; // Stay compact until width exceeds 525px
+                        return w < 435; // Stay compact until width exceeds 435px
                     } else {
-                        nextCompact = w < 510; // Become compact when width drops below 510px
+                        return w < 420; // Become compact when width drops below 420px
                     }
-                    console.log(`[PLAYER RESPONSIVE] availableWidth = ${Math.round(w)}px, mode = ${nextCompact ? 'COMPACT' : 'NORMAL'}`);
-                    return nextCompact;
                 });
             }
         });
@@ -693,10 +690,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         return () => observer.disconnect();
     }, []);
 
-    // Keep scale factors and controls gap stable at 1.0 to preserve approved button sizes, spacing, and legible play controls
-    const scaleFactor = 1.0;
-    const buttonScaleFactor = 1.0;
-    const currentControlsGap = playerControlsGap;
+    // Proportional scale factor based on actual container width (440px is reference desktop width)
+    const scaleFactor = containerWidth && containerWidth < 440 ? Math.max(0.72, containerWidth / 440) : 1.0;
+
+    // Gentle icon scale so buttons stay large, legible, and clickable
+    const buttonScaleFactor = containerWidth && containerWidth < 410 ? Math.max(0.98, containerWidth / 440) : 1.0;
+
+    // Scale controls gap proportionally so relative spatial distances are strictly preserved
+    const currentControlsGap = containerWidth && containerWidth < 410 ? Math.max(8, playerControlsGap * (containerWidth / 440)) : playerControlsGap;
 
     const currentArtworkClass = `w-12 h-12 flex-shrink-0 aspect-square object-cover rounded-lg shadow-lg`;
 
@@ -791,6 +792,29 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [isPlayingGlobal]);
 
     const lastFrameTimeRef = useRef<number>(performance.now());
+    const adjustedWidthRef = useRef<number | null>(null);
+    const wasOccludedRef = useRef(false);
+    const prevAppLeftRef = useRef<number | null>(null);
+    const lastLoggedTargetRef = useRef<number | null>(null);
+
+    // Periodic tablet geometry debugger for specific device layout tracking
+    useEffect(() => {
+        const isTablet = windowWidth < 900;
+        if (!isTablet) return;
+
+        const interval = setInterval(() => {
+            const playerEl = playerContainerRef.current;
+            const containerEl = document.getElementById('main-app-container');
+            if (!playerEl) return;
+
+            const playerRect = playerEl.getBoundingClientRect();
+            const containerRect = containerEl ? containerEl.getBoundingClientRect() : { top: 0, bottom: 0, height: 0 };
+            
+            console.log(`[PLAYER TABLET GEOMETRY]\nplayerRect.top = ${playerRect.top}\nplayerRect.bottom = ${playerRect.bottom}\nplayerRect.height = ${playerRect.height}\ncontainerRect.top = ${containerRect.top}\ncontainerRect.bottom = ${containerRect.bottom}\ncontainerRect.height = ${containerRect.height}\nwindow.innerHeight = ${window.innerHeight}\ndocument.documentElement.clientHeight = ${document.documentElement.clientHeight}\nvisualViewport.height = ${window.visualViewport ? window.visualViewport.height : 'N/A'}\nvisualViewport.offsetTop = ${window.visualViewport ? window.visualViewport.offsetTop : 'N/A'}\nvisualViewport.scale = ${window.visualViewport ? window.visualViewport.scale : 'N/A'}\ncomputed top = ${playerRect.top}\ncomputed bottom = ${window.innerHeight - playerRect.bottom}\ncomputed height = ${playerRect.height}\ncomputed transform = ${window.getComputedStyle(playerEl).transform}`);
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [windowWidth]);
 
     // Sync isAnyAppOpen changes to start an animation using the exact same power4.out easing/timing as subapps
     useEffect(() => {
@@ -834,8 +858,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Absolutely NO transitions or delays; the layout updates frame-by-frame on RAF in full synchronization
                 playerContainerRef.current.style.transition = 'none';
 
-                const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
                 const isStacked = window.innerWidth < 900;
+                const isDesktopLayout = window.innerWidth >= 900;
                 const pct = 50 * t;
                 const offsetPx = isStacked
                     ? dockedConfig.left * (1 - t) - (floatingConfig.width / 2) * t
@@ -845,10 +869,121 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const currentHeight = dockedConfig.height + (floatingConfig.height - dockedConfig.height) * t;
                 const currentBottom = dockedConfig.bottom + (floatingConfig.bottom - dockedConfig.bottom) * t;
 
-                const posWidth = `${currentWidth / rootFontSize}rem`;
-                const posHeight = `${currentHeight / rootFontSize}rem`;
-                const posBottom = `${currentBottom / rootFontSize}rem`;
-                const posLeft = `calc(${pct}% + ${offsetPx / rootFontSize}rem)`;
+                // --- DESKTOP DYNAMIC OCCLUSION RESIZING (WITH PREDICTIVE DIRECTION-AWARE COGNIZANCE) ---
+                let overlap = 0;
+                let isOccluded = false;
+                let appLeft: number | null = null;
+                const safetyGap = 16; // constant 1rem margin from app
+                const minimumUsableWidth = 340; // absolute floor width for player controls integrity
+                const predictiveBuffer = 120; // px threshold where compression initiates *before* contact
+
+                if (isDesktopLayout) {
+                    const appElements = document.querySelectorAll('.spotify-app-panel');
+                    const playerLeft = window.innerWidth * (pct / 100) + offsetPx;
+                    
+                    for (let i = 0; i < appElements.length; i++) {
+                        const el = appElements[i] as HTMLElement;
+                        const style = window.getComputedStyle(el);
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                            const appRect = el.getBoundingClientRect();
+                            if (appRect.width > 0) {
+                                appLeft = appRect.left;
+                                const playerRight = playerLeft + currentWidth;
+                                
+                                // Real-time screen-space geometric intersection check
+                                const interLeft = Math.max(playerLeft, appRect.left);
+                                const interRight = Math.min(playerRight, appRect.right);
+                                
+                                const realPlayerRect = playerContainerRef.current.getBoundingClientRect();
+                                const interTop = Math.max(realPlayerRect.top, appRect.top);
+                                const interBottom = Math.min(realPlayerRect.bottom, appRect.bottom);
+                                
+                                const intersectionWidth = interRight - interLeft;
+                                const intersectionHeight = interBottom - interTop;
+
+                                if (intersectionWidth > 0 && intersectionHeight > 0) {
+                                    overlap = intersectionWidth;
+                                    isOccluded = true;
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // Movement and velocity prediction calculations
+                    let predictedAppLeft = appLeft;
+                    let distance = 9999;
+                    let ratio = 1.0;
+                    let maxCompression = 0;
+
+                    if (appLeft !== null) {
+                        const prevLeft = prevAppLeftRef.current !== null ? prevAppLeftRef.current : appLeft;
+                        const velocity = appLeft - prevLeft;
+                        prevAppLeftRef.current = appLeft;
+
+                        // Predict app left boundary if it is actively moving left (towards the player)
+                        if (velocity < 0) {
+                            const predictionWindow = 12; // anticipate 12 frames ahead
+                            predictedAppLeft = appLeft + velocity * predictionWindow;
+                        }
+
+                        // Calculate distance from player's right edge to the app's predicted safety boundary
+                        distance = (predictedAppLeft - safetyGap) - (playerLeft + currentWidth);
+
+                        // Compression starts once the safety boundary crosses the predictive buffer threshold
+                        ratio = Math.max(0, Math.min(1, distance / predictiveBuffer));
+                        const targetAtContact = predictedAppLeft - safetyGap - playerLeft;
+                        maxCompression = Math.max(0, currentWidth - targetAtContact);
+                    } else {
+                        prevAppLeftRef.current = null;
+                    }
+
+                    // Compute dynamic target width taking safety gap and predictive compression into account
+                    let desiredWidth = currentWidth;
+                    if (appLeft !== null && distance < predictiveBuffer) {
+                        desiredWidth = currentWidth - (1 - ratio) * maxCompression;
+                        desiredWidth = Math.max(minimumUsableWidth, desiredWidth);
+                    }
+
+                    // Smooth transition interpolation (lerp) to prevent layout snap and overshoots
+                    if (adjustedWidthRef.current === null) {
+                        adjustedWidthRef.current = desiredWidth;
+                    } else {
+                        adjustedWidthRef.current += (desiredWidth - adjustedWidthRef.current) * 0.15;
+                    }
+
+                    // Output requested debug log on console (avoid duplicate logs for stable frames)
+                    const roundedTarget = Math.round(desiredWidth);
+                    if (appLeft !== null && roundedTarget !== lastLoggedTargetRef.current) {
+                        console.log(`[PLAYER OCCLUSION]\ndistance = ${Math.round(distance)}\npredictedOverlap = ${Math.round(maxCompression * (1 - ratio))}\ntargetWidth = ${roundedTarget}`);
+                        lastLoggedTargetRef.current = roundedTarget;
+                    }
+                } else {
+                    // Reset Desktop parameters when on tablet/mobile layout
+                    adjustedWidthRef.current = null;
+                    wasOccludedRef.current = false;
+                    prevAppLeftRef.current = null;
+                    lastLoggedTargetRef.current = null;
+                }
+
+                const displayWidth = (isDesktopLayout && adjustedWidthRef.current !== null)
+                    ? adjustedWidthRef.current
+                    : currentWidth;
+
+                // --- TABLET / MOBILE VIEWPORT OFFSET COMPENSATION ---
+                let viewportOffsetBottom = 0;
+                if (!isDesktopLayout && window.visualViewport) {
+                    const vv = window.visualViewport;
+                    // Compensate for Android/Samsung navigation & status bar offsets to ensure bottom anchoring is visual-viewport-relative
+                    viewportOffsetBottom = window.innerHeight - (vv.offsetTop + vv.height);
+                }
+
+                const adjustedBottom = currentBottom - viewportOffsetBottom;
+
+                const posWidth = `${(displayWidth) / 16}rem`;
+                const posHeight = `${(currentHeight) / 16}rem`;
+                const posBottom = `${(adjustedBottom) / 16}rem`;
+                const posLeft = `calc(${pct}% + ${(offsetPx) / 16}rem)`;
 
                 // Main player is ALWAYS COMPLETELY STATIC (transform: none)
                 playerContainerRef.current.style.width = posWidth;
@@ -893,17 +1028,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Synchronize Inner Wave Backdrop (Crisp concentric contour wave)
                 if (innerWaveBackdropRef.current) {
                     const innerD = glowFrame.innerWaveExcursionPx;
-                    const innerW = currentWidth + 2 * innerD;
+                    const innerW = displayWidth + 2 * innerD;
                     const innerH = currentHeight + 2 * innerD;
-                    const innerB = currentBottom - innerD;
+                    const innerB = adjustedBottom - innerD;
                     const innerOff = offsetPx - innerD;
                     const innerRad = 12 + innerD;
 
-                    innerWaveBackdropRef.current.style.width = `${innerW / rootFontSize}rem`;
-                    innerWaveBackdropRef.current.style.height = `${innerH / rootFontSize}rem`;
-                    innerWaveBackdropRef.current.style.bottom = `${innerB / rootFontSize}rem`;
-                    innerWaveBackdropRef.current.style.left = `calc(${pct}% + ${innerOff / rootFontSize}rem)`;
-                    innerWaveBackdropRef.current.style.borderRadius = `${innerRad / rootFontSize}rem`;
+                    innerWaveBackdropRef.current.style.width = `${innerW / 16}rem`;
+                    innerWaveBackdropRef.current.style.height = `${innerH / 16}rem`;
+                    innerWaveBackdropRef.current.style.bottom = `${innerB / 16}rem`;
+                    innerWaveBackdropRef.current.style.left = `calc(${pct}% + ${innerOff / 16}rem)`;
+                    innerWaveBackdropRef.current.style.borderRadius = `${innerRad / 16}rem`;
                     innerWaveBackdropRef.current.style.transform = 'none';
                     innerWaveBackdropRef.current.style.opacity = `${glowFrame.innerWaveOpacity.toFixed(3)}`;
                     innerWaveBackdropRef.current.style.boxShadow = glowFrame.innerWaveShadow;
@@ -914,17 +1049,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Synchronize Outer Wave Backdrop (Soft ambient concentric wave)
                 if (outerWaveBackdropRef.current) {
                     const outerD = glowFrame.outerWaveExcursionPx;
-                    const outerW = currentWidth + 2 * outerD;
+                    const outerW = displayWidth + 2 * outerD;
                     const outerH = currentHeight + 2 * outerD;
-                    const outerB = currentBottom - outerD;
+                    const outerB = adjustedBottom - outerD;
                     const outerOff = offsetPx - outerD;
                     const outerRad = 12 + outerD;
 
-                    outerWaveBackdropRef.current.style.width = `${outerW / rootFontSize}rem`;
-                    outerWaveBackdropRef.current.style.height = `${outerH / rootFontSize}rem`;
-                    outerWaveBackdropRef.current.style.bottom = `${outerB / rootFontSize}rem`;
-                    outerWaveBackdropRef.current.style.left = `calc(${pct}% + ${outerOff / rootFontSize}rem)`;
-                    outerWaveBackdropRef.current.style.borderRadius = `${outerRad / rootFontSize}rem`;
+                    outerWaveBackdropRef.current.style.width = `${outerW / 16}rem`;
+                    outerWaveBackdropRef.current.style.height = `${outerH / 16}rem`;
+                    outerWaveBackdropRef.current.style.bottom = `${outerB / 16}rem`;
+                    outerWaveBackdropRef.current.style.left = `calc(${pct}% + ${outerOff / 16}rem)`;
+                    outerWaveBackdropRef.current.style.borderRadius = `${outerRad / 16}rem`;
                     outerWaveBackdropRef.current.style.transform = 'none';
                     outerWaveBackdropRef.current.style.opacity = `${glowFrame.outerWaveOpacity.toFixed(3)}`;
                     outerWaveBackdropRef.current.style.boxShadow = glowFrame.outerWaveShadow;
@@ -1868,10 +2003,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     backgroundColor: isNight ? '#212121' : (widgetBgColor || '#ffffff'),
                     opacity: 1,
                     // Initial styles before JS takes over
-                    width: isAnyAppOpen ? `${dockedConfig.width / 16}rem` : `${floatingConfig.width / 16}rem`,
-                    height: isAnyAppOpen ? `${dockedConfig.height / 16}rem` : `${floatingConfig.height / 16}rem`,
-                    bottom: isAnyAppOpen ? `${dockedConfig.bottom / 16}rem` : `${floatingConfig.bottom / 16}rem`,
-                    left: isAnyAppOpen ? `${dockedConfig.left / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
+                    width: isAnyAppOpen ? `${(dockedConfig.width) / 16}rem` : `${(floatingConfig.width) / 16}rem`,
+                    height: isAnyAppOpen ? `${(dockedConfig.height) / 16}rem` : `${(floatingConfig.height) / 16}rem`,
+                    bottom: isAnyAppOpen ? `${(dockedConfig.bottom) / 16}rem` : `${(floatingConfig.bottom) / 16}rem`,
+                    left: isAnyAppOpen ? `${(dockedConfig.left) / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
                 }}
             >
                  <div className="relative w-full h-full">
