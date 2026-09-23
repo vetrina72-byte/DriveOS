@@ -60,8 +60,8 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
 
   const [carShadowOpacity, setCarShadowOpacity] = useState(0.40);
   const [aoMapIntensity, setAoMapIntensity] = useState(1.0);
-  const [carShadowWidth, setCarShadowWidth] = useState(20);
-  const [carShadowLength, setCarShadowLength] = useState(20);
+  const [carShadowWidth, setCarShadowWidth] = useState(3.2);
+  const [carShadowLength, setCarShadowLength] = useState(5.8);
   const [carShadowOffsetY, setCarShadowOffsetY] = useState(0.02);
   const [carShadowOffsetX, setCarShadowOffsetX] = useState(0.0);
   const [carShadowOffsetZ, setCarShadowOffsetZ] = useState(0.0);
@@ -105,7 +105,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
-  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(1.9);
+  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(-2.5);
   const [spinnerSize, setSpinnerSize] = useState(18);
   const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
   const [debugSpinner, setDebugSpinner] = useState(false);

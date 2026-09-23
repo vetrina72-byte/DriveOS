@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FaSpotify } from 'react-icons/fa';
 import { FiSearch, FiChevronLeft, FiSend } from 'react-icons/fi';
 import { ViewType } from './SpotifyPlayer';
@@ -30,7 +30,26 @@ interface TopNavBarProps {
 
 const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBack, showBackButton }: TopNavBarProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const navContainerRef = useRef<HTMLElement>(null);
+  const [navWidth, setNavWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const navEl = navContainerRef.current;
+    if (!navEl) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setNavWidth(entry.contentRect.width);
+      }
+    });
+
+    observer.observe(navEl);
+    return () => observer.disconnect();
+  }, []);
+
+  const isNavCompact = navWidth !== null && navWidth < 780;
+  const isNavVeryCompact = navWidth !== null && navWidth < 540;
+
   const textColor = 'var(--text-primary)';
   const secondaryTextColor = 'var(--text-secondary)';
   const hoverBg = isNight ? 'hover:bg-white/10' : 'hover:bg-black/5';
@@ -49,9 +68,9 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
   };
   
   return (
-    <nav className="w-full px-6 pt-6 pb-4 flex-shrink-0 z-30 relative flex items-center justify-between gap-4">
+    <nav ref={navContainerRef} className={`w-full ${isNavCompact ? 'px-3.5 pt-4 pb-3 gap-2' : 'px-6 pt-6 pb-4 gap-4'} flex-shrink-0 z-30 relative flex items-center justify-between`}>
       {/* Left side: Logo/Back + Search */}
-      <div className="flex items-center gap-4 flex-shrink-0">
+      <div className={`flex items-center ${isNavCompact ? 'gap-2' : 'gap-4'} flex-shrink-0`}>
         {showBackButton ? (
           <button onClick={onBack} className={`p-2 -ml-2 rounded-full transition-colors ${hoverBg}`} aria-label="Indietro">
             <FiChevronLeft className={`w-7 h-7`} style={{ color: textColor }} />
@@ -59,29 +78,29 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
         ) : (
           <FaSpotify className={`w-8 h-8`} style={{ color: 'var(--text-spotify-logo)' }}/>
         )}
-        <form onSubmit={handleSearchSubmit} className="relative flex-grow max-w-xs">
-          <FiSearch className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5`} style={{ color: secondaryTextColor }} />
+        <form onSubmit={handleSearchSubmit} className={`relative flex-grow transition-all duration-200 ${isNavVeryCompact ? 'max-w-[130px]' : (isNavCompact ? 'max-w-[170px]' : 'max-w-xs')}`}>
+          <FiSearch className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${isNavCompact ? 'w-4 h-4' : 'w-5 h-5'}`} style={{ color: secondaryTextColor }} />
           <input
             type="text"
             placeholder="Cosa vuoi ascoltare?"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full pl-11 pr-10 py-3 rounded-full text-sm font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
+            className={`w-full ${isNavCompact ? 'pl-8 pr-7 py-2 text-xs' : 'pl-11 pr-10 py-3 text-sm'} font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
             style={{ color: textColor }}
           />
            <button 
             type="submit"
-            className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-colors duration-200 ${hoverBg}`}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors duration-200 ${hoverBg}`}
             aria-label="Cerca"
           >
-              <FiSend className="w-4 h-4" style={{color: textColor}}/>
+              <FiSend className={`${isNavCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} style={{color: textColor}}/>
           </button>
         </form>
       </div>
       
       {/* Right side: Navigation Links & User Profile */}
-      <div className="flex items-center gap-3 ml-auto flex-shrink-0">
-        <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none">
+      <div className={`flex items-center ${isNavCompact ? 'gap-1.5' : 'gap-3'} ml-auto min-w-0 flex-1 justify-end`}>
+        <div className={`flex items-center ${isNavCompact ? 'gap-1' : 'gap-2'} overflow-x-auto py-1 scrollbar-none min-w-0`}>
           {navLinks.map((link) => {
             const linkView = linkToViewMap[link];
             if (!linkView) return null;
@@ -92,15 +111,11 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
             const fontWeight = isActive || isDj ? 'font-bold' : 'font-semibold';
 
             return (
-              <div key={link} className="relative inline-flex items-center">
+              <div key={link} className="relative inline-flex items-center flex-shrink-0">
                 <a
                   href="#"
-                  onClick={(e) => { 
-                    e.preventDefault(); 
-                    if (isDj) console.log('[AI DJ FLOW] USER CLICK -> TopNavBar navigate to AI DJ');
-                    onNavigate(linkView); 
-                  }}
-                  className={`relative z-10 px-3.5 py-1.5 rounded-full text-sm whitespace-nowrap transition-all duration-200 ${fontWeight} ${
+                  onClick={(e) => { e.preventDefault(); onNavigate(linkView); }}
+                  className={`relative z-10 ${isNavCompact ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm'} rounded-full whitespace-nowrap transition-all duration-200 ${fontWeight} ${
                     isActive 
                       ? (isNight ? 'bg-white/15' : 'bg-black/10') 
                       : hoverBg

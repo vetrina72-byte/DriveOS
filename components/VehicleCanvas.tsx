@@ -449,20 +449,15 @@ function SceneController({
     return Math.min(1.0, Math.max(0.0, (aspect - 1.0) / 0.77));
   }, [size.height]);
 
-  // Aggiornamento dinamico del FOV per schermi stretti (Portrait/Mobile)
+  // Mantieni il FOV fisso e stabile a 48 per evitare scatti visivi durante il resize
   useEffect(() => {
     if (camera instanceof THREE.PerspectiveCamera) {
-      const W = window.innerWidth;
-      if (W < 768) {
-        camera.fov = 68;
-      } else if (W < 1024) {
-        camera.fov = 58;
-      } else {
+      if (camera.fov !== 48) {
         camera.fov = 48;
+        camera.updateProjectionMatrix();
       }
-      camera.updateProjectionMatrix();
     }
-  }, [camera, size]);
+  }, [camera]);
 
   const localHomeConfig = useMemo(() => {
     let baseModelScale = homeConfig.modelScale;
@@ -1606,8 +1601,8 @@ function VehicleCanvas({
   headlightConfig,
   dragProgress,
   carShadowOpacity = 0.40,
-  carShadowWidth = 20,
-  carShadowLength = 20,
+  carShadowWidth = 3.2,
+  carShadowLength = 5.8,
   carShadowOffsetY = 0.02,
   carShadowOffsetX = 0.0,
   carShadowOffsetZ = 0.0,

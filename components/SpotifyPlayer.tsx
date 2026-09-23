@@ -330,7 +330,6 @@ const SpotifyPlayer = ({
     const handleSelectItem = (item: MediaItem) => {
         if (item.id === 'liked-songs') { changeView({ type: 'playlist', id: 'liked-songs' }); return; }
         if (item.id === 'spotify-dj' || item.uri?.includes('37i9dQZF1EYkqdzj48dyYq') || item.name?.toLowerCase().includes('spotify dj') || item.name?.toLowerCase() === 'dj spotify') {
-            console.log('[AI DJ FLOW] USER CLICK -> AI DJ SELECT ITEM -> OPEN AI DJ VIEW');
             changeView({ type: 'ai-dj' });
             return;
         }

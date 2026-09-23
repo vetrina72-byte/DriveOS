@@ -4,7 +4,7 @@ import ContentCarousel from './ContentCarousel';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
 import { useAuth, type SpotifyUser } from '@/context/AuthContext';
 import { wikiSpotifyLogoUrl, officialSpotifyDjLogoUrl } from './TopNavBar';
-import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjAudioAnalyzer } from '../services/AiDjAudioAnalyzer';
+import { isSpotifyAiDj, isSpotifyAiDjPlaying } from '../services/AiDjVisualState';
 
 // Helper for dynamic greeting
 const getGreeting = () => {
@@ -108,12 +108,6 @@ const ContentArea = React.memo(({
 
   const handleToggleDjPlayback = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    console.log('[AI DJ FLOW] USER CLICK -> AI DJ START HANDLER (ContentArea hero button)');
-    if (!aiDjAudioAnalyzer.isLoopbackActive()) {
-      aiDjAudioAnalyzer.startLoopbackCapture().catch((err) => {
-        console.error('[AI DJ CAPTURE] startLoopbackCapture rejected from ContentArea:', err);
-      });
-    }
     if (onPlayDJ) {
       onPlayDJ();
       return;
@@ -176,16 +170,16 @@ const ContentArea = React.memo(({
   return (
     <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
       <h1 
-        className="text-3xl font-bold mb-6 px-6"
+        className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 sm:mb-6 px-3 sm:px-6"
         style={{ color: 'var(--heading-color)' }}
       >
         {greeting}, {user?.display_name}!
       </h1>
 
       {/* Spotify DJ Feature Card with Clean Black & White Aesthetic */}
-      <div className="px-6 mb-8">
+      <div className="px-3 sm:px-6 mb-6 sm:mb-8">
         <div 
-          className={`relative overflow-hidden rounded-2xl p-5 border transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+          className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-5 border transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 ${
             isNight 
               ? 'bg-[#121212] border-zinc-800 hover:border-zinc-700 shadow-lg' 
               : 'bg-white border-zinc-200 hover:border-zinc-300 shadow-sm'
@@ -193,19 +187,19 @@ const ContentArea = React.memo(({
         >
           <div 
             onClick={() => onOpenDjView?.()}
-            className="flex items-center gap-4 relative z-10 cursor-pointer group"
+            className="flex items-center gap-3 sm:gap-4 relative z-10 cursor-pointer group min-w-0"
           >
             <div className="flex-shrink-0 relative">
               <img 
                 src={officialSpotifyDjLogoUrl} 
                 alt="Spotify AI DJ Logo" 
-                className="w-14 h-14 rounded-xl flex-shrink-0 object-cover shadow-md border border-white/10 group-hover:scale-105 transition-transform" 
+                className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex-shrink-0 object-cover shadow-md border border-white/10 group-hover:scale-105 transition-transform" 
                 referrerPolicy="no-referrer" 
               />
             </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-base font-bold group-hover:text-[#1db954] transition-colors ${isNight ? 'text-white' : 'text-zinc-900'}`}>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 sm:mb-1 flex-wrap">
+                <span className={`text-sm sm:text-base font-bold group-hover:text-[#1db954] transition-colors ${isNight ? 'text-white' : 'text-zinc-900'}`}>
                   Spotify AI DJ
                 </span>
                 {isDjActive && (
@@ -218,7 +212,7 @@ const ContentArea = React.memo(({
                   </span>
                 )}
               </div>
-              <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-600'} max-w-md leading-relaxed`}>
+              <p className={`text-[11px] sm:text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-600'} max-w-md leading-relaxed truncate sm:whitespace-normal`}>
                 La tua guida musicale personale con selezione intelligente dei brani e commenti vocali dedicati.
               </p>
             </div>

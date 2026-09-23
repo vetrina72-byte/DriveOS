@@ -6,22 +6,32 @@
 @media screen and (orientation: landscape) {
   html {
     /* Reference resolution: 1280px wide. 16px default font-size. 
-       16 / 1280 = 0.0125 -> 1.25vw */
-    font-size: 1.25vw;
+       Use clamp to ensure font size doesn't collapse to tiny fraction on small widths */
+    font-size: clamp(12px, 1.25vw, 18px);
   }
 }
 
 @media screen and (orientation: portrait) {
   html {
-    /* If forced into portrait, we scale based on height to maintain landscape-like proportions or max-width */
-    font-size: 1.25vh;
+    font-size: clamp(12px, 1.25vh, 18px);
   }
 }
 
 body {
-  /* Prevent scrolling if somehow content escapes */
+  /* Prevent scrolling if content escapes */
   overflow: hidden;
   touch-action: none;
+}
+
+/* Custom scrollbar hiding utilities */
+.no-scrollbar::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar,
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 @keyframes marquee {

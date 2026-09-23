@@ -793,7 +793,7 @@ function AppContent() {
             isNight={useDarkTheme} 
             dockedConfig={{ width: responsiveDockedWidth, bottom: playerFloatingBottom, left: responsiveDockedLeft, height: playerDockedHeight }} 
             floatingConfig={{ width: responsiveFloatingPlayerWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: responsiveNavigateToolWidth }} 
-            playerControlsSize={isMobileOrTablet ? Math.max(16, playerControlsSize * 0.8) : playerControlsSize} 
+            playerControlsSize={playerControlsSize} 
             playerControlsGap={playerControlsGap} 
             playerControlsVerticalPosition={playerControlsVerticalPosition} 
             spinnerSize={spinnerSize} 
@@ -816,8 +816,8 @@ function AppContent() {
             dragProgress={dragProgressRef} 
             progressBarHeight={progressBarHeight} 
             progressBarVerticalOffset={progressBarVerticalOffset} 
-            playButtonScale={isMobileOrTablet ? Math.max(0.8, playButtonScale * 0.8) : playButtonScale} 
-            skipButtonScale={isMobileOrTablet ? Math.max(0.8, skipButtonScale * 0.8) : skipButtonScale} 
+            playButtonScale={playButtonScale} 
+            skipButtonScale={skipButtonScale} 
         />
         <AppLauncher isOpen={isAppLauncherOpen} width={appLauncherWidth} height={appLauncherHeight} apps={launcherApps.map(id => ALL_APPS.find(app => app.id === id)!)} isCustomizing={isCustomizing} onCustomizeClick={moveAppToDock} onAppLaunch={toggleApp} isNight={useDarkTheme}/>
         {isAppLauncherOpen && <button onClick={(e) => { e.stopPropagation(); setIsCustomizing(prev => !prev); }} className={`fixed left-1/2 -translate-x-1/2 z-[8000] px-6 py-2 rounded-full font-semibold transition-all duration-300 ease-out shadow-lg ${isCustomizing ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800/80 hover:bg-zinc-700/90 text-gray-200 border border-white/20 backdrop-blur-sm'} ${isAppLauncherOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} style={{ bottom: `calc(6rem + ${(appLauncherHeight) / 16}rem + 0.75rem)` }}>{isCustomizing ? 'Fine' : 'Personalizza'}</button>}

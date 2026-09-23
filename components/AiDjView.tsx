@@ -4,8 +4,7 @@ import { officialSpotifyDjLogoUrl } from './TopNavBar';
 import { useAuth } from '../context/AuthContext';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
 import ContentCarousel from './ContentCarousel';
-import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjAudioAnalyzer } from '../services/AiDjAudioAnalyzer';
-import { AiDjAudioMonitor } from './AiDjAudioMonitor';
+import { isSpotifyAiDj, isSpotifyAiDjPlaying } from '../services/AiDjVisualState';
 
 interface AiDjViewProps {
   isNight: boolean;
@@ -46,12 +45,6 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
 
   const handleToggleDj = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    console.log('[AI DJ FLOW] USER CLICK -> AI DJ START HANDLER (AiDjView hero button)');
-    if (!aiDjAudioAnalyzer.isLoopbackActive()) {
-      aiDjAudioAnalyzer.startLoopbackCapture().catch((err) => {
-        console.error('[AI DJ CAPTURE] startLoopbackCapture rejected from AiDjView:', err);
-      });
-    }
     if (isDjPlaying) {
       pauseSpotify();
     } else if (isDjActive) {
@@ -82,13 +75,10 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
     },
     {
       icon: <Disc className="w-5 h-5" />,
-      title: 'Cambia Atmosfera al Volo',
-      description: 'Tocca il pulsante Cambia Mood durante la riproduzione per passare ad un nuovo genere musicale.',
+      title: 'Selezione Dinamica',
+      description: 'L\'AI DJ adatta automaticamente brani e generi musicali alle tue preferenze e abitudini d\'ascolto.',
     },
   ];
-
-  // Internal debug flag: keep false in production so no diagnostic UI is visible
-  const SHOW_DEBUG_AUDIO_MONITOR = false;
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto pb-10 hide-scrollbar px-6 pt-2">
@@ -170,10 +160,6 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
                 </>
               )}
             </button>
-
-            <span className={`text-[11px] font-medium ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-              {isDjActive ? (isDjPlaying ? 'In riproduzione' : 'In pausa') : 'Tocca per iniziare'}
-            </span>
           </div>
         </div>
 
@@ -215,13 +201,6 @@ export const AiDjView: React.FC<AiDjViewProps> = ({ isNight, onSelectItem }) => 
           </div>
         )}
       </div>
-
-      {/* Internal diagnostic monitor (rendered only if SHOW_DEBUG_AUDIO_MONITOR is true) */}
-      {SHOW_DEBUG_AUDIO_MONITOR && (
-        <div className="mb-8">
-          <AiDjAudioMonitor isDjActive={isDjActive} isDjPlaying={isDjPlaying} isNight={isNight} />
-        </div>
-      )}
 
       {/* Feature Explanation Section */}
       <div className="mb-10">

@@ -73,30 +73,30 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   // Special rendering for the "Liked Songs" playlist
   if (item.id === 'liked-songs') {
       return (
-          <div onClick={() => onSelectItem(item)} className="p-3 rounded-lg transition-all duration-200 cursor-pointer w-full max-w-[11rem] mx-auto bg-gradient-to-br from-indigo-800 to-purple-800 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105">
-              <div className="relative w-full aspect-square mb-3 flex items-center justify-center">
-                  <FiHeart className="w-16 h-16 text-white/90" />
+          <div onClick={() => onSelectItem(item)} className="p-2 sm:p-3 rounded-lg transition-all duration-200 cursor-pointer w-full mx-auto bg-gradient-to-br from-indigo-800 to-purple-800 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105">
+              <div className="relative w-full aspect-square mb-2 sm:mb-3 flex items-center justify-center">
+                  <FiHeart className="w-10 h-10 sm:w-16 sm:h-16 text-white/90" />
               </div>
-              <h3 className="font-bold truncate text-white">{item.name}</h3>
-              <p className="text-sm truncate text-gray-300">{sanitizedDescription}</p>
+              <h3 className="font-bold truncate text-xs sm:text-sm text-white">{item.name}</h3>
+              <p className="text-[11px] sm:text-xs truncate text-gray-300">{sanitizedDescription}</p>
           </div>
       );
   }
 
   const getPlaceholderIcon = () => {
     switch (item.type) {
-      case 'artist': return <FiUser className={`w-10 h-10 ${placeholderIconColor}`} />;
-      case 'show': return <FiMic className={`w-10 h-10 ${placeholderIconColor}`} />;
-      case 'playlist': return <FaSpotify className={`w-10 h-10 ${placeholderIconColor}`} />;
-      case 'category': return <FiMusic className={`w-10 h-10 ${placeholderIconColor}`} />;
-      case 'station': return <FiRadio className={`w-10 h-10 ${placeholderIconColor}`} />;
-      default: return <FiMusic className={`w-10 h-10 ${placeholderIconColor}`} />;
+      case 'artist': return <FiUser className={`w-8 h-8 sm:w-10 sm:h-10 ${placeholderIconColor}`} />;
+      case 'show': return <FiMic className={`w-8 h-8 sm:w-10 sm:h-10 ${placeholderIconColor}`} />;
+      case 'playlist': return <FaSpotify className={`w-8 h-8 sm:w-10 sm:h-10 ${placeholderIconColor}`} />;
+      case 'category': return <FiMusic className={`w-8 h-8 sm:w-10 sm:h-10 ${placeholderIconColor}`} />;
+      case 'station': return <FiRadio className={`w-8 h-8 sm:w-10 sm:h-10 ${placeholderIconColor}`} />;
+      default: return <FiMusic className={`w-8 h-8 sm:w-10 sm:h-10 ${placeholderIconColor}`} />;
     }
   }
 
   return (
-    <div onClick={() => onSelectItem(item)} className={`p-3 rounded-lg transition-colors duration-200 w-full max-w-[11rem] mx-auto ${bgColor} cursor-pointer`}>
-      <div className="relative w-full aspect-square mb-3">
+    <div onClick={() => onSelectItem(item)} className={`p-2 sm:p-3 rounded-lg transition-colors duration-200 w-full mx-auto ${bgColor} cursor-pointer`}>
+      <div className="relative w-full aspect-square mb-2 sm:mb-3">
         {imageUrl && !imageError ? (
           <img 
             src={imageUrl} 
@@ -112,8 +112,8 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
           </div>
         )}
       </div>
-      <h3 className={`font-bold truncate ${textColorPrimary}`}>{item.name}</h3>
-      <p className={`text-sm truncate ${textColorSecondary}`}>{sanitizedDescription}</p>
+      <h3 className={`font-bold truncate text-xs sm:text-sm ${textColorPrimary}`}>{item.name}</h3>
+      <p className={`text-[11px] sm:text-xs truncate ${textColorSecondary}`}>{sanitizedDescription}</p>
     </div>
   );
 };

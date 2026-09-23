@@ -49,9 +49,9 @@ const ContentCarousel = React.memo(({ title, items, isNight, onSelectItem, keyPr
   };
 
   return (
-    <section className="mb-8 relative will-change-transform">
+    <section className="mb-6 sm:mb-8 relative will-change-transform">
       <h2 
-        className="text-2xl font-bold mb-4 px-6" 
+        className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 px-3 sm:px-6" 
         style={{ color: `var(--heading-color)` }}
       >
         {title}
@@ -60,26 +60,26 @@ const ContentCarousel = React.memo(({ title, items, isNight, onSelectItem, keyPr
       <button
           onClick={() => scroll('left')}
           disabled={!canScrollLeft}
-          className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-md transition-opacity duration-300 disabled:opacity-0 disabled:pointer-events-none ${buttonBg}`}
+          className={`absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-10 p-2 sm:p-3 rounded-full shadow-md transition-opacity duration-300 disabled:opacity-0 disabled:pointer-events-none ${buttonBg}`}
           aria-label="Scroll left"
       >
-          <FiChevronLeft className={`w-6 h-6 ${buttonIconColor}`} />
+          <FiChevronLeft className={`w-4 h-4 sm:w-6 sm:h-6 ${buttonIconColor}`} />
       </button>
       <button
           onClick={() => scroll('right')}
           disabled={!canScrollRight}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-md transition-opacity duration-300 disabled:opacity-0 disabled:pointer-events-none ${buttonBg}`}
+          className={`absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-10 p-2 sm:p-3 rounded-full shadow-md transition-opacity duration-300 disabled:opacity-0 disabled:pointer-events-none ${buttonBg}`}
           aria-label="Scroll right"
       >
-          <FiChevronRight className={`w-6 h-6 ${buttonIconColor}`} />
+          <FiChevronRight className={`w-4 h-4 sm:w-6 sm:h-6 ${buttonIconColor}`} />
       </button>
 
       <div
         ref={scrollRef}
-        className="spotify-carousel gap-4 px-6 overflow-x-auto flex scroll-smooth hide-scrollbar"
+        className="spotify-carousel gap-2.5 sm:gap-4 px-3 sm:px-6 overflow-x-auto flex scroll-smooth hide-scrollbar"
       >
         {validItems.map((item, index) => (
-          <div className="py-2 flex-shrink-0 w-44" key={`${keyPrefix}-${item.id || index}`}>
+          <div className="py-1.5 sm:py-2 flex-shrink-0 w-32 sm:w-36 md:w-44" key={`${keyPrefix}-${item.id || index}`}>
             <PlaylistItem item={item} isNight={isNight} onSelectItem={(selectedItem) => onSelectItem(selectedItem, items)} />
           </div>
         ))}

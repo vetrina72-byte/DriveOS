@@ -87,20 +87,18 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ isNight = true
         />
       </button>
 
-      {/* Dropdown Menu Card - Glassmorphism & Compact */}
+      {/* Dropdown Menu Card - Solid Opaque & Clean Compact Layout */}
       {isOpen && (
         <div
           id="spotify-profile-dropdown"
           style={{
-            background: isNight ? 'rgba(18, 18, 18, 0.75)' : 'rgba(255, 255, 255, 0.85)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: isNight ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)',
+            background: isNight ? '#18181b' : '#ffffff',
+            border: isNight ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(0, 0, 0, 0.15)',
           }}
-          className="absolute right-0 top-full mt-2 w-60 rounded-xl shadow-2xl p-3 transition-all duration-200 animate-in fade-in zoom-in-95 z-[999] pointer-events-auto"
+          className="absolute right-0 top-full mt-2 w-60 rounded-xl shadow-2xl p-3.5 transition-all duration-200 animate-in fade-in zoom-in-95 z-[999] pointer-events-auto"
         >
-          {/* Header Info */}
-          <div className="flex items-center gap-2.5 pb-2.5 border-b border-white/10">
+          {/* Header Info: Name, Email, Premium status */}
+          <div className="flex items-center gap-2.5 pb-3 border-b border-white/10">
             {profileImageUrl ? (
               <img
                 src={profileImageUrl}
@@ -109,26 +107,26 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ isNight = true
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-9 h-9 rounded-full bg-emerald-600/90 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
+              <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
                 {displayName.charAt(0).toUpperCase()}
               </div>
             )}
 
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="font-bold text-xs truncate leading-snug text-white">
+              <span className={`font-bold text-xs truncate leading-snug ${isNight ? 'text-white' : 'text-zinc-900'}`}>
                 {displayName}
               </span>
               {user.email && (
-                <span className="text-[10px] text-zinc-400 truncate">
+                <span className={`text-[10px] truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                   {user.email}
                 </span>
               )}
-              <div className="flex items-center gap-1 mt-0.5">
+              <div className="flex items-center gap-1 mt-1">
                 <span
                   className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-bold uppercase tracking-wider ${
                     isPremium
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                      : (isNight ? 'bg-zinc-800 text-zinc-400 border border-zinc-700' : 'bg-zinc-200 text-zinc-600 border border-zinc-300')
                   }`}
                 >
                   <Sparkles size={8} />
@@ -138,26 +136,16 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ isNight = true
             </div>
           </div>
 
-          {/* Connection status */}
-          <div className="py-2 space-y-1 text-xs text-zinc-400 border-b border-white/10">
-            <div className="flex items-center justify-between py-0.5">
-              <span className="flex items-center gap-1 text-[10.5px]">
-                <Shield size={11} className="text-zinc-400" />
-                Connessione Spotify
-              </span>
-              <span className="text-[10.5px] font-semibold text-emerald-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Attiva
-              </span>
-            </div>
-          </div>
-
-          {/* Logout Action - Discrete Minimal Styling */}
-          <div className="pt-2">
+          {/* Logout Action - Completely Flat, Borderless & Red */}
+          <div className="pt-2.5">
             <button
               id="spotify-logout-button"
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg font-semibold text-xs text-zinc-300 hover:text-red-300 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 transition-all duration-150 active:scale-[0.98]"
+              className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs bg-transparent transition-all duration-150 active:scale-[0.98] ${
+                isNight
+                  ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
+                  : 'text-red-600 hover:text-red-700 hover:bg-red-500/10'
+              }`}
             >
               <LogOut size={13} />
               <span>Disconnetti</span>
