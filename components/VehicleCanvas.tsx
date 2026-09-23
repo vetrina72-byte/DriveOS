@@ -466,8 +466,8 @@ function SceneController({
     const W = window.innerWidth;
     const H = window.innerHeight;
     
-    if (W < 1024) {
-      const scaleFactor = Math.max(0.55, W / 1024);
+    if (W < 1180) {
+      const scaleFactor = Math.max(0.55, W / 1180);
       baseModelScale = homeConfig.modelScale * scaleFactor;
       
       if (W < 768 && H > W) {
@@ -506,17 +506,17 @@ function SceneController({
     const W = window.innerWidth;
     const H = window.innerHeight;
     
-    if (W < 1024) {
-      const scaleFactor = Math.max(0.40, W / 1024);
+    if (W < 1180) {
+      const scaleFactor = Math.max(0.40, W / 1180);
       baseModelScale = appOpenConfig.modelScale * scaleFactor;
       
       if (W < 768) {
         // Su mobile stretto, spostiamo ancora più a sinistra. L'app prende l'85% dello schermo a destra.
         // C'è solo un 15% a sinistra. Quindi dobbiamo "spingere" la camera molto a destra per far apparire la macchina a sinistra (oppure spingere la macchina a sinistra).
-        baseModelX = appOpenConfig.modelPos.x - 3.5; 
+        baseModelX = appOpenConfig.modelPos.x - 3.0; 
         baseModelY = appOpenConfig.modelPos.y + (H > W ? 1.5 : 0); // Sposta leggermente in alto se portrait
       } else {
-        baseModelX = appOpenConfig.modelPos.x - 1.5;
+        baseModelX = appOpenConfig.modelPos.x - 1.2;
       }
     }
 

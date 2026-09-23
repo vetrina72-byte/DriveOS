@@ -78,14 +78,14 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
         ) : (
           <FaSpotify className={`w-8 h-8`} style={{ color: 'var(--text-spotify-logo)' }}/>
         )}
-        <form onSubmit={handleSearchSubmit} className={`relative flex-grow transition-all duration-200 ${isNavVeryCompact ? 'max-w-[130px]' : (isNavCompact ? 'max-w-[170px]' : 'max-w-xs')}`}>
+        <form onSubmit={handleSearchSubmit} className={`relative flex-grow transition-all duration-200 ${isNavVeryCompact ? 'max-w-[130px]' : (isNavCompact ? 'max-w-[170px]' : 'w-[260px] md:w-[320px] lg:w-[380px] xl:w-[440px]')}`}>
           <FiSearch className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${isNavCompact ? 'w-4 h-4' : 'w-5 h-5'}`} style={{ color: secondaryTextColor }} />
           <input
             type="text"
             placeholder="Cosa vuoi ascoltare?"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full ${isNavCompact ? 'pl-8 pr-7 py-2 text-xs' : 'pl-11 pr-10 py-3 text-sm'} font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
+            className={`w-full ${isNavCompact ? 'pl-8 pr-7 py-2 text-xs rounded-full' : 'pl-11 pr-10 py-3 text-sm rounded-full'} font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
             style={{ color: textColor }}
           />
            <button 

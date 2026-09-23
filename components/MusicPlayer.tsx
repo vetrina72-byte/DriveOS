@@ -660,7 +660,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-    const isMobileOrTablet = windowWidth < 900;
+    const isMobileOrTablet = windowWidth < 1180;
     
     const [containerWidth, setContainerWidth] = useState<number | null>(null);
     const [isCompactLayout, setIsCompactLayout] = useState(false);
@@ -799,7 +799,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     // Periodic tablet geometry debugger for specific device layout tracking
     useEffect(() => {
-        const isTablet = windowWidth < 900;
+        const isTablet = windowWidth < 1180;
         if (!isTablet) return;
 
         const interval = setInterval(() => {

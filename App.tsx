@@ -531,7 +531,8 @@ function AppContent() {
   // Calculate if the player's space is actually occluded or occupied by an open app
   const isPlayerOccluded = useMemo(() => {
       if (isAppLauncherOpen) return true; // Launcher always occupies the bottom center space
-      if (!activeApp || activeApp === 'maps') return false; // No app or background maps covers the player
+      if (!activeApp) return false; // No app covers the player
+      if (activeApp === 'maps') return true; // Opening the maps app should also dock the player
 
       const appLeft = getAppLeftEdge(windowWidth, activeApp, isMapsLayered);
       
@@ -552,7 +553,7 @@ function AppContent() {
   }, [activeApp, isAppLauncherOpen, windowWidth, isMapsLayered, playerFloatingWidth, navigateToolWidth]);
   
     // RESPONSIVE CONFIGURATIONS FOR PLAYER & NAVIGATION WIDGET
-    const isMobileOrTablet = windowWidth < 900;
+    const isMobileOrTablet = windowWidth < 1180;
 
     const responsiveFloatingPlayerWidth = useMemo(() => {
         if (isMobileOrTablet) {
