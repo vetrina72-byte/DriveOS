@@ -663,6 +663,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const isMobileOrTablet = windowWidth < 900;
     
     const [containerWidth, setContainerWidth] = useState<number | null>(null);
+    const [isCompactLayout, setIsCompactLayout] = useState(false);
 
     useEffect(() => {
         const playerEl = playerContainerRef.current;
@@ -670,7 +671,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
-                setContainerWidth(entry.contentRect.width);
+                const w = entry.contentRect.width;
+                setContainerWidth(w);
+
+                // Dynamic layout mode selection based strictly on actual measured player width with hysteresis
+                // Thresholds: Enter compact below 510px, exit compact above 525px
+                setIsCompactLayout((prevIsCompact) => {
+                    let nextCompact = prevIsCompact;
+                    if (prevIsCompact) {
+                        nextCompact = w < 525; // Stay compact until width exceeds 525px
+                    } else {
+                        nextCompact = w < 510; // Become compact when width drops below 510px
+                    }
+                    console.log(`[PLAYER RESPONSIVE] availableWidth = ${Math.round(w)}px, mode = ${nextCompact ? 'COMPACT' : 'NORMAL'}`);
+                    return nextCompact;
+                });
             }
         });
 
@@ -678,18 +693,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         return () => observer.disconnect();
     }, []);
 
-    // Proportional scale factor based on actual container width (440px is reference desktop width)
-    const scaleFactor = containerWidth && containerWidth < 440 ? Math.max(0.72, containerWidth / 440) : 1.0;
-
-    // Gentle icon scale so buttons stay large, legible, and clickable
-    const buttonScaleFactor = containerWidth && containerWidth < 410 ? Math.max(0.98, containerWidth / 440) : 1.0;
-
-    // Scale controls gap proportionally so relative spatial distances are strictly preserved
-    const currentControlsGap = containerWidth && containerWidth < 410 ? Math.max(8, playerControlsGap * (containerWidth / 440)) : playerControlsGap;
+    // Keep scale factors and controls gap stable at 1.0 to preserve approved button sizes, spacing, and legible play controls
+    const scaleFactor = 1.0;
+    const buttonScaleFactor = 1.0;
+    const currentControlsGap = playerControlsGap;
 
     const currentArtworkClass = `w-12 h-12 flex-shrink-0 aspect-square object-cover rounded-lg shadow-lg`;
 
-    const currentTopRightGapClass = containerWidth && containerWidth < 410 ? 'gap-2 sm:gap-3' : 'gap-3 sm:gap-5';
+    const currentTopRightGapClass = isCompactLayout ? 'gap-2 sm:gap-3' : 'gap-3 sm:gap-5';
     
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
     const [isQueueClosing, setIsQueueClosing] = useState(false);
@@ -823,6 +834,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Absolutely NO transitions or delays; the layout updates frame-by-frame on RAF in full synchronization
                 playerContainerRef.current.style.transition = 'none';
 
+                const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
                 const isStacked = window.innerWidth < 900;
                 const pct = 50 * t;
                 const offsetPx = isStacked
@@ -833,10 +845,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const currentHeight = dockedConfig.height + (floatingConfig.height - dockedConfig.height) * t;
                 const currentBottom = dockedConfig.bottom + (floatingConfig.bottom - dockedConfig.bottom) * t;
 
-                const posWidth = `${(currentWidth) / 16}rem`;
-                const posHeight = `${(currentHeight) / 16}rem`;
-                const posBottom = `${(currentBottom) / 16}rem`;
-                const posLeft = `calc(${pct}% + ${(offsetPx) / 16}rem)`;
+                const posWidth = `${currentWidth / rootFontSize}rem`;
+                const posHeight = `${currentHeight / rootFontSize}rem`;
+                const posBottom = `${currentBottom / rootFontSize}rem`;
+                const posLeft = `calc(${pct}% + ${offsetPx / rootFontSize}rem)`;
 
                 // Main player is ALWAYS COMPLETELY STATIC (transform: none)
                 playerContainerRef.current.style.width = posWidth;
@@ -887,11 +899,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     const innerOff = offsetPx - innerD;
                     const innerRad = 12 + innerD;
 
-                    innerWaveBackdropRef.current.style.width = `${innerW / 16}rem`;
-                    innerWaveBackdropRef.current.style.height = `${innerH / 16}rem`;
-                    innerWaveBackdropRef.current.style.bottom = `${innerB / 16}rem`;
-                    innerWaveBackdropRef.current.style.left = `calc(${pct}% + ${innerOff / 16}rem)`;
-                    innerWaveBackdropRef.current.style.borderRadius = `${innerRad / 16}rem`;
+                    innerWaveBackdropRef.current.style.width = `${innerW / rootFontSize}rem`;
+                    innerWaveBackdropRef.current.style.height = `${innerH / rootFontSize}rem`;
+                    innerWaveBackdropRef.current.style.bottom = `${innerB / rootFontSize}rem`;
+                    innerWaveBackdropRef.current.style.left = `calc(${pct}% + ${innerOff / rootFontSize}rem)`;
+                    innerWaveBackdropRef.current.style.borderRadius = `${innerRad / rootFontSize}rem`;
                     innerWaveBackdropRef.current.style.transform = 'none';
                     innerWaveBackdropRef.current.style.opacity = `${glowFrame.innerWaveOpacity.toFixed(3)}`;
                     innerWaveBackdropRef.current.style.boxShadow = glowFrame.innerWaveShadow;
@@ -908,11 +920,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     const outerOff = offsetPx - outerD;
                     const outerRad = 12 + outerD;
 
-                    outerWaveBackdropRef.current.style.width = `${outerW / 16}rem`;
-                    outerWaveBackdropRef.current.style.height = `${outerH / 16}rem`;
-                    outerWaveBackdropRef.current.style.bottom = `${outerB / 16}rem`;
-                    outerWaveBackdropRef.current.style.left = `calc(${pct}% + ${outerOff / 16}rem)`;
-                    outerWaveBackdropRef.current.style.borderRadius = `${outerRad / 16}rem`;
+                    outerWaveBackdropRef.current.style.width = `${outerW / rootFontSize}rem`;
+                    outerWaveBackdropRef.current.style.height = `${outerH / rootFontSize}rem`;
+                    outerWaveBackdropRef.current.style.bottom = `${outerB / rootFontSize}rem`;
+                    outerWaveBackdropRef.current.style.left = `calc(${pct}% + ${outerOff / rootFontSize}rem)`;
+                    outerWaveBackdropRef.current.style.borderRadius = `${outerRad / rootFontSize}rem`;
                     outerWaveBackdropRef.current.style.transform = 'none';
                     outerWaveBackdropRef.current.style.opacity = `${glowFrame.outerWaveOpacity.toFixed(3)}`;
                     outerWaveBackdropRef.current.style.boxShadow = glowFrame.outerWaveShadow;
@@ -1521,7 +1533,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             return (
                  <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full h-12">
-                        <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
+                        <div className={`flex items-center min-w-0 ${isCompactLayout ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3 flex-1 shrink'}`}>
                             <img src={thumbnail} alt={title} className={`${currentArtworkClass} rounded-lg object-cover flex-shrink-0 shadow-lg`} />
                             <div className="overflow-hidden flex-grow min-w-0 flex-shrink pr-1">
                                 <DynamicTrackTitle title={title} isAnyAppOpen={Boolean(isAnyAppOpen)} />
@@ -1609,7 +1621,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full h-12">
-                        <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
+                        <div className={`flex items-center min-w-0 ${isCompactLayout ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3 flex-1 shrink'}`}>
                             {favicon ? 
                                 <img src={favicon} alt={name} className={`${currentArtworkClass} rounded-lg object-contain bg-zinc-800 flex-shrink-0 shadow-lg`} /> 
                                 : 
@@ -1685,7 +1697,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                  return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
                     <div className="flex items-center justify-between w-full h-12">
-                        <div className={`flex items-center min-w-0 ${isAnyAppOpen ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3'}`}>
+                        <div className={`flex items-center min-w-0 ${isCompactLayout ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3 flex-1 shrink'}`}>
                             {imageUrl && (
                                 <div className="flex-shrink-0 relative">
                                     <img src={imageUrl} alt={albumName} className={`${currentArtworkClass} rounded-lg shadow-lg object-cover`} />
@@ -1856,10 +1868,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     backgroundColor: isNight ? '#212121' : (widgetBgColor || '#ffffff'),
                     opacity: 1,
                     // Initial styles before JS takes over
-                    width: isAnyAppOpen ? `${(dockedConfig.width) / 16}rem` : `${(floatingConfig.width) / 16}rem`,
-                    height: isAnyAppOpen ? `${(dockedConfig.height) / 16}rem` : `${(floatingConfig.height) / 16}rem`,
-                    bottom: isAnyAppOpen ? `${(dockedConfig.bottom) / 16}rem` : `${(floatingConfig.bottom) / 16}rem`,
-                    left: isAnyAppOpen ? `${(dockedConfig.left) / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
+                    width: isAnyAppOpen ? `${dockedConfig.width / 16}rem` : `${floatingConfig.width / 16}rem`,
+                    height: isAnyAppOpen ? `${dockedConfig.height / 16}rem` : `${floatingConfig.height / 16}rem`,
+                    bottom: isAnyAppOpen ? `${dockedConfig.bottom / 16}rem` : `${floatingConfig.bottom / 16}rem`,
+                    left: isAnyAppOpen ? `${dockedConfig.left / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
                 }}
             >
                  <div className="relative w-full h-full">

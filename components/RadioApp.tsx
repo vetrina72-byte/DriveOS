@@ -196,6 +196,12 @@ const RadioApp: React.FC<RadioAppProps> = ({
                 } else {
                     panel.style.transform = `translateX(${visualPercent}%)`;
                 }
+
+                if (visualPercent >= 100) {
+                    panel.style.visibility = 'hidden';
+                } else {
+                    panel.style.visibility = 'visible';
+                }
             }
 
             // 4. Schedule next frame ONLY if active

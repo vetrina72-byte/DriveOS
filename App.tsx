@@ -514,6 +514,42 @@ function AppContent() {
 
   const toggleLauncher = (e: React.MouseEvent) => { e.stopPropagation(); const newLauncherState = !isAppLauncherOpen; setIsAppLauncherOpen(newLauncherState); if (!newLauncherState) setIsCustomizing(false); };
   const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
+
+  // Helper to calculate theoretical app left edge (matches fixed panel widths in subapps)
+  const getAppLeftEdge = (width: number, activeAppId: string | null, layered: boolean) => {
+      if (!activeAppId || activeAppId === 'maps') return width;
+      if (layered) return 0; // Layered occupies the full screen width
+      
+      // Match Tailwind panel widths: fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0
+      if (width >= 1280) return width * 0.40; // xl:w-[60%] -> left starts at 40%
+      if (width >= 1024) return width * 0.35; // lg:w-[65%] -> left starts at 35%
+      if (width >= 768) return width * 0.50;  // md:w-1/2   -> left starts at 50%
+      if (width >= 640) return width * 0.25;  // sm:w-[75%] -> left starts at 25%
+      return width * 0.15;                    // mobile: w-[85%] -> left starts at 15%
+  };
+
+  // Calculate if the player's space is actually occluded or occupied by an open app
+  const isPlayerOccluded = useMemo(() => {
+      if (isAppLauncherOpen) return true; // Launcher always occupies the bottom center space
+      if (!activeApp || activeApp === 'maps') return false; // No app or background maps covers the player
+
+      const appLeft = getAppLeftEdge(windowWidth, activeApp, isMapsLayered);
+      
+      // Calculate right edge of floating player at current screen width
+      const isStacked = windowWidth < 900;
+      const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, windowWidth - 32) : playerFloatingWidth;
+      const currentNavigateToolWidth = isStacked ? Math.min(navigateToolWidth, windowWidth - 32) : navigateToolWidth;
+      
+      const leftOffset = isStacked
+          ? -(currentFloatingPlayerWidth / 2)
+          : -(currentFloatingPlayerWidth / 2 + currentNavigateToolWidth / 2 + 8);
+      
+      const leftPx = windowWidth / 2 + leftOffset;
+      const playerRight = leftPx + currentFloatingPlayerWidth;
+
+      // Space is occluded if the app's left edge overlaps/collides with the player's floating right edge
+      return appLeft < playerRight;
+  }, [activeApp, isAppLauncherOpen, windowWidth, isMapsLayered, playerFloatingWidth, navigateToolWidth]);
   
     // RESPONSIVE CONFIGURATIONS FOR PLAYER & NAVIGATION WIDGET
     const isMobileOrTablet = windowWidth < 900;
@@ -540,9 +576,12 @@ function AppContent() {
         else if (windowWidth < 1280) leftoverPct = 0.35; // app takes 65%
         else leftoverPct = 0.40; // app takes 60%
 
-        const leftoverPx = windowWidth * leftoverPct;
-        return Math.min(playerDockedWidth, Math.max(90, leftoverPx - 32));
-    }, [playerDockedWidth, windowWidth]);
+        const appLeftEdge = windowWidth * leftoverPct;
+        const currentDockedLeft = (windowWidth < 1024) ? 16 : playerDockedLeft;
+        // Account for app drag handle (-left-12 = 48px) and safety gap (16px) -> 64px total
+        const availablePx = appLeftEdge - currentDockedLeft - 64;
+        return Math.min(playerDockedWidth, Math.max(160, availablePx));
+    }, [playerDockedWidth, playerDockedLeft, windowWidth]);
 
     const responsiveDockedLeft = useMemo(() => {
         if (windowWidth < 768) {
@@ -789,7 +828,7 @@ function AppContent() {
          <MusicPlayer 
             activeApp={activeApp} 
             onStationChange={handleStationChange} 
-            isAnyAppOpen={isHomeScreenDocked} 
+            isAnyAppOpen={isPlayerOccluded} 
             isNight={useDarkTheme} 
             dockedConfig={{ width: responsiveDockedWidth, bottom: playerFloatingBottom, left: responsiveDockedLeft, height: playerDockedHeight }} 
             floatingConfig={{ width: responsiveFloatingPlayerWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: responsiveNavigateToolWidth }} 

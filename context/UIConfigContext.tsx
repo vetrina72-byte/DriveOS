@@ -14,9 +14,9 @@ export const DEFAULT_HOME_CONFIG: SceneConfig = {
 export const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
   cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
-  modelPos: { x: -4.90, y: -0.15, z: 0.20 }, 
+  modelPos: { x: -5.70, y: -0.15, z: -0.15 }, 
   modelRot: { x: 0.01, y: -1.19, z: 0.01 },
-  modelScale: 1.57,
+  modelScale: 1.32,
 };
 
 export const UIConfigContext = createContext<any>(null);
