@@ -68,39 +68,39 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
   };
   
   return (
-    <nav ref={navContainerRef} className={`w-full ${isNavCompact ? 'px-3.5 pt-4 pb-3 gap-2' : 'px-6 pt-6 pb-4 gap-4'} flex-shrink-0 z-30 relative flex items-center justify-between`}>
+    <nav ref={navContainerRef} className={`w-full ${isNavCompact ? 'px-3 py-2.5 gap-2' : 'px-5 py-3 gap-3'} flex-shrink-0 z-30 relative flex items-center justify-between`}>
       {/* Left side: Logo/Back + Search */}
-      <div className={`flex items-center ${isNavCompact ? 'gap-2' : 'gap-4'} flex-shrink-0`}>
+      <div className={`flex items-center ${isNavCompact ? 'gap-1.5' : 'gap-3'} flex-shrink-0`}>
         {showBackButton ? (
-          <button onClick={onBack} className={`p-2 -ml-2 rounded-full transition-colors ${hoverBg}`} aria-label="Indietro">
-            <FiChevronLeft className={`w-7 h-7`} style={{ color: textColor }} />
+          <button onClick={onBack} className={`p-1.5 -ml-1 rounded-full transition-colors ${hoverBg}`} aria-label="Indietro">
+            <FiChevronLeft className={`w-6 h-6`} style={{ color: textColor }} />
           </button>
         ) : (
-          <FaSpotify className={`w-8 h-8`} style={{ color: 'var(--text-spotify-logo)' }}/>
+          <FaSpotify className={`w-6 h-6 sm:w-7 sm:h-7`} style={{ color: 'var(--text-spotify-logo)' }}/>
         )}
-        <form onSubmit={handleSearchSubmit} className={`relative flex-grow transition-all duration-200 ${isNavVeryCompact ? 'max-w-[130px]' : (isNavCompact ? 'max-w-[170px]' : 'w-[260px] md:w-[320px] lg:w-[380px] xl:w-[440px]')}`}>
-          <FiSearch className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${isNavCompact ? 'w-4 h-4' : 'w-5 h-5'}`} style={{ color: secondaryTextColor }} />
+        <form onSubmit={handleSearchSubmit} className={`relative flex-shrink-0 transition-all duration-200 ${isNavVeryCompact ? 'w-[130px]' : (isNavCompact ? 'w-[160px]' : 'w-[180px] sm:w-[210px] md:w-[240px]')}`}>
+          <FiSearch className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${isNavCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} style={{ color: secondaryTextColor }} />
           <input
             type="text"
             placeholder="Cosa vuoi ascoltare?"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full ${isNavCompact ? 'pl-8 pr-7 py-2 text-xs rounded-full' : 'pl-11 pr-10 py-3 text-sm rounded-full'} font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
+            className={`w-full ${isNavCompact ? 'pl-7 pr-6 py-1 text-xs rounded-full' : 'pl-8 pr-7 py-1.5 text-xs sm:text-sm rounded-full'} font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
             style={{ color: textColor }}
           />
            <button 
             type="submit"
-            className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors duration-200 ${hoverBg}`}
+            className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors duration-200 ${hoverBg}`}
             aria-label="Cerca"
           >
-              <FiSend className={`${isNavCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} style={{color: textColor}}/>
+              <FiSend className={`${isNavCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} style={{color: textColor}}/>
           </button>
         </form>
       </div>
       
       {/* Right side: Navigation Links & User Profile */}
-      <div className={`flex items-center ${isNavCompact ? 'gap-1.5' : 'gap-3'} ml-auto min-w-0 flex-1 justify-end`}>
-        <div className={`flex items-center ${isNavCompact ? 'gap-1' : 'gap-2'} overflow-x-auto py-1 scrollbar-none min-w-0`}>
+      <div className={`flex items-center ${isNavCompact ? 'gap-1' : 'gap-2'} ml-auto min-w-0 flex-1 justify-end`}>
+        <div className={`flex items-center ${isNavCompact ? 'gap-1' : 'gap-1.5'} overflow-x-auto py-0.5 scrollbar-none min-w-0 flex-nowrap`}>
           {navLinks.map((link) => {
             const linkView = linkToViewMap[link];
             if (!linkView) return null;
@@ -115,7 +115,7 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
                 <a
                   href="#"
                   onClick={(e) => { e.preventDefault(); onNavigate(linkView); }}
-                  className={`relative z-10 ${isNavCompact ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm'} rounded-full whitespace-nowrap transition-all duration-200 ${fontWeight} ${
+                  className={`relative z-10 ${isNavCompact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 sm:px-3 py-1 text-xs sm:text-sm'} rounded-full whitespace-nowrap transition-all duration-200 ${fontWeight} ${
                     isActive 
                       ? (isNight ? 'bg-white/15' : 'bg-black/10') 
                       : hoverBg

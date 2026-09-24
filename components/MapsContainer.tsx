@@ -14,6 +14,7 @@ import { POIPreviewCard } from './POIPreviewCard';
 import { resolveBrand } from './BrandResolver';
 import { buildMapStyle, dist, bear, OSRM_URL } from './MapEngineUtils';
 import { CosmicStarfield } from './CosmicStarfield';
+import { cubicBezierEase } from './VehicleCanvas';
 import { useUIConfig } from '../context/UIConfigContext';
 import { RouteOption, RoadHazard, LocationInfo, AutomotiveCategory } from '../types/maps';
 import { fetchRoadHazardsForRoute } from '../services/RoadHazardService';
@@ -670,7 +671,7 @@ const MapsContainer = React.memo(({
         if (state.targetX !== newTargetX || state.animStartTime === 0) {
             state.startX = state.currentX;
             state.targetX = newTargetX;
-            state.animDuration = sceneTransitionSpeed * 1000;
+            state.animDuration = 900;
             state.animStartTime = performance.now();
         }
     }
@@ -685,9 +686,9 @@ const MapsContainer = React.memo(({
         if (!state.isDragging) {
             if (state.animStartTime > 0) {
                 const elapsed = performance.now() - state.animStartTime;
-                const duration = state.animDuration || (sceneTransitionSpeed * 1000); // ms
+                const duration = 900; // 900ms App transition duration (slow, soft, fluid)
                 const t = Math.min(elapsed / duration, 1.0);
-                const easeT = 1 - Math.pow(1 - t, 3.5); // smoother cubic ease-out
+                const easeT = cubicBezierEase(t);
                 state.currentX = state.startX + (state.targetX - state.startX) * easeT;
                 if (t >= 1.0) {
                   state.currentX = state.targetX;
@@ -3070,7 +3071,7 @@ const MapsContainer = React.memo(({
     >
         {/* Slide Close Drag handle bar */}
         <div
-            className={`absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-55 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`}
+            className={`absolute top-1/2 -translate-y-1/2 -left-10 w-12 h-32 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-55 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}

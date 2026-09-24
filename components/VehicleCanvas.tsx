@@ -56,6 +56,25 @@ function kelvinToColor(kelvin: number): THREE.Color {
   return new THREE.Color(r / 255, g / 255, b / 255);
 }
 
+// Cubic-bezier solver for cubic-bezier(0.16, 1, 0.3, 1)
+export function cubicBezierEase(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  let s = t;
+  for (let i = 0; i < 6; i++) {
+    const s2 = s * s;
+    const s3 = s2 * s;
+    const oneMinusS = 1 - s;
+    const x = 3 * oneMinusS * oneMinusS * s * 0.16 + 3 * oneMinusS * s2 * 0.3 + s3;
+    const dx = 3 * 0.16 * (1 - 4 * s + 3 * s2) + 3 * 0.3 * (2 * s - 3 * s2) + 3 * s2;
+    if (Math.abs(dx) < 1e-6) break;
+    s = s - (x - t) / dx;
+  }
+  s = Math.max(0, Math.min(1, s));
+  const oneMinusS = 1 - s;
+  return 3 * oneMinusS * oneMinusS * s * 1.0 + 3 * oneMinusS * s * s * 1.0 + s * s * s;
+}
+
 // Simple Error Boundary for the 3D model
 interface ModelErrorBoundaryProps {
   children?: React.ReactNode;
@@ -316,6 +335,51 @@ function ContactShadow({
 }) {
   const { scene, camera: mainCamera } = useThree();
 
+  // Create customized ShadowMaterial with feathered alpha falloff so the geometry boundary is mathematically 0 alpha
+  const shadowMaterial = useMemo(() => {
+    const mat = new THREE.ShadowMaterial({
+      transparent: true,
+      opacity: shadowOpacity,
+      depthWrite: false,
+      fog: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -4,
+    });
+
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        '#include <common>\nvarying vec2 vShadowUv;'
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        'void main() {',
+        'void main() {\n\tvShadowUv = uv;'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        '#include <common>\nvarying vec2 vShadowUv;'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) );',
+        `float dx = abs(vShadowUv.x - 0.5) * 2.0;
+         float dy = abs(vShadowUv.y - 0.5) * 2.0;
+         vec2 d = max(abs(vec2(dx, dy)) - vec2(0.35, 0.35), 0.0);
+         float dist = length(d);
+         float edgeFactor = 1.0 - smoothstep(0.0, 0.60, dist);
+         gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) * edgeFactor );`
+      );
+    };
+
+    return mat;
+  }, [shadowOpacity]);
+
+  useEffect(() => {
+    if (shadowMaterial) {
+      shadowMaterial.opacity = shadowOpacity;
+    }
+  }, [shadowOpacity, shadowMaterial]);
+
   useEffect(() => {
     const originalOnBeforeRender = scene.onBeforeRender;
 
@@ -345,15 +409,9 @@ function ContactShadow({
       receiveShadow
       rotation={[-Math.PI / 2, 0, 0]}
       position={[shadowPosition.x, shadowPosition.y, shadowPosition.z]}
+      material={shadowMaterial}
     >
-      <PlaneGeometry args={[carShadowWidth, carShadowLength]} />
-      <ShadowMaterial
-        transparent
-        opacity={shadowOpacity}
-        polygonOffset={true}
-        polygonOffsetFactor={-1}
-        polygonOffsetUnits={-4}
-      />
+      <PlaneGeometry args={[carShadowWidth * 1.6, carShadowLength * 1.6]} />
     </Mesh>
   );
 }
@@ -499,48 +557,57 @@ function SceneController({
   }, [homeConfig, responsiveCoeff]);
 
   const localAppOpenConfig = useMemo(() => {
-    let baseModelX = appOpenConfig.modelPos.x; // default matches -4.90
-    let baseModelY = appOpenConfig.modelPos.y;
-    let baseModelScale = appOpenConfig.modelScale; // default matches 1.57
-
     const W = window.innerWidth;
     const H = window.innerHeight;
-    
+
+    // Determine scale so the car is completely framed inside the visible area
+    const isNarrowMobile = W < 768;
+    const isPortrait = H > W;
+
+    // Adaptive scale based on device format so the vehicle remains framed inside visible 3D area without overflowing
+    let scaleFactor = 1.0;
     if (W < 1180) {
-      const scaleFactor = Math.max(0.40, W / 1180);
-      baseModelScale = appOpenConfig.modelScale * scaleFactor;
-      
-      if (W < 768) {
-        // Su mobile stretto, spostiamo ancora più a sinistra. L'app prende l'85% dello schermo a destra.
-        // C'è solo un 15% a sinistra. Quindi dobbiamo "spingere" la camera molto a destra per far apparire la macchina a sinistra (oppure spingere la macchina a sinistra).
-        baseModelX = appOpenConfig.modelPos.x - 3.0; 
-        baseModelY = appOpenConfig.modelPos.y + (H > W ? 1.5 : 0); // Sposta leggermente in alto se portrait
+      if (isNarrowMobile) {
+        scaleFactor = 0.42;
+      } else if (isPortrait) {
+        scaleFactor = 0.46;
       } else {
-        baseModelX = appOpenConfig.modelPos.x - 1.2;
+        scaleFactor = 0.50;
       }
     }
 
-    const shiftX = baseModelX * (responsiveCoeff - 1.0);
+    const tabletScale = appOpenConfig.modelScale * scaleFactor;
+
+    // Center the car in the visible left column of the tablet screen with safe area margins
+    const targetX = W < 1180 ? (isNarrowMobile ? -4.15 : (isPortrait ? -3.95 : -3.85)) : appOpenConfig.modelPos.x;
+    const targetY = appOpenConfig.modelPos.y + (isPortrait && W < 1180 ? 0.30 : 0.0);
+    const targetZ = appOpenConfig.modelPos.z;
+
+    const camDeltaX = appOpenConfig.cameraPos.x - appOpenConfig.cameraTarget.x;
+    const camDeltaY = appOpenConfig.cameraPos.y - appOpenConfig.cameraTarget.y;
+    // Back up camera slightly on tablet to ensure entire car body is within safe margins
+    const camDeltaZ = (appOpenConfig.cameraPos.z - appOpenConfig.cameraTarget.z) * (W < 1180 ? 1.15 : 1.0);
+
     return {
       ...appOpenConfig,
-      modelScale: baseModelScale,
-      modelPos: {
-        ...appOpenConfig.modelPos,
-        x: baseModelX + shiftX,
-        y: baseModelY,
-      },
+      modelScale: tabletScale,
       cameraTarget: {
-        ...appOpenConfig.cameraTarget,
-        x: baseModelX + shiftX,
-        y: appOpenConfig.cameraTarget.y + (baseModelY - appOpenConfig.modelPos.y),
+        x: targetX,
+        y: targetY + 0.60,
+        z: targetZ,
       },
       cameraPos: {
-        ...appOpenConfig.cameraPos,
-        x: appOpenConfig.cameraPos.x + shiftX,
-        y: appOpenConfig.cameraPos.y + (baseModelY - appOpenConfig.modelPos.y),
+        x: targetX + camDeltaX,
+        y: targetY + 0.60 + camDeltaY,
+        z: targetZ + camDeltaZ,
+      },
+      modelPos: {
+        x: targetX,
+        y: targetY,
+        z: targetZ,
       },
     };
-  }, [appOpenConfig, responsiveCoeff]);
+  }, [appOpenConfig]);
 
   // Gestione interazione orbit controls
   useEffect(() => {
@@ -966,9 +1033,9 @@ function SceneController({
     } else if (transitionMode.current === "auto") {
       const now = performance.now();
       const elapsed = (now - animStartTime.current) / 1000;
-      const duration = autoAnimDuration.current || sceneTransitionSpeed || 1.10;
+      const duration = 0.90; // 900ms total duration for soft, slow, fluid 3D scene expansion/contraction
       const normT = Math.min(elapsed / duration, 1.0);
-      const easeT = 1 - Math.pow(1 - normT, 4);
+      const easeT = cubicBezierEase(normT);
 
       p = autoStartP.current + (autoTargetP.current - autoStartP.current) * easeT;
       currentP.current = p;
@@ -1199,14 +1266,26 @@ function SceneController({
       const cw = container.clientWidth;
       const ch = container.clientHeight;
 
-      let minWidthPercent = 0.40;
-      if (cw < 640) minWidthPercent = 0.15;
-      else if (cw < 768) minWidthPercent = 0.25;
-      else if (cw < 1024) minWidthPercent = 0.50;
-      else if (cw < 1280) minWidthPercent = 0.35;
+      let appBoundary = -1;
+      const appPanel = document.querySelector('.spotify-app-panel') as HTMLElement;
+      if (appPanel && appPanel.offsetWidth > 0) {
+        const rect = appPanel.getBoundingClientRect();
+        if (rect.left > 0 && rect.left < cw) {
+          appBoundary = rect.left;
+        }
+      }
+
+      if (appBoundary < 0) {
+        let minWidthPercent = 0.40;
+        if (cw < 640) minWidthPercent = 0.15;
+        else if (cw < 768) minWidthPercent = 0.25;
+        else if (cw < 1024) minWidthPercent = 0.50;
+        else if (cw < 1280) minWidthPercent = 0.35;
+        appBoundary = cw * minWidthPercent;
+      }
       
-      let visibleWidth = Math.round(cw * minWidthPercent + cw * (1 - minWidthPercent) * p);
-      visibleWidth = Math.max(1, Math.min(cw, visibleWidth));
+      let targetVisibleWidth = Math.round(appBoundary + (cw - appBoundary) * p);
+      let visibleWidth = Math.max(1, Math.min(cw, targetVisibleWidth));
 
       // Forza il ridimensionamento fisico e l'aggiornamento degli stili CSS del Canvas ad ogni singolo frame
       if (canvas.width !== visibleWidth || canvas.height !== ch) {
@@ -1805,11 +1884,16 @@ function VehicleCanvas({
   );
 
   return (
-    <>
+    <div
+      className="absolute inset-0 z-0 pointer-events-auto"
+      style={{
+        transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), width 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+      }}
+    >
       <Canvas
-        className="absolute inset-0"
+        className="w-full h-full"
         style={{ zIndex: 0, touchAction: "none" }}
-        shadows={typeof window !== 'undefined' && window.innerWidth > 1024 ? { type: THREE.PCFSoftShadowMap } : false}
+        shadows={{ type: THREE.PCFSoftShadowMap }}
         dpr={[1, Math.min(window.devicePixelRatio, 1.5)]}
         frameloop="always"
         camera={{
@@ -2020,7 +2104,7 @@ function VehicleCanvas({
           spotLightIntensity={spotLightIntensity}
         />
       </Canvas>
-    </>
+    </div>
   );
 }
 useGLTF.preload(MODEL_URL);

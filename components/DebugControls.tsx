@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { SceneConfig, HeadlightConfig } from './VehicleCanvas';
+import { cubicBezierEase } from './VehicleCanvas';
 import type { SceneColors } from '../App';
 import { initialSceneColors } from '../App';
 import { useWeather } from '../context/WeatherContext';
@@ -195,10 +196,9 @@ export default function DebugControls({
           if (!state.isDragging) {
               if (state.animStartTime > 0) {
                   const elapsed = performance.now() - state.animStartTime;
-                  const duration = (sceneTransitionSpeed || 1.10) * 1000; // ms
+                  const duration = 900; // 900ms App transition duration (slow, soft, fluid)
                   const t = Math.min(elapsed / duration, 1.0);
-                  // power4.out easing
-                  const easeT = 1 - Math.pow(1 - t, 4);
+                  const easeT = cubicBezierEase(t);
                   state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
                   if (t >= 1.0) {
                       state.currentPercent = state.targetPercent;
@@ -358,15 +358,15 @@ export default function DebugControls({
   const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
 
   const handleContainerClass = renderLayered
-      ? `absolute -top-12 left-0 right-0 h-12 flex items-end justify-center pb-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
-      : `absolute top-0 bottom-0 -left-12 w-12 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
+      ? `absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-12 flex items-center justify-center cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
+      : `absolute top-1/2 -translate-y-1/2 -left-10 w-12 h-32 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
 
   const handlePillClass = renderLayered
       ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-x-110 ${handleColorClass}`
       : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
 
   const containerClass = isAppView 
-    ? `spotify-app-panel shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full border-t border-zinc-800' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0 border-l border-zinc-800'}`
+    ? `spotify-app-panel shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full border-t border-zinc-800' : 'relative w-full h-full border-l border-zinc-800'}`
     : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
 
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();

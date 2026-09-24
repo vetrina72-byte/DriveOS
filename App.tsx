@@ -4,7 +4,7 @@ import { VehicleProvider } from './context/VehicleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { YouTubeMusicProvider } from './context/YouTubeMusicContext';
 import { UIConfigProvider, useUIConfig } from './context/UIConfigContext';
-import VehicleCanvas, { SceneConfig } from './components/VehicleCanvas';
+import VehicleCanvas, { SceneConfig, cubicBezierEase } from './components/VehicleCanvas';
 import { ICONS } from './constants';
 import SpotifyApp from './components/SpotifyPlayer';
 import MusicPlayer from './components/MusicPlayer';
@@ -455,7 +455,7 @@ function AppContent() {
       if (switchTimeoutRef.current) clearTimeout(switchTimeoutRef.current);
       switchTimeoutRef.current = window.setTimeout(() => {
           isSwitchingRef.current = false;
-      }, 500);
+      }, 600);
       activeAppRef.current = newApp;
       setActiveApp(newApp);
       setIsMapsLayered(false);
@@ -517,8 +517,11 @@ function AppContent() {
 
   // Helper to calculate theoretical app left edge (matches fixed panel widths in subapps)
   const getAppLeftEdge = (width: number, activeAppId: string | null, layered: boolean) => {
-      if (!activeAppId || activeAppId === 'maps') return width;
-      if (layered) return 0; // Layered occupies the full screen width
+      if (!activeAppId) return width;
+      if (layered) return width; // When layered over maps, player uses full available container width
+      if (activeAppId === 'maps') {
+          return width >= 1180 ? width * (1 / 3) : Math.max(playerDockedWidth + 2 * responsiveDockedMargin, width * 0.45);
+      }
       
       // Match Tailwind panel widths: fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0
       if (width >= 1280) return width * 0.40; // xl:w-[60%] -> left starts at 40%
@@ -569,30 +572,19 @@ function AppContent() {
         return navigateToolWidth;
     }, [navigateToolWidth, windowWidth, isMobileOrTablet]);
 
-    const responsiveDockedWidth = useMemo(() => {
-        let leftoverPct = 1.0;
-        if (windowWidth < 640) leftoverPct = 0.15; // app takes 85%
-        else if (windowWidth < 768) leftoverPct = 0.25; // app takes 75%
-        else if (windowWidth < 1024) leftoverPct = 0.50; // app takes 50%
-        else if (windowWidth < 1280) leftoverPct = 0.35; // app takes 65%
-        else leftoverPct = 0.40; // app takes 60%
+    const responsiveDockedMargin = useMemo(() => {
+        return windowWidth < 1024 ? 16 : 24;
+    }, [windowWidth]);
 
-        const appLeftEdge = windowWidth * leftoverPct;
-        const currentDockedLeft = (windowWidth < 1024) ? 16 : playerDockedLeft;
-        // Account for app drag handle (-left-12 = 48px) and safety gap (16px) -> 64px total
-        const availablePx = appLeftEdge - currentDockedLeft - 64;
-        return Math.min(playerDockedWidth, Math.max(160, availablePx));
-    }, [playerDockedWidth, playerDockedLeft, windowWidth]);
+    const responsiveDockedWidth = useMemo(() => {
+        const appLeft = getAppLeftEdge(windowWidth, activeApp, isMapsLayered);
+        const availablePx = appLeft - 2 * responsiveDockedMargin;
+        return Math.min(playerDockedWidth, Math.max(220, Math.round(availablePx)));
+    }, [responsiveDockedMargin, windowWidth, activeApp, isMapsLayered, playerDockedWidth]);
 
     const responsiveDockedLeft = useMemo(() => {
-        if (windowWidth < 768) {
-            return 16;
-        }
-        if (windowWidth < 1024) {
-            return 16;
-        }
-        return playerDockedLeft;
-    }, [playerDockedLeft, windowWidth]);
+        return responsiveDockedMargin;
+    }, [responsiveDockedMargin]);
 
     // --- REFS AND STATE FOR FLUID NAVIGATE TOOL ANIMATION ---
     const launcherVisualState = useRef(isAppLauncherOpen ? 1 : 0);
@@ -628,15 +620,16 @@ function AppContent() {
         let animationFrameId: number;
 
         const loop = () => {
-            const duration = (sceneTransitionSpeed || 1.10) * 1000;
+            const launcherDuration = 420; // 420ms for launcher and widget movement
+            const appDuration = 600; // 600ms for app opening/closing transition
 
             // 1. Calculate launcher animation state (0 = closed/Home, 1 = open/Launcher)
-            // Using power4.out easing to match MusicPlayer and subapps
+            // Using cubic-bezier(0.16, 1, 0.3, 1) matching 3D car and MusicPlayer
             const targetLauncher = isAppLauncherOpen ? 1 : 0;
             if (launcherAnimStartTime.current > 0) {
                 const elapsed = performance.now() - launcherAnimStartTime.current;
-                const normT = Math.min(elapsed / duration, 1.0);
-                const easeT = 1 - Math.pow(1 - normT, 4);
+                const normT = Math.min(elapsed / launcherDuration, 1.0);
+                const easeT = cubicBezierEase(normT);
                 launcherVisualState.current = launcherStartT.current + (targetLauncher - launcherStartT.current) * easeT;
                 if (normT >= 1.0) {
                     launcherAnimStartTime.current = 0;
@@ -654,8 +647,8 @@ function AppContent() {
                 const targetApp = activeApp !== null ? 0 : 1;
                 if (appAnimStartTime.current > 0) {
                     const elapsed = performance.now() - appAnimStartTime.current;
-                    const normT = Math.min(elapsed / duration, 1.0);
-                    const easeT = 1 - Math.pow(1 - normT, 4);
+                    const normT = Math.min(elapsed / appDuration, 1.0);
+                    const easeT = cubicBezierEase(normT);
                     appVisualState.current = appStartT.current + (targetApp - appStartT.current) * easeT;
                     if (normT >= 1.0) {
                         appAnimStartTime.current = 0;
@@ -797,6 +790,7 @@ function AppContent() {
       <MiniMap isVisible={activeApp === null && !isCanvasInteracting} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
+        <div id="queue-portal-root" className="relative z-[2500]"></div>
         <MapsContainer 
             isOpen={shouldShowMap} 
             onClose={handleCloseMaps} 
@@ -829,7 +823,7 @@ function AppContent() {
          <MusicPlayer 
             activeApp={activeApp} 
             onStationChange={handleStationChange} 
-            isAnyAppOpen={isPlayerOccluded} 
+            isAnyAppOpen={isHomeScreenDocked} 
             isNight={useDarkTheme} 
             dockedConfig={{ width: responsiveDockedWidth, bottom: playerFloatingBottom, left: responsiveDockedLeft, height: playerDockedHeight }} 
             floatingConfig={{ width: responsiveFloatingPlayerWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: responsiveNavigateToolWidth }} 

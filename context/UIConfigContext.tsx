@@ -13,8 +13,8 @@ export const DEFAULT_HOME_CONFIG: SceneConfig = {
 
 export const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   cameraPos: { x: 5.40, y: 5.40, z: 4.75 },
-  cameraTarget: { x: -4.90, y: 0.45, z: -0.40 },
-  modelPos: { x: -5.70, y: -0.15, z: 0.40 }, 
+  cameraTarget: { x: -4.90, y: 0.45, z: 0.0 },
+  modelPos: { x: -4.90, y: -0.15, z: 0.0 }, 
   modelRot: { x: 0.01, y: -1.19, z: 0.01 },
   modelScale: 1.51,
 };
@@ -37,7 +37,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
 
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
-  const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(1.10);
+  const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(0.40);
   
   const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(DEFAULT_APP_OPEN_CONFIG);

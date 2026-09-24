@@ -170,18 +170,18 @@ const ContentArea = React.memo(({
   return (
     <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
       <h1 
-        className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 sm:mb-6 px-3 sm:px-6"
+        className="text-lg sm:text-xl md:text-2xl font-bold mb-2.5 sm:mb-4 px-3 sm:px-6"
         style={{ color: 'var(--heading-color)' }}
       >
         {greeting}, {user?.display_name}!
       </h1>
 
       {/* Spotify DJ Feature Card with Clean Black & White Aesthetic */}
-      <div className="px-3 sm:px-6 mb-6 sm:mb-8">
+      <div className="px-3 sm:px-6 mb-4 sm:mb-6">
         <div 
-          className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-5 border transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 ${
+          className={`relative overflow-hidden rounded-xl p-3 sm:p-4 border transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 ${
             isNight 
-              ? 'bg-[#121212] border-zinc-800 hover:border-zinc-700 shadow-lg' 
+              ? 'bg-[#121212] border-zinc-800 hover:border-zinc-700 shadow-md' 
               : 'bg-white border-zinc-200 hover:border-zinc-300 shadow-sm'
           }`}
         >

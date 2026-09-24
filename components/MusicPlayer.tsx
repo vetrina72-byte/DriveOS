@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import apiClient from '../spotifyClient';
 import { useUIConfig } from '../context/UIConfigContext';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth
+    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth, FiX
 } from 'react-icons/fi';
 import { Sparkles, Activity } from 'lucide-react';
 import { 
@@ -20,6 +20,7 @@ import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals'
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
 import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjVisualState } from '../services/AiDjVisualState';
+import { cubicBezierEase } from './VehicleCanvas';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -440,49 +441,112 @@ const YouTubeProgressBar = ({
 };
 
 
-const QueuePopover = ({ isNight, nextTrack, position, onClose, isClosing, height, scale, width, offsetX }: { 
+const QueuePopover = ({ 
+    isNight, 
+    nextTrack, 
+    position, 
+    onClose, 
+    isClosing, 
+    height, 
+    scale 
+}: { 
     isNight: boolean, 
     nextTrack: { name: string, description: string, imageUrl: string } | null, 
-    position: { bottom: number, left: number, transform: string }, 
+    position: { bottom: number, right: number, width: number }, 
     onClose: () => void, 
     isClosing: boolean, 
     height: number, 
     scale: number,
-    width: number,
-    offsetX: number,
 }) => {
     const popoverRef = useRef<HTMLDivElement>(null);
+    const portalTarget = document.getElementById('queue-portal-root') || document.body;
 
     return ReactDOM.createPortal(
         <div
             ref={popoverRef}
             style={{
                 bottom: `${position.bottom}px`,
-                left: `${position.left + offsetX}px`,
-                transform: `${position.transform} scale(${scale})`,
-                transformOrigin: 'bottom center',
-                backgroundColor: 'var(--player-bg)',
-                height: `${(height) / 16}rem`,
-                width: `${(width) / 16}rem`,
+                right: `${position.right}px`,
+                width: `${position.width}px`,
+                height: height ? `${height / 16}rem` : undefined,
+                transform: `scale(${scale})`,
+                transformOrigin: 'bottom right',
+                zIndex: 2500,
             }}
-            className={`fixed p-3 rounded-lg shadow-2xl z-50 border ${isNight ? 'border-zinc-700' : 'border-zinc-200'} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'} flex flex-col`}
+            className={`fixed p-3 sm:p-3.5 rounded-2xl shadow-2xl z-[2500] border backdrop-blur-2xl transition-all duration-300 ${
+                isNight 
+                    ? 'border-white/20 bg-[#1e1e1e]/95 text-white shadow-black/80' 
+                    : 'border-black/15 bg-white/95 text-zinc-900 shadow-xl'
+            } ${isClosing ? 'animate-queue-bubble-out' : 'animate-queue-bubble-in'} flex flex-col justify-between overflow-visible relative group`}
         >
-            <p className="text-xs font-bold mb-2 flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Prossima in coda</p>
-            <div className="flex-grow flex items-center">
+            {/* Bubble arrow / tail pointing down to the queue button on player */}
+            <div 
+                className={`absolute -bottom-1.5 right-6 w-3.5 h-3.5 rotate-45 border-r border-b ${
+                    isNight 
+                        ? 'bg-[#1e1e1e] border-white/20' 
+                        : 'bg-white border-black/15'
+                }`}
+                style={{ zIndex: 2501 }}
+            />
+
+            {/* Header / Badge */}
+            <div className="flex items-center justify-between mb-2 flex-shrink-0 z-10 relative">
+                <div className="flex items-center gap-1.5">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
+                        isNight 
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Prossimo in coda
+                    </span>
+                </div>
+                <button 
+                    onClick={onClose} 
+                    className={`p-1 rounded-full ${isNight ? 'hover:bg-white/10 text-zinc-400 hover:text-white' : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-900'} transition-colors`}
+                    aria-label="Chiudi coda"
+                >
+                    <FiX className="w-3.5 h-3.5" />
+                </button>
+            </div>
+
+            {/* Track Info */}
+            <div className="flex items-center gap-3 min-w-0 z-10 relative">
                 {nextTrack ? (
-                    <div className="flex items-center gap-3 min-w-0 w-full">
-                        <img src={nextTrack.imageUrl} alt={nextTrack.name} className="w-10 h-10 rounded-md flex-shrink-0" />
-                        <div className="overflow-hidden">
-                            <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.name}</p>
-                            <p className="text-xs truncate" style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{nextTrack.description}</p>
+                    <>
+                        {nextTrack.imageUrl ? (
+                            <div className="relative flex-shrink-0">
+                                <img 
+                                    src={nextTrack.imageUrl} 
+                                    alt={nextTrack.name} 
+                                    className="w-11 h-11 rounded-xl object-cover shadow-md border border-black/10 dark:border-white/10" 
+                                />
+                                <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/10 pointer-events-none" />
+                            </div>
+                        ) : (
+                            <div className={`w-11 h-11 rounded-xl ${isNight ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} flex items-center justify-center flex-shrink-0 shadow-inner`}>
+                                <FiMusic className="w-5 h-5" />
+                            </div>
+                        )}
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                            <p className="font-bold text-xs sm:text-sm truncate leading-snug">
+                                {nextTrack.name}
+                            </p>
+                            <p className={`text-[11px] truncate leading-tight mt-0.5 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                {nextTrack.description}
+                            </p>
                         </div>
-                    </div>
+                    </>
                 ) : (
-                    <p className="text-sm w-full text-center" style={{ color: 'var(--text-secondary)' }}>Nessuna canzone in coda.</p>
+                    <div className="flex items-center justify-center w-full py-1 text-center">
+                        <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                            Nessun brano in coda
+                        </p>
+                    </div>
                 )}
             </div>
         </div>,
-        document.getElementById('scaled-portal-root')!
+        portalTarget
     );
 };
 
@@ -541,7 +605,7 @@ const DisabledPlayerView = ({
     const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
 
     return (
-        <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+        <div className="w-full h-full flex flex-col justify-between px-4 py-2 flex-1 self-stretch">
             {/* Top part: Track info */}
             <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-3 min-w-0">
@@ -711,7 +775,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const spotifyQueueButtonRef = useRef<HTMLButtonElement>(null);
     const youTubeQueueButtonRef = useRef<HTMLButtonElement>(null);
-    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, left: 0, transform: '' });
+    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, right: 0, width: 288 });
     
     const playerState = nowPlaying.spotifyState;
     const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
@@ -791,46 +855,70 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         playingStateRef.current.isPlaying = isPlayingGlobal;
     }, [isPlayingGlobal]);
 
+    const targetDockedWidthRef = useRef<number>(dockedConfig.width);
     const lastFrameTimeRef = useRef<number>(performance.now());
-    const adjustedWidthRef = useRef<number | null>(null);
-    const wasOccludedRef = useRef(false);
-    const prevAppLeftRef = useRef<number | null>(null);
-    const lastLoggedTargetRef = useRef<number | null>(null);
 
-    // Periodic tablet geometry debugger for specific device layout tracking
-    useEffect(() => {
-        const isTablet = windowWidth < 1180;
-        if (!isTablet) return;
+    // Calculate FINAL_APP_RECT, symmetric margins, and PLAYER_TARGET_RECT once when opening an app
+    const updateTargetDockedWidth = useCallback(() => {
+        const wWidth = window.innerWidth;
+        const sideMargin = wWidth < 1024 ? 16 : 24;
 
-        const interval = setInterval(() => {
-            const playerEl = playerContainerRef.current;
-            const containerEl = document.getElementById('main-app-container');
-            if (!playerEl) return;
+        // Determine FINAL_APP_LEFT edge
+        let appLeft = wWidth;
+        const appElements = document.querySelectorAll('.spotify-app-panel');
+        for (let i = 0; i < appElements.length; i++) {
+            const el = appElements[i] as HTMLElement;
+            if (el.offsetWidth > 0) {
+                if (el.offsetWidth >= wWidth - 10) {
+                    appLeft = wWidth;
+                } else {
+                    appLeft = wWidth - el.offsetWidth;
+                }
+                break;
+            }
+        }
+        if (appLeft === wWidth) {
+            if (activeApp === 'maps') {
+                appLeft = wWidth >= 1180 ? wWidth * (1 / 3) : Math.max(dockedConfig.width + 2 * sideMargin, wWidth * 0.45);
+            } else if (activeApp && !isMapsLayered) {
+                if (wWidth >= 1280) appLeft = wWidth * 0.40;
+                else if (wWidth >= 1024) appLeft = wWidth * 0.35;
+                else if (wWidth >= 768) appLeft = wWidth * 0.50;
+                else if (wWidth >= 640) appLeft = wWidth * 0.25;
+                else appLeft = wWidth * 0.15;
+            }
+        }
 
-            const playerRect = playerEl.getBoundingClientRect();
-            const containerRect = containerEl ? containerEl.getBoundingClientRect() : { top: 0, bottom: 0, height: 0 };
-            
-            console.log(`[PLAYER TABLET GEOMETRY]\nplayerRect.top = ${playerRect.top}\nplayerRect.bottom = ${playerRect.bottom}\nplayerRect.height = ${playerRect.height}\ncontainerRect.top = ${containerRect.top}\ncontainerRect.bottom = ${containerRect.bottom}\ncontainerRect.height = ${containerRect.height}\nwindow.innerHeight = ${window.innerHeight}\ndocument.documentElement.clientHeight = ${document.documentElement.clientHeight}\nvisualViewport.height = ${window.visualViewport ? window.visualViewport.height : 'N/A'}\nvisualViewport.offsetTop = ${window.visualViewport ? window.visualViewport.offsetTop : 'N/A'}\nvisualViewport.scale = ${window.visualViewport ? window.visualViewport.scale : 'N/A'}\ncomputed top = ${playerRect.top}\ncomputed bottom = ${window.innerHeight - playerRect.bottom}\ncomputed height = ${playerRect.height}\ncomputed transform = ${window.getComputedStyle(playerEl).transform}`);
-        }, 3000);
+        // Available width inside left column with perfectly symmetrical margins on left and right
+        const availablePx = appLeft - (2 * sideMargin);
+        targetDockedWidthRef.current = Math.min(dockedConfig.width, Math.max(220, Math.round(availablePx)));
+    }, [activeApp]);
 
-        return () => clearInterval(interval);
-    }, [windowWidth]);
-
-    // Sync isAnyAppOpen changes to start an animation using the exact same power4.out easing/timing as subapps
+    // Recalculate fixed target when opening state or active app changes
     useEffect(() => {
         if (isAnyAppOpen !== lastIsAnyAppOpen.current) {
             lastIsAnyAppOpen.current = isAnyAppOpen;
             startT.current = visualState.current;
             animStartTime.current = performance.now();
+            updateTargetDockedWidth();
         }
-    }, [isAnyAppOpen]);
+    }, [isAnyAppOpen, updateTargetDockedWidth]);
+
+    useEffect(() => {
+        updateTargetDockedWidth();
+    }, [activeApp, updateTargetDockedWidth]);
+
+    useEffect(() => {
+        window.addEventListener('resize', updateTargetDockedWidth);
+        return () => window.removeEventListener('resize', updateTargetDockedWidth);
+    }, [updateTargetDockedWidth]);
 
     // Single unified requestAnimationFrame loop that handles BOTH manual dragging AND smooth, beautifully easing transitions in real-time
     useEffect(() => {
         let animationFrameId: number;
 
         const loop = () => {
-            const duration = (sceneTransitionSpeed || 1.10) * 1000; // ms
+            const duration = 420; // 420ms staggered completion (player completes movement before 600ms app expansion)
 
             if (dragProgress.current !== null) {
                 wasDraggingRef.current = true;
@@ -841,8 +929,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 if (animStartTime.current > 0) {
                     const elapsed = performance.now() - animStartTime.current;
                     const normT = Math.min(elapsed / duration, 1.0);
-                    // Match power4.out easing perfectly: 1 - (1 - x)^4
-                    const easeT = 1 - Math.pow(1 - normT, 4);
+                    // Match cubic-bezier(0.16, 1, 0.3, 1) perfectly with 3D car
+                    const easeT = cubicBezierEase(normT);
                     visualState.current = startT.current + (targetT - startT.current) * easeT;
                     if (normT >= 1.0) {
                         animStartTime.current = 0;
@@ -859,116 +947,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerContainerRef.current.style.transition = 'none';
 
                 const isStacked = window.innerWidth < 900;
-                const isDesktopLayout = window.innerWidth >= 900;
+                const isDesktopLayout = window.innerWidth >= 1180;
                 const pct = 50 * t;
+                const sideMargin = window.innerWidth < 1024 ? 16 : 24;
+                const dockedLeft = sideMargin;
                 const offsetPx = isStacked
-                    ? dockedConfig.left * (1 - t) - (floatingConfig.width / 2) * t
-                    : dockedConfig.left * (1 - t) - (floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) * t;
+                    ? dockedLeft * (1 - t) - (floatingConfig.width / 2) * t
+                    : dockedLeft * (1 - t) - (floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) * t;
                 
-                const currentWidth = dockedConfig.width + (floatingConfig.width - dockedConfig.width) * t;
+                // Target width is derived from available space between dockedConfig.left and the app boundary
+                const effectiveDockedWidth = targetDockedWidthRef.current || dockedConfig.width;
+
+                const currentWidth = effectiveDockedWidth + (floatingConfig.width - effectiveDockedWidth) * t;
                 const currentHeight = dockedConfig.height + (floatingConfig.height - dockedConfig.height) * t;
                 const currentBottom = dockedConfig.bottom + (floatingConfig.bottom - dockedConfig.bottom) * t;
 
-                // --- DESKTOP DYNAMIC OCCLUSION RESIZING (WITH PREDICTIVE DIRECTION-AWARE COGNIZANCE) ---
-                let overlap = 0;
-                let isOccluded = false;
-                let appLeft: number | null = null;
-                const safetyGap = 16; // constant 1rem margin from app
-                const minimumUsableWidth = 340; // absolute floor width for player controls integrity
-                const predictiveBuffer = 120; // px threshold where compression initiates *before* contact
-
-                if (isDesktopLayout) {
-                    const appElements = document.querySelectorAll('.spotify-app-panel');
-                    const playerLeft = window.innerWidth * (pct / 100) + offsetPx;
-                    
-                    for (let i = 0; i < appElements.length; i++) {
-                        const el = appElements[i] as HTMLElement;
-                        const style = window.getComputedStyle(el);
-                        if (style.display !== 'none' && style.visibility !== 'hidden') {
-                            const appRect = el.getBoundingClientRect();
-                            if (appRect.width > 0) {
-                                appLeft = appRect.left;
-                                const playerRight = playerLeft + currentWidth;
-                                
-                                // Real-time screen-space geometric intersection check
-                                const interLeft = Math.max(playerLeft, appRect.left);
-                                const interRight = Math.min(playerRight, appRect.right);
-                                
-                                const realPlayerRect = playerContainerRef.current.getBoundingClientRect();
-                                const interTop = Math.max(realPlayerRect.top, appRect.top);
-                                const interBottom = Math.min(realPlayerRect.bottom, appRect.bottom);
-                                
-                                const intersectionWidth = interRight - interLeft;
-                                const intersectionHeight = interBottom - interTop;
-
-                                if (intersectionWidth > 0 && intersectionHeight > 0) {
-                                    overlap = intersectionWidth;
-                                    isOccluded = true;
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    // Movement and velocity prediction calculations
-                    let predictedAppLeft = appLeft;
-                    let distance = 9999;
-                    let ratio = 1.0;
-                    let maxCompression = 0;
-
-                    if (appLeft !== null) {
-                        const prevLeft = prevAppLeftRef.current !== null ? prevAppLeftRef.current : appLeft;
-                        const velocity = appLeft - prevLeft;
-                        prevAppLeftRef.current = appLeft;
-
-                        // Predict app left boundary if it is actively moving left (towards the player)
-                        if (velocity < 0) {
-                            const predictionWindow = 12; // anticipate 12 frames ahead
-                            predictedAppLeft = appLeft + velocity * predictionWindow;
-                        }
-
-                        // Calculate distance from player's right edge to the app's predicted safety boundary
-                        distance = (predictedAppLeft - safetyGap) - (playerLeft + currentWidth);
-
-                        // Compression starts once the safety boundary crosses the predictive buffer threshold
-                        ratio = Math.max(0, Math.min(1, distance / predictiveBuffer));
-                        const targetAtContact = predictedAppLeft - safetyGap - playerLeft;
-                        maxCompression = Math.max(0, currentWidth - targetAtContact);
-                    } else {
-                        prevAppLeftRef.current = null;
-                    }
-
-                    // Compute dynamic target width taking safety gap and predictive compression into account
-                    let desiredWidth = currentWidth;
-                    if (appLeft !== null && distance < predictiveBuffer) {
-                        desiredWidth = currentWidth - (1 - ratio) * maxCompression;
-                        desiredWidth = Math.max(minimumUsableWidth, desiredWidth);
-                    }
-
-                    // Smooth transition interpolation (lerp) to prevent layout snap and overshoots
-                    if (adjustedWidthRef.current === null) {
-                        adjustedWidthRef.current = desiredWidth;
-                    } else {
-                        adjustedWidthRef.current += (desiredWidth - adjustedWidthRef.current) * 0.15;
-                    }
-
-                    // Output requested debug log on console (avoid duplicate logs for stable frames)
-                    const roundedTarget = Math.round(desiredWidth);
-                    if (appLeft !== null && roundedTarget !== lastLoggedTargetRef.current) {
-                        console.log(`[PLAYER OCCLUSION]\ndistance = ${Math.round(distance)}\npredictedOverlap = ${Math.round(maxCompression * (1 - ratio))}\ntargetWidth = ${roundedTarget}`);
-                        lastLoggedTargetRef.current = roundedTarget;
-                    }
-                } else {
-                    // Reset Desktop parameters when on tablet/mobile layout
-                    adjustedWidthRef.current = null;
-                    wasOccludedRef.current = false;
-                    prevAppLeftRef.current = null;
-                    lastLoggedTargetRef.current = null;
-                }
-
-                const displayWidth = (isDesktopLayout && adjustedWidthRef.current !== null)
-                    ? adjustedWidthRef.current
-                    : currentWidth;
+                const displayWidth = currentWidth;
 
                 // --- TABLET / MOBILE VIEWPORT OFFSET COMPENSATION ---
                 let viewportOffsetBottom = 0;
@@ -1322,10 +1316,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         const calculatePosition = () => {
             const playerRect = playerEl.getBoundingClientRect();
+            // Anchor to player: right edge flush with right edge of player
+            // Max allowed width: playerRect.width (queuePopupWidth <= musicPlayerWidth)
+            const popoverW = Math.min(queuePopoverWidth, playerRect.width);
             setPopoverPosition({
                 bottom: window.innerHeight - playerRect.top + queuePopoverBottomOffset,
-                left: playerRect.left + playerRect.width / 2,
-                transform: 'translateX(-50%)',
+                right: window.innerWidth - playerRect.right,
+                width: popoverW,
             });
         };
         
@@ -1666,7 +1663,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const currentTrackIndex = youtubePlaylist ? youtubePlaylist.findIndex(track => track.videoId === youtubeTrack.videoId) : -1;
 
             return (
-                 <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                 <div className="w-full h-full flex flex-col justify-between px-4 py-2 flex-1 self-stretch">
                     <div className="flex items-center justify-between w-full h-12">
                         <div className={`flex items-center min-w-0 ${isCompactLayout ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3 flex-1 shrink'}`}>
                             <img src={thumbnail} alt={title} className={`${currentArtworkClass} rounded-lg object-cover flex-shrink-0 shadow-lg`} />
@@ -1754,7 +1751,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const isFavorite = favoriteStationUUIDs.includes(radioStation.stationuuid);
             
             return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2 flex-1 self-stretch">
                     <div className="flex items-center justify-between w-full h-12">
                         <div className={`flex items-center min-w-0 ${isCompactLayout ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3 flex-1 shrink'}`}>
                             {favicon ? 
@@ -1829,8 +1826,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
             const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
             const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
-                 return (
-                <div className="w-full h-full flex flex-col justify-between px-4 py-2">
+            return (
+                <div className="w-full h-full flex flex-col justify-between px-4 py-2 flex-1 self-stretch">
                     <div className="flex items-center justify-between w-full h-12">
                         <div className={`flex items-center min-w-0 ${isCompactLayout ? 'gap-2 sm:gap-3 flex-1 shrink' : 'gap-3 flex-1 shrink'}`}>
                             {imageUrl && (
@@ -1992,7 +1989,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
             <div 
                 ref={playerContainerRef}
-                className={`fixed z-[2000] rounded-xl overflow-hidden max-w-[calc(100vw-32px)] border ${themeClasses} ${isNight ? 'bg-[#212121]' : 'bg-white'} shadow-xl ${
+                className={`music-player-container box-border fixed z-[2000] rounded-xl overflow-hidden border flex flex-col justify-between self-stretch ${themeClasses} ${isNight ? 'bg-[#212121]' : 'bg-white'} shadow-xl ${
                     isDjActive 
                         ? (isNight ? 'ring-1 ring-emerald-500/30' : 'ring-1 ring-emerald-600/20') 
                         : (isNight ? 'ring-1 ring-white/10' : 'ring-1 ring-black/5')
@@ -2009,7 +2006,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     left: isAnyAppOpen ? `${(dockedConfig.left) / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
                 }}
             >
-                 <div className="relative w-full h-full">
+                 <div className="relative w-full h-full flex flex-col justify-between flex-1 self-stretch">
                     {(nowPlaying.isLoading || debugSpinner) && (
                         <div className="player-spinner-overlay" style={spinnerStyle}>
                             <div className="spinner-visual" style={spinnerVisualDivStyle}></div>
@@ -2047,8 +2044,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     isClosing={isQueueClosing}
                     height={queuePopoverHeight}
                     scale={queuePopoverScale}
-                    width={queuePopoverWidth}
-                    offsetX={queuePopoverOffsetX}
                 />
             )}
         </>
