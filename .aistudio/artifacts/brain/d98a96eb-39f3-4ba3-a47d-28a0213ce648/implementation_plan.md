@@ -1,164 +1,229 @@
 # Performance Engineering: Deep Audit e Piano di Ottimizzazione all'Apertura delle App
 
-## 1. Diagnosi Globale: Perché l'Apertura Genera Micro-Scatti (anche su PC)
+## 1. Analisi del Momento Critico: "Open App"
 
-### La Sequenza Critica del Frame Drop
-Quando l'utente clicca su un'app (es. Spotify), nel lasso di tempo di **580 ms** si verificano simultaneamente:
-1. **Animazione 3D WebGL**: la camera e l'auto ruotano/traslano a 60 FPS con ricalcolo matriciale e multi-pass rendering (Mali-G52 o GPU desktop).
-2. **Animazione Music Player**: il player calcola la traiettoria easing verso sinistra.
-3. **Animazione Drawer**: il pannello scorre a tutto schermo.
-4. **IL PROBLEMA (a 350 ms, nel pieno dell'animazione)**:
-   - `triggerHomeContentFetch()` si attiva a metà transizione (`setTimeout 350ms`).
-   - Vengono inviate **12 richieste HTTP contemporanee** (`/me/playlists`, `/me/top/artists`, `/browse/categories/...`, `/browse/new-releases`, etc.).
-   - Man mano che le 12 risposte arrivano, vengono chiamati **12 singoli state setter React** (`setUserPlaylists`, `setTopArtists`, `setMadeForYouPlaylists`, `setChartsPlaylists`, etc.) all'interno di `AuthContext.tsx`.
-   - Poiché `AuthContext.Provider` avvolge l'intera applicazione, si generano **12 re-render globali consecutivi a cascata** del Virtual DOM in meno di 200 ms.
-   - `ContentArea.tsx` istanzia simultaneamente **14 caroselli orizzontali**, che montano **oltre 250 componenti `PlaylistItem`**.
-   - Ognuno dei 250 `PlaylistItem` esegue un `useEffect` su `item.id`, monta un tag `<img>` e inizia a scaricare e decodificare texture sRGB nel main thread.
-   - Ciascuno dei 14 caroselli crea una propria istanza sincrona di `ResizeObserver` e registra 3 event listener.
-5. **Risultato**: Il browser si trova a dover gestire contemporaneamente Garbage Collection, decodifica immagini sincrona, calcolo layout di 250 card, 12 re-render globali e rendering WebGL a 60 FPS. Questo satura la CPU (anche su PC potenti) causando il classico **drop da 60 FPS a 15-20 FPS nei primi istanti**.
+### La Sequenza Temporale e la Sovrapposizione dei Carichi (0 - 580 ms)
+
+Quando l'utente tocca un'icona nella Dock (es. Spotify):
+
+```text
+FRAME 0 ms (Click)
+├── 3D Canvas: calcolo quaternioni e inizio interpolazione camera/modello (WebGL)
+├── Music Player: calcolo traiettoria fluida verso sinistra (RAF)
+├── Drawer: inizio traslazione translateX da 100% a 0% (RAF)
+└── React: montaggio immediato del componente dell'App (<SpotifyPlayer />, <ContentArea />)
+
+FRAME 0 - 200 ms (Transizione Iniziale)
+├── 3D Canvas esegue 12 frame WebGL (Texture pass, Shadow map pass, MeshReflector pass)
+├── DOM: ContentArea monta contemporaneamente 14 caroselli e oltre 250 card PlaylistItem
+├── Browser: creazione di ~1.500 nodi DOM in memoria
+└── Memory: istanziazione di 14 listener e calcolo iniziale delle classi CSS
+
+FRAME 200 - 580 ms (Picco di Concorrenza)
+├── Rete: arrivo delle risposte HTTP dei contenuti home
+├── React Main Thread: esecuzione di re-render a cascata per i dati ricevuti
+├── Browser: avvio download di decine di immagini di copertina
+├── CPU/GPU: decodifica bitmap sRGB delle immagini concorrente al rendering WebGL
+└── RISULTATO: saturazione del Main Thread → Drop da 60 FPS a 20 FPS (Micro-scatti visibili anche su PC)
+```
 
 ---
 
-## 2. Audit Dettagliato App per App
+## 2. Profiling e Diagnosi dei Tre Costi
+
+| Tipo di Costo | Definizione | Dove si concentra nel progetto |
+| :--- | :--- | :--- |
+| **A. Tempo di Caricamento Reale** | Tempo effettivo affinché le API rispondano con i dati | Chiamate HTTP asincrone verso Spotify/Radio Browser/YouTube (dipendenti dalla rete) |
+| **B. Picco Iniziale (Spike)** | Lavoro computazionale concentrato nei primi 500 ms | Creazione massiva di 250+ card DOM, decodifica simultanea di immagini, re-render a raffica |
+| **C. Costo Continuo** | Carico residuo dopo che l'app è aperta e ferma | RAF loops in background, `ResizeObserver`, listener non passivi, `nowPlaying` re-renders |
+
+---
+
+## 3. Audit Approfondito App-per-App
 
 ---
 
 ### SPOTIFY (Priorità Massima)
 
-#### A. File e Componenti Responsabili
-- `context/AuthContext.tsx` (`fetchData`, `triggerHomeContentFetch`, `state setters`)
-- `components/SpotifyPlayer.tsx` (`useEffect isOpen fetch timer`)
-- `components/ContentArea.tsx` (montaggio sincrono di 14 caroselli)
-- `components/ContentCarousel.tsx` (istanza `ResizeObserver` per ogni carosello)
-- `components/PlaylistItem.tsx` (assenza di `React.memo`, `useEffect` non necessario, caricamento immagini simultaneo)
+#### 1. Componenti Principali
+- `components/SpotifyPlayer.tsx` (Host Drawer & Physics)
+- `components/ContentArea.tsx` (Container Home con Hero DJ & 14 Caroselli)
+- `components/ContentCarousel.tsx` (Carosello orizzontale scrollabile)
+- `components/PlaylistItem.tsx` (Card singola playlist/album/artista/brano)
+- `context/AuthContext.tsx` (Gestione token, sessione e fetch dati Home)
 
-#### B. Cause Individuate nel Codice
-1. **12 Re-render Globali a Raffica**: `fetchData()` in `AuthContext.tsx` risolve le chiamate e aggiorna 12 stati distinti senza batching. Poiché il Context risiede al root, l'intero albero di componenti (compresi player, navigazione, header) viene ricalcolato 12 volte di seguito.
-2. **Fetch Avviato a Metà Transizione (350ms)**: Il timer avvia il fetch mentre drawer e 3D stanno ancora accelerando/decelerando.
-3. **Mancanza di Staged Rendering**: `ContentArea.tsx` monta immediatamente tutti i 14 caroselli (sia visibili che 1000px sotto il fold).
-4. **250+ Istanze Non Memoizzate**: `PlaylistItem.tsx` non è `React.memo`, quindi ogni micro-aggiornamento di contesto provoca il re-render di centinaia di nodi DOM.
-5. **14 ResizeObserver Simultanei**: Ogni `ContentCarousel` istanzia un `ResizeObserver` separato all'avvio.
+#### 2. Caricamento Dati
+- `fetchData()` in `AuthContext.tsx` invia 12 richieste HTTP contemporanee (`/me/playlists`, `/me/top/artists`, `/browse/categories/...`, etc.).
+- Se avviato durante la transizione (prima dei 580 ms), la ricezione dati contende la CPU con l'interpolazione della telecamera 3D.
 
-#### C. Soluzioni Architetturali
-1. **Defer del Fetch a Transizione Conclusa (`600ms`)**:
-   - Avviare il caricamento della rete **solo dopo che la transizione visiva (580ms) si è conclusa al 100%**. Durante l'animazione, la shell dell'app e la cache locale pregressa (o skeleton a layout fisso) sono già a schermo a 60 FPS senza alcuna contesa di CPU.
-2. **State Consolidation / Batching in `AuthContext`**:
-   - Consolidare i dati della home in un unico oggetto di stato `homeContent` o utilizzare `ReactDOM.unstable_batchedUpdates`, trasformando 12 re-render a cascata in **1 singolo render atomico**.
-3. **Staged Rendering Progressivo**:
-   - **Fase 1 (immediata a 0ms)**: Rendering della Shell (Header, Saluto, Hero Card "Spotify AI DJ" con pulsante play rapido) + Carosello "Continua ad ascoltare" (Above-the-fold prioritario).
-   - **Fase 2 (a transizione finita, ~600ms)**: Rendering dei caroselli prioritari successivi ("Realizzato per te", "Le tue playlist", "Classifiche").
-   - **Fase 3 (idle / scroll progressivo)**: Montaggio dei restanti caroselli secondari below-the-fold solo quando entrano nella viewport o in `requestIdleCallback`.
-4. **Memoization di `PlaylistItem`**:
-   - Avvolgere `PlaylistItem` in `React.memo`.
-   - Eliminare l'inutile `useEffect` interno per `setImageError(false)`.
-5. **Zero Layout Shift per le Card**:
-   - Tutte le card hanno contenitore `w-full aspect-square` con sfondo placeholder sobrio già riservato. L'immagine si carica in `decoding="async"` e `loading="lazy"`, comparendo senza alcuno spostamento visivo dei testi sottostanti.
-6. **Ottimizzazione `ContentCarousel`**:
-   - Rimozione dei 14 `ResizeObserver` individuali; controllo scrollability leggero via scroll listener passivo e window resize.
+#### 3. Rendering e Virtual DOM
+- `ContentArea.tsx` renderizza 14 sezioni carosello. Se ciascuna ha 15-20 elementi, vengono creati **280 componenti `PlaylistItem` contemporaneamente**.
+- Ogni `PlaylistItem` contiene 6 nodi DOM (wrapper, container aspect-ratio, img, fallback icon, titolo h3, descrizione p) = **~1.680 nodi DOM** iniettati nel documento.
+- `ContentArea` è agganciato al contesto globale `nowPlaying`: ad ogni aggiornamento di stato del player (secondo per secondo o cambio traccia), tutti i 14 caroselli e le 280 card venivano rivalutati.
 
-#### D. Impatto Atteso
-- Transizione di apertura Spotify granitica a **60 FPS sia su PC che su Tab A8**.
-- Riduzione dell'utilizzo del main thread all'apertura del **75%**.
+#### 4. Immagini e Media
+- 280 tag `<img>` richiedono simultaneamente le immagini di copertina.
+- La decodifica delle immagini JPEG/PNG su main thread compete direttamente con il ciclo di rasterizzazione WebGL.
+
+#### 5. Scroll e Listener
+- `ContentCarousel.tsx` istanziava 14 `ResizeObserver` separati e 14 scroll listener per determinare la visibilità delle frecce di scorrimento.
+
+#### 6. Problemi Individuati
+1. Montaggio simultaneo di tutti i caroselli (anche quelli 1.200px sotto il fold dello schermo).
+2. Mancanza di isolamento tra lo stato del player (`nowPlaying` per l'AI DJ card) e i caroselli sottostanti.
+3. Decodifica concorrente di troppe immagini durante il movimento del drawer.
+
+#### 7. Soluzione Proposta
+1. **Staged Progressive Rendering**:
+   - *Fase 1 (0 ms)*: Shell immediata (Header, Saluto, Hero Card DJ) + i primi 3 caroselli visibili above-the-fold (*Continua ad ascoltare*, *Realizzato per te*, *Le tue playlist*).
+   - *Fase 2 (post-transizione, ~600 ms)*: Inserimento progressivo dei caroselli successivi (*Classifiche*, *Musica da cantare*, *Artisti del momento*, *Nuove uscite*).
+   - *Fase 3 (idle / on-demand)*: Inserimento dei caroselli secondari below-the-fold (*Podcast*, *Generi*, *Album salvati*).
+2. **Isolamento Componente `SpotifyDjHeroCard`**:
+   - Estrarre la Hero Card dell'AI DJ in un componente separato memoizzato che ascolta `nowPlaying`, evitando il re-render di `ContentArea` e dei caroselli durante la riproduzione musicale.
+3. **Memoization Pura di `PlaylistItem`**:
+   - `React.memo` su `PlaylistItem` con props primitive/stabili.
+4. **Zero Layout Shift**:
+   - Contenitore rigidamente vincolato con classe `aspect-square`, placeholder CSS neutro con transizione d'opacità per l'immagine solo ad avvenuta decodifica asincrona (`decoding="async"`).
+
+#### 8. Rischio di Regressione
+- **Basso**: Il contenuto visivo, le copertine, i titoli e la navigazione rimangono identici al 100%.
+
+#### 9. Priorità
+- **Massima (P0)**.
 
 ---
 
 ### MAPS
 
-#### A. File e Componenti Responsabili
+#### 1. Componenti Principali
 - `components/MapsContainer.tsx`
-- `components/MapEngineUtils.ts`
-- `MapLibre GL` canvas instance
+- `components/NavigateTool.tsx`, `components/SearchPanel.tsx`, `components/TripStatsHUD.tsx`
+- Canvas MapLibre GL + RadarService + Starfield
 
-#### B. Cause Individuate nel Codice
-- Il canvas MapLibre reagisce a resize durante il movimento del drawer, scatenando il rendering WebGL della mappa mentre Three.js sta renderizzando l'auto.
-- `MapControls`, `CosmicStarfield`, radar weather frames.
+#### 2. Caricamento Dati & Rendering
+- Inizializzazione motore cartografico vettoriale MapLibre GL.
+- Calcolo dei percorsi e overlay del traffico/meteo.
 
-#### C. Soluzioni
-1. Mantenere il canvas MapLibre dimensionato stabilmente, posticipando `map.resize()` al completamento della transizione (580ms).
-2. Sospendere il render di radar weather frames se il pannello mappe è chiuso o coperto.
+#### 3. Problemi Individuati
+- Durante lo scorrimento del drawer (0 - 580 ms), MapLibre potrebbe tentare di ridimensionare il proprio canvas o ricalcolare le matrici dei tile vettoriali in parallelo a Three.js.
+- Il loop RAF di `MapsContainer` prima continuava all'infinito (ora risolto con il gated RAF).
 
-#### D. Impatto Atteso
-- Eliminazione di doppie chiamate WebGL concorrenti durante lo slide.
+#### 4. Soluzione Proposta
+1. Mantenere il canvas MapLibre stabile durante lo scorrimento e invocare `map.resize()` **solo al termine dei 580 ms di transizione**.
+2. Sospendere il loop radar meteo quando il pannello Mappe non è visibile.
+
+#### 5. Rischio di Regressione
+- **Nullo**.
+
+#### 6. Priorità
+- **Alta (P1)**.
 
 ---
 
 ### RADIO
 
-#### A. File e Componenti Responsabili
+#### 1. Componenti Principali
 - `components/RadioApp.tsx`
-- `components/HorizontalCarousel.tsx`
-- `components/RadioCard.tsx`
+- `components/HorizontalCarousel.tsx`, `components/RadioCard.tsx`
+- `radio_curated.ts` (dataset locale sincrono)
 
-#### B. Cause Individuate nel Codice
-- `RadioApp.tsx` attende la risoluzione di 5 chiamate HTTP di `radioBrowserApi` prima di visualizzare le stazioni, mostrando uno skeleton temporaneo, anche se `curatedStations` (le radio italiane più popolari) è già presente sincronicamente in locale in memoria (`radio_curated.ts`).
+#### 2. Caricamento Dati & Rendering
+- `RadioApp` scarica categorie live da `radio-browser.info` tramite 5 richieste HTTP.
+- Possiede già in memoria locale `curatedStations` (le 20 stazioni radio italiane più popolari).
 
-#### C. Soluzioni
-1. **Visualizzazione Immediata a 0ms**: Montare subito `curatedStations` ("Le più ascoltate in Italia") istantaneamente al click.
-2. In background, a transizione conclusa, caricare le altre categorie (Pop, Rock, Dance, Notizie) e aggiungerle progressivamente.
-3. Memoizzare `RadioCard` con `React.memo`.
+#### 3. Problemi Individuati
+- Inizializzare `categories` come array vuoto costringeva l'app a mostrare skeleton generici per 500-1000 ms, ritardando il *First Meaningful Paint*.
 
-#### D. Impatto Atteso
-- Apertura istantanea senza schermata vuota o attesa di rete.
+#### 4. Soluzione Proposta
+1. **Instant Paint a 0 ms**: Inizializzare lo stato direttamente con `curatedStations` in modo che "Le più ascoltate in Italia" sia renderizzato al primo frame senza attese di rete.
+2. Caricare in background le altre categorie (Pop, Rock, Dance, Notizie) e aggiungerle in coda senza bloccare l'interfaccia.
+3. `React.memo` su `RadioCard` con `decoding="async"` e fallback favicon.
+
+#### 5. Rischio di Regressione
+- **Nullo**.
+
+#### 6. Priorità
+- **Media (P2)**.
 
 ---
 
 ### YOUTUBE MUSIC
 
-#### A. File e Componenti Responsabili
+#### 1. Componenti Principali
 - `components/YouTubeMusicApp.tsx`
 - `context/YouTubeMusicContext.tsx`
 - `components/ContentCarousel.tsx`
 
-#### B. Cause Individuate nel Codice
-- All'apertura viene invocato `fetchYouTubeHomeData` che genera contemporaneamente 4 caroselli di video/playlist YouTube.
+#### 2. Caricamento Dati & Rendering
+- Query verso YouTube Music Data API / fallback demo con generazione di caroselli video e playlist.
 
-#### C. Soluzioni
-1. Applicare la stessa strategia di Staged Rendering (render immediato di Top Categories + Above-the-fold, poi progressive rendering below-the-fold).
-2. Utilizzare immagini con `decoding="async"` e placeholder proporzionati a dimensione fissa.
+#### 3. Problemi Individuati
+- Come per Spotify, caricare contemporaneamente tutte le playlist YouTube può causare un burst di immagini non necessario durante lo slide.
+
+#### 4. Soluzione Proposta
+1. Staged rendering progressivo dei caroselli di YouTube Music.
+2. Contenitori aspect ratio 16:9 / 1:1 rigidi per prevenire layout shift.
+
+#### 5. Rischio di Regressione
+- **Nullo**.
+
+#### 6. Priorità
+- **Media (P2)**.
 
 ---
 
 ### THEATER / VIDEO
 
-#### A. File e Componenti Responsabili
+#### 1. Componenti Principali
 - `components/Theater.tsx`
 - `components/ServiceButton`
 
-#### B. Cause Individuate nel Codice
-- `ServiceButton` ha calcoli di `getBoundingClientRect()` ad ogni mousemove/touch.
-- Componente già leggero, ma può beneficiare del posticipo del caricamento dei poster/trailer a transizione conclusa.
+#### 2. Caricamento Dati & Rendering
+- Griglia di pulsanti per i servizi streaming con effetto 3D glare su mousemove/touch.
 
-#### C. Soluzioni
-- Caricamento iframe video on-demand solo quando l'utente seleziona un trailer o un servizio, evitando istanze di player video nascosti in background.
+#### 3. Problemi Individuati
+- Se venissero montati iframe o video player prima dell'interazione esplicita dell'utente, occuperebbero decoder hardware GPU.
+
+#### 4. Soluzione Proposta
+- Mantenere i video iframe instanziati rigorosamente *on-demand* al click dell'utente.
+
+#### 5. Rischio di Regressione
+- **Nullo**.
+
+#### 6. Priorità
+- **Bassa (P3)**.
 
 ---
 
-## 3. Piano Operativo di Implementazione a Blocchi Verificabili
+## 4. Prestazioni Globali & Budget di Rendering
+
+### Performance Budget Obiettivo
+- **Transizione Open App**: **0 long tasks > 50 ms** nel lasso 0 - 580 ms. Frame rate minimo **55-60 FPS**.
+- **First Meaningful Content (FMC)**: **< 100 ms** (Shell + Top Carousels già visibili).
+- **Layout Shift (CLS)**: **0.00** (tutti i contenitori di immagini hanno dimensione esatta pre-allocata).
+- **CPU a Riposo**: **0%** (tutti i loop RAF e observer dormono quando non vi sono animazioni in corso).
+
+---
+
+## 5. Piano di Implementazione a Fasi
 
 ```text
-[BLOCCO A: DEFER DEL FETCH & BATCHING STATO AUTHCONTEXT]
-→ Spostamento del trigger di fetch da 350ms a 600ms (post-transizione)
-→ Consolidamento degli state setters di AuthContext in batch atomico
-→ Verifica apertura Spotify senza scatti di rendering
+[FASE 1: SPOTIFY ARCHITECTURAL OPTIMIZATION]
+1. Isolamento di SpotifyDjHeroCard da ContentArea per azzerare re-render durante la riproduzione.
+2. Staged Progressive Rendering in ContentArea (Stadio 1 immediato, Stadio 2 a 600ms, Stadio 3 on-demand).
+3. Memoization di PlaylistItem con decoding="async" e zero layout shift.
+4. Centralizzazione dei listener di scorrimento in ContentCarousel.
 
-[BLOCCO B: STAGED RENDERING & ZERO LAYOUT SHIFT SPOTIFY]
-→ Staged rendering in ContentArea (Shell + Above-the-fold immediato, resto progressivo)
-→ React.memo su PlaylistItem ed eliminazione useEffect superfluo
-→ Placeholder a dimensione fissa e decoding="async" per eliminare layout shifts
-→ Ottimizzazione caroselli (eliminazione dei 14 ResizeObserver)
-→ Verifica stabilità e fluidità caroselli
+[FASE 2: MAPS & RADIO SMOOTHING]
+1. Posticipo del map.resize() al termine della transizione (580ms).
+2. Instant-mount di curatedStations in RadioApp per First Meaningful Content a 0ms.
 
-[BLOCCO C: OTTIMIZZAZIONE APERTURA RADIO & YOUTUBE MUSIC]
-→ Radio: visualizzazione immediata di curatedStations a 0ms
-→ YouTube Music: staged rendering e memoization
-→ Maps: resize maplibre a transizione completata
-→ Verifica globale
+[FASE 3: YOUTUBE MUSIC & THEATER ALIGNMENT]
+1. Staged rendering in YouTubeMusicApp.
+2. Verifica assenza di decoder attivi in background in Theater.
+
+[FASE 4: VERIFICA PRESTAZIONI SU PC E GALAXY TAB A8]
+1. Test di apertura ripetuta di tutte le app.
+2. Verifica transizioni fluide a 60 FPS in lockstep tra Camera 3D, Player e Drawer.
+3. Controllo assenza totale di regressioni grafiche o funzionali.
 ```
-
----
-
-## 4. Garanzie di Conservazione UX e Design
-- **Nessuna rimozione**: tutti i caroselli, tutte le categorie, tutte le card e tutte le playlist rimangono esattamente identiche.
-- **Stesso stile e grafica**: stessi colori, stesse animazioni, stesse icone, stesso layout.
-- **Nessun layout shift**: le altezze e larghezze delle card sono rigidamente bloccate a CSS con aspect ratio invariato.
-- **Transizione perfetta a 580ms**: Player, camera 3D e app si muovono all'unisono senza rallentamenti o drop di frame.
