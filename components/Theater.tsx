@@ -14,6 +14,7 @@ const ServiceButton = ({ service, isNight, onClick }: {
     const cardRef = useRef<HTMLButtonElement>(null);
     const glareRef = useRef<HTMLDivElement>(null);
     const logoRef = useRef<HTMLImageElement>(null);
+    const cachedRectRef = useRef<DOMRect | null>(null);
     
     const { logoUrl, name, glowColor } = service;
 
@@ -27,7 +28,11 @@ const ServiceButton = ({ service, isNight, onClick }: {
 
     const handlePointerMove = (x: number, y: number) => {
         if (!cardRef.current) return;
-        const rect = cardRef.current.getBoundingClientRect();
+        let rect = cachedRectRef.current;
+        if (!rect) {
+            rect = cardRef.current.getBoundingClientRect();
+            cachedRectRef.current = rect;
+        }
         const mouseX = x - rect.left;
         const mouseY = y - rect.top;
 
@@ -36,8 +41,8 @@ const ServiceButton = ({ service, isNight, onClick }: {
         cardRef.current.style.setProperty('--mouse-y', `${(mouseY) / 16}rem`);
 
         // Calculate and apply 3D rotation
-        const rotateX = (mouseY / rect.height - 0.5) * -20; // -10 to 10 degrees
-        const rotateY = (mouseX / rect.width - 0.5) * 20;  // -10 to 10 degrees
+        const rotateX = (mouseY / (rect.height || 1) - 0.5) * -20; // -10 to 10 degrees
+        const rotateY = (mouseX / (rect.width || 1) - 0.5) * 20;  // -10 to 10 degrees
         cardRef.current.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.05, 1.05, 1.05)`;
 
         // Lift the logo towards the user
@@ -47,10 +52,14 @@ const ServiceButton = ({ service, isNight, onClick }: {
     };
 
     const handlePointerEnter = () => {
+        if (cardRef.current) {
+            cachedRectRef.current = cardRef.current.getBoundingClientRect();
+        }
         if (glareRef.current) glareRef.current.style.opacity = '1';
     };
 
     const handlePointerLeave = () => {
+        cachedRectRef.current = null;
         if (!cardRef.current) return;
         // Reset 3D transforms
         cardRef.current.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
@@ -75,9 +84,15 @@ const ServiceButton = ({ service, isNight, onClick }: {
             onMouseLeave={handlePointerLeave}
             onTouchStart={(e) => {
                 handlePointerEnter();
-                handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+                if (e.touches[0]) {
+                    handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
             }}
-            onTouchMove={(e) => handlePointerMove(e.touches[0].clientX, e.touches[0].clientY)}
+            onTouchMove={(e) => {
+                if (e.touches[0]) {
+                    handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            }}
             onTouchEnd={handlePointerLeave}
             className="service-button"
             style={{ '--glow-color': glowColor } as React.CSSProperties}

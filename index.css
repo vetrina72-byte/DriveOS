@@ -167,3 +167,23 @@ body {
   transform-origin: bottom right;
 }
 
+/* Performance optimizations for mobile & low-end GPUs */
+.gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 200px;
+}
+
+.spotify-carousel {
+  contain: layout style;
+}
+
+.carousel-card-contain {
+  contain: layout style paint;
+}
+

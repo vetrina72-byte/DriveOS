@@ -147,7 +147,7 @@ function createPOIMarkerElement(poi: LocationInfo, isNight: boolean, onClick: ()
       <div class="relative flex flex-col items-center">
         <div class="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-md border border-black/15 overflow-hidden p-1">
           ${logoUrl ? `
-            <img src="${logoUrl}" alt="${cleanName}" referrerpolicy="no-referrer" class="w-full h-full object-contain transition-opacity duration-150" onerror="this.onerror=null;this.parentElement.innerHTML='${svg.replace(/'/g, "\\'")}'" />
+            <img src="${logoUrl}" alt="${cleanName}" referrerpolicy="no-referrer" class="w-full h-full object-contain transition-opacity duration-150" onerror="this.onerror=null;this.parentElement.innerHTML='${(svg || '').replace(/'/g, "\\'")}'" />
           ` : `
             <div style="background-color: ${bg};" class="w-full h-full rounded-lg flex items-center justify-center text-white">
               ${svg}
@@ -330,6 +330,19 @@ const MapsContainer = React.memo(({
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  const isOpenRef = useRef(isOpen);
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+    if (isOpen && mapRef.current && rposRef.current) {
+      mapRef.current.jumpTo({
+        center: [rposRef.current.lng, rposRef.current.lat],
+        bearing: ccamBearRef.current,
+        pitch: ccamPitchRef.current,
+        zoom: mapRef.current.getZoom()
+      });
+    }
+  }, [isOpen]);
 
   // MapLibre and marker references
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -2408,39 +2421,41 @@ const MapsContainer = React.memo(({
         }
 
         if (mapRef.current && followRef.current && !isRoutePreviewRef.current && !interactRef.current && !flyingRef.current && !isWeatherActiveRef.current) {
-          const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-          const targetFps = isMobile ? 30 : 60;
-          const frameTime = 1000 / targetFps;
-          
-          // Continuous smooth camera pitch interpolation (exponential easing)
-          const targetPitch = is3DRef.current ? 45 : 0;
-          const pitchDiff = targetPitch - ccamPitchRef.current;
-          if (Math.abs(pitchDiff) > 0.05) {
-            ccamPitchRef.current += pitchDiff * (1 - Math.exp(-9.0 * dt));
-          } else {
-            ccamPitchRef.current = targetPitch;
-          }
-
-          // Continuous smooth camera bearing interpolation (shortest circular angle) when in heading-up mode
-          if (cmodeRef.current === 'heading-up') {
-            const targetBearing = cbearRef.current;
-            const currentBearVal = mapRef.current.getBearing();
-            const bearDiff = (((targetBearing - currentBearVal) % 360) + 540) % 360 - 180;
-            if (Math.abs(bearDiff) > 0.1) {
-              ccamBearRef.current = currentBearVal + bearDiff * (1 - Math.exp(-7.0 * dt));
+          if (isOpenRef.current || navingRef.current) {
+            const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+            const targetFps = isMobile ? 30 : 60;
+            const frameTime = 1000 / targetFps;
+            
+            // Continuous smooth camera pitch interpolation (exponential easing)
+            const targetPitch = is3DRef.current ? 45 : 0;
+            const pitchDiff = targetPitch - ccamPitchRef.current;
+            if (Math.abs(pitchDiff) > 0.05) {
+              ccamPitchRef.current += pitchDiff * (1 - Math.exp(-9.0 * dt));
             } else {
-              ccamBearRef.current = targetBearing;
+              ccamPitchRef.current = targetPitch;
             }
-          }
 
-          if (!(mapRef.current as any)._lastMapUpdate || t - (mapRef.current as any)._lastMapUpdate >= frameTime) {
-            mapRef.current.jumpTo({
-              center: [rposRef.current.lng, rposRef.current.lat],
-              bearing: ccamBearRef.current,
-              pitch: ccamPitchRef.current,
-              zoom: mapRef.current.getZoom()
-            });
-            (mapRef.current as any)._lastMapUpdate = t;
+            // Continuous smooth camera bearing interpolation (shortest circular angle) when in heading-up mode
+            if (cmodeRef.current === 'heading-up') {
+              const targetBearing = cbearRef.current;
+              const currentBearVal = mapRef.current.getBearing();
+              const bearDiff = (((targetBearing - currentBearVal) % 360) + 540) % 360 - 180;
+              if (Math.abs(bearDiff) > 0.1) {
+                ccamBearRef.current = currentBearVal + bearDiff * (1 - Math.exp(-7.0 * dt));
+              } else {
+                ccamBearRef.current = targetBearing;
+              }
+            }
+
+            if (!(mapRef.current as any)._lastMapUpdate || t - (mapRef.current as any)._lastMapUpdate >= frameTime) {
+              mapRef.current.jumpTo({
+                center: [rposRef.current.lng, rposRef.current.lat],
+                bearing: ccamBearRef.current,
+                pitch: ccamPitchRef.current,
+                zoom: mapRef.current.getZoom()
+              });
+              (mapRef.current as any)._lastMapUpdate = t;
+            }
           }
         }
 

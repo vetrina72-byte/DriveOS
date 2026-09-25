@@ -858,31 +858,32 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [isPlayingGlobal]);
 
     const targetDockedWidthRef = useRef<number>(dockedConfig.width);
+    const cachedAppLeftRef = useRef<number>(typeof window !== 'undefined' ? window.innerWidth : 1024);
     const lastFrameTimeRef = useRef<number>(performance.now());
 
-    // Calculate real app left edge and symmetric docked width
+    // Calculate real app left edge and symmetric docked width without forcing synchronous reflows in loop
     const updateTargetDockedWidth = useCallback(() => {
         const wWidth = window.innerWidth;
         const sideMargin = wWidth < 1024 ? 16 : 24;
 
-        // Determine FINAL_APP_LEFT boundary
+        // Determine FINAL_APP_LEFT boundary statically and reliably
         let appLeft = wWidth;
-        const mapsPanel = document.getElementById('maps-app-panel');
-        if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < wWidth) {
-            appLeft = wWidth - mapsPanel.offsetWidth;
-        } else {
-            const appElements = document.querySelectorAll('.spotify-app-panel');
-            for (let i = 0; i < appElements.length; i++) {
-                const el = appElements[i] as HTMLElement;
-                if (el.offsetWidth > 0 && el.offsetWidth < wWidth && !el.closest('#maps-anchored-container')) {
-                    appLeft = wWidth - el.offsetWidth;
-                    break;
-                }
+        if (activeApp) {
+            if (activeApp === 'maps' || SPLIT_APPS_WITH_MAP_UNDER.includes(activeApp)) {
+                appLeft = Math.round(wWidth * (1 / 3));
+            } else if (wWidth >= 1280) {
+                appLeft = Math.round(wWidth * 0.40);
+            } else if (wWidth >= 1024) {
+                appLeft = Math.round(wWidth * 0.35);
+            } else if (wWidth >= 768) {
+                appLeft = Math.round(wWidth * 0.50);
+            } else if (wWidth >= 640) {
+                appLeft = Math.round(wWidth * 0.25);
+            } else {
+                appLeft = Math.round(wWidth * (1 / 3));
             }
         }
-        if (appLeft === wWidth && activeApp) {
-            appLeft = Math.round(wWidth * (1 / 3));
-        }
+        cachedAppLeftRef.current = appLeft;
 
         // Available width inside left column with perfectly symmetrical margins on left and right
         const availablePx = appLeft - (2 * sideMargin);
@@ -904,7 +905,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [activeApp, updateTargetDockedWidth]);
 
     useEffect(() => {
-        window.addEventListener('resize', updateTargetDockedWidth);
+        window.addEventListener('resize', updateTargetDockedWidth, { passive: true });
         return () => window.removeEventListener('resize', updateTargetDockedWidth);
     }, [updateTargetDockedWidth]);
 
@@ -915,7 +916,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     useEffect(() => {
         updateRemScale();
-        window.addEventListener('resize', updateRemScale);
+        window.addEventListener('resize', updateRemScale, { passive: true });
         return () => window.removeEventListener('resize', updateRemScale);
     }, [updateRemScale]);
 
@@ -960,24 +961,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Root rem scaling factor read from cached ref (avoids forced layout recalc every frame)
                 const remScale = remScaleRef.current;
 
-                // Determine app boundary (the real left edge of the open right-hand panel) in current coordinate space
-                let appLeft = winWidth;
-                const mapsPanel = document.getElementById('maps-app-panel');
-                if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < winWidth) {
-                    appLeft = winWidth - mapsPanel.offsetWidth;
-                } else {
-                    const panels = document.querySelectorAll('.spotify-app-panel');
-                    for (let i = 0; i < panels.length; i++) {
-                        const el = panels[i] as HTMLElement;
-                        if (el.offsetWidth > 0 && el.offsetWidth < winWidth && !el.closest('#maps-anchored-container')) {
-                            appLeft = winWidth - el.offsetWidth;
-                            break;
-                        }
-                    }
-                }
-                if (appLeft === winWidth && activeApp) {
-                    appLeft = Math.round(winWidth * (1 / 3));
-                }
+                // Determine app boundary in current coordinate space (read purely from cached computation, 0 layout reflows)
+                const appLeft = isAnyAppOpen ? cachedAppLeftRef.current : winWidth;
 
                 // --- DOCKED GEOMETRY (when t = 0, app is open) ---
                 // Available width inside left column with perfectly symmetrical margins on left and right:

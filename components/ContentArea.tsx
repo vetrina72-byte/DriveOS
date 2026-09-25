@@ -243,20 +243,21 @@ const ContentArea = React.memo(({
   const [renderStage, setRenderStage] = React.useState(1);
 
   React.useEffect(() => {
-    // Stage 1 (0ms): Shell, Greeting, Hero Card, Immediate Above-the-fold
-    // Stage 2 (60ms): Core Primary Carousels
-    const t1 = setTimeout(() => {
-      setRenderStage(prev => Math.max(prev, 2));
-    }, 60);
-
-    // Stage 3 (200ms): Full Below-the-fold Carousels
-    const t2 = setTimeout(() => {
-      setRenderStage(prev => Math.max(prev, 3));
-    }, 200);
+    // Frame-sliced progressive staging:
+    // Frame 0 (0ms): Shell, Greeting, Hero Card, Immediate Above-the-fold
+    // Frame 1 (~16ms): Core Primary Carousels
+    // Frame 2 (~32ms): Full Below-the-fold Carousels
+    let raf2: number;
+    const raf1 = requestAnimationFrame(() => {
+      setRenderStage(2);
+      raf2 = requestAnimationFrame(() => {
+        setRenderStage(3);
+      });
+    });
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
     };
   }, []);
 

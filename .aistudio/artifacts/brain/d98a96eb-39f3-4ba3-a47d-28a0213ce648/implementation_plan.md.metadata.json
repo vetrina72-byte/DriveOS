@@ -1,6 +1,6 @@
 {
-  "summary":  "Performance Engineering Comprehensive Audit & Execution Plan: analisi approfondita dei carichi di mount, rendering e decodifica all'apertura delle app (Spotify, Maps, Radio, YouTube Music, Theater), con profiling dettagliato delle operazioni concorrenti tra Main Thread, React Virtual DOM e WebGL GPU, e strategie di staged progressive rendering a zero layout shift.",
-  "updatedAt":  "2026-09-25T18:16:11.178933898Z",
+  "summary":  "Piano di Performance Engineering per infotainment: audit approfondito dei colli di bottiglia CPU/GPU/DOM/React/WebGL, piano per Galaxy Tab A8 e dispositivi low-end, eliminazione dei frame spikes, pausa del loop 3D durante le app a schermo intero, content-visibility/IntersectionObserver per i caroselli, rimozione del layout thrashing e profilazione adattiva con isteresi senza alcuna modifica visiva.",
+  "updatedAt":  "2026-09-25T19:23:56.172374756Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

@@ -22,6 +22,7 @@ import WeatherEffects from "./WeatherEffects";
 import type { SceneColors } from "../App";
 import type { WeatherParams } from "../types";
 import { APP_TRANSITION_SECONDS } from "../context/UIConfigContext";
+import { usePerformanceProfile } from "../hooks/usePerformanceProfile";
 
 // Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
 const Primitive = "primitive" as any;
@@ -1896,6 +1897,18 @@ function VehicleCanvas({
     </Group>
   );
 
+  const [isAppTransitioning, setIsAppTransitioning] = useState(false);
+
+  useEffect(() => {
+    setIsAppTransitioning(true);
+    const timer = setTimeout(() => {
+      setIsAppTransitioning(false);
+    }, 750);
+    return () => clearTimeout(timer);
+  }, [isAppOpen]);
+
+  const perfProfile = usePerformanceProfile();
+
   return (
     <div
       className="absolute inset-0 z-0 pointer-events-auto"
@@ -1907,8 +1920,8 @@ function VehicleCanvas({
         className="w-full h-full"
         style={{ zIndex: 0, touchAction: "none" }}
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, Math.min(window.devicePixelRatio, 1.25)]}
-        frameloop="always"
+        dpr={[1, Math.min(window.devicePixelRatio, perfProfile.dprLimit)]}
+        frameloop={(isAppOpen && !isAppTransitioning) ? "demand" : "always"}
         camera={{
           fov: 48,
           near: 0.5,
@@ -2061,8 +2074,8 @@ function VehicleCanvas({
           castShadow
           shadow-bias={-0.0001}
           shadow-normalBias={0.02}
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
+          shadow-mapSize-width={perfProfile.shadowMapSize}
+          shadow-mapSize-height={perfProfile.shadowMapSize}
           shadow-camera-near={0.5}
           shadow-camera-far={50}
           shadow-camera-left={-15}

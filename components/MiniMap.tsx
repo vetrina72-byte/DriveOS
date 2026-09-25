@@ -256,16 +256,28 @@ const MiniMap: React.FC<MiniMapProps> = ({
     return unsubscribe;
   }, []);
 
+  const [isInteracting, setIsInteracting] = React.useState(false);
+
+  useEffect(() => {
+    const handleCanvasInteracting = (e: any) => {
+      setIsInteracting(Boolean(e.detail));
+    };
+    window.addEventListener('canvas-interacting', handleCanvasInteracting, { passive: true });
+    return () => window.removeEventListener('canvas-interacting', handleCanvasInteracting);
+  }, []);
+
+  const effectivelyVisible = isVisible && !isInteracting;
+
   // Resize when visibility toggles
   useEffect(() => {
-    if (isVisible && mapRef.current) {
+    if (effectivelyVisible && mapRef.current) {
       mapRef.current.resize();
     }
-  }, [isVisible]);
+  }, [effectivelyVisible]);
 
   return (
     <div
-      className={`minimap-container ${isVisible ? 'visible' : ''}`}
+      className={`minimap-container ${effectivelyVisible ? 'visible' : ''}`}
       style={containerStyle}
       onClick={onClick}
     >
@@ -277,4 +289,4 @@ const MiniMap: React.FC<MiniMapProps> = ({
   );
 };
 
-export default MiniMap;
+export default React.memo(MiniMap);

@@ -96,7 +96,11 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   }
 
   return (
-    <div onClick={() => onSelectItem(item)} className={`p-2 sm:p-3 rounded-lg transition-colors duration-200 w-full mx-auto ${bgColor} cursor-pointer`}>
+    <div 
+      onClick={() => onSelectItem(item)} 
+      className={`p-2 sm:p-3 rounded-lg transition-colors duration-200 w-full mx-auto ${bgColor} cursor-pointer`}
+      style={{ contain: 'layout paint' }}
+    >
       <div className="relative w-full aspect-square mb-2 sm:mb-3">
         {imageUrl && !imageError ? (
           <img 

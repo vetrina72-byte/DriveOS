@@ -239,7 +239,6 @@ function AppContent() {
   ]);
 
   const [isCustomizing, setIsCustomizing] = useState(false);
-  const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
   const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music', 'debug']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
@@ -615,16 +614,19 @@ function AppContent() {
         }
     }, [activeApp]);
 
-    // --- UNIFIED FLUID ANIMATION LOOP FOR NAVIGATE TOOL ---
+    // --- UNIFIED FLUID ANIMATION LOOP FOR NAVIGATE TOOL (ON-DEMAND) ---
+    const isNavLoopRunning = useRef(false);
+
     useEffect(() => {
         let animationFrameId: number;
 
-        const loop = () => {
+        const updateNavigateTool = () => {
             const launcherDuration = 420; // 420ms for launcher and widget movement
             const appDuration = 600; // 600ms for app opening/closing transition
 
+            let isAnimating = false;
+
             // 1. Calculate launcher animation state (0 = closed/Home, 1 = open/Launcher)
-            // Using cubic-bezier(0.16, 1, 0.3, 1) matching 3D car and MusicPlayer
             const targetLauncher = isAppLauncherOpen ? 1 : 0;
             if (launcherAnimStartTime.current > 0) {
                 const elapsed = performance.now() - launcherAnimStartTime.current;
@@ -633,6 +635,8 @@ function AppContent() {
                 launcherVisualState.current = launcherStartT.current + (targetLauncher - launcherStartT.current) * easeT;
                 if (normT >= 1.0) {
                     launcherAnimStartTime.current = 0;
+                } else {
+                    isAnimating = true;
                 }
             } else {
                 launcherVisualState.current = targetLauncher;
@@ -643,6 +647,7 @@ function AppContent() {
             if (dragProgressRef.current !== null) {
                 appVisualState.current = dragProgressRef.current;
                 appAnimStartTime.current = 0;
+                isAnimating = true;
             } else {
                 const targetApp = activeApp !== null ? 0 : 1;
                 if (appAnimStartTime.current > 0) {
@@ -652,6 +657,8 @@ function AppContent() {
                     appVisualState.current = appStartT.current + (targetApp - appStartT.current) * easeT;
                     if (normT >= 1.0) {
                         appAnimStartTime.current = 0;
+                    } else {
+                        isAnimating = true;
                     }
                 } else {
                     appVisualState.current = targetApp;
@@ -705,11 +712,26 @@ function AppContent() {
                 navigateToolRef.current.style.pointerEvents = (visibility > 0.8 && activeApp === null) ? 'auto' : 'none';
             }
 
-            animationFrameId = requestAnimationFrame(loop);
+            if (isAnimating) {
+                animationFrameId = requestAnimationFrame(updateNavigateTool);
+            } else {
+                isNavLoopRunning.current = false;
+            }
         };
 
-        loop();
-        return () => cancelAnimationFrame(animationFrameId);
+        const startNavLoop = () => {
+            if (!isNavLoopRunning.current) {
+                isNavLoopRunning.current = true;
+                animationFrameId = requestAnimationFrame(updateNavigateTool);
+            }
+        };
+
+        startNavLoop();
+
+        return () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            isNavLoopRunning.current = false;
+        };
     }, [
         isAppLauncherOpen, 
         activeApp, 
@@ -741,7 +763,6 @@ function AppContent() {
         nightAmbientIntensity={nightAmbientIntensity}
         nightFrontLightIntensity={nightFrontLightIntensity}
         nightEnvironmentIntensity={nightEnvironmentIntensity}
-        onInteractionChange={setIsCanvasInteracting}
         effectiveWeatherCondition={effectiveWeatherCondition}
         dayFogNear={dayFogNear}
         dayFogFar={dayFogFar}
@@ -787,7 +808,7 @@ function AppContent() {
       />
       <TopStatusBar tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} isMapVisible={shouldShowMap}/>
       <WeatherModal tempUnit={tempUnit} setTempUnit={setTempUnit}/>
-      <MiniMap isVisible={activeApp === null && !isCanvasInteracting} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
+      <MiniMap isVisible={activeApp === null} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
         <div id="queue-portal-root" className="relative z-[2500]"></div>

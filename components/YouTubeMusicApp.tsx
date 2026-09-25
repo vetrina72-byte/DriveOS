@@ -96,6 +96,23 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const CLOSE_THRESHOLD_PERCENT = 25;
 
     const [error, setError] = useState<string | null>(null);
+    const [renderStage, setRenderStage] = useState(1);
+
+    useEffect(() => {
+        if (isOpen) {
+            let raf2: number;
+            const raf1 = requestAnimationFrame(() => {
+                setRenderStage(2);
+            });
+            return () => {
+                cancelAnimationFrame(raf1);
+                if (raf2) cancelAnimationFrame(raf2);
+            };
+        } else {
+            setRenderStage(1);
+        }
+    }, [isOpen]);
+
     const [searchQuery, setSearchQuery] = useState('');
     const [submittedQuery, setSubmittedQuery] = useState('');
     const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
@@ -431,10 +448,14 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             <>
                 <ContentCarousel title="Classifiche Musicali Italia" items={homeData.musicCharts || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-charts" />
                 <ContentCarousel title="Playlist Pop del Momento" items={homeData.popPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-pop" />
-                <ContentCarousel title="Successi Italiani" items={homeData.italianPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-italian" />
-                <ContentCarousel title="Workout Hits" items={homeData.workoutPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-workout" />
-                <ContentCarousel title="Live Performance" items={homeData.livePerformances || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-live" />
-                <ContentCarousel title="Acoustic Sessions" items={homeData.acousticSessions || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-acoustic" />
+                {renderStage >= 2 && (
+                    <>
+                        <ContentCarousel title="Successi Italiani" items={homeData.italianPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-italian" />
+                        <ContentCarousel title="Workout Hits" items={homeData.workoutPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-workout" />
+                        <ContentCarousel title="Live Performance" items={homeData.livePerformances || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-live" />
+                        <ContentCarousel title="Acoustic Sessions" items={homeData.acousticSessions || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-acoustic" />
+                    </>
+                )}
             </>
         )
     };
