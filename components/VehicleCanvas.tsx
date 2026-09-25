@@ -523,14 +523,19 @@ function SceneController({
     
     const W = window.innerWidth;
     const H = window.innerHeight;
+    const aspect = W / (H || 1);
     
     if (W < 1180) {
-      const scaleFactor = Math.max(0.55, W / 1180);
-      baseModelScale = homeConfig.modelScale * scaleFactor;
+      // In resize/tablet, maintain the visual presence of the desktop baseline:
+      // Scale gently based on aspect ratio, ensuring safe margins without aggressive shrinking
+      const fitFactor = aspect >= 1.35 
+        ? 1.02 // Slightly more prominent visual presence on wide/medium tablet
+        : Math.min(1.02, Math.max(0.85, aspect / 1.35));
+      baseModelScale = homeConfig.modelScale * fitFactor;
       
       if (W < 768 && H > W) {
          // Sposta l'auto in alto per non farla coprire dal player musicale alla base
-         baseModelY = homeConfig.modelPos.y + 1.2;
+         baseModelY = homeConfig.modelPos.y + 0.8;
       }
     }
 
@@ -560,37 +565,38 @@ function SceneController({
     const W = window.innerWidth;
     const H = window.innerHeight;
 
-    // Determine scale so the car is completely framed inside the visible area
-    const isNarrowMobile = W < 768;
+    const isNarrowMobile = W < 640;
     const isPortrait = H > W;
 
-    // Adaptive scale based on device format so the vehicle remains framed inside visible 3D area without overflowing
+    // Preserve visual presence of the model without excessive shrinking:
+    // Reference desktop scale is appOpenConfig.modelScale (1.51).
+    // On tablet/resize, maintain strong presence (around 1.35 - 1.45) with safe boundaries.
     let scaleFactor = 1.0;
     if (W < 1180) {
       if (isNarrowMobile) {
-        scaleFactor = 0.42;
+        scaleFactor = 0.82;
       } else if (isPortrait) {
-        scaleFactor = 0.46;
+        scaleFactor = 0.88;
       } else {
-        scaleFactor = 0.50;
+        scaleFactor = 0.94; // Solid, prominent framing on tablet
       }
     }
 
-    const tabletScale = appOpenConfig.modelScale * scaleFactor;
+    const effectiveScale = appOpenConfig.modelScale * scaleFactor;
 
-    // Center the car in the visible left column of the tablet screen with safe area margins
-    const targetX = W < 1180 ? (isNarrowMobile ? -4.15 : (isPortrait ? -3.95 : -3.85)) : appOpenConfig.modelPos.x;
-    const targetY = appOpenConfig.modelPos.y + (isPortrait && W < 1180 ? 0.30 : 0.0);
+    // Center the car cleanly in the visible left 1/3 column
+    const targetX = W < 1180 ? (isNarrowMobile ? -4.20 : (isPortrait ? -4.40 : -4.60)) : appOpenConfig.modelPos.x;
+    const targetY = appOpenConfig.modelPos.y + (isPortrait && W < 1180 ? 0.20 : 0.0);
     const targetZ = appOpenConfig.modelPos.z;
 
     const camDeltaX = appOpenConfig.cameraPos.x - appOpenConfig.cameraTarget.x;
     const camDeltaY = appOpenConfig.cameraPos.y - appOpenConfig.cameraTarget.y;
-    // Back up camera slightly on tablet to ensure entire car body is within safe margins
-    const camDeltaZ = (appOpenConfig.cameraPos.z - appOpenConfig.cameraTarget.z) * (W < 1180 ? 1.15 : 1.0);
+    // Maintain baseline camera distance without artificial 1.15 pullback
+    const camDeltaZ = appOpenConfig.cameraPos.z - appOpenConfig.cameraTarget.z;
 
     return {
       ...appOpenConfig,
-      modelScale: tabletScale,
+      modelScale: effectiveScale,
       cameraTarget: {
         x: targetX,
         y: targetY + 0.60,
@@ -1033,7 +1039,7 @@ function SceneController({
     } else if (transitionMode.current === "auto") {
       const now = performance.now();
       const elapsed = (now - animStartTime.current) / 1000;
-      const duration = 0.90; // 900ms total duration for soft, slow, fluid 3D scene expansion/contraction
+      const duration = 0.42; // 420ms synchronized with music player and app panel opening
       const normT = Math.min(elapsed / duration, 1.0);
       const easeT = cubicBezierEase(normT);
 

@@ -21,6 +21,7 @@ import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
 import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjVisualState } from '../services/AiDjVisualState';
 import { cubicBezierEase } from './VehicleCanvas';
+import { SPLIT_APPS_WITH_MAP_UNDER } from '../App';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -858,40 +859,33 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const targetDockedWidthRef = useRef<number>(dockedConfig.width);
     const lastFrameTimeRef = useRef<number>(performance.now());
 
-    // Calculate FINAL_APP_RECT, symmetric margins, and PLAYER_TARGET_RECT once when opening an app
+    // Calculate real app left edge and symmetric docked width
     const updateTargetDockedWidth = useCallback(() => {
         const wWidth = window.innerWidth;
         const sideMargin = wWidth < 1024 ? 16 : 24;
 
-        // Determine FINAL_APP_LEFT edge
+        // Determine FINAL_APP_LEFT boundary
         let appLeft = wWidth;
-        const appElements = document.querySelectorAll('.spotify-app-panel');
-        for (let i = 0; i < appElements.length; i++) {
-            const el = appElements[i] as HTMLElement;
-            if (el.offsetWidth > 0) {
-                if (el.offsetWidth >= wWidth - 10) {
-                    appLeft = wWidth;
-                } else {
+        const mapsPanel = document.getElementById('maps-app-panel');
+        if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < wWidth) {
+            appLeft = wWidth - mapsPanel.offsetWidth;
+        } else {
+            const appElements = document.querySelectorAll('.spotify-app-panel');
+            for (let i = 0; i < appElements.length; i++) {
+                const el = appElements[i] as HTMLElement;
+                if (el.offsetWidth > 0 && el.offsetWidth < wWidth && !el.closest('#maps-anchored-container')) {
                     appLeft = wWidth - el.offsetWidth;
+                    break;
                 }
-                break;
             }
         }
-        if (appLeft === wWidth) {
-            if (activeApp === 'maps') {
-                appLeft = wWidth >= 1180 ? wWidth * (1 / 3) : Math.max(dockedConfig.width + 2 * sideMargin, wWidth * 0.45);
-            } else if (activeApp && !isMapsLayered) {
-                if (wWidth >= 1280) appLeft = wWidth * 0.40;
-                else if (wWidth >= 1024) appLeft = wWidth * 0.35;
-                else if (wWidth >= 768) appLeft = wWidth * 0.50;
-                else if (wWidth >= 640) appLeft = wWidth * 0.25;
-                else appLeft = wWidth * 0.15;
-            }
+        if (appLeft === wWidth && activeApp) {
+            appLeft = Math.round(wWidth * (1 / 3));
         }
 
         // Available width inside left column with perfectly symmetrical margins on left and right
         const availablePx = appLeft - (2 * sideMargin);
-        targetDockedWidthRef.current = Math.min(dockedConfig.width, Math.max(220, Math.round(availablePx)));
+        targetDockedWidthRef.current = Math.max(200, Math.round(availablePx));
     }, [activeApp]);
 
     // Recalculate fixed target when opening state or active app changes
@@ -946,38 +940,65 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Absolutely NO transitions or delays; the layout updates frame-by-frame on RAF in full synchronization
                 playerContainerRef.current.style.transition = 'none';
 
-                const isStacked = window.innerWidth < 900;
-                const isDesktopLayout = window.innerWidth >= 1180;
+                const winWidth = window.innerWidth;
+                const isStacked = winWidth < 900;
                 const pct = 50 * t;
-                const sideMargin = window.innerWidth < 1024 ? 16 : 24;
-                const dockedLeft = sideMargin;
-                const offsetPx = isStacked
-                    ? dockedLeft * (1 - t) - (floatingConfig.width / 2) * t
-                    : dockedLeft * (1 - t) - (floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) * t;
-                
-                // Target width is derived from available space between dockedConfig.left and the app boundary
-                const effectiveDockedWidth = targetDockedWidthRef.current || dockedConfig.width;
+                const sideMargin = winWidth < 1024 ? 16 : 24;
 
-                const currentWidth = effectiveDockedWidth + (floatingConfig.width - effectiveDockedWidth) * t;
-                const currentHeight = dockedConfig.height + (floatingConfig.height - dockedConfig.height) * t;
-                const currentBottom = dockedConfig.bottom + (floatingConfig.bottom - dockedConfig.bottom) * t;
+                // Root rem scaling factor dynamically measured from the document
+                const remScale = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16;
+
+                // Determine app boundary (the real left edge of the open right-hand panel) in current coordinate space
+                let appLeft = winWidth;
+                const mapsPanel = document.getElementById('maps-app-panel');
+                if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < winWidth) {
+                    appLeft = winWidth - mapsPanel.offsetWidth;
+                } else {
+                    const panels = document.querySelectorAll('.spotify-app-panel');
+                    for (let i = 0; i < panels.length; i++) {
+                        const el = panels[i] as HTMLElement;
+                        if (el.offsetWidth > 0 && el.offsetWidth < winWidth && !el.closest('#maps-anchored-container')) {
+                            appLeft = winWidth - el.offsetWidth;
+                            break;
+                        }
+                    }
+                }
+                if (appLeft === winWidth && activeApp) {
+                    appLeft = Math.round(winWidth * (1 / 3));
+                }
+
+                // --- DOCKED GEOMETRY (when t = 0, app is open) ---
+                // Available width inside left column with perfectly symmetrical margins on left and right:
+                // leftMargin = sideMargin, rightMargin = sideMargin
+                // playerLeft = sideMargin, playerRight = appLeft - sideMargin
+                // playerWidth = appLeft - 2 * sideMargin
+                const effectiveDockedWidth = Math.max(200, Math.round(appLeft - 2 * sideMargin));
+                const dockedLeft = sideMargin;
+                const dockedBottom = dockedConfig.bottom * remScale;
+                const dockedHeight = dockedConfig.height * remScale;
+
+                // --- HOME GEOMETRY (when t = 1, home view) ---
+                // Scaled exactly in lockstep with NavigateTool / NavigationWidget so they are vertically and horizontally aligned
+                const homeWidth = floatingConfig.width * remScale;
+                const homeHeight = floatingConfig.height * remScale;
+                const homeBottom = floatingConfig.bottom * remScale;
+                const homeOffsetPx = isStacked
+                    ? -(homeWidth / 2)
+                    : -(homeWidth / 2 + (floatingConfig.otherWidgetWidth * remScale) / 2 + (8 * remScale));
+
+                // --- FLUID INTERPOLATION (0 = Docked, 1 = Home) ---
+                const offsetPx = dockedLeft * (1 - t) + homeOffsetPx * t;
+                const currentWidth = effectiveDockedWidth + (homeWidth - effectiveDockedWidth) * t;
+                const currentHeight = dockedHeight + (homeHeight - dockedHeight) * t;
+                const currentBottom = dockedBottom + (homeBottom - dockedBottom) * t;
 
                 const displayWidth = currentWidth;
 
-                // --- TABLET / MOBILE VIEWPORT OFFSET COMPENSATION ---
-                let viewportOffsetBottom = 0;
-                if (!isDesktopLayout && window.visualViewport) {
-                    const vv = window.visualViewport;
-                    // Compensate for Android/Samsung navigation & status bar offsets to ensure bottom anchoring is visual-viewport-relative
-                    viewportOffsetBottom = window.innerHeight - (vv.offsetTop + vv.height);
-                }
-
-                const adjustedBottom = currentBottom - viewportOffsetBottom;
-
-                const posWidth = `${(displayWidth) / 16}rem`;
-                const posHeight = `${(currentHeight) / 16}rem`;
-                const posBottom = `${(adjustedBottom) / 16}rem`;
-                const posLeft = `calc(${pct}% + ${(offsetPx) / 16}rem)`;
+                // Use exact pixel dimensions (px)
+                const posWidth = `${Math.round(displayWidth)}px`;
+                const posHeight = `${Math.round(currentHeight)}px`;
+                const posBottom = `${Math.round(currentBottom)}px`;
+                const posLeft = `calc(${pct}% + ${Math.round(offsetPx)}px)`;
 
                 // Main player is ALWAYS COMPLETELY STATIC (transform: none)
                 playerContainerRef.current.style.width = posWidth;
@@ -985,6 +1006,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerContainerRef.current.style.bottom = posBottom;
                 playerContainerRef.current.style.left = posLeft;
                 playerContainerRef.current.style.transform = 'none';
+                playerContainerRef.current.style.margin = '0';
 
                 // --- AI DJ MULTI-LAYER AMBIENT GLOW & EVENT ENGINE ---
                 const isDjActiveVal = isDjActiveRef.current && source === 'spotify';
@@ -1024,15 +1046,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     const innerD = glowFrame.innerWaveExcursionPx;
                     const innerW = displayWidth + 2 * innerD;
                     const innerH = currentHeight + 2 * innerD;
-                    const innerB = adjustedBottom - innerD;
+                    const innerB = currentBottom - innerD;
                     const innerOff = offsetPx - innerD;
                     const innerRad = 12 + innerD;
 
-                    innerWaveBackdropRef.current.style.width = `${innerW / 16}rem`;
-                    innerWaveBackdropRef.current.style.height = `${innerH / 16}rem`;
-                    innerWaveBackdropRef.current.style.bottom = `${innerB / 16}rem`;
-                    innerWaveBackdropRef.current.style.left = `calc(${pct}% + ${innerOff / 16}rem)`;
-                    innerWaveBackdropRef.current.style.borderRadius = `${innerRad / 16}rem`;
+                    innerWaveBackdropRef.current.style.width = `${Math.round(innerW)}px`;
+                    innerWaveBackdropRef.current.style.height = `${Math.round(innerH)}px`;
+                    innerWaveBackdropRef.current.style.bottom = `${Math.round(innerB)}px`;
+                    innerWaveBackdropRef.current.style.left = `calc(${pct}% + ${Math.round(innerOff)}px)`;
+                    innerWaveBackdropRef.current.style.borderRadius = `${Math.round(innerRad)}px`;
                     innerWaveBackdropRef.current.style.transform = 'none';
                     innerWaveBackdropRef.current.style.opacity = `${glowFrame.innerWaveOpacity.toFixed(3)}`;
                     innerWaveBackdropRef.current.style.boxShadow = glowFrame.innerWaveShadow;
@@ -1045,15 +1067,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     const outerD = glowFrame.outerWaveExcursionPx;
                     const outerW = displayWidth + 2 * outerD;
                     const outerH = currentHeight + 2 * outerD;
-                    const outerB = adjustedBottom - outerD;
+                    const outerB = currentBottom - outerD;
                     const outerOff = offsetPx - outerD;
                     const outerRad = 12 + outerD;
 
-                    outerWaveBackdropRef.current.style.width = `${outerW / 16}rem`;
-                    outerWaveBackdropRef.current.style.height = `${outerH / 16}rem`;
-                    outerWaveBackdropRef.current.style.bottom = `${outerB / 16}rem`;
-                    outerWaveBackdropRef.current.style.left = `calc(${pct}% + ${outerOff / 16}rem)`;
-                    outerWaveBackdropRef.current.style.borderRadius = `${outerRad / 16}rem`;
+                    outerWaveBackdropRef.current.style.width = `${Math.round(outerW)}px`;
+                    outerWaveBackdropRef.current.style.height = `${Math.round(outerH)}px`;
+                    outerWaveBackdropRef.current.style.bottom = `${Math.round(outerB)}px`;
+                    outerWaveBackdropRef.current.style.left = `calc(${pct}% + ${Math.round(outerOff)}px)`;
+                    outerWaveBackdropRef.current.style.borderRadius = `${Math.round(outerRad)}px`;
                     outerWaveBackdropRef.current.style.transform = 'none';
                     outerWaveBackdropRef.current.style.opacity = `${glowFrame.outerWaveOpacity.toFixed(3)}`;
                     outerWaveBackdropRef.current.style.boxShadow = glowFrame.outerWaveShadow;
@@ -1088,31 +1110,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentTrack = playerState?.track_window?.current_track ?? (playerState as any)?.item;
     const currentTrackUri = currentTrack?.uri;
 
-    const handleToggleQueue = useCallback((source: 'spotify' | 'youtube') => {
-        if (source === 'spotify') {
-            const newIsEnabled = !isAutoQueueEnabled;
-            setIsAutoQueueEnabled(newIsEnabled);
-    
-            if (!newIsEnabled && visibleQueue === 'spotify') {
-                setIsQueueClosing(true);
-                setTimeout(() => {
-                    setVisibleQueue(null);
-                    setIsQueueClosing(false);
-                }, 300);
-            }
-        } else if (source === 'youtube') {
-            if (visibleQueue === 'youtube') {
-                setIsQueueClosing(true);
-                setTimeout(() => {
-                    setVisibleQueue(null);
-                    setIsQueueClosing(false);
-                }, 300);
-            } else {
-                setIsQueueClosing(false); 
-                setVisibleQueue('youtube');
-            }
+    const handleToggleQueue = useCallback((targetSource: 'spotify' | 'youtube') => {
+        if (visibleQueue === targetSource) {
+            setIsQueueClosing(true);
+            setTimeout(() => {
+                setVisibleQueue(null);
+                setIsQueueClosing(false);
+            }, 200);
+        } else {
+            setIsQueueClosing(false); 
+            setVisibleQueue(targetSource);
         }
-    }, [isAutoQueueEnabled, visibleQueue]);
+    }, [visibleQueue]);
 
     useEffect(() => {
         if (!playerState || playerState.paused || !currentTrackUri) return;
@@ -1309,23 +1318,35 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     useEffect(() => {
         const playerEl = playerContainerRef.current;
-        const buttonRef = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
-        if (!visibleQueue || !playerEl || !buttonRef) return;
+        if (!visibleQueue || !playerEl) return;
 
         let animationFrameId: number;
 
         const calculatePosition = () => {
+            if (!playerEl) return;
             const playerRect = playerEl.getBoundingClientRect();
-            // Anchor to player: right edge flush with right edge of player
-            // Max allowed width: playerRect.width (queuePopupWidth <= musicPlayerWidth)
-            const popoverW = Math.min(queuePopoverWidth, playerRect.width);
+            const popoverW = Math.min(queuePopoverWidth || 288, playerRect.width);
+
+            const activeBtn = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
+            let rightPx = window.innerWidth - playerRect.right + 8;
+            if (activeBtn) {
+                const btnRect = activeBtn.getBoundingClientRect();
+                if (btnRect.width > 0) {
+                    rightPx = Math.max(8, window.innerWidth - btnRect.right - 6);
+                }
+            }
+
+            const bottomPx = window.innerHeight - playerRect.top + (queuePopoverBottomOffset || 12);
+
             setPopoverPosition({
-                bottom: window.innerHeight - playerRect.top + queuePopoverBottomOffset,
-                right: window.innerWidth - playerRect.right,
-                width: popoverW,
+                bottom: Math.max(12, Math.round(bottomPx)),
+                right: Math.max(8, Math.round(rightPx)),
+                width: Math.round(popoverW),
             });
         };
-        
+
+        calculatePosition();
+
         const updateLoop = () => {
             calculatePosition();
             animationFrameId = requestAnimationFrame(updateLoop);
@@ -1338,7 +1359,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             cancelAnimationFrame(animationFrameId);
             window.removeEventListener('resize', calculatePosition);
         };
-    }, [visibleQueue, queuePopoverBottomOffset]);
+    }, [visibleQueue, queuePopoverWidth, queuePopoverBottomOffset]);
     
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -1935,18 +1956,32 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         : null;
 
     const nextTrackDetails = useMemo(() => {
-        if (visibleQueue === 'spotify' && nextSpotifyTrack) {
+        if (visibleQueue === 'spotify') {
+            if (nextSpotifyTrack) {
+                return {
+                    name: nextSpotifyTrack.name,
+                    description: nextSpotifyTrack.artists?.map((a: any) => a.name).join(', ') || 'Artista sconosciuto',
+                    imageUrl: nextSpotifyTrack.album?.images?.[0]?.url || '',
+                };
+            }
             return {
-                name: nextSpotifyTrack.name,
-                description: nextSpotifyTrack.artists.map(a => a.name).join(', '),
-                imageUrl: nextSpotifyTrack.album.images[0]?.url,
+                name: 'Nessun brano in coda',
+                description: 'La tua coda di riproduzione è vuota',
+                imageUrl: '',
             };
         }
-        if (visibleQueue === 'youtube' && nextYouTubeTrack) {
+        if (visibleQueue === 'youtube') {
+            if (nextYouTubeTrack) {
+                return {
+                    name: nextYouTubeTrack.title,
+                    description: nextYouTubeTrack.channelTitle || 'YouTube Music',
+                    imageUrl: nextYouTubeTrack.thumbnail || '',
+                };
+            }
             return {
-                name: nextYouTubeTrack.title,
-                description: nextYouTubeTrack.channelTitle,
-                imageUrl: nextYouTubeTrack.thumbnail,
+                name: 'Nessun video in coda',
+                description: 'Nessun prossimo brano nella playlist',
+                imageUrl: '',
             };
         }
         return null;
@@ -2000,10 +2035,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     backgroundColor: isNight ? '#212121' : (widgetBgColor || '#ffffff'),
                     opacity: 1,
                     // Initial styles before JS takes over
-                    width: isAnyAppOpen ? `${(dockedConfig.width) / 16}rem` : `${(floatingConfig.width) / 16}rem`,
-                    height: isAnyAppOpen ? `${(dockedConfig.height) / 16}rem` : `${(floatingConfig.height) / 16}rem`,
-                    bottom: isAnyAppOpen ? `${(dockedConfig.bottom) / 16}rem` : `${(floatingConfig.bottom) / 16}rem`,
-                    left: isAnyAppOpen ? `${(dockedConfig.left) / 16}rem` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8) / 16}rem)`,
+                    width: isAnyAppOpen ? `${dockedConfig.width}px` : `${floatingConfig.width}px`,
+                    height: isAnyAppOpen ? `${dockedConfig.height}px` : `${floatingConfig.height}px`,
+                    bottom: isAnyAppOpen ? `${dockedConfig.bottom}px` : `${floatingConfig.bottom}px`,
+                    left: isAnyAppOpen ? `${dockedConfig.left}px` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8)}px)`,
+                    margin: 0,
                 }}
             >
                  <div className="relative w-full h-full flex flex-col justify-between flex-1 self-stretch">

@@ -516,19 +516,19 @@ function AppContent() {
   const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
 
   // Helper to calculate theoretical app left edge (matches fixed panel widths in subapps)
-  const getAppLeftEdge = (width: number, activeAppId: string | null, layered: boolean) => {
+  const getAppLeftEdge = (width: number, activeAppId: string | null) => {
       if (!activeAppId) return width;
-      if (layered) return width; // When layered over maps, player uses full available container width
-      if (activeAppId === 'maps') {
-          return width >= 1180 ? width * (1 / 3) : Math.max(playerDockedWidth + 2 * responsiveDockedMargin, width * 0.45);
+      // All split apps (Spotify, YouTube Music, Radio, Theater, Debug) use MapsContainer panel (w-2/3 right-0)
+      if (activeAppId === 'maps' || SPLIT_APPS_WITH_MAP_UNDER.includes(activeAppId)) {
+          return Math.round(width * (1 / 3));
       }
       
-      // Match Tailwind panel widths: fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0
-      if (width >= 1280) return width * 0.40; // xl:w-[60%] -> left starts at 40%
-      if (width >= 1024) return width * 0.35; // lg:w-[65%] -> left starts at 35%
-      if (width >= 768) return width * 0.50;  // md:w-1/2   -> left starts at 50%
-      if (width >= 640) return width * 0.25;  // sm:w-[75%] -> left starts at 25%
-      return width * 0.15;                    // mobile: w-[85%] -> left starts at 15%
+      // Standalone app panel widths: fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0
+      if (width >= 1280) return Math.round(width * 0.40);
+      if (width >= 1024) return Math.round(width * 0.35);
+      if (width >= 768) return Math.round(width * 0.50);
+      if (width >= 640) return Math.round(width * 0.25);
+      return Math.round(width * (1 / 3));
   };
 
   // Calculate if the player's space is actually occluded or occupied by an open app
@@ -537,7 +537,7 @@ function AppContent() {
       if (!activeApp) return false; // No app covers the player
       if (activeApp === 'maps') return true; // Opening the maps app should also dock the player
 
-      const appLeft = getAppLeftEdge(windowWidth, activeApp, isMapsLayered);
+      const appLeft = getAppLeftEdge(windowWidth, activeApp);
       
       // Calculate right edge of floating player at current screen width
       const isStacked = windowWidth < 900;
@@ -553,7 +553,7 @@ function AppContent() {
 
       // Space is occluded if the app's left edge overlaps/collides with the player's floating right edge
       return appLeft < playerRight;
-  }, [activeApp, isAppLauncherOpen, windowWidth, isMapsLayered, playerFloatingWidth, navigateToolWidth]);
+  }, [activeApp, isAppLauncherOpen, windowWidth, playerFloatingWidth, navigateToolWidth]);
   
     // RESPONSIVE CONFIGURATIONS FOR PLAYER & NAVIGATION WIDGET
     const isMobileOrTablet = windowWidth < 1180;
@@ -577,10 +577,10 @@ function AppContent() {
     }, [windowWidth]);
 
     const responsiveDockedWidth = useMemo(() => {
-        const appLeft = getAppLeftEdge(windowWidth, activeApp, isMapsLayered);
+        const appLeft = getAppLeftEdge(windowWidth, activeApp);
         const availablePx = appLeft - 2 * responsiveDockedMargin;
-        return Math.min(playerDockedWidth, Math.max(220, Math.round(availablePx)));
-    }, [responsiveDockedMargin, windowWidth, activeApp, isMapsLayered, playerDockedWidth]);
+        return Math.max(200, Math.round(availablePx));
+    }, [responsiveDockedMargin, windowWidth, activeApp]);
 
     const responsiveDockedLeft = useMemo(() => {
         return responsiveDockedMargin;

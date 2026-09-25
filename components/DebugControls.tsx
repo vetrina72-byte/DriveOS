@@ -525,6 +525,7 @@ export default function DebugControls({
   const mainContent = (
     <div 
       id="debug-panel"
+      data-app-id="debug"
       ref={panelRef}
       className={containerClass}
       style={isAppView ? {

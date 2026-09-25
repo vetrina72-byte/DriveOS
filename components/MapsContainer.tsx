@@ -686,7 +686,7 @@ const MapsContainer = React.memo(({
         if (!state.isDragging) {
             if (state.animStartTime > 0) {
                 const elapsed = performance.now() - state.animStartTime;
-                const duration = 900; // 900ms App transition duration (slow, soft, fluid)
+                const duration = 420; // 420ms App transition duration (synchronized with player and 3D camera)
                 const t = Math.min(elapsed / duration, 1.0);
                 const easeT = cubicBezierEase(t);
                 state.currentX = state.startX + (state.targetX - state.startX) * easeT;
@@ -3057,7 +3057,7 @@ const MapsContainer = React.memo(({
     <div 
         id="maps-app-panel"
         ref={panelRef}
-        className="fixed top-0 right-0 w-2/3 md:w-3/4 lg:w-2/3 text-white shadow-2xl z-[4000] flex spotify-app-panel pointer-events-auto touch-none"
+        className="fixed top-0 right-0 w-2/3 text-white shadow-2xl z-[4000] flex spotify-app-panel pointer-events-auto touch-none"
         style={{ 
             willChange: 'transform',
             top: 0,

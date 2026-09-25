@@ -155,7 +155,7 @@ const RadioApp: React.FC<RadioAppProps> = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = 900; // 900ms App transition duration (slow, soft, fluid)
+                    const duration = (sceneTransitionSpeed || 0.75) * 1000;
                     const t = Math.min(elapsed / duration, 1.0);
                     const easeT = cubicBezierEase(t);
                     state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
@@ -606,7 +606,8 @@ const RadioApp: React.FC<RadioAppProps> = ({
     const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
+            data-app-id="radio"
+            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
                 // Transform managed by physics loop
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,

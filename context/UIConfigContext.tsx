@@ -37,7 +37,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
 
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
-  const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(0.40);
+  const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(0.75);
   
   const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(DEFAULT_APP_OPEN_CONFIG);
@@ -167,7 +167,32 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [virtualKeyboardKeyGapY, setVirtualKeyboardKeyGapY] = useState(2);
   const [virtualKeyboardKeyFontWeight, setVirtualKeyboardKeyFontWeight] = useState(600);
 
+  const [isSimulatingResize, setIsSimulatingResize] = useState(false);
+  const [simulatedWindowWidth, setSimulatedWindowWidth] = useState(1024);
+  const [simulatedWindowHeight, setSimulatedWindowHeight] = useState(768);
+  const [compactLayoutThreshold, setCompactLayoutThreshold] = useState(420);
+  const [forcePlayerLayout, setForcePlayerLayout] = useState<'auto' | 'compact' | 'wide'>('auto');
+  const [resizeModelScaleFactor, setResizeModelScaleFactor] = useState(1.0);
+  const [resizeModelOffsetX, setResizeModelOffsetX] = useState(0.0);
+  const [resizeModelOffsetY, setResizeModelOffsetY] = useState(0.0);
+  const [resizeModelOffsetZ, setResizeModelOffsetZ] = useState(0.0);
+  const [resizeCameraOffsetX, setResizeCameraOffsetX] = useState(0.0);
+  const [resizeCameraOffsetY, setResizeCameraOffsetY] = useState(0.0);
+  const [resizeCameraOffsetZ, setResizeCameraOffsetZ] = useState(0.0);
+
   const value = {
+    isSimulatingResize, setIsSimulatingResize,
+    simulatedWindowWidth, setSimulatedWindowWidth,
+    simulatedWindowHeight, setSimulatedWindowHeight,
+    compactLayoutThreshold, setCompactLayoutThreshold,
+    forcePlayerLayout, setForcePlayerLayout,
+    resizeModelScaleFactor, setResizeModelScaleFactor,
+    resizeModelOffsetX, setResizeModelOffsetX,
+    resizeModelOffsetY, setResizeModelOffsetY,
+    resizeModelOffsetZ, setResizeModelOffsetZ,
+    resizeCameraOffsetX, setResizeCameraOffsetX,
+    resizeCameraOffsetY, setResizeCameraOffsetY,
+    resizeCameraOffsetZ, setResizeCameraOffsetZ,
     topBarScale, setTopBarScale,
     topBarOffsetY, setTopBarOffsetY,
     mapsSearchPanelTop, setMapsSearchPanelTop,

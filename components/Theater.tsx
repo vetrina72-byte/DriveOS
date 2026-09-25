@@ -410,6 +410,7 @@ const Theater = ({
     const mainContent = (
         <div
             ref={panelRef}
+            data-app-id="theater"
             className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
             style={{
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
