@@ -21,6 +21,7 @@ import { VolumetricHeadlight } from "./VolumetricHeadlight";
 import WeatherEffects from "./WeatherEffects";
 import type { SceneColors } from "../App";
 import type { WeatherParams } from "../types";
+import { APP_TRANSITION_SECONDS } from "../context/UIConfigContext";
 
 // Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
 const Primitive = "primitive" as any;
@@ -527,10 +528,10 @@ function SceneController({
     
     if (W < 1180) {
       // In resize/tablet, maintain the visual presence of the desktop baseline:
-      // Scale gently based on aspect ratio, ensuring safe margins without aggressive shrinking
+      // Subtle reduction (0.96 vs previous 1.02) to make the car slightly smaller in Home during resize
       const fitFactor = aspect >= 1.35 
-        ? 1.02 // Slightly more prominent visual presence on wide/medium tablet
-        : Math.min(1.02, Math.max(0.85, aspect / 1.35));
+        ? 0.96 
+        : Math.min(0.96, Math.max(0.82, (aspect / 1.35) * 0.96));
       baseModelScale = homeConfig.modelScale * fitFactor;
       
       if (W < 768 && H > W) {
@@ -949,57 +950,29 @@ function SceneController({
       // Il progresso parte esattamente dal frame visivo attuale
       autoStartP.current = currentP.current;
       autoTargetP.current = isAppOpen ? 0 : 1;
-      autoAnimDuration.current = sceneTransitionSpeed;
+      autoAnimDuration.current = APP_TRANSITION_SECONDS;
     } else if (
       !clickOccurred &&
       !dragActive &&
       transitionMode.current === "drag"
     ) {
-      // RILASCIO HANDLE / FINE DRAG STABILIZZATA
-      transitionMode.current = "idle";
+      // RILASCIO HANDLE / FINE DRAG STABILIZZATA: transizione morbida se non ancora atterrato
       const targetP = isAppOpen ? 0 : 1;
-      currentP.current = targetP;
-
-      if (!isAppOpen) {
-        const ePos = new THREE.Vector3(
-          localHomeConfig.cameraPos.x as number,
-          localHomeConfig.cameraPos.y as number,
-          localHomeConfig.cameraPos.z as number
-        );
-        const eTarget = new THREE.Vector3(
-          localHomeConfig.cameraTarget.x as number,
-          localHomeConfig.cameraTarget.y as number,
-          localHomeConfig.cameraTarget.z as number
-        );
-        const eModelPos = new THREE.Vector3(
-          localHomeConfig.modelPos.x as number,
-          localHomeConfig.modelPos.y as number,
-          localHomeConfig.modelPos.z as number
-        );
-
-        applyInterpolation(
-          camera.position,
-          ctrl ? (ctrl as any).target : new THREE.Vector3(),
-          modelRef.current?.position || new THREE.Vector3(),
-          modelRef.current?.scale.x || 1.55,
-          modelRef.current?.quaternion || new THREE.Quaternion(),
-          ePos,
-          eTarget,
-          eModelPos,
-          localHomeConfig.modelScale,
-          quatTargetHome,
-          1.0,
-          ctrl
-        );
-        camera.updateProjectionMatrix();
-        if (ctrl) {
-          camera.position.copy(ePos);
-          camera.lookAt(eTarget);
-          ctrl.target.copy(eTarget);
-          resetOrbitMomentum(ctrl);
-          ctrl.enableRotate = true;
-          ctrl.enabled = true;
+      if (Math.abs(currentP.current - targetP) > 0.005) {
+        transitionMode.current = "auto";
+        animStartTime.current = performance.now();
+        frozenCamPos.current.copy(camera.position);
+        if (ctrl) frozenCamTarget.current.copy(ctrl.target);
+        if (modelRef.current) {
+          frozenModelPos.current.copy(modelRef.current.position);
+          frozenModelScale.current = modelRef.current.scale.x;
+          frozenModelRot.current.copy(modelRef.current.quaternion);
         }
+        autoStartP.current = currentP.current;
+        autoTargetP.current = targetP;
+      } else {
+        transitionMode.current = "idle";
+        currentP.current = targetP;
       }
     }
 
@@ -1039,7 +1012,7 @@ function SceneController({
     } else if (transitionMode.current === "auto") {
       const now = performance.now();
       const elapsed = (now - animStartTime.current) / 1000;
-      const duration = 0.42; // 420ms synchronized with music player and app panel opening
+      const duration = APP_TRANSITION_SECONDS; // 580ms shared transition baseline (player + app + camera)
       const normT = Math.min(elapsed / duration, 1.0);
       const easeT = cubicBezierEase(normT);
 
@@ -1376,12 +1349,32 @@ function EnvironmentController({
   const currentEnvColor = useRef(new THREE.Color("#ffffff")).current;
   const currentFloorColor = useRef(new THREE.Color("#050505")).current;
   const nightFloorColor = useRef(new THREE.Color("#040404")).current;
+  const isConverged = useRef(false);
 
   // Default Day Values
   const dayAmbientIntensity = 0.5;
   const dayFrontLightIntensity = 0.6;
   const dayDirectionalIntensity = 1.5;
   const dayEnvironmentIntensity = 2.8;
+
+  useEffect(() => {
+    isConverged.current = false;
+  }, [
+    weatherCondition,
+    isNight,
+    sceneColors,
+    dirLightIntensity,
+    spotLightIntensity,
+    carReflectionOpacity,
+    forceManualFog,
+    dayFogNear,
+    dayFogFar,
+    nightFogNear,
+    nightFogFar,
+    nightAmbientIntensity,
+    nightFrontLightIntensity,
+    nightEnvironmentIntensity,
+  ]);
 
   useEffect(() => {
     // Sincronizziamo lo sfondo della scena dinamicamente in useFrame per nascondere i bordi del piano e garantire l'effetto di spazio infinito.
@@ -1445,6 +1438,7 @@ function EnvironmentController({
   }, [weatherCondition, isNight, sceneColors, getWeatherKey]);
 
   useFrame((_, delta) => {
+    if (isConverged.current) return;
     const t = 1 - Math.exp(-1.5 * delta);
 
     const weatherKey = getWeatherKey(weatherCondition);
@@ -1598,6 +1592,19 @@ function EnvironmentController({
       if (scene.fog) {
         scene.fog = null;
       }
+    }
+
+    const diffSky =
+      Math.abs(currentEnvColor.r - targetSky.r) +
+      Math.abs(currentEnvColor.g - targetSky.g) +
+      Math.abs(currentEnvColor.b - targetSky.b);
+    const diffFloor =
+      Math.abs(currentFloorColor.r - targetFloorColorVal.r) +
+      Math.abs(currentFloorColor.g - targetFloorColorVal.g) +
+      Math.abs(currentFloorColor.b - targetFloorColorVal.b);
+
+    if (diffSky < 0.005 && diffFloor < 0.005) {
+      isConverged.current = true;
     }
   });
 
@@ -1900,7 +1907,7 @@ function VehicleCanvas({
         className="w-full h-full"
         style={{ zIndex: 0, touchAction: "none" }}
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, Math.min(window.devicePixelRatio, 1.5)]}
+        dpr={[1, Math.min(window.devicePixelRatio, 1.25)]}
         frameloop="always"
         camera={{
           fov: 48,
@@ -2054,8 +2061,8 @@ function VehicleCanvas({
           castShadow
           shadow-bias={-0.0001}
           shadow-normalBias={0.02}
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-near={0.5}
           shadow-camera-far={50}
           shadow-camera-left={-15}
@@ -2074,7 +2081,7 @@ function VehicleCanvas({
           <PlaneGeometry args={[250, 250]} />
           <MeshReflectorMaterial
             blur={[carReflectionBlur, carReflectionBlur]}
-            resolution={1024}
+            resolution={512}
             mixBlur={1}
             mixStrength={carReflectionMixStrength}
             roughness={carReflectionRoughness}

@@ -27,19 +27,12 @@ const ContentCarousel = React.memo(({ title, items, isNight, onSelectItem, keyPr
     checkScrollability();
     el.addEventListener('scroll', checkScrollability, { passive: true });
     window.addEventListener('resize', checkScrollability, { passive: true });
-    
-    let resizeObserver: ResizeObserver | null = new ResizeObserver(checkScrollability);
-    resizeObserver.observe(el);
 
     return () => {
       el.removeEventListener('scroll', checkScrollability);
       window.removeEventListener('resize', checkScrollability);
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-        resizeObserver = null;
-      }
     };
-  }, [checkScrollability]);
+  }, [checkScrollability, validItems.length]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {

@@ -19,6 +19,9 @@ export const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   modelScale: 1.51,
 };
 
+export const APP_TRANSITION_DURATION = 580; // 580ms unified transition duration for App, Player and 3D Camera
+export const APP_TRANSITION_SECONDS = 0.58; // 0.58s for Three.js / WebGL scene animations
+
 export const UIConfigContext = createContext<any>(null);
 
 export function UIConfigProvider({ children }: { children: React.ReactNode }) {
@@ -37,7 +40,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
 
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
-  const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(0.75);
+  const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(APP_TRANSITION_SECONDS);
   
   const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(DEFAULT_APP_OPEN_CONFIG);

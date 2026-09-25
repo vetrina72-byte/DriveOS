@@ -144,6 +144,26 @@ const ContentArea = React.memo(({
   const filteredSavedAlbums = React.useMemo(() => filterDjItems(savedAlbums), [savedAlbums]);
   const filteredGenres = React.useMemo(() => filterDjItems(genresCategories), [genresCategories]);
 
+  const [renderStage, setRenderStage] = React.useState(1);
+
+  React.useEffect(() => {
+    // Stage 1 (0ms): Shell & Top Above-the-fold content
+    // Stage 2 (50ms): Core Primary Carousels
+    const t1 = setTimeout(() => {
+      setRenderStage(prev => Math.max(prev, 2));
+    }, 50);
+
+    // Stage 3 (180ms): Full Below-the-fold Carousels
+    const t2 = setTimeout(() => {
+      setRenderStage(prev => Math.max(prev, 3));
+    }, 180);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   const hasAnyContent = (
     filteredContinue.length > 0 ||
     filteredMadeForYou.length > 0 ||
@@ -195,6 +215,8 @@ const ContentArea = React.memo(({
                 alt="Spotify AI DJ Logo" 
                 className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex-shrink-0 object-cover shadow-md border border-white/10 group-hover:scale-105 transition-transform" 
                 referrerPolicy="no-referrer" 
+                loading="lazy"
+                decoding="async"
               />
             </div>
             <div className="min-w-0">
@@ -259,81 +281,94 @@ const ContentArea = React.memo(({
         </div>
       </div>
       
+      {/* STAGE 1: Immediate Above-the-fold Carousels */}
       {filteredContinue.length > 0 && (
           <div>
               <ContentCarousel title="Continua ad ascoltare" items={filteredContinue} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="continue-listening" />
           </div>
       )}
-       {filteredMadeForYou.length > 0 && (
+      {filteredMadeForYou.length > 0 && (
           <div>
               <ContentCarousel title="Realizzato per te" items={filteredMadeForYou} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you-new" />
           </div>
       )}
-       {filteredMadeForYouPlaylists.length > 0 && (
+      {filteredMadeForYouPlaylists.length > 0 && (
           <div>
               <ContentCarousel title="Le playlist create per te" items={filteredMadeForYouPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="made-for-you" />
           </div>
       )}
-      {filteredUserPlaylists.length > 0 && (
-          <div>
-              <ContentCarousel title="Le tue playlist" items={filteredUserPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
-          </div>
+
+      {/* STAGE 2: Core Primary Carousels */}
+      {renderStage >= 2 && (
+        <>
+          {filteredUserPlaylists.length > 0 && (
+              <div>
+                  <ContentCarousel title="Le tue playlist" items={filteredUserPlaylists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="user-playlists" />
+              </div>
+          )}
+          {filteredCharts.length > 0 && (
+              <div>
+                  <ContentCarousel title="Classifiche" items={filteredCharts} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
+              </div>
+          )}
+          {filteredParty.length > 0 && (
+            <div>
+                <ContentCarousel 
+                    title="Musica da cantare" 
+                    items={filteredParty} 
+                    isNight={isNight} 
+                    onSelectItem={onSelectItem} 
+                    keyPrefix="party-playlists" 
+                />
+            </div>
+          )}
+          {filteredTopArtists.length > 0 && (
+              <div>
+                  <ContentCarousel title="I tuoi artisti del momento" items={filteredTopArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
+              </div>
+          )}
+          {filteredNewReleases.length > 0 && (
+              <div>
+                  <ContentCarousel title="Nuove uscite" items={filteredNewReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
+              </div>
+          )}
+        </>
       )}
-      {filteredCharts.length > 0 && (
-          <div>
-              <ContentCarousel title="Classifiche" items={filteredCharts} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="charts" />
-          </div>
-      )}
-      {filteredParty.length > 0 && (
-        <div>
-            <ContentCarousel 
-                title="Musica da cantare" 
-                items={filteredParty} 
-                isNight={isNight} 
-                onSelectItem={onSelectItem} 
-                keyPrefix="party-playlists" 
-            />
-        </div>
-      )}
-      {filteredTopArtists.length > 0 && (
-          <div>
-              <ContentCarousel title="I tuoi artisti del momento" items={filteredTopArtists} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-artists" />
-          </div>
-      )}
-      {filteredNewReleases.length > 0 && (
-          <div>
-              <ContentCarousel title="Nuove uscite" items={filteredNewReleases} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="new-releases" />
-          </div>
-      )}
-      {filteredShows.length > 0 && (
-          <div>
-              <ContentCarousel title="Podcast consigliati" items={filteredShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
-          </div>
-      )}
-      {filteredTopTracks.length > 0 && (
-          <div>
-              <ContentCarousel title="Un tuffo nel passato" items={filteredTopTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-tracks" />
-          </div>
-      )}
-      {filteredArtistRadio.length > 0 && topArtists.length > 0 && (
-          <div>
-              <ContentCarousel title={`Radio di ${topArtists[0].name}`} items={filteredArtistRadio} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="artist-radio" />
-          </div>
-      )}
-      {filteredTrackRecs.length > 0 && (
-          <div>
-              <ContentCarousel title="Potrebbe piacerti anche" items={filteredTrackRecs} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="track-recs" />
-          </div>
-      )}
-      {filteredSavedAlbums.length > 0 && (
-          <div>
-              <ContentCarousel title="I tuoi album salvati" items={filteredSavedAlbums} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="saved-albums" />
-          </div>
-      )}
-      {filteredGenres.length > 0 && (
-          <div>
-              <ContentCarousel title="Esplora per generi e mood" items={filteredGenres} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
-          </div>
+
+      {/* STAGE 3: Remaining Below-the-fold Carousels */}
+      {renderStage >= 3 && (
+        <>
+          {filteredShows.length > 0 && (
+              <div>
+                  <ContentCarousel title="Podcast consigliati" items={filteredShows} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="rec-shows" />
+              </div>
+          )}
+          {filteredTopTracks.length > 0 && (
+              <div>
+                  <ContentCarousel title="Un tuffo nel passato" items={filteredTopTracks} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="top-tracks" />
+              </div>
+          )}
+          {filteredArtistRadio.length > 0 && topArtists.length > 0 && (
+              <div>
+                  <ContentCarousel title={`Radio di ${topArtists[0].name}`} items={filteredArtistRadio} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="artist-radio" />
+              </div>
+          )}
+          {filteredTrackRecs.length > 0 && (
+              <div>
+                  <ContentCarousel title="Potrebbe piacerti anche" items={filteredTrackRecs} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="track-recs" />
+              </div>
+          )}
+          {filteredSavedAlbums.length > 0 && (
+              <div>
+                  <ContentCarousel title="I tuoi album salvati" items={filteredSavedAlbums} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="saved-albums" />
+              </div>
+          )}
+          {filteredGenres.length > 0 && (
+              <div>
+                  <ContentCarousel title="Esplora per generi e mood" items={filteredGenres} isNight={isNight} onSelectItem={onSelectItem} keyPrefix="genres" />
+              </div>
+          )}
+        </>
       )}
     </div>
   );

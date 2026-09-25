@@ -1,95 +1,164 @@
-# Piano di Ottimizzazione Scena 3D: Sincronizzazione Animazione e Fit Intelligente nel Resize
+# Performance Engineering: Deep Audit e Piano di Ottimizzazione all'Apertura delle App
 
-## Sintesi degli Obiettivi
-1. **Sincronizzazione temporale perfetta della scena 3D con interfaccia e player**:
-   - Uniformare la durata della transizione della camera e del modello 3D alla durata reale già utilizzata dal Music Player e dall'apertura delle app (**420ms**), condividendo la stessa curva di easing (`cubic-bezier(0.16, 1, 0.3, 1)`), in modo che camera, player e app terminino contemporaneamente.
-2. **Preservazione della presenza visiva del modello 3D durante il resize (No "Shrink to Fit" cieco)**:
-   - Utilizzare il **Current Screen Size (Desktop)** come baseline di riferimento.
-   - Eliminare le formule di riduzione lineare aggressiva (`W / 1180`, dimezzamento fisso a `0.50` e arretramento forzato della camera).
-   - Introdurre un adattamento basato sull'aspect ratio e sull'area visibile reale della canvas 3D che mantenga la presenza visiva percepita del modello, leggermente più presente su tablet, riducendo le dimensioni solo ed esclusivamente quando geometricamente necessario per evitare clipping sui bordi della scena.
+## 1. Diagnosi Globale: Perché l'Apertura Genera Micro-Scatti (anche su PC)
 
----
-
-## 1. Analisi dello Stato Attuale: Cause e Numeri
-
-### A. Timing di Animazione Attuale (Perché la camera è troppo lenta)
-- In `components/MusicPlayer.tsx` (linea 915):
-  $$\text{duration}_{\text{player}} = 420\text{ ms}$$
-- In `components/VehicleCanvas.tsx` (linea 1036):
-  $$\text{duration}_{\text{camera}} = 0.90\text{ s} = 900\text{ ms}$$
-- In `components/MapsContainer.tsx` (linea 689):
-  $$\text{duration}_{\text{maps}} = 900\text{ ms}$$
-- **Discrepanza riscontrata**:
-  Il Music Player completa il suo movimento in **420ms**. La camera 3D impiega **900ms** (più del doppio). Quando il player è già fermo in posizione e l'app ha quasi completato il render, la camera 3D continua a muoversi per un altro mezzo secondo, creando una sensazione di lentezza e asincronia visiva.
-
-### B. Scala e Posizionamento del Modello 3D Attuale (Perché il modello diventa minuscolo)
-- **Stato Home** (`localHomeConfig` in `VehicleCanvas.tsx`, linee 527-535):
-  ```ts
-  if (W < 1180) {
-    const scaleFactor = Math.max(0.55, W / 1180);
-    baseModelScale = homeConfig.modelScale * scaleFactor;
-  }
-  ```
-  Appena la larghezza scende sotto 1180px, la scala base ($2.68$) viene moltiplicata per $W / 1180$. A 800px la macchina viene rimpicciolita al 67%, pur essendoci ancora tutto lo spazio verticale e orizzontale necessario.
-- **Stato App Aperta** (`localAppOpenConfig`, linee 569-590):
-  ```ts
-  let scaleFactor = 1.0;
-  if (W < 1180) {
-    scaleFactor = isNarrowMobile ? 0.42 : (isPortrait ? 0.46 : 0.50);
-  }
-  const tabletScale = appOpenConfig.modelScale * scaleFactor;
-  const camDeltaZ = (cameraPos.z - cameraTarget.z) * (W < 1180 ? 1.15 : 1.0);
-  ```
-  Su tablet/resize, la scala viene letteralmente dimezzata ($0.50 \times 1.51 = 0.755$) e la telecamera viene contestualmente allontanata del 15% (`camDeltaZ * 1.15`). Questo duplice fattore trasforma l'auto in un modellino minuscolo disperso nello spazio.
+### La Sequenza Critica del Frame Drop
+Quando l'utente clicca su un'app (es. Spotify), nel lasso di tempo di **580 ms** si verificano simultaneamente:
+1. **Animazione 3D WebGL**: la camera e l'auto ruotano/traslano a 60 FPS con ricalcolo matriciale e multi-pass rendering (Mali-G52 o GPU desktop).
+2. **Animazione Music Player**: il player calcola la traiettoria easing verso sinistra.
+3. **Animazione Drawer**: il pannello scorre a tutto schermo.
+4. **IL PROBLEMA (a 350 ms, nel pieno dell'animazione)**:
+   - `triggerHomeContentFetch()` si attiva a metà transizione (`setTimeout 350ms`).
+   - Vengono inviate **12 richieste HTTP contemporanee** (`/me/playlists`, `/me/top/artists`, `/browse/categories/...`, `/browse/new-releases`, etc.).
+   - Man mano che le 12 risposte arrivano, vengono chiamati **12 singoli state setter React** (`setUserPlaylists`, `setTopArtists`, `setMadeForYouPlaylists`, `setChartsPlaylists`, etc.) all'interno di `AuthContext.tsx`.
+   - Poiché `AuthContext.Provider` avvolge l'intera applicazione, si generano **12 re-render globali consecutivi a cascata** del Virtual DOM in meno di 200 ms.
+   - `ContentArea.tsx` istanzia simultaneamente **14 caroselli orizzontali**, che montano **oltre 250 componenti `PlaylistItem`**.
+   - Ognuno dei 250 `PlaylistItem` esegue un `useEffect` su `item.id`, monta un tag `<img>` e inizia a scaricare e decodificare texture sRGB nel main thread.
+   - Ciascuno dei 14 caroselli crea una propria istanza sincrona di `ResizeObserver` e registra 3 event listener.
+5. **Risultato**: Il browser si trova a dover gestire contemporaneamente Garbage Collection, decodifica immagini sincrona, calcolo layout di 250 card, 12 re-render globali e rendering WebGL a 60 FPS. Questo satura la CPU (anche su PC potenti) causando il classico **drop da 60 FPS a 15-20 FPS nei primi istanti**.
 
 ---
 
-## 2. Soluzione Proposta
-
-### Parte 1: Sincronizzazione del Timing a 420ms
-- Impostare in `components/VehicleCanvas.tsx`:
-  $$\text{duration} = 0.42\text{ s (420 ms)}$$
-  sia per l'apertura che per la chiusura dell'app in modalità automatica (`transitionMode.current === "auto"`).
-- Allineare anche `components/MapsContainer.tsx` e `components/SpotifyPlayer.tsx` su una durata di **420ms** (o derivata da `sceneTransitionSpeed` tarata a 0.42s).
-- **Risultato**:
-  $$\text{Player (420ms)} \quad \longleftrightarrow \quad \text{App Slide (420ms)} \quad \longleftrightarrow \quad \text{Camera 3D (420ms)}$$
-  I tre componenti partono insieme sul frame 0, interpolano con la stessa curva `cubicBezierEase` e terminano contemporaneamente al frame 420ms.
+## 2. Audit Dettagliato App per App
 
 ---
 
-### Parte 2: Fit Intelligente del Modello 3D nel Resize
-Utilizzare come baseline immutabile il **Current Screen Size** (`homeConfig.modelScale = 2.68`, `appOpenConfig.modelScale = 1.51`, $A_{\text{ref}} \approx 16/9 \approx 1.77$):
+### SPOTIFY (Priorità Massima)
 
-#### A. Stato Home (Nessuna app aperta)
-- **Principio**: La telecamera Three.js PerspectiveCamera usa un FOV verticale fisso ($48^\circ$). Quando la finestra viene ridimensionata orizzontalmente o verticalmente, l'altezza visibile in unità Three.js resta invariata; cambia solo l'apertura orizzontale in funzione dell'aspect ratio $A = W / H$.
-- **Formula di presenza visiva**:
-  - Non ridurre la scala per schermi medi o tablet orizzontali.
-  - Mantenere la scala nominale $2.68$ (o leggermente superiore, es. $2.75$ per accentuare la presenza visiva desiderata dall'utente).
-  - Intervenire con un fattore di contenimento solo se l'aspect ratio si restringe drasticamente (es. $A < 1.25$ o mobile portrait) per garantire un margine di sicurezza del 10% dai bordi della canvas, senza mai far scendere la scala a valori minimi arbitrari:
-    $$\text{scaleFactor} = \min\left(1.05, \, \max\left(0.85, \, \frac{A}{1.35}\right)\right)$$
-  - Centratura dinamica `modelPos.x` per mantenere la vettura al centro del cono visivo utile.
+#### A. File e Componenti Responsabili
+- `context/AuthContext.tsx` (`fetchData`, `triggerHomeContentFetch`, `state setters`)
+- `components/SpotifyPlayer.tsx` (`useEffect isOpen fetch timer`)
+- `components/ContentArea.tsx` (montaggio sincrono di 14 caroselli)
+- `components/ContentCarousel.tsx` (istanza `ResizeObserver` per ogni carosello)
+- `components/PlaylistItem.tsx` (assenza di `React.memo`, `useEffect` non necessario, caricamento immagini simultaneo)
 
-#### B. Stato App Aperta (Pannello a destra, auto a sinistra)
-- **Principio**: Con l'app aperta, la colonna visibile a sinistra occupa $1/3$ della larghezza dello schermo.
-- **Correzione**:
-  - Eliminare il crollo a $0.50$ e l'allontanamento della camera `camDeltaZ * 1.15`.
-  - Mantenere la telecamera alla distanza corretta ($camDeltaZ \times 1.0$) e una scala del modello solida (intorno a $1.35 - 1.45$ invece di $0.75$), calcolando il posizionamento $X$ in modo che l'auto sia centrata nel terzo sinistro dello schermo con margini equilibrati sia dal bordo sinistro dell'infotainment che dalla boundary dell'app aperta a destra.
-  - L'auto rimane ben visibile, dettagliata e proporzionata, con presenza scenica adeguata e senza uscire dai bordi.
+#### B. Cause Individuate nel Codice
+1. **12 Re-render Globali a Raffica**: `fetchData()` in `AuthContext.tsx` risolve le chiamate e aggiorna 12 stati distinti senza batching. Poiché il Context risiede al root, l'intero albero di componenti (compresi player, navigazione, header) viene ricalcolato 12 volte di seguito.
+2. **Fetch Avviato a Metà Transizione (350ms)**: Il timer avvia il fetch mentre drawer e 3D stanno ancora accelerando/decelerando.
+3. **Mancanza di Staged Rendering**: `ContentArea.tsx` monta immediatamente tutti i 14 caroselli (sia visibili che 1000px sotto il fold).
+4. **250+ Istanze Non Memoizzate**: `PlaylistItem.tsx` non è `React.memo`, quindi ogni micro-aggiornamento di contesto provoca il re-render di centinaia di nodi DOM.
+5. **14 ResizeObserver Simultanei**: Ogni `ContentCarousel` istanzia un `ResizeObserver` separato all'avvio.
+
+#### C. Soluzioni Architetturali
+1. **Defer del Fetch a Transizione Conclusa (`600ms`)**:
+   - Avviare il caricamento della rete **solo dopo che la transizione visiva (580ms) si è conclusa al 100%**. Durante l'animazione, la shell dell'app e la cache locale pregressa (o skeleton a layout fisso) sono già a schermo a 60 FPS senza alcuna contesa di CPU.
+2. **State Consolidation / Batching in `AuthContext`**:
+   - Consolidare i dati della home in un unico oggetto di stato `homeContent` o utilizzare `ReactDOM.unstable_batchedUpdates`, trasformando 12 re-render a cascata in **1 singolo render atomico**.
+3. **Staged Rendering Progressivo**:
+   - **Fase 1 (immediata a 0ms)**: Rendering della Shell (Header, Saluto, Hero Card "Spotify AI DJ" con pulsante play rapido) + Carosello "Continua ad ascoltare" (Above-the-fold prioritario).
+   - **Fase 2 (a transizione finita, ~600ms)**: Rendering dei caroselli prioritari successivi ("Realizzato per te", "Le tue playlist", "Classifiche").
+   - **Fase 3 (idle / scroll progressivo)**: Montaggio dei restanti caroselli secondari below-the-fold solo quando entrano nella viewport o in `requestIdleCallback`.
+4. **Memoization di `PlaylistItem`**:
+   - Avvolgere `PlaylistItem` in `React.memo`.
+   - Eliminare l'inutile `useEffect` interno per `setImageError(false)`.
+5. **Zero Layout Shift per le Card**:
+   - Tutte le card hanno contenitore `w-full aspect-square` con sfondo placeholder sobrio già riservato. L'immagine si carica in `decoding="async"` e `loading="lazy"`, comparendo senza alcuno spostamento visivo dei testi sottostanti.
+6. **Ottimizzazione `ContentCarousel`**:
+   - Rimozione dei 14 `ResizeObserver` individuali; controllo scrollability leggero via scroll listener passivo e window resize.
+
+#### D. Impatto Atteso
+- Transizione di apertura Spotify granitica a **60 FPS sia su PC che su Tab A8**.
+- Riduzione dell'utilizzo del main thread all'apertura del **75%**.
 
 ---
 
-## 3. Piano dei File da Modificare
+### MAPS
 
-1. **`components/VehicleCanvas.tsx`**:
-   - Aggiornare `duration = 0.42` (420ms) nel loop di animazione automatica (`linea 1036`).
-   - Sostituire le formule di scaling forzato in `localHomeConfig` (linee 520-557) e `localAppOpenConfig` (linee 559-610) con la logica di conservazione della presenza basata sull'aspect ratio e sull'area visibile reale.
-2. **`components/MapsContainer.tsx`**:
-   - Uniformare la durata di transizione del pannello drawer a `420ms` per sincronia perfetta con la camera e il player.
+#### A. File e Componenti Responsabili
+- `components/MapsContainer.tsx`
+- `components/MapEngineUtils.ts`
+- `MapLibre GL` canvas instance
+
+#### B. Cause Individuate nel Codice
+- Il canvas MapLibre reagisce a resize durante il movimento del drawer, scatenando il rendering WebGL della mappa mentre Three.js sta renderizzando l'auto.
+- `MapControls`, `CosmicStarfield`, radar weather frames.
+
+#### C. Soluzioni
+1. Mantenere il canvas MapLibre dimensionato stabilmente, posticipando `map.resize()` al completamento della transizione (580ms).
+2. Sospendere il render di radar weather frames se il pannello mappe è chiuso o coperto.
+
+#### D. Impatto Atteso
+- Eliminazione di doppie chiamate WebGL concorrenti durante lo slide.
 
 ---
 
-## 4. Verifica e Risultati Attesi
-- **Sincronia**: Al click sull'icona di un'app, l'app scorre da destra, il player si sposta verso sinistra e la camera 3D ruota/zooma terminando il moto nello stesso istante esatto (420ms).
-- **Scala Home nel resize**: La vettura non si riduce al 50-60% durante il resize della finestra, ma mantiene la grandezza e la presenza dello schermo desktop grande.
-- **Scala App Open nel resize**: L'auto nella colonna sinistra mantiene una dimensione chiara e leggibile senza diventare un modellino minuscolo.
-- **Integrità del Music Player**: Nessun tocco alle formule e alle boundary del player musicale già consolidate.
+### RADIO
+
+#### A. File e Componenti Responsabili
+- `components/RadioApp.tsx`
+- `components/HorizontalCarousel.tsx`
+- `components/RadioCard.tsx`
+
+#### B. Cause Individuate nel Codice
+- `RadioApp.tsx` attende la risoluzione di 5 chiamate HTTP di `radioBrowserApi` prima di visualizzare le stazioni, mostrando uno skeleton temporaneo, anche se `curatedStations` (le radio italiane più popolari) è già presente sincronicamente in locale in memoria (`radio_curated.ts`).
+
+#### C. Soluzioni
+1. **Visualizzazione Immediata a 0ms**: Montare subito `curatedStations` ("Le più ascoltate in Italia") istantaneamente al click.
+2. In background, a transizione conclusa, caricare le altre categorie (Pop, Rock, Dance, Notizie) e aggiungerle progressivamente.
+3. Memoizzare `RadioCard` con `React.memo`.
+
+#### D. Impatto Atteso
+- Apertura istantanea senza schermata vuota o attesa di rete.
+
+---
+
+### YOUTUBE MUSIC
+
+#### A. File e Componenti Responsabili
+- `components/YouTubeMusicApp.tsx`
+- `context/YouTubeMusicContext.tsx`
+- `components/ContentCarousel.tsx`
+
+#### B. Cause Individuate nel Codice
+- All'apertura viene invocato `fetchYouTubeHomeData` che genera contemporaneamente 4 caroselli di video/playlist YouTube.
+
+#### C. Soluzioni
+1. Applicare la stessa strategia di Staged Rendering (render immediato di Top Categories + Above-the-fold, poi progressive rendering below-the-fold).
+2. Utilizzare immagini con `decoding="async"` e placeholder proporzionati a dimensione fissa.
+
+---
+
+### THEATER / VIDEO
+
+#### A. File e Componenti Responsabili
+- `components/Theater.tsx`
+- `components/ServiceButton`
+
+#### B. Cause Individuate nel Codice
+- `ServiceButton` ha calcoli di `getBoundingClientRect()` ad ogni mousemove/touch.
+- Componente già leggero, ma può beneficiare del posticipo del caricamento dei poster/trailer a transizione conclusa.
+
+#### C. Soluzioni
+- Caricamento iframe video on-demand solo quando l'utente seleziona un trailer o un servizio, evitando istanze di player video nascosti in background.
+
+---
+
+## 3. Piano Operativo di Implementazione a Blocchi Verificabili
+
+```text
+[BLOCCO A: DEFER DEL FETCH & BATCHING STATO AUTHCONTEXT]
+→ Spostamento del trigger di fetch da 350ms a 600ms (post-transizione)
+→ Consolidamento degli state setters di AuthContext in batch atomico
+→ Verifica apertura Spotify senza scatti di rendering
+
+[BLOCCO B: STAGED RENDERING & ZERO LAYOUT SHIFT SPOTIFY]
+→ Staged rendering in ContentArea (Shell + Above-the-fold immediato, resto progressivo)
+→ React.memo su PlaylistItem ed eliminazione useEffect superfluo
+→ Placeholder a dimensione fissa e decoding="async" per eliminare layout shifts
+→ Ottimizzazione caroselli (eliminazione dei 14 ResizeObserver)
+→ Verifica stabilità e fluidità caroselli
+
+[BLOCCO C: OTTIMIZZAZIONE APERTURA RADIO & YOUTUBE MUSIC]
+→ Radio: visualizzazione immediata di curatedStations a 0ms
+→ YouTube Music: staged rendering e memoization
+→ Maps: resize maplibre a transizione completata
+→ Verifica globale
+```
+
+---
+
+## 4. Garanzie di Conservazione UX e Design
+- **Nessuna rimozione**: tutti i caroselli, tutte le categorie, tutte le card e tutte le playlist rimangono esattamente identiche.
+- **Stesso stile e grafica**: stessi colori, stesse animazioni, stesse icone, stesso layout.
+- **Nessun layout shift**: le altezze e larghezze delle card sono rigidamente bloccate a CSS con aspect ratio invariato.
+- **Transizione perfetta a 580ms**: Player, camera 3D e app si muovono all'unisono senza rallentamenti o drop di frame.

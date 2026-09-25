@@ -22,6 +22,7 @@ import NewReleasesView from './NewReleasesView';
 import { PodcastService } from '../services/PodcastService';
 import AiDjView from './AiDjView';
 import { cubicBezierEase } from './VehicleCanvas';
+import { APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 
 export type ViewType = 
     | 'home' 
@@ -137,7 +138,7 @@ const SpotifyPlayer = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = 420; // 420ms Synchronized transition speed
+                    const duration = APP_TRANSITION_DURATION; // 580ms Synchronized transition speed
                     const t = Math.min(elapsed / duration, 1.0);
                     const easeT = cubicBezierEase(t);
                     state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
@@ -235,16 +236,16 @@ const SpotifyPlayer = ({
             }
             
             if (isOpen) {
-                // Defer fetching until panel slide-in animation completes (~300ms) to ensure 60fps opening
+                // Defer fetching until panel slide-in animation completes (580ms) to ensure 60fps opening
                 const fetchTimer = setTimeout(() => {
                     triggerHomeContentFetch();
-                }, 350);
+                }, APP_TRANSITION_DURATION + 20);
                 return () => clearTimeout(fetchTimer);
             } else {
                 const timer = setTimeout(() => {
                     setView({ type: 'home' });
                     setViewHistory([]);
-                }, 420); // 420ms synchronized transition speed duration
+                }, APP_TRANSITION_DURATION); // 580ms synchronized transition speed duration
                 return () => clearTimeout(timer);
             }
         }

@@ -22,6 +22,7 @@ import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
 import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjVisualState } from '../services/AiDjVisualState';
 import { cubicBezierEase } from './VehicleCanvas';
 import { SPLIT_APPS_WITH_MAP_UNDER } from '../App';
+import { APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 
 interface MusicPlayerProps {
     activeApp: string | null;
@@ -907,12 +908,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         return () => window.removeEventListener('resize', updateTargetDockedWidth);
     }, [updateTargetDockedWidth]);
 
+    const remScaleRef = useRef(1.0);
+    const updateRemScale = useCallback(() => {
+        remScaleRef.current = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16;
+    }, []);
+
+    useEffect(() => {
+        updateRemScale();
+        window.addEventListener('resize', updateRemScale);
+        return () => window.removeEventListener('resize', updateRemScale);
+    }, [updateRemScale]);
+
     // Single unified requestAnimationFrame loop that handles BOTH manual dragging AND smooth, beautifully easing transitions in real-time
     useEffect(() => {
         let animationFrameId: number;
 
         const loop = () => {
-            const duration = 420; // 420ms staggered completion (player completes movement before 600ms app expansion)
+            const duration = APP_TRANSITION_DURATION; // 580ms synchronized transition (perfect lockstep with 3D camera and app panels)
 
             if (dragProgress.current !== null) {
                 wasDraggingRef.current = true;
@@ -945,8 +957,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const pct = 50 * t;
                 const sideMargin = winWidth < 1024 ? 16 : 24;
 
-                // Root rem scaling factor dynamically measured from the document
-                const remScale = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16;
+                // Root rem scaling factor read from cached ref (avoids forced layout recalc every frame)
+                const remScale = remScaleRef.current;
 
                 // Determine app boundary (the real left edge of the open right-hand panel) in current coordinate space
                 let appLeft = winWidth;
@@ -1082,15 +1094,40 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     outerWaveBackdropRef.current.style.border = glowFrame.outerWaveBorder || 'none';
                     outerWaveBackdropRef.current.style.display = (glowFrame.activeOpacity > 0.005 && glowFrame.outerWaveOpacity > 0.005) ? 'block' : 'none';
                 }
-            }
 
+                // Schedule next frame ONLY if animation, drag or AI DJ glow is actively running
+                const isTransitioning = animStartTime.current > 0;
+                const isDragging = dragProgress.current !== null;
+                const isDjActiveAnim = isDjActiveVal && isDjPlayingVal;
+
+                if (isTransitioning || isDragging || isDjActiveAnim) {
+                    animationFrameId = requestAnimationFrame(loop);
+                }
+            }
+        };
+
+        const handleDragEvent = () => {
+            cancelAnimationFrame(animationFrameId);
             animationFrameId = requestAnimationFrame(loop);
         };
 
+        const handleResize = () => {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(loop);
+        };
+
+        window.addEventListener('app-drag-state', handleDragEvent);
+        window.addEventListener('resize', handleResize);
+
+        // Run initial loop
         loop();
 
-        return () => cancelAnimationFrame(animationFrameId);
-    }, [dockedConfig, floatingConfig, dragProgress, isAnyAppOpen, sceneTransitionSpeed]);
+        return () => {
+            cancelAnimationFrame(animationFrameId);
+            window.removeEventListener('app-drag-state', handleDragEvent);
+            window.removeEventListener('resize', handleResize);
+        };
+    }, [dockedConfig, floatingConfig, dragProgress, isAnyAppOpen, activeApp]);
 
     useEffect(() => {
         const show = nowPlaying.isLoading || debugSpinner;

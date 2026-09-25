@@ -1,5 +1,6 @@
 
 import React, { createContext, useState, useEffect, useContext, useCallback, ReactNode, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import apiClient from '../spotifyClient';
 import type { SpotifyPlayer, SpotifyPlayerState } from '@/globals';
 import { NowPlayingState, YouTubeTrackInfo, PlayOptions } from '../types';
@@ -612,9 +613,8 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
         }
         setHomeContentError(null);
 
-        const safeFetch = async (
+        const safeFetchData = async (
             promise: Promise<any>, 
-            setter: (data: any) => void, 
             storageKey: string, 
             extractor: (data: any) => any
         ) => {
@@ -622,49 +622,74 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
                 const res = await promise;
                 const data = extractor(res.data);
                 if (data && Array.isArray(data) && data.length > 0) {
-                    setter(data);
                     try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch (e) {}
+                    return data;
                 }
             } catch (e) {
                 // Non-blocking
             }
+            return null;
         };
 
-        const fetchOperations = [
-            safeFetch(apiClient.get('/me/playlists?limit=10'), setUserPlaylists, 'spotify_cache_user_playlists', d => d?.items),
-            safeFetch(apiClient.get('/me/top/artists?time_range=medium_term&limit=10'), setTopArtists, 'spotify_cache_top_artists', d => d?.items),
-            safeFetch(apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'), setMadeForYouPlaylists, 'spotify_cache_made_for_you_pl', d => d?.playlists?.items),
-            safeFetch(apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'), setChartsPlaylists, 'spotify_cache_charts', d => d?.playlists?.items),
-            safeFetch(apiClient.get('/browse/new-releases?country=IT&limit=10'), setNewReleases, 'spotify_cache_new_releases', d => d?.albums?.items),
-            safeFetch(apiClient.get('/browse/categories?country=IT&limit=20'), setGenresCategories, 'spotify_cache_genres', d => d?.categories?.items?.map((c: any) => ({ ...c, type: 'category' }))),
-            safeFetch(apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'), setRecommendedShows, 'spotify_cache_shows', d => d?.shows?.items),
-            safeFetch(apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'), setPartyPlaylists, 'spotify_cache_party', d => d?.playlists?.items),
-            safeFetch(apiClient.get('/me/top/tracks?limit=20&time_range=long_term'), setTopTracks, 'spotify_cache_top_tracks', d => d?.items),
-            safeFetch(apiClient.get('/me/albums?limit=10'), setSavedAlbums, 'spotify_cache_saved_albums', d => d?.items?.map((i: any) => i.album).filter(Boolean)),
-            safeFetch(apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'), setMadeForYou, 'spotify_cache_made_for_you_new', d => d?.playlists?.items),
+        // STAGE 1: Prioritized Above-the-fold content
+        const [recentRes, userPlRes, topArtRes, madeForYouRes, newRelRes] = await Promise.all([
             (async () => {
                 try {
                     const recents = await apiClient.get('/me/player/recently-played?limit=25');
                     if (recents.data?.items) {
-                        const processed = await processRecentPlays(recents.data.items);
-                        setContinueListeningItems(currentItems => {
-                            const optimisticItem = latestOptimisticItem.current || (currentItems.length > 0 ? currentItems[0] : null);
-                            if (!optimisticItem) return processed;
-                            const combined = [optimisticItem, ...processed.filter(item => item.uri !== optimisticItem.uri)];
-                            const unique = new Set<string>();
-                            const result = combined.filter(item => { if (!item?.uri || unique.has(item.uri)) return false; unique.add(item.uri); return true; }).slice(0, 10);
-                            try { localStorage.setItem('continueListeningItems', JSON.stringify(result)); } catch (e) {}
-                            return result;
-                        });
+                        return await processRecentPlays(recents.data.items);
                     }
                 } catch (e) {}
-            })()
-        ];
+                return null;
+            })(),
+            safeFetchData(apiClient.get('/me/playlists?limit=10'), 'spotify_cache_user_playlists', d => d?.items),
+            safeFetchData(apiClient.get('/me/top/artists?time_range=medium_term&limit=10'), 'spotify_cache_top_artists', d => d?.items),
+            safeFetchData(apiClient.get('/browse/categories/0JQ5DAt0tbjZptfcdMSKl3/playlists?country=IT&limit=10'), 'spotify_cache_made_for_you_new', d => d?.playlists?.items),
+            safeFetchData(apiClient.get('/browse/new-releases?country=IT&limit=10'), 'spotify_cache_new_releases', d => d?.albums?.items),
+        ]);
 
-        // Progressive resolution: as each finishes, UI is already updated!
-        await Promise.allSettled(fetchOperations);
-        setHasFetchedHomeContent(true);
-        setHomeContentLoading(false);
+        // Batch update Stage 1 in a single React tick
+        ReactDOM.unstable_batchedUpdates(() => {
+            if (recentRes) {
+                setContinueListeningItems(currentItems => {
+                    const optimisticItem = latestOptimisticItem.current || (currentItems.length > 0 ? currentItems[0] : null);
+                    if (!optimisticItem) return recentRes;
+                    const combined = [optimisticItem, ...recentRes.filter(item => item.uri !== optimisticItem.uri)];
+                    const unique = new Set<string>();
+                    const result = combined.filter(item => { if (!item?.uri || unique.has(item.uri)) return false; unique.add(item.uri); return true; }).slice(0, 10);
+                    try { localStorage.setItem('continueListeningItems', JSON.stringify(result)); } catch (e) {}
+                    return result;
+                });
+            }
+            if (userPlRes) setUserPlaylists(userPlRes);
+            if (topArtRes) setTopArtists(topArtRes);
+            if (madeForYouRes) setMadeForYou(madeForYouRes);
+            if (newRelRes) setNewReleases(newRelRes);
+            setHomeContentLoading(false);
+        });
+
+        // STAGE 2: Secondary / Below-the-fold content
+        const [madeForYouPlRes, chartsRes, genresRes, showsRes, partyRes, topTracksRes, savedAlbumsRes] = await Promise.all([
+            safeFetchData(apiClient.get('/browse/categories/0JQ5DAqbMKF2JckPAnMAhA/playlists?country=IT&limit=10'), 'spotify_cache_made_for_you_pl', d => d?.playlists?.items),
+            safeFetchData(apiClient.get('/browse/categories/toplists/playlists?country=IT&limit=10'), 'spotify_cache_charts', d => d?.playlists?.items),
+            safeFetchData(apiClient.get('/browse/categories?country=IT&limit=20'), 'spotify_cache_genres', d => d?.categories?.items?.map((c: any) => ({ ...c, type: 'category' }))),
+            safeFetchData(apiClient.get('/search?q=podcast&type=show&market=IT&limit=10'), 'spotify_cache_shows', d => d?.shows?.items),
+            safeFetchData(apiClient.get('/browse/categories/party/playlists?country=IT&limit=10'), 'spotify_cache_party', d => d?.playlists?.items),
+            safeFetchData(apiClient.get('/me/top/tracks?limit=20&time_range=long_term'), 'spotify_cache_top_tracks', d => d?.items),
+            safeFetchData(apiClient.get('/me/albums?limit=10'), 'spotify_cache_saved_albums', d => d?.items?.map((i: any) => i.album).filter(Boolean)),
+        ]);
+
+        // Batch update Stage 2 in a single React tick
+        ReactDOM.unstable_batchedUpdates(() => {
+            if (madeForYouPlRes) setMadeForYouPlaylists(madeForYouPlRes);
+            if (chartsRes) setChartsPlaylists(chartsRes);
+            if (genresRes) setGenresCategories(genresRes);
+            if (showsRes) setRecommendedShows(showsRes);
+            if (partyRes) setPartyPlaylists(partyRes);
+            if (topTracksRes) setTopTracks(topTracksRes);
+            if (savedAlbumsRes) setSavedAlbums(savedAlbumsRes);
+            setHasFetchedHomeContent(true);
+        });
     }, [state.user, processRecentPlays, userPlaylists.length, topArtists.length, newReleases.length]);
 
     const triggerHomeContentFetch = useCallback(() => {

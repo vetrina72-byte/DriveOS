@@ -122,11 +122,13 @@ const RadioApp: React.FC<RadioAppProps> = ({
     const ANIMATION_SPEED = 0.18; 
     const CLOSE_THRESHOLD_PERCENT = 25;
     
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [categories, setCategories] = useState<{name: string; stations: RadioStation[]}[]>([]);
+    const [categories, setCategories] = useState<{name: string; stations: RadioStation[]}[]>([
+        { name: 'Le più ascoltate in Italia', stations: curatedStations }
+    ]);
     const [favorites, setFavorites] = useState<RadioStation[]>([]);
-    const [favoritesLoading, setFavoritesLoading] = useState(true);
+    const [favoritesLoading, setFavoritesLoading] = useState(false);
     
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<RadioStation[]>([]);

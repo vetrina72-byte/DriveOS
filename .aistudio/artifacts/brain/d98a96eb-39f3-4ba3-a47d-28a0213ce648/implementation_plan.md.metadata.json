@@ -1,6 +1,6 @@
 {
-  "summary":  "Piano dettagliato per la sincronizzazione del timing di animazione della camera 3D (durata unificata a 420ms con player e apertura app) e per il fit intelligente del modello 3D durante il resize per mantenere la presenza visiva del current screen size senza rimpicciolimenti eccessivi.",
-  "updatedAt":  "2026-09-25T14:51:02.934904771Z",
+  "summary":  "Performance Engineering Deep Audit & Staged Rendering Plan: analisi dettagliata dei picchi all'apertura delle app (12 fetch contemporanei, 12 re-render a cascata in AuthContext, 14 caroselli con 280 card renderizzate simultaneamente), con soluzioni concrete (Staged Rendering, State Batching, Defer del fetch a fine transizione, Memoization PlaylistItem, Zero Layout Shift).",
+  "updatedAt":  "2026-09-25T18:05:36.162529601Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

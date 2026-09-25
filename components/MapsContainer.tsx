@@ -15,7 +15,7 @@ import { resolveBrand } from './BrandResolver';
 import { buildMapStyle, dist, bear, OSRM_URL } from './MapEngineUtils';
 import { CosmicStarfield } from './CosmicStarfield';
 import { cubicBezierEase } from './VehicleCanvas';
-import { useUIConfig } from '../context/UIConfigContext';
+import { useUIConfig, APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 import { RouteOption, RoadHazard, LocationInfo, AutomotiveCategory } from '../types/maps';
 import { fetchRoadHazardsForRoute } from '../services/RoadHazardService';
 import { analyzeRouteTraffic, buildTrafficGeoJSON } from '../services/TrafficService';
@@ -663,19 +663,30 @@ const MapsContainer = React.memo(({
   const mapActive = true;
   const mapActiveRef = useRef(true);
 
+  const updateRef = useRef<() => void>(() => {});
+  const startAnimation = useCallback(() => {
+    if (!physics.current.animationId) {
+      physics.current.animationId = requestAnimationFrame(() => {
+        physics.current.animationId = 0;
+        updateRef.current();
+      });
+    }
+  }, []);
+
   // Sync drawer slides positioning with isOpen state
   useEffect(() => {
     const state = physics.current;
     if (!state.isDragging) {
         const newTargetX = isOpen ? 0 : 100;
-        if (state.targetX !== newTargetX || state.animStartTime === 0) {
+        if (state.targetX !== newTargetX || state.animStartTime === 0 || Math.abs(state.currentX - newTargetX) > 0.01) {
             state.startX = state.currentX;
             state.targetX = newTargetX;
-            state.animDuration = 900;
+            state.animDuration = APP_TRANSITION_DURATION;
             state.animStartTime = performance.now();
+            startAnimation();
         }
     }
-  }, [isOpen, sceneTransitionSpeed]);
+  }, [isOpen, startAnimation]);
 
   // Drawer slide frame cycle animation
   useEffect(() => {
@@ -683,19 +694,22 @@ const MapsContainer = React.memo(({
         const state = physics.current;
         const panel = panelRef.current;
 
+        let isSettled = false;
         if (!state.isDragging) {
             if (state.animStartTime > 0) {
                 const elapsed = performance.now() - state.animStartTime;
-                const duration = 420; // 420ms App transition duration (synchronized with player and 3D camera)
+                const duration = APP_TRANSITION_DURATION; // 580ms App transition duration (synchronized with player and 3D camera)
                 const t = Math.min(elapsed / duration, 1.0);
                 const easeT = cubicBezierEase(t);
                 state.currentX = state.startX + (state.targetX - state.startX) * easeT;
                 if (t >= 1.0) {
                   state.currentX = state.targetX;
                   state.animStartTime = 0;
+                  isSettled = true;
                 }
             } else {
                 state.currentX = state.targetX;
+                isSettled = true;
             }
         }
 
@@ -705,7 +719,7 @@ const MapsContainer = React.memo(({
             
             onDragProgress?.(visualProgress);
 
-            if (!state.isDragging && Math.abs(state.targetX - state.currentX) < 0.2) {
+            if (!state.isDragging && (isSettled || Math.abs(state.targetX - state.currentX) < 0.2)) {
                 state.isInteracting = false;
                 onDragProgress?.(null);
             }
@@ -720,18 +734,37 @@ const MapsContainer = React.memo(({
             panel.style.transform = `translateX(${visualX}%)`;
         }
 
-        state.animationId = requestAnimationFrame(update);
+        // Schedule next frame ONLY if active (animating, dragging, interacting)
+        if (!isSettled || state.isDragging || state.isInteracting) {
+            state.animationId = requestAnimationFrame(() => {
+                state.animationId = 0;
+                updateRef.current();
+            });
+        } else {
+            state.animationId = 0;
+        }
     };
 
-    physics.current.animationId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(physics.current.animationId);
-  }, [onDragProgress, sceneTransitionSpeed]);
+    updateRef.current = update;
+  });
+
+  useEffect(() => {
+    // Initial positioning render
+    updateRef.current();
+    return () => {
+        if (physics.current.animationId) {
+            cancelAnimationFrame(physics.current.animationId);
+            physics.current.animationId = 0;
+        }
+    };
+  }, []);
 
   // Handle slide drag starts
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!panelRef.current) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
+    startAnimation();
     
     onInteractionStart?.();
 
