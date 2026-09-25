@@ -32,10 +32,11 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
   const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
   
-  // Reset image error state if the item changes
-  useEffect(() => {
+  const [prevId, setPrevId] = useState(item.id);
+  if (prevId !== item.id) {
+    setPrevId(item.id);
     setImageError(false);
-  }, [item.id]);
+  }
 
   const handleImageError = () => {
     setImageError(true);

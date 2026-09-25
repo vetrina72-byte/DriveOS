@@ -69,6 +69,135 @@ const filterDjItems = (items: MediaItem[]) => {
   );
 };
 
+interface SpotifyDjHeroCardProps {
+  isNight: boolean;
+  onOpenDjView?: () => void;
+  onPlayDJ?: () => void;
+}
+
+const SpotifyDjHeroCard = React.memo(({ isNight, onOpenDjView, onPlayDJ }: SpotifyDjHeroCardProps) => {
+  const { nowPlaying, play, pauseSpotify } = useAuth();
+
+  const isDjActive = React.useMemo(() => {
+    if (!nowPlaying?.spotifyState) return false;
+    return isSpotifyAiDj(nowPlaying.spotifyState);
+  }, [nowPlaying?.spotifyState]);
+
+  const isDjPlaying = React.useMemo(() => {
+    return isDjActive && isSpotifyAiDjPlaying(nowPlaying?.spotifyState);
+  }, [isDjActive, nowPlaying?.spotifyState]);
+
+  const handleToggleDjPlayback = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (onPlayDJ) {
+      onPlayDJ();
+      return;
+    }
+    if (isDjPlaying) {
+      pauseSpotify();
+    } else if (isDjActive) {
+      play({ context_uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' });
+    } else {
+      const djItem: MediaItem = {
+        id: 'spotify-dj',
+        name: 'DJ Spotify',
+        type: 'playlist',
+        uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq',
+        description: 'Spotify AI DJ',
+        imageUrl: officialSpotifyDjLogoUrl,
+      };
+      play({ context_uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' }, djItem);
+    }
+  };
+
+  return (
+    <div className="px-3 sm:px-6 mb-4 sm:mb-6">
+      <div 
+        className={`relative overflow-hidden rounded-xl p-3 sm:p-4 border transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 ${
+          isNight 
+            ? 'bg-[#121212] border-zinc-800 hover:border-zinc-700 shadow-md' 
+            : 'bg-white border-zinc-200 hover:border-zinc-300 shadow-sm'
+        }`}
+      >
+        <div 
+          onClick={() => onOpenDjView?.()}
+          className="flex items-center gap-3 sm:gap-4 relative z-10 cursor-pointer group min-w-0"
+        >
+          <div className="flex-shrink-0 relative">
+            <img 
+              src={officialSpotifyDjLogoUrl} 
+              alt="Spotify AI DJ Logo" 
+              className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex-shrink-0 object-cover shadow-md border border-white/10 group-hover:scale-105 transition-transform" 
+              referrerPolicy="no-referrer" 
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-0.5 sm:mb-1 flex-wrap">
+              <span className={`text-sm sm:text-base font-bold group-hover:text-[#1db954] transition-colors ${isNight ? 'text-white' : 'text-zinc-900'}`}>
+                Spotify AI DJ
+              </span>
+              {isDjActive && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                  isNight 
+                    ? 'bg-zinc-800 text-zinc-300 border-zinc-700' 
+                    : 'bg-zinc-100 text-zinc-700 border-zinc-300'
+                }`}>
+                  {isDjPlaying ? 'In riproduzione' : 'In pausa'}
+                </span>
+              )}
+            </div>
+            <p className={`text-[11px] sm:text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-600'} max-w-md leading-relaxed truncate sm:whitespace-normal`}>
+              La tua guida musicale personale con selezione intelligente dei brani e commenti vocali dedicati.
+            </p>
+          </div>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => onOpenDjView?.()}
+            className={`px-3.5 py-2 rounded-full font-bold text-xs transition-colors border cursor-pointer ${
+              isNight 
+                ? 'bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700' 
+                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border-zinc-300'
+            }`}
+          >
+            Scopri AI DJ
+          </button>
+
+          <button
+            onClick={handleToggleDjPlayback}
+            className={`flex-shrink-0 px-5 py-2.5 rounded-full font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 text-black cursor-pointer ${
+              isDjPlaying
+                ? 'bg-white hover:bg-zinc-200 shadow-md'
+                : 'bg-[#1db954] hover:bg-[#1ed760] active:scale-95 shadow-md shadow-emerald-500/10'
+            }`}
+          >
+            {isDjPlaying ? (
+              <>
+                <Pause className="w-3.5 h-3.5 fill-current" />
+                Pausa
+              </>
+            ) : isDjActive ? (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                Riprendi
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                Avvia DJ
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+SpotifyDjHeroCard.displayName = 'SpotifyDjHeroCard';
+
 // Main Component
 const ContentArea = React.memo(({ 
     isNight, 
@@ -95,39 +224,6 @@ const ContentArea = React.memo(({
 }: ContentAreaProps) => {
   
   const greeting = getGreeting();
-  const { nowPlaying, play, pauseSpotify } = useAuth();
-
-  const isDjActive = React.useMemo(() => {
-    if (!nowPlaying?.spotifyState) return false;
-    return isSpotifyAiDj(nowPlaying.spotifyState);
-  }, [nowPlaying]);
-
-  const isDjPlaying = React.useMemo(() => {
-    return isDjActive && isSpotifyAiDjPlaying(nowPlaying?.spotifyState);
-  }, [isDjActive, nowPlaying]);
-
-  const handleToggleDjPlayback = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (onPlayDJ) {
-      onPlayDJ();
-      return;
-    }
-    if (isDjPlaying) {
-      pauseSpotify();
-    } else if (isDjActive) {
-      play({ context_uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' });
-    } else {
-      const djItem: MediaItem = {
-        id: 'spotify-dj',
-        name: 'DJ Spotify',
-        type: 'playlist',
-        uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq',
-        description: 'Spotify AI DJ',
-        imageUrl: officialSpotifyDjLogoUrl,
-      };
-      play({ context_uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' }, djItem);
-    }
-  };
 
   const filteredContinue = React.useMemo(() => filterDjItems(continueListeningItems), [continueListeningItems]);
   const filteredMadeForYou = React.useMemo(() => filterDjItems(madeForYou), [madeForYou]);
@@ -147,16 +243,16 @@ const ContentArea = React.memo(({
   const [renderStage, setRenderStage] = React.useState(1);
 
   React.useEffect(() => {
-    // Stage 1 (0ms): Shell & Top Above-the-fold content
-    // Stage 2 (50ms): Core Primary Carousels
+    // Stage 1 (0ms): Shell, Greeting, Hero Card, Immediate Above-the-fold
+    // Stage 2 (60ms): Core Primary Carousels
     const t1 = setTimeout(() => {
       setRenderStage(prev => Math.max(prev, 2));
-    }, 50);
+    }, 60);
 
-    // Stage 3 (180ms): Full Below-the-fold Carousels
+    // Stage 3 (200ms): Full Below-the-fold Carousels
     const t2 = setTimeout(() => {
       setRenderStage(prev => Math.max(prev, 3));
-    }, 180);
+    }, 200);
 
     return () => {
       clearTimeout(t1);
@@ -196,90 +292,8 @@ const ContentArea = React.memo(({
         {greeting}, {user?.display_name}!
       </h1>
 
-      {/* Spotify DJ Feature Card with Clean Black & White Aesthetic */}
-      <div className="px-3 sm:px-6 mb-4 sm:mb-6">
-        <div 
-          className={`relative overflow-hidden rounded-xl p-3 sm:p-4 border transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 ${
-            isNight 
-              ? 'bg-[#121212] border-zinc-800 hover:border-zinc-700 shadow-md' 
-              : 'bg-white border-zinc-200 hover:border-zinc-300 shadow-sm'
-          }`}
-        >
-          <div 
-            onClick={() => onOpenDjView?.()}
-            className="flex items-center gap-3 sm:gap-4 relative z-10 cursor-pointer group min-w-0"
-          >
-            <div className="flex-shrink-0 relative">
-              <img 
-                src={officialSpotifyDjLogoUrl} 
-                alt="Spotify AI DJ Logo" 
-                className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex-shrink-0 object-cover shadow-md border border-white/10 group-hover:scale-105 transition-transform" 
-                referrerPolicy="no-referrer" 
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-0.5 sm:mb-1 flex-wrap">
-                <span className={`text-sm sm:text-base font-bold group-hover:text-[#1db954] transition-colors ${isNight ? 'text-white' : 'text-zinc-900'}`}>
-                  Spotify AI DJ
-                </span>
-                {isDjActive && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                    isNight 
-                      ? 'bg-zinc-800 text-zinc-300 border-zinc-700' 
-                      : 'bg-zinc-100 text-zinc-700 border-zinc-300'
-                  }`}>
-                    {isDjPlaying ? 'In riproduzione' : 'In pausa'}
-                  </span>
-                )}
-              </div>
-              <p className={`text-[11px] sm:text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-600'} max-w-md leading-relaxed truncate sm:whitespace-normal`}>
-                La tua guida musicale personale con selezione intelligente dei brani e commenti vocali dedicati.
-              </p>
-            </div>
-          </div>
-
-          <div className="relative z-10 flex items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => onOpenDjView?.()}
-              className={`px-3.5 py-2 rounded-full font-bold text-xs transition-colors border cursor-pointer ${
-                isNight 
-                  ? 'bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700' 
-                  : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border-zinc-300'
-              }`}
-            >
-              Scopri AI DJ
-            </button>
-
-            <button
-              onClick={handleToggleDjPlayback}
-              className={`flex-shrink-0 px-5 py-2.5 rounded-full font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 text-black cursor-pointer ${
-                isDjPlaying
-                  ? 'bg-white hover:bg-zinc-200 shadow-md'
-                  : 'bg-[#1db954] hover:bg-[#1ed760] active:scale-95 shadow-md shadow-emerald-500/10'
-              }`}
-            >
-              {isDjPlaying ? (
-                <>
-                  <Pause className="w-3.5 h-3.5 fill-current" />
-                  Pausa
-                </>
-              ) : isDjActive ? (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  Riprendi
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  Avvia DJ
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Spotify DJ Feature Card isolated from ContentArea re-renders */}
+      <SpotifyDjHeroCard isNight={isNight} onOpenDjView={onOpenDjView} onPlayDJ={onPlayDJ} />
       
       {/* STAGE 1: Immediate Above-the-fold Carousels */}
       {filteredContinue.length > 0 && (

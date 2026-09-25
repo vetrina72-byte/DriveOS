@@ -9,29 +9,7 @@ interface RadioCardProps {
 }
 
 const RadioCard: React.FC<RadioCardProps> = ({ station, onPlay, isNight }) => {
-    const [imageStatus, setImageStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
-
-    useEffect(() => {
-        if (!station.favicon) {
-            setImageStatus('error');
-            return;
-        }
-
-        setImageStatus('loading');
-        const img = new Image();
-        img.src = station.favicon;
-
-        const handleLoad = () => setImageStatus('loaded');
-        const handleError = () => setImageStatus('error');
-
-        img.addEventListener('load', handleLoad);
-        img.addEventListener('error', handleError);
-
-        return () => {
-            img.removeEventListener('load', handleLoad);
-            img.removeEventListener('error', handleError);
-        };
-    }, [station.favicon]);
+    const [imageError, setImageError] = useState(!station.favicon);
     
     const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
     const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
@@ -47,10 +25,13 @@ const RadioCard: React.FC<RadioCardProps> = ({ station, onPlay, isNight }) => {
                     className="relative w-full aspect-square mb-3 cursor-pointer group"
                     aria-label={`Play ${station.name}`}
                 >
-                    {imageStatus === 'loaded' ? (
+                    {station.favicon && !imageError ? (
                         <img
                             src={station.favicon}
                             alt={station.name}
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => setImageError(true)}
                             className={`w-full h-full rounded-md object-contain shadow-lg ${isNight ? 'bg-zinc-800' : 'bg-white'}`}
                         />
                     ) : (
@@ -60,10 +41,10 @@ const RadioCard: React.FC<RadioCardProps> = ({ station, onPlay, isNight }) => {
                     )}
                 </button>
                 <h3 className={`font-bold truncate ${isNight ? 'text-white' : 'text-zinc-800'}`}>{station.name}</h3>
-                <p className={`text-sm truncate ${isNight ? 'text-[#b3b3b3]' : 'text-zinc-500'}`}>{station.tags.split(',')[0]}</p>
+                <p className={`text-sm truncate ${isNight ? 'text-[#b3b3b3]' : 'text-zinc-500'}`}>{station.tags?.split(',')[0] || ''}</p>
             </div>
         </div>
     );
 };
 
-export default RadioCard;
+export default React.memo(RadioCard);
