@@ -136,9 +136,22 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
     // The absolute truth of what is currently rendered on screen explicitly for seeking
     const visualPosRef = useRef<number>(state.position);
     const optimisticSeekRef = useRef<{ pos: number, ts: number } | null>(null);
+    const lastRenderedPosRef = useRef<number>(state.position || 0);
+    const lastTrackKeyRef = useRef<string>('');
 
     // Local progress state incremented every second when playing
     const [progressMs, setProgressMs] = useState<number>(state.position || 0);
+
+    const currentTrackKey = state.track_window?.current_track?.id || state.track_window?.current_track?.uri || '';
+
+    // Reset baseline when track changes
+    useEffect(() => {
+        if (currentTrackKey !== lastTrackKeyRef.current) {
+            lastTrackKeyRef.current = currentTrackKey;
+            lastRenderedPosRef.current = state.position || 0;
+            optimisticSeekRef.current = null;
+        }
+    }, [currentTrackKey, state.position]);
 
     // Sync with incoming state.position
     useEffect(() => {
@@ -176,7 +189,7 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
         };
     }, [player]);
 
-    // --- DYNAMIC UPDATE LOOP ---
+    // --- DYNAMIC UPDATE LOOP (Jitter-free and smooth with DJ/fast speech support) ---
     useEffect(() => {
         let animationFrameId: number;
 
@@ -196,25 +209,33 @@ const SpotifyProgressBar = ({ player, state, height, offset }: { player: Spotify
 
             if (isSeeking) {
                 currentPos = visualPosRef.current;
-            } else {
-                if (optimisticSeekRef.current) {
-                    if (!state.paused && !isRecentAction) {
-                        currentPos = optimisticSeekRef.current.pos + (Date.now() - optimisticSeekRef.current.ts);
-                    } else {
-                        currentPos = optimisticSeekRef.current.pos;
-                    }
+            } else if (optimisticSeekRef.current) {
+                if (!state.paused && !isRecentAction) {
+                    currentPos = optimisticSeekRef.current.pos + (Date.now() - optimisticSeekRef.current.ts);
                 } else {
-                    if (!state.paused && !isRecentAction) {
-                        currentPos = state.position + (Date.now() - state.timestamp);
-                    } else {
-                        currentPos = state.position;
+                    currentPos = optimisticSeekRef.current.pos;
+                }
+            } else {
+                if (!state.paused && !isRecentAction) {
+                    const rawElapsed = Date.now() - (state.timestamp || Date.now());
+                    const safeElapsed = (rawElapsed >= 0 && rawElapsed < 120000) ? rawElapsed : 0;
+                    let calculated = state.position + safeElapsed;
+                    
+                    // Monotonic guard: during rapid events / Spotify DJ talk, prevent progress bar from jittering backwards
+                    if (calculated < lastRenderedPosRef.current && (lastRenderedPosRef.current - calculated < 3500)) {
+                        calculated = lastRenderedPosRef.current;
                     }
+                    currentPos = calculated;
+                } else {
+                    currentPos = state.position;
                 }
             }
 
             if (currentPos > duration) currentPos = duration;
+            if (currentPos < 0) currentPos = 0;
+            lastRenderedPosRef.current = currentPos;
+
             const percent = (currentPos / duration) * 100;
-            
             barFillRef.current.style.width = `${Math.max(0, Math.min(100, percent))}%`;
             
             if (!isSeeking) {
@@ -446,40 +467,25 @@ const YouTubeProgressBar = ({
 const QueuePopover = ({ 
     isNight, 
     nextTrack, 
-    position, 
     onClose, 
     isClosing, 
-    height, 
-    scale 
 }: { 
     isNight: boolean, 
     nextTrack: { name: string, description: string, imageUrl: string } | null, 
-    position: { bottom: number, right: number, width: number }, 
     onClose: () => void, 
     isClosing: boolean, 
-    height: number, 
-    scale: number,
 }) => {
-    const popoverRef = useRef<HTMLDivElement>(null);
-    const portalTarget = document.getElementById('queue-portal-root') || document.body;
-
-    return ReactDOM.createPortal(
+    return (
         <div
-            ref={popoverRef}
-            style={{
-                bottom: `${position.bottom}px`,
-                right: `${position.right}px`,
-                width: `${position.width}px`,
-                height: height ? `${height / 16}rem` : undefined,
-                transform: `scale(${scale})`,
-                transformOrigin: 'bottom right',
-                zIndex: 2500,
-            }}
-            className={`fixed p-3 sm:p-3.5 rounded-2xl shadow-2xl z-[2500] border backdrop-blur-2xl transition-all duration-300 ${
+            className={`queue-popover-card absolute bottom-[calc(100%+12px)] right-0 w-[290px] sm:w-[320px] max-w-[calc(100vw-2rem)] p-3 sm:p-3.5 rounded-2xl shadow-2xl z-[9500] border backdrop-blur-2xl transition-all duration-300 pointer-events-auto select-none ${
                 isNight 
                     ? 'border-white/20 bg-[#1e1e1e]/95 text-white shadow-black/80' 
                     : 'border-black/15 bg-white/95 text-zinc-900 shadow-xl'
-            } ${isClosing ? 'animate-queue-bubble-out' : 'animate-queue-bubble-in'} flex flex-col justify-between overflow-visible relative group`}
+            } ${isClosing ? 'animate-queue-bubble-out' : 'animate-queue-bubble-in'} flex flex-col justify-between overflow-visible group`}
+            style={{
+                transformOrigin: 'bottom right',
+            }}
+            onClick={(e) => e.stopPropagation()}
         >
             {/* Bubble arrow / tail pointing down to the queue button on player */}
             <div 
@@ -488,7 +494,7 @@ const QueuePopover = ({
                         ? 'bg-[#1e1e1e] border-white/20' 
                         : 'bg-white border-black/15'
                 }`}
-                style={{ zIndex: 2501 }}
+                style={{ zIndex: 9501 }}
             />
 
             {/* Header / Badge */}
@@ -505,7 +511,7 @@ const QueuePopover = ({
                 </div>
                 <button 
                     onClick={onClose} 
-                    className={`p-1 rounded-full ${isNight ? 'hover:bg-white/10 text-zinc-400 hover:text-white' : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-900'} transition-colors`}
+                    className={`p-1 rounded-full ${isNight ? 'hover:bg-white/10 text-zinc-400 hover:text-white' : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-900'} transition-colors cursor-pointer`}
                     aria-label="Chiudi coda"
                 >
                     <FiX className="w-3.5 h-3.5" />
@@ -513,20 +519,19 @@ const QueuePopover = ({
             </div>
 
             {/* Track Info */}
-            <div className="flex items-center gap-3 min-w-0 z-10 relative">
+            <div className="flex items-center gap-3 min-w-0 w-full z-10 relative">
                 {nextTrack ? (
                     <>
                         {nextTrack.imageUrl ? (
-                            <div className="relative flex-shrink-0">
+                            <div className="relative flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden shadow-md border border-black/10 dark:border-white/10">
                                 <img 
                                     src={nextTrack.imageUrl} 
                                     alt={nextTrack.name} 
-                                    className="w-11 h-11 rounded-xl object-cover shadow-md border border-black/10 dark:border-white/10" 
+                                    className="w-full h-full object-cover" 
                                 />
-                                <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/10 pointer-events-none" />
                             </div>
                         ) : (
-                            <div className={`w-11 h-11 rounded-xl ${isNight ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} flex items-center justify-center flex-shrink-0 shadow-inner`}>
+                            <div className={`w-12 h-12 rounded-xl ${isNight ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} flex items-center justify-center flex-shrink-0 shadow-inner`}>
                                 <FiMusic className="w-5 h-5" />
                             </div>
                         )}
@@ -534,7 +539,7 @@ const QueuePopover = ({
                             <p className="font-bold text-xs sm:text-sm truncate leading-snug">
                                 {nextTrack.name}
                             </p>
-                            <p className={`text-[11px] truncate leading-tight mt-0.5 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                            <p className={`text-[11px] truncate leading-tight mt-1 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                                 {nextTrack.description}
                             </p>
                         </div>
@@ -547,8 +552,7 @@ const QueuePopover = ({
                     </div>
                 )}
             </div>
-        </div>,
-        portalTarget
+        </div>
     );
 };
 
@@ -777,7 +781,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const spotifyQueueButtonRef = useRef<HTMLButtonElement>(null);
     const youTubeQueueButtonRef = useRef<HTMLButtonElement>(null);
-    const [popoverPosition, setPopoverPosition] = useState({ bottom: 0, right: 0, width: 288 });
     
     const playerState = nowPlaying.spotifyState;
     const { radioStation, youtubeTrack, youtubePlaylist, source, activeDevice } = nowPlaying;
@@ -858,32 +861,31 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [isPlayingGlobal]);
 
     const targetDockedWidthRef = useRef<number>(dockedConfig.width);
-    const cachedAppLeftRef = useRef<number>(typeof window !== 'undefined' ? window.innerWidth : 1024);
     const lastFrameTimeRef = useRef<number>(performance.now());
 
-    // Calculate real app left edge and symmetric docked width without forcing synchronous reflows in loop
+    // Calculate real app left edge and symmetric docked width
     const updateTargetDockedWidth = useCallback(() => {
         const wWidth = window.innerWidth;
         const sideMargin = wWidth < 1024 ? 16 : 24;
 
-        // Determine FINAL_APP_LEFT boundary statically and reliably
+        // Determine FINAL_APP_LEFT boundary
         let appLeft = wWidth;
-        if (activeApp) {
-            if (activeApp === 'maps' || SPLIT_APPS_WITH_MAP_UNDER.includes(activeApp)) {
-                appLeft = Math.round(wWidth * (1 / 3));
-            } else if (wWidth >= 1280) {
-                appLeft = Math.round(wWidth * 0.40);
-            } else if (wWidth >= 1024) {
-                appLeft = Math.round(wWidth * 0.35);
-            } else if (wWidth >= 768) {
-                appLeft = Math.round(wWidth * 0.50);
-            } else if (wWidth >= 640) {
-                appLeft = Math.round(wWidth * 0.25);
-            } else {
-                appLeft = Math.round(wWidth * (1 / 3));
+        const mapsPanel = document.getElementById('maps-app-panel');
+        if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < wWidth) {
+            appLeft = wWidth - mapsPanel.offsetWidth;
+        } else {
+            const appElements = document.querySelectorAll('.spotify-app-panel');
+            for (let i = 0; i < appElements.length; i++) {
+                const el = appElements[i] as HTMLElement;
+                if (el.offsetWidth > 0 && el.offsetWidth < wWidth && !el.closest('#maps-anchored-container')) {
+                    appLeft = wWidth - el.offsetWidth;
+                    break;
+                }
             }
         }
-        cachedAppLeftRef.current = appLeft;
+        if (appLeft === wWidth && activeApp) {
+            appLeft = Math.round(wWidth * (1 / 3));
+        }
 
         // Available width inside left column with perfectly symmetrical margins on left and right
         const availablePx = appLeft - (2 * sideMargin);
@@ -905,7 +907,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }, [activeApp, updateTargetDockedWidth]);
 
     useEffect(() => {
-        window.addEventListener('resize', updateTargetDockedWidth, { passive: true });
+        window.addEventListener('resize', updateTargetDockedWidth);
         return () => window.removeEventListener('resize', updateTargetDockedWidth);
     }, [updateTargetDockedWidth]);
 
@@ -916,7 +918,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     useEffect(() => {
         updateRemScale();
-        window.addEventListener('resize', updateRemScale, { passive: true });
+        window.addEventListener('resize', updateRemScale);
         return () => window.removeEventListener('resize', updateRemScale);
     }, [updateRemScale]);
 
@@ -961,8 +963,24 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Root rem scaling factor read from cached ref (avoids forced layout recalc every frame)
                 const remScale = remScaleRef.current;
 
-                // Determine app boundary in current coordinate space (read purely from cached computation, 0 layout reflows)
-                const appLeft = isAnyAppOpen ? cachedAppLeftRef.current : winWidth;
+                // Determine app boundary (the real left edge of the open right-hand panel) in current coordinate space
+                let appLeft = winWidth;
+                const mapsPanel = document.getElementById('maps-app-panel');
+                if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < winWidth) {
+                    appLeft = winWidth - mapsPanel.offsetWidth;
+                } else {
+                    const panels = document.querySelectorAll('.spotify-app-panel');
+                    for (let i = 0; i < panels.length; i++) {
+                        const el = panels[i] as HTMLElement;
+                        if (el.offsetWidth > 0 && el.offsetWidth < winWidth && !el.closest('#maps-anchored-container')) {
+                            appLeft = winWidth - el.offsetWidth;
+                            break;
+                        }
+                    }
+                }
+                if (appLeft === winWidth && activeApp) {
+                    appLeft = Math.round(winWidth * (1 / 3));
+                }
 
                 // --- DOCKED GEOMETRY (when t = 0, app is open) ---
                 // Available width inside left column with perfectly symmetrical margins on left and right:
@@ -1338,50 +1356,37 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, [youtubeTrack?.videoId, source]);
     
+    // Auto-dismiss QueuePopover when clicking outside
     useEffect(() => {
-        const playerEl = playerContainerRef.current;
-        if (!visibleQueue || !playerEl) return;
+        if (!visibleQueue) return;
 
-        let animationFrameId: number;
-
-        const calculatePosition = () => {
-            if (!playerEl) return;
-            const playerRect = playerEl.getBoundingClientRect();
-            const popoverW = Math.min(queuePopoverWidth || 288, playerRect.width);
-
-            const activeBtn = visibleQueue === 'spotify' ? spotifyQueueButtonRef.current : youTubeQueueButtonRef.current;
-            let rightPx = window.innerWidth - playerRect.right + 8;
-            if (activeBtn) {
-                const btnRect = activeBtn.getBoundingClientRect();
-                if (btnRect.width > 0) {
-                    rightPx = Math.max(8, window.innerWidth - btnRect.right - 6);
-                }
+        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (!target) return;
+            
+            const popoverEl = document.querySelector('.queue-popover-card');
+            if (
+                popoverEl?.contains(target) || 
+                spotifyQueueButtonRef.current?.contains(target) || 
+                youTubeQueueButtonRef.current?.contains(target)
+            ) {
+                return;
             }
-
-            const bottomPx = window.innerHeight - playerRect.top + (queuePopoverBottomOffset || 12);
-
-            setPopoverPosition({
-                bottom: Math.max(12, Math.round(bottomPx)),
-                right: Math.max(8, Math.round(rightPx)),
-                width: Math.round(popoverW),
-            });
+            
+            handleToggleQueue(visibleQueue);
         };
 
-        calculatePosition();
+        const timer = setTimeout(() => {
+            window.addEventListener('mousedown', handleClickOutside, true);
+            window.addEventListener('touchstart', handleClickOutside, true);
+        }, 50);
 
-        const updateLoop = () => {
-            calculatePosition();
-            animationFrameId = requestAnimationFrame(updateLoop);
-        };
-
-        animationFrameId = requestAnimationFrame(updateLoop);
-        window.addEventListener('resize', calculatePosition);
-        
         return () => {
-            cancelAnimationFrame(animationFrameId);
-            window.removeEventListener('resize', calculatePosition);
+            clearTimeout(timer);
+            window.removeEventListener('mousedown', handleClickOutside, true);
+            window.removeEventListener('touchstart', handleClickOutside, true);
         };
-    }, [visibleQueue, queuePopoverWidth, queuePopoverBottomOffset]);
+    }, [visibleQueue, handleToggleQueue]);
     
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -2046,7 +2051,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
             <div 
                 ref={playerContainerRef}
-                className={`music-player-container box-border fixed z-[2000] rounded-xl overflow-hidden border flex flex-col justify-between self-stretch ${themeClasses} ${isNight ? 'bg-[#212121]' : 'bg-white'} shadow-xl ${
+                className={`music-player-container box-border fixed z-[2000] rounded-2xl squircle-card overflow-visible border flex flex-col justify-between self-stretch ${themeClasses} ${isNight ? 'bg-[#212121]' : 'bg-white'} shadow-xl ${
                     isDjActive 
                         ? (isNight ? 'ring-1 ring-emerald-500/30' : 'ring-1 ring-emerald-600/20') 
                         : (isNight ? 'ring-1 ring-white/10' : 'ring-1 ring-black/5')
@@ -2064,7 +2069,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     margin: 0,
                 }}
             >
-                 <div className="relative w-full h-full flex flex-col justify-between flex-1 self-stretch">
+                {/* Popover anchored directly to the player */}
+                {visibleQueue && (
+                    <QueuePopover
+                        isNight={isNight}
+                        nextTrack={nextTrackDetails}
+                        onClose={() => setVisibleQueue(null)}
+                        isClosing={isQueueClosing}
+                    />
+                )}
+
+                <div className="relative w-full h-full flex flex-col justify-between flex-1 self-stretch rounded-2xl squircle-card overflow-hidden">
                     {(nowPlaying.isLoading || debugSpinner) && (
                         <div className="player-spinner-overlay" style={spinnerStyle}>
                             <div className="spinner-visual" style={spinnerVisualDivStyle}></div>
@@ -2093,17 +2108,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     </div>
                 </div>
             </div>
-            {visibleQueue && (
-                <QueuePopover
-                    isNight={isNight}
-                    nextTrack={nextTrackDetails}
-                    position={popoverPosition}
-                    onClose={() => setVisibleQueue(null)}
-                    isClosing={isQueueClosing}
-                    height={queuePopoverHeight}
-                    scale={queuePopoverScale}
-                />
-            )}
         </>
     );
 };

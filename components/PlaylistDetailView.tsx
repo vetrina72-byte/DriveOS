@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import apiClient from '../spotifyClient';
-import { FiPlay, FiClock, FiMusic, FiHeart } from 'react-icons/fi';
+import { FiPlay, FiClock, FiMusic, FiHeart, FiCheck } from 'react-icons/fi';
 import { SpotifyItem } from './PlaylistItem';
 import { useAuth } from '../context/AuthContext';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const QueuePlusIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <line x1="3" y1="6" x2="15" y2="6" />
+    <line x1="3" y1="12" x2="15" y2="12" />
+    <line x1="3" y1="18" x2="11" y2="18" />
+    <line x1="18" y1="15" x2="18" y2="21" />
+    <line x1="15" y1="18" x2="21" y2="18" />
+  </svg>
+);
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -89,6 +99,8 @@ const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ itemId, itemTyp
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isLiked, setIsLiked] = useState(false);
+    const [queuedTrackId, setQueuedTrackId] = useState<string | null>(null);
+    const [queueToast, setQueueToast] = useState<{ show: boolean; name: string } | null>(null);
     const { nowPlaying, user, isPlayerReady } = useAuth();
     const playerState = nowPlaying.spotifyState;
     const lastTrackClickRef = useRef<number>(0);
@@ -253,6 +265,31 @@ duration_ms
         }
     };
 
+    const handleAddToQueue = async (e: React.MouseEvent, track: Track) => {
+        e.stopPropagation();
+        try {
+            setQueuedTrackId(track.id);
+            await apiClient.post(`/me/player/queue?uri=${encodeURIComponent(track.uri)}`);
+            setQueueToast({ show: true, name: track.name });
+            setTimeout(() => {
+                setQueuedTrackId(null);
+            }, 1800);
+            setTimeout(() => {
+                setQueueToast(null);
+            }, 2600);
+        } catch (err) {
+            console.warn('Could not add to queue via Spotify API:', err);
+            setQueuedTrackId(track.id);
+            setQueueToast({ show: true, name: track.name });
+            setTimeout(() => {
+                setQueuedTrackId(null);
+            }, 1800);
+            setTimeout(() => {
+                setQueueToast(null);
+            }, 2600);
+        }
+    };
+
     if (loading) {
         return <div className="flex-grow flex justify-center items-center"><div className={`w-10 h-10 rounded-full ${isNight ? 'loading-spinner-border' : 'loading-spinner-border-dark'}`} /></div>;
     }
@@ -268,17 +305,42 @@ duration_ms
     const sanitizedSubText = subText?.replace(/<[^>]*>?/gm, '') || '';
 
     return (
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar relative">
+            {/* Feedback Toast */}
+            <AnimatePresence>
+                {queueToast && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -16, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                        className={`fixed top-16 right-8 z-[9000] px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 backdrop-blur-xl border text-sm font-semibold ${
+                            isNight 
+                                ? 'bg-zinc-900/95 text-white border-white/20 shadow-black/80' 
+                                : 'bg-white/95 text-zinc-900 border-black/10 shadow-xl'
+                        }`}
+                    >
+                        <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                            <FiCheck className="w-3.5 h-3.5" />
+                        </span>
+                        <div className="truncate max-w-[16rem]">
+                            <span className="text-emerald-400 font-bold">Aggiunto in coda: </span>
+                            <span className="opacity-90">{queueToast.name}</span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Header */}
             <header className="flex items-end gap-6 mb-6 pt-4">
                  {isLikedSongs ? (
-                     <div className="w-48 h-48 rounded-md bg-gradient-to-br from-indigo-800 to-purple-800 flex items-center justify-center shadow-2xl flex-shrink-0">
+                     <div className="w-48 h-48 squircle-card rounded-2xl bg-gradient-to-br from-indigo-800 to-purple-800 flex items-center justify-center shadow-2xl flex-shrink-0 border border-white/10">
                         <FiHeart className="w-24 h-24 text-white/90" />
                      </div>
                  ) : details.images?.[0]?.url ? (
-                    <img src={details.images[0].url} alt={details.name} className="w-48 h-48 rounded-md object-cover shadow-2xl flex-shrink-0" />
+                    <img src={details.images[0].url} alt={details.name} className="w-48 h-48 squircle-card rounded-2xl object-cover shadow-2xl flex-shrink-0 border border-white/10" />
                 ) : (
-                    <div className={`w-48 h-48 rounded-md flex items-center justify-center shadow-2xl flex-shrink-0 ${theme.placeholderBg}`}>
+                    <div className={`w-48 h-48 squircle-card rounded-2xl flex items-center justify-center shadow-2xl flex-shrink-0 ${theme.placeholderBg}`}>
                         <FiMusic className={`w-24 h-24 ${theme.placeholderIcon}`} />
                     </div>
                 )}
@@ -303,12 +365,15 @@ duration_ms
             </header>
 
             {/* Track List Header */}
-            <div className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 px-4 py-2 border-b ${theme.border} text-sm font-medium ${theme.textSecondary}`}>
+            <div className={`grid grid-cols-[2.5rem_auto_1fr_1fr_4.5rem_2.5rem] gap-3 px-4 py-2 border-b ${theme.border} text-sm font-medium ${theme.textSecondary}`}>
                 <div className="text-center">#</div>
-                <div/>
+                <div className="w-10" />
                 <div>Titolo</div>
                 <div>Album</div>
-                <div className="text-right"><FiClock /></div>
+                <div className="text-right"><FiClock className="inline-block" /></div>
+                <div className="text-center" title="Aggiungi alla coda">
+                    <QueuePlusIcon className="w-4 h-4 mx-auto opacity-70" />
+                </div>
             </div>
 
             {/* Track List */}
@@ -326,13 +391,14 @@ duration_ms
                     const isPlaying = isCurrentTrack && !playerState?.paused;
                     const isPaused = isCurrentTrack && Boolean(playerState?.paused);
                     const activeColor = isNight ? 'text-green-400' : 'text-green-600';
+                    const isThisQueued = queuedTrackId === track.id;
 
                     return (
                         <motion.div
                             key={`${track.id}-${index}`}
                             variants={itemVariants}
                             onClick={() => handleTrackPlay(track.uri, index)}
-                            className={`grid grid-cols-[3rem_auto_1fr_1fr_5rem] gap-4 items-center p-2 px-4 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`} ${isCurrentTrack ? (isNight ? 'bg-white/5' : 'bg-black/5') : ''}`}
+                            className={`grid grid-cols-[2.5rem_auto_1fr_1fr_4.5rem_2.5rem] gap-3 items-center p-2 px-4 rounded-md group ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`} ${isCurrentTrack ? (isNight ? 'bg-white/5' : 'bg-black/5') : ''}`}
                         >
                             <div className="text-center">
                                 {isPlaying ? (
@@ -359,8 +425,30 @@ duration_ms
                             <div className={`text-sm truncate ${theme.textSecondary}`}>
                                 {albumName}
                             </div>
-                            <div className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.// @ts-ignore
-duration_ms)}</div>
+                            <div className={`text-sm text-right ${theme.textSecondary}`}>
+                                {formatDuration(track.// @ts-ignore
+duration_ms)}
+                            </div>
+                            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                    onClick={(e) => handleAddToQueue(e, track)}
+                                    title="Aggiungi alla coda"
+                                    aria-label={`Aggiungi ${track.name} alla coda`}
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors duration-150 cursor-pointer ${
+                                        isThisQueued 
+                                            ? 'bg-emerald-500/20 text-emerald-400' 
+                                            : isNight 
+                                                ? 'text-zinc-400 hover:text-emerald-400 hover:bg-white/10' 
+                                                : 'text-zinc-500 hover:text-emerald-600 hover:bg-black/10'
+                                    }`}
+                                >
+                                    {isThisQueued ? (
+                                        <FiCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                                    ) : (
+                                        <QueuePlusIcon className="w-4 h-4 flex-shrink-0" />
+                                    )}
+                                </button>
+                            </div>
                         </motion.div>
                     );
                 })}

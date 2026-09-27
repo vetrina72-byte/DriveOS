@@ -454,7 +454,7 @@ export default function SearchPanel({
       ref={searchContainerRef}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
-      className={`absolute top-3 left-3 sm:top-5 sm:left-5 z-[2000] w-[calc(100%-4.5rem)] sm:w-[22rem] max-w-[22rem] backdrop-blur-md border rounded-xl sm:rounded-2xl shadow-xl overflow-hidden touch-auto transition-all duration-300 ease-in-out ${
+      className={`absolute top-3 left-3 sm:top-5 sm:left-5 z-[2000] w-[calc(100%-4.5rem)] sm:w-[22rem] max-w-[22rem] backdrop-blur-md border squircle-card rounded-2xl shadow-xl overflow-hidden touch-auto transition-all duration-300 ease-in-out ${
         isVisible
           ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
           : 'opacity-0 -translate-y-4 scale-95 pointer-events-none'

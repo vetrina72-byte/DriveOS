@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { FiRadio, FiAlertTriangle, FiSearch, FiX, FiChevronLeft } from 'react-icons/fi';
-import { useUIConfig } from '../context/UIConfigContext';
+import { useUIConfig, APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 import type { RadioStation } from '../types';
 import RadioCard from './RadioCard';
 import HorizontalCarousel from './HorizontalCarousel';
@@ -157,7 +157,7 @@ const RadioApp: React.FC<RadioAppProps> = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = (sceneTransitionSpeed || 0.75) * 1000;
+                    const duration = APP_TRANSITION_DURATION; // 560ms Synchronized transition speed
                     const t = Math.min(elapsed / duration, 1.0);
                     const easeT = cubicBezierEase(t);
                     state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
@@ -609,7 +609,7 @@ const RadioApp: React.FC<RadioAppProps> = ({
         <div 
             ref={panelRef}
             data-app-id="radio"
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
+            className={`radio-app-panel squircle-24 shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
                 // Transform managed by physics loop
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
@@ -623,7 +623,7 @@ const RadioApp: React.FC<RadioAppProps> = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative backdrop-blur-lg rounded-t-[2rem]`}
+              className={`w-full h-full flex flex-col relative backdrop-blur-lg squircle-24 overflow-hidden`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
                 {/* --- DRAG HANDLE --- */}

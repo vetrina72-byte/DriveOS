@@ -60,7 +60,7 @@ export const POIPreviewCard: React.FC<POIPreviewCardProps> = ({
 
   return (
     <div 
-      className="absolute bottom-3 left-3 sm:bottom-6 sm:left-6 z-[4100] w-[calc(100%-1.5rem)] sm:w-[26rem] max-w-[26rem] rounded-xl sm:rounded-2xl p-3.5 sm:p-5 bg-zinc-900/90 backdrop-blur-xl border border-white/15 shadow-2xl text-white animate-in fade-in slide-in-from-bottom-4 duration-200 pointer-events-auto select-none"
+      className="absolute bottom-3 left-3 sm:bottom-6 sm:left-6 z-[4100] w-[calc(100%-1.5rem)] sm:w-[26rem] max-w-[26rem] squircle-card rounded-2xl p-3.5 sm:p-5 bg-zinc-900/90 backdrop-blur-xl border border-white/15 shadow-2xl text-white animate-in fade-in slide-in-from-bottom-4 duration-200 pointer-events-auto select-none"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header with Brand / Category and Close Button */}

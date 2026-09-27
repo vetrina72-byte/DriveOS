@@ -366,8 +366,8 @@ export default function DebugControls({
       : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
 
   const containerClass = isAppView 
-    ? `spotify-app-panel shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full border-t border-zinc-800' : 'relative w-full h-full border-l border-zinc-800'}`
-    : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white rounded-lg shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
+    ? `debug-app-panel squircle-24 shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full border-t border-zinc-800' : 'relative w-full h-full border-l border-zinc-800'}`
+    : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white squircle-20 shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
 
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
 

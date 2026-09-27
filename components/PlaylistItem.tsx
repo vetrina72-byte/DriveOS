@@ -74,7 +74,7 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   // Special rendering for the "Liked Songs" playlist
   if (item.id === 'liked-songs') {
       return (
-          <div onClick={() => onSelectItem(item)} className="p-2 sm:p-3 rounded-lg transition-all duration-200 cursor-pointer w-full mx-auto bg-gradient-to-br from-indigo-800 to-purple-800 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105">
+          <div onClick={() => onSelectItem(item)} className="p-2.5 sm:p-4 squircle-card rounded-2xl transition-all duration-200 cursor-pointer w-full mx-auto bg-gradient-to-br from-indigo-800 to-purple-800 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105 border border-white/10">
               <div className="relative w-full aspect-square mb-2 sm:mb-3 flex items-center justify-center">
                   <FiHeart className="w-10 h-10 sm:w-16 sm:h-16 text-white/90" />
               </div>
@@ -95,24 +95,26 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
     }
   }
 
+  const isArtist = item.type === 'artist';
+
   return (
     <div 
       onClick={() => onSelectItem(item)} 
-      className={`p-2 sm:p-3 rounded-lg transition-colors duration-200 w-full mx-auto ${bgColor} cursor-pointer`}
+      className={`p-2.5 sm:p-3 squircle-card rounded-2xl transition-all duration-200 w-full mx-auto ${bgColor} cursor-pointer border border-white/5 hover:border-white/20 hover:scale-[1.02]`}
       style={{ contain: 'layout paint' }}
     >
-      <div className="relative w-full aspect-square mb-2 sm:mb-3">
+      <div className="relative w-full aspect-square mb-2 sm:mb-2.5 overflow-hidden">
         {imageUrl && !imageError ? (
           <img 
             src={imageUrl} 
             alt={item.name} 
-            className="w-full h-full rounded-md object-cover shadow-lg"
+            className={`w-full h-full object-cover shadow-md ${isArtist ? 'rounded-full' : 'squircle-card rounded-xl'}`}
             loading="lazy"
             decoding="async"
             onError={handleImageError}
           />
         ) : (
-          <div className={`w-full h-full rounded-md flex items-center justify-center ${placeholderBg}`}>
+          <div className={`w-full h-full flex items-center justify-center ${placeholderBg} ${isArtist ? 'rounded-full' : 'squircle-card rounded-xl'}`}>
             {getPlaceholderIcon()}
           </div>
         )}

@@ -126,7 +126,7 @@ const ArrivalToast = () => {
                     initial={{ opacity: 0, y: 50, scale: 0.9 }} 
                     animate={{ opacity: 1, y: 0, scale: 1 }} 
                     exit={{ opacity: 0, y: 50, scale: 0.9 }} 
-                    className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 rounded-xl shadow-lg border border-white/10" 
+                    className="fixed left-1/2 -translate-x-1/2 z-50 bg-zinc-800/80 backdrop-blur-md text-white font-bold px-6 py-3 squircle-toast rounded-xl shadow-lg border border-white/10" 
                     style={{ bottom: '14.375rem' }}
                 >
                     {arrivalMessage}
@@ -239,6 +239,7 @@ function AppContent() {
   ]);
 
   const [isCustomizing, setIsCustomizing] = useState(false);
+  const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
   const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music', 'debug']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
@@ -614,19 +615,16 @@ function AppContent() {
         }
     }, [activeApp]);
 
-    // --- UNIFIED FLUID ANIMATION LOOP FOR NAVIGATE TOOL (ON-DEMAND) ---
-    const isNavLoopRunning = useRef(false);
-
+    // --- UNIFIED FLUID ANIMATION LOOP FOR NAVIGATE TOOL ---
     useEffect(() => {
         let animationFrameId: number;
 
-        const updateNavigateTool = () => {
+        const loop = () => {
             const launcherDuration = 420; // 420ms for launcher and widget movement
-            const appDuration = 600; // 600ms for app opening/closing transition
-
-            let isAnimating = false;
+            const appDuration = 560; // 560ms for app opening/closing transition
 
             // 1. Calculate launcher animation state (0 = closed/Home, 1 = open/Launcher)
+            // Using cubic-bezier(0.16, 1, 0.3, 1) matching 3D car and MusicPlayer
             const targetLauncher = isAppLauncherOpen ? 1 : 0;
             if (launcherAnimStartTime.current > 0) {
                 const elapsed = performance.now() - launcherAnimStartTime.current;
@@ -635,8 +633,6 @@ function AppContent() {
                 launcherVisualState.current = launcherStartT.current + (targetLauncher - launcherStartT.current) * easeT;
                 if (normT >= 1.0) {
                     launcherAnimStartTime.current = 0;
-                } else {
-                    isAnimating = true;
                 }
             } else {
                 launcherVisualState.current = targetLauncher;
@@ -647,7 +643,6 @@ function AppContent() {
             if (dragProgressRef.current !== null) {
                 appVisualState.current = dragProgressRef.current;
                 appAnimStartTime.current = 0;
-                isAnimating = true;
             } else {
                 const targetApp = activeApp !== null ? 0 : 1;
                 if (appAnimStartTime.current > 0) {
@@ -657,8 +652,6 @@ function AppContent() {
                     appVisualState.current = appStartT.current + (targetApp - appStartT.current) * easeT;
                     if (normT >= 1.0) {
                         appAnimStartTime.current = 0;
-                    } else {
-                        isAnimating = true;
                     }
                 } else {
                     appVisualState.current = targetApp;
@@ -682,8 +675,9 @@ function AppContent() {
                     : (currentFloatingPlayerWidth / 2 - currentNavigateToolWidth / 2 + 8);
 
                 // Launcher open position (tLauncher = 1):
+                // Symmetrical to player on the left: positioned exactly `playerDockedLeft` from the right edge
                 const launcherPercent = 100;
-                const launcherOffsetPx = -(playerDockedLeft + 90 + currentNavigateToolWidth);
+                const launcherOffsetPx = -(playerDockedLeft + currentNavigateToolWidth);
 
                 // Fluid linear interpolation between home and launcher position
                 const currentPercent = homePercent + (launcherPercent - homePercent) * tLauncher;
@@ -704,7 +698,7 @@ function AppContent() {
                 const slideX = (1 - visibility) * 40;
 
                 navigateToolRef.current.style.position = 'fixed';
-                navigateToolRef.current.style.zIndex = '1000';
+                navigateToolRef.current.style.zIndex = '7001';
                 navigateToolRef.current.style.bottom = `${currentBottomPx / 16}rem`;
                 navigateToolRef.current.style.left = `calc(${currentPercent}% + ${currentOffsetPx / 16}rem)`;
                 navigateToolRef.current.style.opacity = `${visibility}`;
@@ -712,26 +706,11 @@ function AppContent() {
                 navigateToolRef.current.style.pointerEvents = (visibility > 0.8 && activeApp === null) ? 'auto' : 'none';
             }
 
-            if (isAnimating) {
-                animationFrameId = requestAnimationFrame(updateNavigateTool);
-            } else {
-                isNavLoopRunning.current = false;
-            }
+            animationFrameId = requestAnimationFrame(loop);
         };
 
-        const startNavLoop = () => {
-            if (!isNavLoopRunning.current) {
-                isNavLoopRunning.current = true;
-                animationFrameId = requestAnimationFrame(updateNavigateTool);
-            }
-        };
-
-        startNavLoop();
-
-        return () => {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            isNavLoopRunning.current = false;
-        };
+        loop();
+        return () => cancelAnimationFrame(animationFrameId);
     }, [
         isAppLauncherOpen, 
         activeApp, 
@@ -763,6 +742,7 @@ function AppContent() {
         nightAmbientIntensity={nightAmbientIntensity}
         nightFrontLightIntensity={nightFrontLightIntensity}
         nightEnvironmentIntensity={nightEnvironmentIntensity}
+        onInteractionChange={setIsCanvasInteracting}
         effectiveWeatherCondition={effectiveWeatherCondition}
         dayFogNear={dayFogNear}
         dayFogFar={dayFogFar}
@@ -808,7 +788,7 @@ function AppContent() {
       />
       <TopStatusBar tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} isMapVisible={shouldShowMap}/>
       <WeatherModal tempUnit={tempUnit} setTempUnit={setTempUnit}/>
-      <MiniMap isVisible={activeApp === null} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
+      <MiniMap isVisible={activeApp === null && !isCanvasInteracting} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>
       <div className="ui-scaler" style={uiScale ? { '--ui-scale': uiScale } as React.CSSProperties : {}}>
         <div id="scaled-portal-root" className="relative z-[9999]"></div>
         <div id="queue-portal-root" className="relative z-[2500]"></div>

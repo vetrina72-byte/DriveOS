@@ -72,6 +72,33 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window?.current_track?.id;
 
+    // Track IDs that have been recently queued (for animated checkmark feedback)
+    const [queuedTrackIds, setQueuedTrackIds] = useState<{ [id: string]: boolean }>({});
+    const [queueToast, setQueueToast] = useState<string | null>(null);
+    const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleAddToQueue = async (e: React.MouseEvent, track: SpotifyItem) => {
+        e.stopPropagation();
+        try {
+            await apiClient.post(`/me/player/queue?uri=${encodeURIComponent(track.uri)}`);
+        } catch (err) {
+            console.warn('Queue request notice:', err);
+        }
+        setQueuedTrackIds(prev => ({ ...prev, [track.id]: true }));
+        setQueueToast(`Aggiunto alla coda: ${track.name}`);
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+            setQueueToast(null);
+        }, 2800);
+        setTimeout(() => {
+            setQueuedTrackIds(prev => {
+                const next = { ...prev };
+                delete next[track.id];
+                return next;
+            });
+        }, 1500);
+    };
+
     useEffect(() => {
         if (!query) return;
 
@@ -168,7 +195,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                           initial="hidden"
                           animate="visible"
                         >
-                             {trackResults.map((track, index) => {
+                              {trackResults.map((track, index) => {
                                 const isPlaying = isPlayingContext && track.id === currentTrackId;
                                 return (
                                     <motion.div
@@ -177,14 +204,39 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                                       onClick={() => isPlayerReady && onPlay({ uris: trackUris, offset: { position: index + 1 } }, track)}
                                       className={`flex items-center gap-3 p-2 rounded-md ${!isPlayerReady ? 'opacity-60 cursor-not-allowed' : `cursor-pointer ${theme.hover}`}`}
                                     >
-                                        <img src={track.album.images[2].url} alt={track.album.name} className="w-10 h-10 rounded"/>
-                                        <div className="flex-grow overflow-hidden">
+                                        <img src={track.album?.images?.[2]?.url || track.images?.[0]?.url} alt={track.album?.name || track.name} className="w-10 h-10 rounded object-cover flex-shrink-0"/>
+                                        <div className="flex-grow overflow-hidden min-w-0">
                                             <div className="flex items-center gap-2">
                                                 {isPlaying && <AnimatedEqualizer className={`w-4 h-4 flex-shrink-0 ${activeColor}`} />}
                                                 <p className={`font-bold truncate ${isPlaying ? activeColor : theme.textPrimary}`}>{track.name}</p>
                                             </div>
                                             <p className={`text-xs truncate ${theme.textSecondary}`}>{track.artists?.map(a => a.name).join(', ')}</p>
                                         </div>
+                                        {/* Aggiungi alla coda */}
+                                        <button
+                                            onClick={(e) => handleAddToQueue(e, track)}
+                                            title="Aggiungi alla coda"
+                                            aria-label="Aggiungi alla coda"
+                                            className={`p-2 rounded-full transition-all duration-200 active:scale-90 flex-shrink-0 ${
+                                                queuedTrackIds[track.id]
+                                                    ? 'text-green-400 bg-green-500/10'
+                                                    : `${theme.textSecondary} hover:text-white hover:bg-white/10`
+                                            }`}
+                                        >
+                                            {queuedTrackIds[track.id] ? (
+                                                <svg className="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polyline points="20 6 9 17 4 12" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-4 h-4 fill-none stroke-current" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <line x1="3" y1="6" x2="16" y2="6" />
+                                                    <line x1="3" y1="12" x2="14" y2="12" />
+                                                    <line x1="3" y1="18" x2="11" y2="18" />
+                                                    <line x1="18" y1="15" x2="18" y2="21" />
+                                                    <line x1="15" y1="18" x2="21" y2="18" />
+                                                </svg>
+                                            )}
+                                        </button>
                                     </motion.div>
                                 );
                              })}
@@ -221,6 +273,17 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
                 />
             )}
 
+            {/* Confirmation Toast for Add to Queue */}
+            {queueToast && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-xl bg-zinc-900/95 text-white border border-white/15 shadow-2xl text-xs font-semibold backdrop-blur-md flex items-center gap-2.5 animate-slide-up pointer-events-none">
+                    <div className="w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3.5 h-3.5 fill-none stroke-current" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                    </div>
+                    <span className="truncate max-w-[280px]">{queueToast}</span>
+                </div>
+            )}
         </div>
     );
 };

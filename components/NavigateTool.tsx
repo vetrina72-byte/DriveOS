@@ -231,7 +231,7 @@ const NavigateTool = ({
             ref={containerRef}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
-            className={`relative backdrop-blur-md rounded-xl ${isNight ? 'border border-white/10' : 'border border-black/5'} shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
+            className={`relative backdrop-blur-md squircle-card rounded-2xl ${isNight ? 'border border-white/10' : 'border border-black/5'} shadow-lg flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 pointer-events-auto`}
             style={{ 
                 width: `${(width) / 16}rem`,
                 height: `${(isExpanded ? expandedHeight : baseHeight) / 16}rem`,

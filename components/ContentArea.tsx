@@ -17,14 +17,14 @@ const getGreeting = () => {
 const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     const bgColor = isNight ? 'bg-white/5' : 'bg-black/5';
     return (
-        <div className="mb-8 px-6 animate-pulse">
-            <div className={`h-8 w-1/3 rounded-md mb-4 ${bgColor}`}></div>
-            <div className="flex gap-4">
+        <div className="mb-6 sm:mb-8 px-3 sm:px-6 animate-pulse min-h-[220px]">
+            <div className={`h-6 sm:h-7 w-48 rounded-md mb-3 sm:mb-4 ${bgColor}`}></div>
+            <div className="flex gap-2.5 sm:gap-4 overflow-hidden">
                 {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className={`flex-shrink-0 w-44`}>
-                        <div className={`w-full aspect-square rounded-md ${bgColor}`}></div>
-                        <div className={`h-4 w-full rounded-md mt-3 ${bgColor}`}></div>
-                        <div className={`h-3 w-2/3 rounded-md mt-2 ${bgColor}`}></div>
+                    <div key={i} className="py-1.5 sm:py-2 flex-shrink-0 w-32 sm:w-36 md:w-44">
+                        <div className={`w-full aspect-square rounded-lg ${bgColor}`}></div>
+                        <div className={`h-3.5 w-3/4 rounded-md mt-2.5 ${bgColor}`}></div>
+                        <div className={`h-3 w-1/2 rounded-md mt-1.5 ${bgColor}`}></div>
                     </div>
                 ))}
             </div>
@@ -243,21 +243,20 @@ const ContentArea = React.memo(({
   const [renderStage, setRenderStage] = React.useState(1);
 
   React.useEffect(() => {
-    // Frame-sliced progressive staging:
-    // Frame 0 (0ms): Shell, Greeting, Hero Card, Immediate Above-the-fold
-    // Frame 1 (~16ms): Core Primary Carousels
-    // Frame 2 (~32ms): Full Below-the-fold Carousels
-    let raf2: number;
-    const raf1 = requestAnimationFrame(() => {
-      setRenderStage(2);
-      raf2 = requestAnimationFrame(() => {
-        setRenderStage(3);
-      });
-    });
+    // Stage 1 (0ms): Shell, Greeting, Hero Card, Immediate Above-the-fold
+    // Stage 2 (60ms): Core Primary Carousels
+    const t1 = setTimeout(() => {
+      setRenderStage(prev => Math.max(prev, 2));
+    }, 60);
+
+    // Stage 3 (200ms): Full Below-the-fold Carousels
+    const t2 = setTimeout(() => {
+      setRenderStage(prev => Math.max(prev, 3));
+    }, 200);
 
     return () => {
-      cancelAnimationFrame(raf1);
-      if (raf2) cancelAnimationFrame(raf2);
+      clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, []);
 
@@ -272,7 +271,13 @@ const ContentArea = React.memo(({
   if (loading && !hasAnyContent) {
       return (
           <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
-              <h1 className="text-3xl font-bold mb-8 px-6 text-transparent animate-pulse bg-gray-600/20 w-1/2 rounded-md h-9">.</h1>
+              <h1 
+                className="text-lg sm:text-xl md:text-2xl font-bold mb-2.5 sm:mb-4 px-3 sm:px-6"
+                style={{ color: 'var(--heading-color)' }}
+              >
+                {greeting}, {user?.display_name || ''}!
+              </h1>
+              <SpotifyDjHeroCard isNight={isNight} onOpenDjView={onOpenDjView} onPlayDJ={onPlayDJ} />
               <SkeletonCarousel isNight={isNight} />
               <SkeletonCarousel isNight={isNight} />
               <SkeletonCarousel isNight={isNight} />

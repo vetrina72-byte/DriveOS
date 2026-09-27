@@ -64,7 +64,7 @@ const SpotifyPlayer = ({
     spotifyPlayerTop: number;
     spotifyPlayerBottom: number;
     isMapsLayered?: boolean;
-    onDragProgress?: (progress: number | null) => void;
+    onDragProgress?: (progress: number | null, handleX?: number | null) => void;
     layeredAppTopOffset?: number;
 }) => {
     const { 
@@ -158,14 +158,16 @@ const SpotifyPlayer = ({
                 // Determine visual progress (clamped for 3D scene safety)
                 let visualProgress = state.currentPercent / 100;
                 visualProgress = Math.max(0, Math.min(1, visualProgress));
+                const pWidth = panelRef.current ? panelRef.current.offsetWidth : (window.innerWidth * 2 / 3);
+                const handleX = (window.innerWidth - pWidth) + (state.currentPercent / 100) * pWidth;
                 
-                onDragProgress?.(visualProgress);
+                onDragProgress?.(visualProgress, handleX);
 
                 // Check if settled (animation finished)
                 // We use a threshold of 0.5% to consider it "done" for the 3D scene handoff
                 if (!state.isDragging && (isSettled || Math.abs(state.targetPercent - state.currentPercent) < 0.5)) {
                     state.isInteracting = false;
-                    onDragProgress?.(null); // Release control to auto-animation
+                    onDragProgress?.(null, null); // Release control to auto-animation
                 }
             }
 
@@ -231,7 +233,10 @@ const SpotifyPlayer = ({
             if (state.targetPercent !== newTargetPercent || state.animStartTime === 0 || Math.abs(state.currentPercent - newTargetPercent) > 0.01) {
                 state.startPercent = state.currentPercent;
                 state.targetPercent = newTargetPercent;
+                const dist = Math.abs(newTargetPercent - state.currentPercent);
+                state.animDuration = Math.max(100, (dist / 100) * APP_TRANSITION_DURATION);
                 state.animStartTime = performance.now();
+                state.isInteracting = true;
                 startAnimation();
             }
             
@@ -293,6 +298,13 @@ const SpotifyPlayer = ({
         if (newPercent < 0) newPercent = 0;
         
         state.currentPercent = newPercent;
+        
+        // Immediately notify progress and real handle position to the 3D scene
+        const visualProgress = Math.max(0, Math.min(1, newPercent / 100));
+        const pWidth = panelRef.current ? panelRef.current.offsetWidth : (window.innerWidth * 2 / 3);
+        const handleX = (window.innerWidth - pWidth) + (newPercent / 100) * pWidth;
+        onDragProgress?.(visualProgress, handleX);
+
         startAnimation();
     };
 
@@ -455,7 +467,7 @@ const SpotifyPlayer = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative rounded-t-[2rem]`}
+              className={`w-full h-full flex flex-col relative squircle-panel rounded-3xl overflow-hidden border border-white/10 shadow-2xl`}
               style={{ backgroundColor }}
             >
                 {/* --- DRAG HANDLE (CONDITIONAL POS) --- */}

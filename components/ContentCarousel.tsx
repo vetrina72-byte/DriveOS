@@ -69,10 +69,10 @@ const ContentCarousel = React.memo(({ title, items, isNight, onSelectItem, keyPr
 
       <div
         ref={scrollRef}
-        className="spotify-carousel gap-2.5 sm:gap-4 px-3 sm:px-6 overflow-x-auto flex scroll-smooth hide-scrollbar"
+        className="spotify-carousel gap-2.5 sm:gap-4 px-3 sm:px-6 overflow-x-auto flex scroll-smooth hide-scrollbar min-h-[12rem] sm:min-h-[14rem]"
       >
         {validItems.map((item, index) => (
-          <div className="py-1.5 sm:py-2 flex-shrink-0 w-32 sm:w-36 md:w-44 carousel-card-contain" key={`${keyPrefix}-${item.id || index}`}>
+          <div className="py-1.5 sm:py-2 flex-shrink-0 w-32 sm:w-36 md:w-40 lg:w-44 carousel-card-contain" key={`${keyPrefix}-${item.id || index}`}>
             <PlaylistItem item={item} isNight={isNight} onSelectItem={(selectedItem) => onSelectItem(selectedItem, items)} />
           </div>
         ))}

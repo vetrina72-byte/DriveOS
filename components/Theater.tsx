@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, Variants } from 'framer-motion';
-import { useUIConfig } from '../context/UIConfigContext';
+import { useUIConfig, APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 import { cubicBezierEase } from './VehicleCanvas';
 
 // A self-contained component for the service button with 3D hover effects.
@@ -226,7 +226,7 @@ const Theater = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = 900; // 900ms App transition duration (slow, soft, fluid)
+                    const duration = APP_TRANSITION_DURATION; // 580ms unified transition duration
                     const t = Math.min(elapsed / duration, 1.0);
                     const easeT = cubicBezierEase(t);
                     state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
@@ -426,7 +426,7 @@ const Theater = ({
         <div
             ref={panelRef}
             data-app-id="theater"
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
+            className={`theater-app-panel squircle-24 shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
             style={{
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
                 bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
@@ -439,7 +439,7 @@ const Theater = ({
             aria-labelledby="theater-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="theater-container relative rounded-t-[2rem]">
+            <div className="theater-container relative squircle-24 overflow-hidden">
                 {/* --- DRAG HANDLE --- */}
                 <div
                     className={handleContainerClass}

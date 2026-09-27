@@ -78,14 +78,14 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
         ) : (
           <FaSpotify className={`w-6 h-6 sm:w-7 sm:h-7`} style={{ color: 'var(--text-spotify-logo)' }}/>
         )}
-        <form onSubmit={handleSearchSubmit} className={`relative flex-shrink-0 transition-all duration-200 ${isNavVeryCompact ? 'w-[130px]' : (isNavCompact ? 'w-[160px]' : 'w-[180px] sm:w-[210px] md:w-[240px]')}`}>
+        <form onSubmit={handleSearchSubmit} className={`relative flex-shrink-0 transition-all duration-200 ${isNavVeryCompact ? 'w-[120px]' : (isNavCompact ? 'w-[140px]' : 'w-[155px] sm:w-[175px] md:w-[195px]')}`}>
           <FiSearch className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${isNavCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} style={{ color: secondaryTextColor }} />
           <input
             type="text"
-            placeholder="Cosa vuoi ascoltare?"
+            placeholder={isNavVeryCompact ? "Cerca..." : "Cosa vuoi ascoltare?"}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full ${isNavCompact ? 'pl-7 pr-6 py-1 text-xs rounded-full' : 'pl-8 pr-7 py-1.5 text-xs sm:text-sm rounded-full'} font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
+            className={`w-full ${isNavCompact ? 'pl-7 pr-6 py-1 text-[11px] placeholder:text-[10.5px] rounded-full' : 'pl-8 pr-7 py-1.5 text-xs sm:text-[13px] placeholder:text-xs rounded-full'} font-medium transition-colors duration-300 ${inputBg} placeholder:text-[#b3b3b3] border border-transparent focus:border-white/20 focus:outline-none`}
             style={{ color: textColor }}
           />
            <button 
@@ -98,9 +98,9 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
         </form>
       </div>
       
-      {/* Right side: Navigation Links & User Profile */}
-      <div className={`flex items-center ${isNavCompact ? 'gap-1' : 'gap-2'} ml-auto min-w-0 flex-1 justify-end`}>
-        <div className={`flex items-center ${isNavCompact ? 'gap-1' : 'gap-1.5'} overflow-x-auto py-0.5 scrollbar-none min-w-0 flex-nowrap`}>
+      {/* Right side: Navigation Links & User Profile - All categories visible simultaneously */}
+      <div className={`flex items-center gap-1 sm:gap-2 ml-auto min-w-0 flex-1 justify-end`}>
+        <div className={`flex items-center gap-1 sm:gap-1.5 py-0.5 min-w-0 flex-nowrap`}>
           {navLinks.map((link) => {
             const linkView = linkToViewMap[link];
             if (!linkView) return null;
@@ -115,7 +115,7 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
                 <a
                   href="#"
                   onClick={(e) => { e.preventDefault(); onNavigate(linkView); }}
-                  className={`relative z-10 ${isNavCompact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 sm:px-3 py-1 text-xs sm:text-sm'} rounded-full whitespace-nowrap transition-all duration-200 ${fontWeight} ${
+                  className={`relative z-10 ${isNavCompact ? 'px-1.5 sm:px-2 py-0.5 text-[10.5px] sm:text-[11px]' : 'px-2 sm:px-2.5 py-1 text-xs md:text-[13px]'} rounded-full whitespace-nowrap transition-all duration-200 ${fontWeight} ${
                     isActive 
                       ? (isNight ? 'bg-white/15' : 'bg-black/10') 
                       : hoverBg

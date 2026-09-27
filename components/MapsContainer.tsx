@@ -147,7 +147,7 @@ function createPOIMarkerElement(poi: LocationInfo, isNight: boolean, onClick: ()
       <div class="relative flex flex-col items-center">
         <div class="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-md border border-black/15 overflow-hidden p-1">
           ${logoUrl ? `
-            <img src="${logoUrl}" alt="${cleanName}" referrerpolicy="no-referrer" class="w-full h-full object-contain transition-opacity duration-150" onerror="this.onerror=null;this.parentElement.innerHTML='${(svg || '').replace(/'/g, "\\'")}'" />
+            <img src="${logoUrl}" alt="${cleanName}" referrerpolicy="no-referrer" class="w-full h-full object-contain transition-opacity duration-150" onerror="this.onerror=null;this.parentElement.innerHTML='${svg.replace(/'/g, "\\'")}'" />
           ` : `
             <div style="background-color: ${bg};" class="w-full h-full rounded-lg flex items-center justify-center text-white">
               ${svg}
@@ -330,19 +330,6 @@ const MapsContainer = React.memo(({
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-
-  const isOpenRef = useRef(isOpen);
-  useEffect(() => {
-    isOpenRef.current = isOpen;
-    if (isOpen && mapRef.current && rposRef.current) {
-      mapRef.current.jumpTo({
-        center: [rposRef.current.lng, rposRef.current.lat],
-        bearing: ccamBearRef.current,
-        pitch: ccamPitchRef.current,
-        zoom: mapRef.current.getZoom()
-      });
-    }
-  }, [isOpen]);
 
   // MapLibre and marker references
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -2079,16 +2066,22 @@ const MapsContainer = React.memo(({
       }, 10000);
     }
 
-    if (flyingRef.current) {
-      // Smoothly update camera pitch in-flight without restarting flyTo or speeding up camera movement
+    if (flyingRef.current || followRef.current) {
+      // Smoothly update camera pitch and continue moving towards vehicle coordinates
       ccamPitchRef.current = targetPitch;
+      const tll: [number, number] = [clngRef.current, clatRef.current];
+      const tz = czoomRef.current || 17.5;
+      const tb = cmodeRef.current === 'heading-up' ? cbearRef.current : 0;
       mapRef.current.easeTo({
+        center: tll,
+        zoom: tz,
+        bearing: tb,
         pitch: targetPitch,
-        duration: 400,
-        essential: true,
-        easing: (t) => 1 - Math.pow(1 - t, 3)
+        duration: 900,
+        easing: (t) => 1 - Math.pow(1 - t, 3.5),
+        essential: true
       });
-    } else if (!followRef.current) {
+    } else {
       ccamPitchRef.current = targetPitch;
       mapRef.current.easeTo({
         pitch: targetPitch,
@@ -2231,7 +2224,7 @@ const MapsContainer = React.memo(({
     // Smooth atomic cross-fade after short buffer time for tiles to load in memory
     setTimeout(() => {
       if (mapRef.current) {
-        mapRef.current.setPaintProperty(layerId, 'raster-opacity', 0.55);
+        mapRef.current.setPaintProperty(layerId, 'raster-opacity', 1.0);
         mapRef.current.setPaintProperty(currentLayerId, 'raster-opacity', 0);
         weatherSlotRef.current = ns;
       }
@@ -2421,41 +2414,39 @@ const MapsContainer = React.memo(({
         }
 
         if (mapRef.current && followRef.current && !isRoutePreviewRef.current && !interactRef.current && !flyingRef.current && !isWeatherActiveRef.current) {
-          if (isOpenRef.current || navingRef.current) {
-            const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-            const targetFps = isMobile ? 30 : 60;
-            const frameTime = 1000 / targetFps;
-            
-            // Continuous smooth camera pitch interpolation (exponential easing)
-            const targetPitch = is3DRef.current ? 45 : 0;
-            const pitchDiff = targetPitch - ccamPitchRef.current;
-            if (Math.abs(pitchDiff) > 0.05) {
-              ccamPitchRef.current += pitchDiff * (1 - Math.exp(-9.0 * dt));
+          const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+          const targetFps = isMobile ? 30 : 60;
+          const frameTime = 1000 / targetFps;
+          
+          // Continuous smooth camera pitch interpolation (exponential easing)
+          const targetPitch = is3DRef.current ? 45 : 0;
+          const pitchDiff = targetPitch - ccamPitchRef.current;
+          if (Math.abs(pitchDiff) > 0.05) {
+            ccamPitchRef.current += pitchDiff * (1 - Math.exp(-9.0 * dt));
+          } else {
+            ccamPitchRef.current = targetPitch;
+          }
+
+          // Continuous smooth camera bearing interpolation (shortest circular angle) when in heading-up mode
+          if (cmodeRef.current === 'heading-up') {
+            const targetBearing = cbearRef.current;
+            const currentBearVal = mapRef.current.getBearing();
+            const bearDiff = (((targetBearing - currentBearVal) % 360) + 540) % 360 - 180;
+            if (Math.abs(bearDiff) > 0.1) {
+              ccamBearRef.current = currentBearVal + bearDiff * (1 - Math.exp(-7.0 * dt));
             } else {
-              ccamPitchRef.current = targetPitch;
+              ccamBearRef.current = targetBearing;
             }
+          }
 
-            // Continuous smooth camera bearing interpolation (shortest circular angle) when in heading-up mode
-            if (cmodeRef.current === 'heading-up') {
-              const targetBearing = cbearRef.current;
-              const currentBearVal = mapRef.current.getBearing();
-              const bearDiff = (((targetBearing - currentBearVal) % 360) + 540) % 360 - 180;
-              if (Math.abs(bearDiff) > 0.1) {
-                ccamBearRef.current = currentBearVal + bearDiff * (1 - Math.exp(-7.0 * dt));
-              } else {
-                ccamBearRef.current = targetBearing;
-              }
-            }
-
-            if (!(mapRef.current as any)._lastMapUpdate || t - (mapRef.current as any)._lastMapUpdate >= frameTime) {
-              mapRef.current.jumpTo({
-                center: [rposRef.current.lng, rposRef.current.lat],
-                bearing: ccamBearRef.current,
-                pitch: ccamPitchRef.current,
-                zoom: mapRef.current.getZoom()
-              });
-              (mapRef.current as any)._lastMapUpdate = t;
-            }
+          if (!(mapRef.current as any)._lastMapUpdate || t - (mapRef.current as any)._lastMapUpdate >= frameTime) {
+            mapRef.current.jumpTo({
+              center: [rposRef.current.lng, rposRef.current.lat],
+              bearing: ccamBearRef.current,
+              pitch: ccamPitchRef.current,
+              zoom: mapRef.current.getZoom()
+            });
+            (mapRef.current as any)._lastMapUpdate = t;
           }
         }
 
@@ -3105,7 +3096,7 @@ const MapsContainer = React.memo(({
     <div 
         id="maps-app-panel"
         ref={panelRef}
-        className="fixed top-0 right-0 w-2/3 text-white shadow-2xl z-[4000] flex spotify-app-panel pointer-events-auto touch-none"
+        className="fixed top-0 right-0 w-2/3 text-white shadow-2xl z-[4000] flex maps-app-panel squircle-24 pointer-events-auto touch-none"
         style={{ 
             willChange: 'transform',
             top: 0,

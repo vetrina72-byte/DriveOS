@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
-import { useUIConfig } from '../context/UIConfigContext';
+import { useUIConfig, APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 import ContentCarousel from './ContentCarousel';
 import { SpotifyItem as MediaItem } from './PlaylistItem';
 import { FiLoader, FiSearch, FiX } from 'react-icons/fi';
@@ -96,23 +96,6 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
     const CLOSE_THRESHOLD_PERCENT = 25;
 
     const [error, setError] = useState<string | null>(null);
-    const [renderStage, setRenderStage] = useState(1);
-
-    useEffect(() => {
-        if (isOpen) {
-            let raf2: number;
-            const raf1 = requestAnimationFrame(() => {
-                setRenderStage(2);
-            });
-            return () => {
-                cancelAnimationFrame(raf1);
-                if (raf2) cancelAnimationFrame(raf2);
-            };
-        } else {
-            setRenderStage(1);
-        }
-    }, [isOpen]);
-
     const [searchQuery, setSearchQuery] = useState('');
     const [submittedQuery, setSubmittedQuery] = useState('');
     const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
@@ -142,7 +125,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             if (!state.isDragging) {
                 if (state.animStartTime > 0) {
                     const elapsed = performance.now() - state.animStartTime;
-                    const duration = (sceneTransitionSpeed || 0.75) * 1000;
+                    const duration = APP_TRANSITION_DURATION; // 560ms Synchronized transition speed
                     const t = Math.min(elapsed / duration, 1.0);
                     const easeT = cubicBezierEase(t);
                     state.currentPercent = state.startPercent + (state.targetPercent - state.startPercent) * easeT;
@@ -448,14 +431,10 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             <>
                 <ContentCarousel title="Classifiche Musicali Italia" items={homeData.musicCharts || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-charts" />
                 <ContentCarousel title="Playlist Pop del Momento" items={homeData.popPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-pop" />
-                {renderStage >= 2 && (
-                    <>
-                        <ContentCarousel title="Successi Italiani" items={homeData.italianPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-italian" />
-                        <ContentCarousel title="Workout Hits" items={homeData.workoutPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-workout" />
-                        <ContentCarousel title="Live Performance" items={homeData.livePerformances || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-live" />
-                        <ContentCarousel title="Acoustic Sessions" items={homeData.acousticSessions || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-acoustic" />
-                    </>
-                )}
+                <ContentCarousel title="Successi Italiani" items={homeData.italianPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-italian" />
+                <ContentCarousel title="Workout Hits" items={homeData.workoutPlaylists || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-workout" />
+                <ContentCarousel title="Live Performance" items={homeData.livePerformances || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-live" />
+                <ContentCarousel title="Acoustic Sessions" items={homeData.acousticSessions || []} isNight={isNight} onSelectItem={handleSelectItem} keyPrefix="yt-acoustic" />
             </>
         )
     };
@@ -464,7 +443,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         <div 
             ref={panelRef}
             data-app-id="youtube-music"
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
+            className={`spotify-app-panel squircle-24 shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
                 // Transform managed by physics loop
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
@@ -478,7 +457,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative rounded-t-[2rem]`}
+              className={`w-full h-full flex flex-col relative squircle-24 overflow-hidden`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
                 {/* --- DRAG HANDLE (OUTSIDE LEFT) --- */}

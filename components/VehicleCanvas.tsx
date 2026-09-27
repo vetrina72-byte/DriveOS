@@ -22,7 +22,6 @@ import WeatherEffects from "./WeatherEffects";
 import type { SceneColors } from "../App";
 import type { WeatherParams } from "../types";
 import { APP_TRANSITION_SECONDS } from "../context/UIConfigContext";
-import { usePerformanceProfile } from "../hooks/usePerformanceProfile";
 
 // Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
 const Primitive = "primitive" as any;
@@ -586,14 +585,13 @@ function SceneController({
 
     const effectiveScale = appOpenConfig.modelScale * scaleFactor;
 
-    // Center the car cleanly in the visible left 1/3 column
+    // Center the car cleanly in the visible left column matching default app open config
     const targetX = W < 1180 ? (isNarrowMobile ? -4.20 : (isPortrait ? -4.40 : -4.60)) : appOpenConfig.modelPos.x;
     const targetY = appOpenConfig.modelPos.y + (isPortrait && W < 1180 ? 0.20 : 0.0);
     const targetZ = appOpenConfig.modelPos.z;
 
     const camDeltaX = appOpenConfig.cameraPos.x - appOpenConfig.cameraTarget.x;
     const camDeltaY = appOpenConfig.cameraPos.y - appOpenConfig.cameraTarget.y;
-    // Maintain baseline camera distance without artificial 1.15 pullback
     const camDeltaZ = appOpenConfig.cameraPos.z - appOpenConfig.cameraTarget.z;
 
     return {
@@ -708,6 +706,8 @@ function SceneController({
   const frozenModelPos = useRef(new THREE.Vector3());
   const frozenModelScale = useRef<number>(1);
   const frozenModelRot = useRef(new THREE.Quaternion());
+  const lastRenderedWidth = useRef<number>(typeof window !== 'undefined' ? window.innerWidth : 1280);
+  const frozenStartWidth = useRef<number>(typeof window !== 'undefined' ? window.innerWidth : 1280);
 
   const syncLights = () => {
     if (modelRef.current) {
@@ -947,6 +947,7 @@ function SceneController({
         frozenModelScale.current = modelRef.current.scale.x;
         frozenModelRot.current.copy(modelRef.current.quaternion);
       }
+      frozenStartWidth.current = lastRenderedWidth.current;
 
       // Il progresso parte esattamente dal frame visivo attuale
       autoStartP.current = currentP.current;
@@ -969,6 +970,7 @@ function SceneController({
           frozenModelScale.current = modelRef.current.scale.x;
           frozenModelRot.current.copy(modelRef.current.quaternion);
         }
+        frozenStartWidth.current = lastRenderedWidth.current;
         autoStartP.current = currentP.current;
         autoTargetP.current = targetP;
       } else {
@@ -1239,43 +1241,69 @@ function SceneController({
       }
     }
 
-    // 4. Viewport & Aspect Ratio dinamico dal DOM - Sincronizzato frame-per-frame con il pannello dell'app
+    // 4. Viewport & Aspect Ratio dinamico - Sincronizzato con l'area 3D disponibile
     const canvas = gl.domElement;
     const container = canvas.parentElement;
     if (container) {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
 
-      let appBoundary = -1;
-      const appPanel = document.querySelector('.spotify-app-panel') as HTMLElement;
-      if (appPanel && appPanel.offsetWidth > 0) {
-        const rect = appPanel.getBoundingClientRect();
-        if (rect.left > 0 && rect.left < cw) {
-          appBoundary = rect.left;
+      // Determinazione deterministica del confine dell'app quando aperta
+      let dockedAppWidth = Math.round(cw * (1 / 3));
+      if (cw < 640) dockedAppWidth = Math.round(cw * 0.15);
+      else if (cw < 768) dockedAppWidth = Math.round(cw * 0.25);
+      else if (cw < 1024) dockedAppWidth = Math.round(cw * 0.50);
+      else if (cw < 1280) dockedAppWidth = Math.round(cw * 0.40);
+
+      // Posizione reale dell'handle se trascinato o presente nel DOM
+      const handleEl = document.querySelector('.app-drawer-handle') as HTMLElement | null;
+      const appPanel = (
+        document.querySelector('.spotify-app-panel') || 
+        document.getElementById('maps-app-panel') || 
+        document.querySelector('.app-panel')
+      ) as HTMLElement | null;
+
+      let realHandleX = -1;
+      if (handleEl) {
+        const hRect = handleEl.getBoundingClientRect();
+        if (hRect.left > 0 && hRect.left < cw) {
+          realHandleX = hRect.left;
+        }
+      } else if (appPanel && appPanel.offsetWidth > 0) {
+        const pRect = appPanel.getBoundingClientRect();
+        if (pRect.left > 0 && pRect.left < cw) {
+          realHandleX = pRect.left;
         }
       }
 
-      if (appBoundary < 0) {
-        let minWidthPercent = 0.40;
-        if (cw < 640) minWidthPercent = 0.15;
-        else if (cw < 768) minWidthPercent = 0.25;
-        else if (cw < 1024) minWidthPercent = 0.50;
-        else if (cw < 1280) minWidthPercent = 0.35;
-        appBoundary = cw * minWidthPercent;
-      }
-      
-      let targetVisibleWidth = Math.round(appBoundary + (cw - appBoundary) * p);
-      let visibleWidth = Math.max(1, Math.min(cw, targetVisibleWidth));
+      let visibleWidth = cw;
 
-      // Forza il ridimensionamento fisico e l'aggiornamento degli stili CSS del Canvas ad ogni singolo frame
-      if (canvas.width !== visibleWidth || canvas.height !== ch) {
+      if (transitionMode.current === "drag" && realHandleX > 0) {
+        // Drag in corso: la scena 3D segue la posizione dell'handle in tempo reale
+        visibleWidth = Math.round(realHandleX);
+      } else if (transitionMode.current === "auto") {
+        // Animazione open/close: progressione continua partendo da frozenStartWidth.current
+        const targetWidth = isAppOpen ? (realHandleX > 0 ? realHandleX : dockedAppWidth) : cw;
+        const normT = Math.min((performance.now() - animStartTime.current) / (APP_TRANSITION_SECONDS * 1000), 1.0);
+        const easeT = cubicBezierEase(normT);
+        visibleWidth = Math.round(frozenStartWidth.current + (targetWidth - frozenStartWidth.current) * easeT);
+      } else {
+        // Stato stazionario idle
+        visibleWidth = isAppOpen ? (realHandleX > 0 ? realHandleX : dockedAppWidth) : cw;
+      }
+
+      visibleWidth = Math.max(1, Math.min(cw, visibleWidth));
+      lastRenderedWidth.current = visibleWidth;
+
+      // Aggiornamento dimensionamento fisico e dello stile canvas solo se cambiato
+      if (canvas.width !== Math.round(visibleWidth * gl.getPixelRatio()) || canvas.height !== Math.round(ch * gl.getPixelRatio())) {
         gl.setSize(visibleWidth, ch, true);
       }
 
-      // Ricalcolo della matrice con FOV fisso per evitare distorsioni "a step"
+      // Adattamento della camera perspective e della proiezione senza distorsioni
       if (camera instanceof THREE.PerspectiveCamera) {
-        const aspect = visibleWidth / ch;
-        if (camera.aspect !== aspect) {
+        const aspect = visibleWidth / Math.max(1, ch);
+        if (Math.abs(camera.aspect - aspect) > 0.0001) {
           camera.aspect = aspect;
           camera.fov = 48;
           camera.updateProjectionMatrix();
@@ -1283,7 +1311,8 @@ function SceneController({
       }
 
       gl.setViewport(0, 0, visibleWidth, ch);
-      gl.setScissorTest(false);
+      gl.setScissor(0, 0, visibleWidth, ch);
+      gl.setScissorTest(true);
     }
 
     if (floorRef.current && modelRef.current) {
@@ -1897,31 +1926,19 @@ function VehicleCanvas({
     </Group>
   );
 
-  const [isAppTransitioning, setIsAppTransitioning] = useState(false);
-
-  useEffect(() => {
-    setIsAppTransitioning(true);
-    const timer = setTimeout(() => {
-      setIsAppTransitioning(false);
-    }, 750);
-    return () => clearTimeout(timer);
-  }, [isAppOpen]);
-
-  const perfProfile = usePerformanceProfile();
-
   return (
     <div
       className="absolute inset-0 z-0 pointer-events-auto"
       style={{
-        transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), width 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+        transition: 'transform 0.56s cubic-bezier(0.16, 1, 0.3, 1), width 0.56s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.56s cubic-bezier(0.16, 1, 0.3, 1)'
       }}
     >
       <Canvas
         className="w-full h-full"
         style={{ zIndex: 0, touchAction: "none" }}
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, Math.min(window.devicePixelRatio, perfProfile.dprLimit)]}
-        frameloop={(isAppOpen && !isAppTransitioning) ? "demand" : "always"}
+        dpr={[1, Math.min(window.devicePixelRatio, 1.25)]}
+        frameloop="always"
         camera={{
           fov: 48,
           near: 0.5,
@@ -2074,8 +2091,8 @@ function VehicleCanvas({
           castShadow
           shadow-bias={-0.0001}
           shadow-normalBias={0.02}
-          shadow-mapSize-width={perfProfile.shadowMapSize}
-          shadow-mapSize-height={perfProfile.shadowMapSize}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-near={0.5}
           shadow-camera-far={50}
           shadow-camera-left={-15}

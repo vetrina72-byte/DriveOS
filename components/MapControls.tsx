@@ -421,26 +421,6 @@ export default function MapControls({
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
                 />
               </div>
-
-              {/* Adjustable Transparency Control */}
-              <div className="flex justify-between items-center mt-1 pt-1 border-t border-black/5 dark:border-white/10">
-                <span className={`text-[10px] font-semibold ${isNight ? "text-white/50" : "text-zinc-500"}`}>Opacità Radar</span>
-                <div className="flex items-center gap-1.5">
-                  <input 
-                    type="range" 
-                    min="20" 
-                    max="100" 
-                    step="5"
-                    value={Math.round(radarOpacity * 100)}
-                    onChange={(e) => onOpacityChange?.(parseInt(e.target.value, 10) / 100)}
-                    className="w-16 h-1 rounded-lg appearance-none bg-zinc-300 dark:bg-zinc-700 accent-blue-600 cursor-pointer"
-                    title="Regola la trasparenza del radar"
-                  />
-                  <span className={`text-[10px] font-bold tabular-nums w-7 text-right ${isNight ? "text-white/80" : "text-zinc-700"}`}>
-                    {Math.round(radarOpacity * 100)}%
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
         </div>

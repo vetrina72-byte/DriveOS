@@ -187,3 +187,116 @@ body {
   contain: layout style paint;
 }
 
+/* ==========================================================================
+   APPLE-STYLE CONTINUOUS CORNERS & SQUIRCLE SYSTEM
+   ========================================================================== */
+
+/* Modern CSS corner-shape support */
+@supports (corner-shape: superellipse) {
+  .squircle-sm, .squircle-md, .squircle-lg, .squircle-xl, .squircle-2xl, .squircle-3xl,
+  .squircle-card, .squircle-panel, .squircle-modal, .squircle-toast, .squircle-button,
+  .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl {
+    corner-shape: superellipse;
+  }
+}
+
+/* Continuous corner curvature profile classes */
+.squircle-sm {
+  border-radius: 10px;
+  corner-shape: superellipse;
+}
+
+.squircle-md {
+  border-radius: 14px;
+  corner-shape: superellipse;
+}
+
+.squircle-lg {
+  border-radius: 18px;
+  corner-shape: superellipse;
+}
+
+.squircle-xl {
+  border-radius: 22px;
+  corner-shape: superellipse;
+}
+
+.squircle-2xl {
+  border-radius: 26px;
+  corner-shape: superellipse;
+}
+
+.squircle-3xl {
+  border-radius: 34px;
+  corner-shape: superellipse;
+}
+
+/* UI Semantic Squircles */
+.squircle-panel {
+  border-radius: 28px;
+  corner-shape: superellipse;
+}
+
+.squircle-card {
+  border-radius: 20px;
+  corner-shape: superellipse;
+}
+
+.squircle-modal {
+  border-radius: 32px;
+  corner-shape: superellipse;
+}
+
+.squircle-toast {
+  border-radius: 18px;
+  corner-shape: superellipse;
+}
+
+.squircle-button {
+  border-radius: 14px;
+  corner-shape: superellipse;
+}
+
+/* Upgrade Tailwind standard rounded classes to Continuous Corner curvature */
+.rounded-lg {
+  border-radius: 12px;
+  corner-shape: superellipse;
+}
+
+.rounded-xl {
+  border-radius: 16px;
+  corner-shape: superellipse;
+}
+
+.rounded-2xl {
+  border-radius: 24px;
+  corner-shape: superellipse;
+}
+
+.rounded-3xl {
+  border-radius: 32px;
+  corner-shape: superellipse;
+}
+
+/* Concentric Corners System:
+   Outer container -> Inner element maintains proportional concentric curvature
+*/
+.squircle-panel > .squircle-card,
+.squircle-panel .squircle-nested-card,
+.rounded-3xl > .rounded-2xl {
+  border-radius: 20px;
+  corner-shape: superellipse;
+}
+
+.squircle-card > .squircle-button,
+.squircle-card .squircle-nested-btn,
+.rounded-2xl > .rounded-xl {
+  border-radius: 12px;
+  corner-shape: superellipse;
+}
+
+.squircle-modal > .squircle-card {
+  border-radius: 22px;
+  corner-shape: superellipse;
+}
+

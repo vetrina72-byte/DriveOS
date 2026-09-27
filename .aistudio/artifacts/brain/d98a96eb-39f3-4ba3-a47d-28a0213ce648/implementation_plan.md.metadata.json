@@ -1,6 +1,6 @@
 {
-  "summary":  "Piano di Performance Engineering per infotainment: audit approfondito dei colli di bottiglia CPU/GPU/DOM/React/WebGL, piano per Galaxy Tab A8 e dispositivi low-end, eliminazione dei frame spikes, pausa del loop 3D durante le app a schermo intero, content-visibility/IntersectionObserver per i caroselli, rimozione del layout thrashing e profilazione adattiva con isteresi senza alcuna modifica visiva.",
-  "updatedAt":  "2026-09-25T19:23:56.172374756Z",
+  "summary":  "Implementation plan for fixing 3D scene animation continuity, centering the 3D model in available viewport, and introducing Apple Continuous Corners (Squircle) throughout the UI.",
+  "updatedAt":  "2026-09-27T20:23:05.517515172Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

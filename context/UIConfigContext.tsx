@@ -19,8 +19,8 @@ export const DEFAULT_APP_OPEN_CONFIG: SceneConfig = {
   modelScale: 1.51,
 };
 
-export const APP_TRANSITION_DURATION = 580; // 580ms unified transition duration for App, Player and 3D Camera
-export const APP_TRANSITION_SECONDS = 0.58; // 0.58s for Three.js / WebGL scene animations
+export const APP_TRANSITION_DURATION = 560; // 560ms elegant unified transition duration for App, Player and 3D Camera
+export const APP_TRANSITION_SECONDS = 0.56; // 0.56s for Three.js / WebGL scene animations
 
 export const UIConfigContext = createContext<any>(null);
 

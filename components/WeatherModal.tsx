@@ -429,7 +429,7 @@ export default function WeatherModal({ tempUnit, setTempUnit }: WeatherModalProp
             onClick={onClose}
         >
             <div 
-                className={`w-full max-w-lg sm:max-w-2xl md:max-w-3xl ${theme.bg} ${theme.textPrimary} rounded-2xl shadow-2xl p-4 sm:p-5 my-auto flex flex-col border ${theme.border} transition-all duration-300 transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-95 translate-y-4 opacity-0'}`}
+                className={`w-full max-w-lg sm:max-w-2xl md:max-w-3xl ${theme.bg} ${theme.textPrimary} squircle-24 shadow-2xl p-4 sm:p-5 my-auto flex flex-col border ${theme.border} transition-all duration-300 transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-95 translate-y-4 opacity-0'}`}
                 onClick={stopPropagation}
                 role="dialog"
                 aria-modal="true"
