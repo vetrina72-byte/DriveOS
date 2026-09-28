@@ -100,27 +100,27 @@ const PlaylistItem = ({ item, isNight, onSelectItem, contextInfo }: { item: Spot
   return (
     <div 
       onClick={() => onSelectItem(item)} 
-      className={`p-2.5 sm:p-3 squircle-card rounded-2xl transition-all duration-200 w-full mx-auto ${bgColor} cursor-pointer border border-white/5 hover:border-white/20 hover:scale-[1.02]`}
+      className={`p-2 sm:p-2.5 squircle-card rounded-2xl transition-all duration-200 w-full mx-auto ${bgColor} cursor-pointer border border-white/5 hover:border-white/20 hover:scale-[1.02]`}
       style={{ contain: 'layout paint' }}
     >
-      <div className="relative w-full aspect-square mb-2 sm:mb-2.5 overflow-hidden">
+      <div className="relative w-full aspect-square mb-1.5 sm:mb-2 overflow-hidden squircle-card rounded-xl">
         {imageUrl && !imageError ? (
           <img 
             src={imageUrl} 
             alt={item.name} 
-            className={`w-full h-full object-cover shadow-md ${isArtist ? 'rounded-full' : 'squircle-card rounded-xl'}`}
+            className="w-full h-full object-cover shadow-md squircle-card rounded-xl"
             loading="lazy"
             decoding="async"
             onError={handleImageError}
           />
         ) : (
-          <div className={`w-full h-full flex items-center justify-center ${placeholderBg} ${isArtist ? 'rounded-full' : 'squircle-card rounded-xl'}`}>
+          <div className={`w-full h-full flex items-center justify-center ${placeholderBg} squircle-card rounded-xl`}>
             {getPlaceholderIcon()}
           </div>
         )}
       </div>
-      <h3 className={`font-bold truncate text-xs sm:text-sm ${textColorPrimary}`}>{item.name}</h3>
-      <p className={`text-[11px] sm:text-xs truncate ${textColorSecondary}`}>{sanitizedDescription}</p>
+      <h3 className={`font-bold truncate text-xs sm:text-[13px] ${textColorPrimary}`}>{item.name}</h3>
+      <p className={`text-[10px] sm:text-[11px] truncate ${textColorSecondary}`}>{sanitizedDescription}</p>
     </div>
   );
 };

@@ -4,9 +4,10 @@ import { LogOut, ChevronDown, Sparkles, Shield } from 'lucide-react';
 
 interface UserProfileMenuProps {
   isNight?: boolean;
+  isCompact?: boolean;
 }
 
-export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ isNight = true }) => {
+export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ isNight = true, isCompact = false }) => {
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -49,11 +50,11 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ isNight = true
 
   return (
     <div className="relative z-50 flex-shrink-0" ref={menuRef} id="spotify-user-profile-container">
-      {/* Profile Trigger Button - Minimal Infotainment Style */}
+      {/* Profile Trigger Button - Integrated Navigation Style */}
       <button
         id="spotify-profile-button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 h-9 pl-1.5 pr-3 rounded-full transition-all duration-200 select-none backdrop-blur-md border ${
+        className={`flex items-center gap-1.5 ${isCompact ? 'h-7 pl-1 pr-2' : 'h-8 sm:h-9 pl-1.5 pr-2.5 sm:pr-3'} rounded-full transition-all duration-200 select-none backdrop-blur-md border ${
           isNight
             ? 'bg-zinc-900/80 hover:bg-zinc-800/90 text-zinc-100 border-white/10 hover:border-white/20 shadow-md shadow-black/40'
             : 'bg-zinc-100/80 hover:bg-zinc-200/90 text-zinc-900 border-zinc-300/80 shadow-sm'
@@ -66,21 +67,21 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ isNight = true
           <img
             src={profileImageUrl}
             alt={displayName}
-            className="w-6 h-6 rounded-full object-cover border border-emerald-500/60 flex-shrink-0"
+            className={`${isCompact ? 'w-5 h-5' : 'w-5 h-5 sm:w-6 sm:h-6'} rounded-full object-cover border border-emerald-500/60 flex-shrink-0`}
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="w-6 h-6 rounded-full bg-emerald-600/90 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+          <div className={`${isCompact ? 'w-5 h-5 text-[10px]' : 'w-5 h-5 sm:w-6 sm:h-6 text-[10.5px]'} rounded-full bg-emerald-600/90 flex items-center justify-center text-white font-bold flex-shrink-0`}>
             {displayName.charAt(0).toUpperCase()}
           </div>
         )}
 
-        <span className="text-xs font-semibold max-w-[100px] truncate">
+        <span className={`${isCompact ? 'text-[10.5px] max-w-[55px]' : 'text-[11px] sm:text-xs max-w-[75px] sm:max-w-[100px]'} font-semibold truncate`}>
           {displayName}
         </span>
 
         <ChevronDown
-          size={13}
+          size={12}
           className={`text-zinc-400 transition-transform duration-200 flex-shrink-0 ${
             isOpen ? 'rotate-180 text-emerald-400' : ''
           }`}

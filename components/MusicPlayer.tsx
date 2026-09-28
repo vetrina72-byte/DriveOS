@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import apiClient from '../spotifyClient';
 import { useUIConfig } from '../context/UIConfigContext';
 import { 
-    FiMusic, FiAlertTriangle, FiHeart, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth, FiX
+    FiMusic, FiAlertTriangle, FiHeart, FiSearch, FiRadio, FiSmartphone, FiMonitor, FiSpeaker, FiTv, FiTablet, FiCast, FiHeadphones, FiBluetooth, FiX
 } from 'react-icons/fi';
 import { Sparkles, Activity } from 'lucide-react';
 import { 
@@ -16,6 +16,7 @@ import {
     PiShuffleBold, PiRepeatBold, PiRepeatOnceBold
 } from 'react-icons/pi';
 import { BsList } from 'react-icons/bs';
+import { HiOutlineQueueList, HiQueueList } from 'react-icons/hi2';
 import type { SpotifyPlayer, SpotifyPlayerState, SpotifyTrack } from '@/globals';
 import type { RadioStation, YouTubeTrackInfo, SpotifyDevice } from '../types';
 import { getPlayerInstance, getDeviceId } from '../lib/spotify-player';
@@ -24,8 +25,99 @@ import { cubicBezierEase } from './VehicleCanvas';
 import { SPLIT_APPS_WITH_MAP_UNDER } from '../App';
 import { APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 
+// Lucide Player Control Icons requested by user
+const PrevTrackIcon = ({ size, scale = 1 }: { size: string; scale?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ height: size, width: size, transform: `scale(${scale})`, transformOrigin: 'center' }}
+    className="flex-shrink-0 block"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z" />
+    <path d="M3 20V4" />
+  </svg>
+);
+
+const NextTrackIcon = ({ size, scale = 1 }: { size: string; scale?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ height: size, width: size, transform: `scale(${scale})`, transformOrigin: 'center' }}
+    className="flex-shrink-0 block"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M21 4v16" />
+    <path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" />
+  </svg>
+);
+
+const PlayIcon = ({ size, scale = 1 }: { size: string; scale?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ height: size, width: size, transform: `scale(${scale})`, transformOrigin: 'center' }}
+    className="flex-shrink-0 block"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+  </svg>
+);
+
+const PauseIcon = ({ size, scale = 1 }: { size: string; scale?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ height: size, width: size, transform: `scale(${scale})`, transformOrigin: 'center' }}
+    className="flex-shrink-0 block"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="14" y="3" width="5" height="18" rx="1" />
+    <rect x="5" y="3" width="5" height="18" rx="1" />
+  </svg>
+);
+
+const SearchIcon = ({ size, scale = 1 }: { size: string; scale?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ height: size, width: size, transform: `scale(${scale})`, transformOrigin: 'center' }}
+    className="flex-shrink-0 block"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="m21 21-4.34-4.34" />
+    <circle cx="11" cy="11" r="8" />
+  </svg>
+);
+
 interface MusicPlayerProps {
     activeApp: string | null;
+    onOpenApp?: (appId: string) => void;
     onStationChange: (direction: 'next' | 'prev') => void;
     isAnyAppOpen: boolean;
     isNight: boolean;
@@ -477,19 +569,20 @@ const QueuePopover = ({
 }) => {
     return (
         <div
-            className={`queue-popover-card absolute bottom-[calc(100%+12px)] right-0 w-[290px] sm:w-[320px] max-w-[calc(100vw-2rem)] p-3.5 sm:p-4 squircle-card rounded-2xl shadow-2xl z-[9500] border backdrop-blur-2xl transition-all duration-300 pointer-events-auto select-none ${
+            className={`queue-popover-card absolute bottom-[calc(100%+8px)] right-0 w-[205px] sm:w-[230px] p-3 sm:p-3.5 squircle-card rounded-xl shadow-2xl border backdrop-blur-2xl transition-all duration-300 pointer-events-auto select-none ${
                 isNight 
                     ? 'border-white/20 bg-[#1e1e1e]/95 text-white shadow-black/80' 
                     : 'border-black/15 bg-white/95 text-zinc-900 shadow-xl'
             } ${isClosing ? 'animate-queue-bubble-out' : 'animate-queue-bubble-in'} flex flex-col justify-between overflow-visible group`}
             style={{
-                transformOrigin: 'bottom right',
+                zIndex: isClosing ? 10 : 50,
+                transformOrigin: 'calc(100% - 25px) calc(100% + 4px)',
             }}
             onClick={(e) => e.stopPropagation()}
         >
             {/* Bubble arrow / tail pointing down to the queue button on player */}
             <div 
-                className={`absolute -bottom-1.5 right-6 w-3.5 h-3.5 rotate-45 border-r border-b ${
+                className={`absolute -bottom-1 right-5 w-2.5 h-2.5 rotate-45 border-r border-b ${
                     isNight 
                         ? 'bg-[#1e1e1e] border-white/20' 
                         : 'bg-white border-black/15'
@@ -498,20 +591,20 @@ const QueuePopover = ({
             />
 
             {/* Header / Badge */}
-            <div className="flex items-center justify-between mb-2.5 flex-shrink-0 z-10 relative">
-                <div className="flex items-center gap-1.5">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
+            <div className="flex items-center justify-between mb-1.5 flex-shrink-0 z-10 relative">
+                <div className="flex items-center gap-1">
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[9.5px] font-bold tracking-wider uppercase ${
                         isNight 
                             ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
                             : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     }`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Prossimo in coda
+                        <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+                        In coda
                     </span>
                 </div>
                 <button 
                     onClick={onClose} 
-                    className={`p-1 rounded-full ${isNight ? 'hover:bg-white/10 text-zinc-400 hover:text-white' : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-900'} transition-colors cursor-pointer`}
+                    className={`p-0.5 rounded-full ${isNight ? 'hover:bg-white/10 text-zinc-400 hover:text-white' : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-900'} transition-colors cursor-pointer`}
                     aria-label="Chiudi coda"
                 >
                     <FiX className="w-3.5 h-3.5" />
@@ -519,34 +612,35 @@ const QueuePopover = ({
             </div>
 
             {/* Track Info */}
-            <div className="flex items-center gap-3 min-w-0 w-full z-10 relative">
+            <div className="flex items-center gap-2.5 min-w-0 w-full z-10 relative">
                 {nextTrack ? (
                     <>
                         {nextTrack.imageUrl ? (
-                            <div className="relative flex-shrink-0 w-12 h-12 squircle-sm rounded-xl overflow-hidden shadow-md border border-black/10 dark:border-white/10">
+                            <div className="relative flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden shadow-md border border-black/10 dark:border-white/10">
                                 <img 
                                     src={nextTrack.imageUrl} 
                                     alt={nextTrack.name} 
                                     className="w-full h-full object-cover" 
+                                
                                 />
                             </div>
                         ) : (
-                            <div className={`w-12 h-12 squircle-sm rounded-xl ${isNight ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} flex items-center justify-center flex-shrink-0 shadow-inner`}>
-                                <FiMusic className="w-5 h-5" />
+                            <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-lg ${isNight ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} flex items-center justify-center flex-shrink-0 shadow-inner`}>
+                                <FiMusic className="w-4 h-4" />
                             </div>
                         )}
                         <div className="min-w-0 flex-1 overflow-hidden">
-                            <p className="font-bold text-xs sm:text-sm truncate leading-snug">
+                            <p className="font-bold text-[11px] sm:text-[12px] truncate leading-tight">
                                 {nextTrack.name}
                             </p>
-                            <p className={`text-[11px] truncate leading-tight mt-1 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                            <p className={`text-[9.5px] sm:text-[10px] truncate leading-tight mt-0.5 ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                                 {nextTrack.description}
                             </p>
                         </div>
                     </>
                 ) : (
-                    <div className="flex items-center justify-center w-full py-1 text-center">
-                        <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    <div className="flex items-center justify-center w-full py-0.5 text-center">
+                        <p className={`text-[10.5px] ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                             Nessun brano in coda
                         </p>
                     </div>
@@ -652,23 +746,37 @@ const DisabledPlayerView = ({
             <div className="w-full flex items-center justify-between" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                 <div className="w-[22%] flex justify-center items-center">
                     <button disabled={!isReady} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: buttonColor }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                        <PrevTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale} />
                     </button>
                 </div>
                 <div className="w-[26%] flex justify-center items-center">
                     <button disabled={!isReady} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: buttonColor }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                        <PlayIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={playButtonScale} />
                     </button>
                 </div>
                 <div className="w-[22%] flex justify-center items-center">
                     <button disabled={!isReady} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: buttonColor }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                        <NextTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale} />
                     </button>
                 </div>
-                <div className="w-[30%] flex justify-end items-center gap-2 sm:gap-3">
+                <div className="w-[30%] flex justify-end items-center gap-1.5 sm:gap-2">
                     <button disabled={!isReady} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} /></button>
-                    <button disabled={!isReady} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition-all duration-200 hover:bg-white/5 active:scale-95" style={{ color: inactiveButtonColor }}>
-                        <BsList style={{ width: '1.25rem', height: '1.25rem' }} />
+                    <button disabled={!isReady} onClick={handleOpenSpotifySearch} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: inactiveButtonColor }} title="Cerca su Spotify" aria-label="Cerca su Spotify">
+                        <SearchIcon size={`${(playerControlsSize * 0.9) / 16}rem`} />
+                    </button>
+                    <button 
+                        disabled={!isReady} 
+                        onClick={() => handleToggleQueue('spotify')}
+                        className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-pointer transition active:scale-95 hover:bg-white/5"
+                        style={{ color: isAutoQueueEnabled ? buttonColor : inactiveButtonColor }}
+                        title={isAutoQueueEnabled ? "Prossimo in coda: Attivo" : "Prossimo in coda: Disattivato"}
+                        aria-label={isAutoQueueEnabled ? "Disattiva prossimo in coda" : "Attiva prossimo in coda"}
+                    >
+                        {isAutoQueueEnabled ? (
+                            <HiQueueList style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} className="flex-shrink-0 block fill-current" />
+                        ) : (
+                            <HiOutlineQueueList style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} className="flex-shrink-0 block" />
+                        )}
                     </button>
                 </div>
             </div>
@@ -776,6 +884,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const [visibleQueue, setVisibleQueue] = useState<'spotify' | 'youtube' | null>(null);
     const [isQueueClosing, setIsQueueClosing] = useState(false);
     const [isAutoQueueEnabled, setIsAutoQueueEnabled] = useState(true);
+    const dismissedTrackUriRef = useRef<string | null>(null);
+    const dismissedYouTubeTrackRef = useRef<string | null>(null);
+    const manualCloseTimerRef = useRef<any | null>(null);
+    const isManuallyOpenedRef = useRef<boolean>(false);
     
     const [isLiked, setIsLiked] = useState(false);
 
@@ -1150,19 +1262,69 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentTrack = playerState?.track_window?.current_track ?? (playerState as any)?.item;
     const currentTrackUri = currentTrack?.uri;
 
-    const handleToggleQueue = useCallback((targetSource: 'spotify' | 'youtube') => {
-        if (visibleQueue === targetSource) {
-            setIsQueueClosing(true);
-            setTimeout(() => {
-                setVisibleQueue(null);
-                setIsQueueClosing(false);
-            }, 200);
-        } else {
-            setIsQueueClosing(false); 
-            setVisibleQueue(targetSource);
+    const handleCloseQueuePopover = useCallback(() => {
+        if (currentTrackUri) {
+            dismissedTrackUriRef.current = currentTrackUri;
         }
-    }, [visibleQueue]);
+        if (youtubeTrack?.videoId) {
+            dismissedYouTubeTrackRef.current = youtubeTrack.videoId;
+        }
 
+        // Clear manual close timer when closed
+        if (manualCloseTimerRef.current) {
+            clearTimeout(manualCloseTimerRef.current);
+            manualCloseTimerRef.current = null;
+        }
+        isManuallyOpenedRef.current = false;
+
+        setIsQueueClosing(true);
+        setTimeout(() => {
+            setVisibleQueue(null);
+            setIsQueueClosing(false);
+        }, 350);
+    }, [currentTrackUri, youtubeTrack]);
+
+    const handleToggleQueue = useCallback((targetSource: 'spotify' | 'youtube') => {
+        // Clear any existing manual close timer
+        if (manualCloseTimerRef.current) {
+            clearTimeout(manualCloseTimerRef.current);
+            manualCloseTimerRef.current = null;
+        }
+
+        if (visibleQueue) {
+            // If already open, close it!
+            handleCloseQueuePopover();
+        } else {
+            // If closed, open it!
+            dismissedTrackUriRef.current = null;
+            dismissedYouTubeTrackRef.current = null;
+            setIsQueueClosing(false);
+            setVisibleQueue(targetSource);
+
+            // Set manual mode flag
+            isManuallyOpenedRef.current = true;
+            // Set the 5-second timer to auto-dismiss the queue popover
+            manualCloseTimerRef.current = setTimeout(() => {
+                setIsQueueClosing(true);
+                setTimeout(() => {
+                    setVisibleQueue(null);
+                    setIsQueueClosing(false);
+                }, 350);
+                isManuallyOpenedRef.current = false;
+            }, 5000);
+        }
+    }, [visibleQueue, handleCloseQueuePopover]);
+
+    // Cleanup manual close timer on unmount
+    useEffect(() => {
+        return () => {
+            if (manualCloseTimerRef.current) {
+                clearTimeout(manualCloseTimerRef.current);
+            }
+        };
+    }, []);
+
+    // near-end for Spotify
     useEffect(() => {
         if (!playerState || playerState.paused || !currentTrackUri) return;
 
@@ -1175,9 +1337,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (isBackwardsSeek && !isNearEnd && visibleQueue === 'spotify') {
             // Hide popover if user seeks away from the end
             setIsQueueClosing(true);
-            setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 300);
-        } else if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify') {
-            // Show popover if near the end and it's not already visible
+            setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 350);
+        } else if (isNearEnd && canSkipNext && isAutoQueueEnabled && visibleQueue !== 'spotify' && dismissedTrackUriRef.current !== currentTrackUri) {
+            // Show popover if near the end and it's not already visible and wasn't manually dismissed for this song
             setIsQueueClosing(false);
             setVisibleQueue('spotify');
         }
@@ -1185,17 +1347,128 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         prevPositionRef.current = position;
     }, [playerState, currentTrackUri, visibleQueue, isAutoQueueEnabled]);
 
-    // Effect for hiding popover on track change
+    // near-end for YouTube
+    useEffect(() => {
+        if (source !== 'youtube' || !youtubeTrack || isYouTubeSeeking) return;
+        const { position, duration } = youTubeProgress;
+        if (!duration || duration <= 0) return;
+
+        const remaining = duration - position;
+        const isNearEnd = duration > 15 && remaining < 15;
+
+        const currentYouTubeVideoId = youtubeTrack.videoId;
+
+        if (isNearEnd && isAutoQueueEnabled && visibleQueue !== 'youtube' && dismissedYouTubeTrackRef.current !== currentYouTubeVideoId) {
+            setIsQueueClosing(false);
+            setVisibleQueue('youtube');
+        }
+    }, [youTubeProgress, youtubeTrack, source, isYouTubeSeeking, visibleQueue, isAutoQueueEnabled]);
+
+    // Effect for hiding popover on track change (Spotify)
     const prevTrackUri = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
+            // New track started playing -> reset dismissed ref
+            dismissedTrackUriRef.current = null;
             if (visibleQueue === 'spotify') {
+                // Clear manual close timer
+                if (manualCloseTimerRef.current) {
+                    clearTimeout(manualCloseTimerRef.current);
+                    manualCloseTimerRef.current = null;
+                }
+                isManuallyOpenedRef.current = false;
+
                 setIsQueueClosing(true);
-                setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 300);
+                setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 350);
             }
         }
         prevTrackUri.current = currentTrackUri;
     }, [currentTrackUri, visibleQueue]);
+
+    // Effect for hiding popover on track change (YouTube)
+    const prevYouTubeVideoId = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        const currentYouTubeVideoId = youtubeTrack?.videoId;
+        if (prevYouTubeVideoId.current && prevYouTubeVideoId.current !== currentYouTubeVideoId) {
+            // New track started playing -> reset dismissed ref
+            dismissedYouTubeTrackRef.current = null;
+            if (visibleQueue === 'youtube') {
+                // Clear manual close timer
+                if (manualCloseTimerRef.current) {
+                    clearTimeout(manualCloseTimerRef.current);
+                    manualCloseTimerRef.current = null;
+                }
+                isManuallyOpenedRef.current = false;
+
+                setIsQueueClosing(true);
+                setTimeout(() => { setVisibleQueue(null); setIsQueueClosing(false); }, 350);
+            }
+        }
+        prevYouTubeVideoId.current = currentYouTubeVideoId;
+    }, [youtubeTrack, visibleQueue]);
+
+    // --- AI DJ CUSTOM QUEUE INTERLEAVING LOGIC ---
+    const djCustomQueueRef = useRef<{ uri: string; name: string }[]>([]);
+    const isPlayingInterleavedTrackRef = useRef(false);
+    const hasTriggeredInterleaveRef = useRef(false);
+
+    useEffect(() => {
+        const handleQueueAdd = (e: any) => {
+            const trackDetail = e.detail;
+            if (trackDetail?.uri) {
+                console.log('🎵 [DJ QUEUE INTERLEAVE] Track queued for AI DJ:', trackDetail.name);
+                djCustomQueueRef.current.push({ uri: trackDetail.uri, name: trackDetail.name });
+            }
+        };
+        window.addEventListener('spotify-queue-add', handleQueueAdd as EventListener);
+        return () => {
+            window.removeEventListener('spotify-queue-add', handleQueueAdd as EventListener);
+        };
+    }, []);
+
+    // Monitor near-end of AI DJ track to play user queued track
+    useEffect(() => {
+        if (!playerState || playerState.paused || source !== 'spotify') return;
+
+        const { position, duration } = playerState;
+        const isNearEnd = duration > 8000 && (duration - position) < 2500;
+        const isCurrentlyDj = isDjActiveRef.current;
+
+        if (isCurrentlyDj && djCustomQueueRef.current.length > 0 && isNearEnd && !hasTriggeredInterleaveRef.current) {
+            hasTriggeredInterleaveRef.current = true;
+            const nextCustomTrack = djCustomQueueRef.current.shift();
+            if (nextCustomTrack) {
+                isPlayingInterleavedTrackRef.current = true;
+                const deviceId = localStorage.getItem('spotify_device_id') || (playerState as any)?.device?.id;
+                apiClient.put(`/me/player/play${deviceId ? `?device_id=${deviceId}` : ''}`, { uris: [nextCustomTrack.uri] })
+                    .catch(err => console.warn('DJ queue interleave play failed:', err));
+            }
+        }
+    }, [playerState, source]);
+
+    // On track transition, check if we need to continue playing custom queue or switch back to Spotify AI DJ
+    useEffect(() => {
+        if (prevTrackUri.current && prevTrackUri.current !== currentTrackUri) {
+            hasTriggeredInterleaveRef.current = false;
+
+            if (isPlayingInterleavedTrackRef.current) {
+                if (djCustomQueueRef.current.length > 0) {
+                    const nextCustomTrack = djCustomQueueRef.current.shift();
+                    if (nextCustomTrack) {
+                        const deviceId = localStorage.getItem('spotify_device_id') || (playerState as any)?.device?.id;
+                        apiClient.put(`/me/player/play${deviceId ? `?device_id=${deviceId}` : ''}`, { uris: [nextCustomTrack.uri] })
+                            .catch(err => console.warn('DJ queue interleave play next failed:', err));
+                    }
+                } else {
+                    // All custom queued tracks played -> RETURN TO SPOTIFY AI DJ!
+                    isPlayingInterleavedTrackRef.current = false;
+                    const deviceId = localStorage.getItem('spotify_device_id') || (playerState as any)?.device?.id;
+                    apiClient.put(`/me/player/play${deviceId ? `?device_id=${deviceId}` : ''}`, { context_uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' })
+                        .catch(err => console.warn('Return to AI DJ failed:', err));
+                }
+            }
+        }
+    }, [currentTrackUri, playerState]);
     
     useEffect(() => {
         if (audioRef.current) {
@@ -1356,37 +1629,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     }, [youtubeTrack?.videoId, source]);
     
-    // Auto-dismiss QueuePopover when clicking outside
-    useEffect(() => {
-        if (!visibleQueue) return;
 
-        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-            const target = e.target as HTMLElement | null;
-            if (!target) return;
-            
-            const popoverEl = document.querySelector('.queue-popover-card');
-            if (
-                popoverEl?.contains(target) || 
-                spotifyQueueButtonRef.current?.contains(target) || 
-                youTubeQueueButtonRef.current?.contains(target)
-            ) {
-                return;
-            }
-            
-            handleToggleQueue(visibleQueue);
-        };
-
-        const timer = setTimeout(() => {
-            window.addEventListener('mousedown', handleClickOutside, true);
-            window.addEventListener('touchstart', handleClickOutside, true);
-        }, 50);
-
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('mousedown', handleClickOutside, true);
-            window.removeEventListener('touchstart', handleClickOutside, true);
-        };
-    }, [visibleQueue, handleToggleQueue]);
     
     useEffect(() => {
         const checkIsLiked = async () => {
@@ -1571,6 +1814,26 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         }
     };
     
+    const handleOpenSpotifySearch = (e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        window.dispatchEvent(new CustomEvent('spotify-open-search'));
+        if (onOpenApp) {
+            onOpenApp('spotify');
+        }
+        const focusInput = () => {
+            const searchInput = document.querySelector('input[placeholder*="ascoltare"], input[placeholder*="Cerca"]') as HTMLInputElement;
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.select();
+                searchInput.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+            }
+        };
+        focusInput();
+        requestAnimationFrame(focusInput);
+        setTimeout(focusInput, 30);
+        setTimeout(focusInput, 100);
+    };
+
     const handlePrevTrack = async () => {
         if (source === 'spotify') {
             try {
@@ -1706,7 +1969,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (source === 'youtube' && youtubeTrack) {
             const { title, channelTitle, thumbnail } = youtubeTrack;
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
+            const inactiveButtonColor = isNight ? '#464646' : '#9ca3af';
             const isYouTubePlaylist = Boolean(youtubePlaylist && youtubePlaylist.length > 0);
             const currentTrackIndex = youtubePlaylist ? youtubePlaylist.findIndex(track => track.videoId === youtubeTrack.videoId) : -1;
 
@@ -1762,14 +2025,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 className="p-1 rounded-full flex items-center justify-center transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5" 
                                 style={{ color: buttonActiveColor }}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                                <PrevTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale * buttonScaleFactor} />
                             </button>
                         </div>
                         <div className="w-[26%] flex justify-center items-center">
-                            <button onClick={handleTogglePlay} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 leading-none hover:bg-white/5" style={{ color: buttonActiveColor }}>
+                            <button onClick={handleTogglePlay} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: buttonActiveColor }}>
                                 {isYouTubePlaying
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                                    ? <PauseIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={playButtonScale * buttonScaleFactor} />
+                                    : <PlayIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={playButtonScale * buttonScaleFactor} />
                                 }
                             </button>
                         </div>
@@ -1780,12 +2043,29 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 className="p-1 rounded-full flex items-center justify-center transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5" 
                                 style={{ color: buttonActiveColor }}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                                <NextTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale * buttonScaleFactor} />
                             </button>
                         </div>
-                        <div className="w-[30%] flex justify-end items-center gap-2 sm:gap-3">
-                            <button ref={youTubeQueueButtonRef} onClick={() => handleToggleQueue('youtube')} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: visibleQueue === 'youtube' ? buttonActiveColor : inactiveButtonColor }}>
-                                <BsList className="w-5 h-5 sm:w-5 sm:h-5" />
+                        <div className="w-[30%] flex justify-end items-center gap-1.5 sm:gap-2">
+                            <button className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: inactiveButtonColor }}>
+                                <FiHeart style={{ width: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`, height: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem` }} />
+                            </button>
+                            <button onClick={handleOpenSpotifySearch} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: inactiveButtonColor }} title="Cerca su Spotify" aria-label="Cerca su Spotify">
+                                <SearchIcon size={`${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`} />
+                            </button>
+                            <button 
+                                ref={youTubeQueueButtonRef} 
+                                onClick={() => handleToggleQueue('youtube')} 
+                                className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5"
+                                style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}
+                                title={isAutoQueueEnabled ? "Prossimo in coda: Attivo" : "Prossimo in coda: Disattivato"}
+                                aria-label={isAutoQueueEnabled ? "Disattiva prossimo in coda" : "Attiva prossimo in coda"}
+                            >
+                                {isAutoQueueEnabled ? (
+                                    <HiQueueList style={{ width: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`, height: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem` }} className="flex-shrink-0 block fill-current" />
+                                ) : (
+                                    <HiOutlineQueueList style={{ width: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`, height: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem` }} className="flex-shrink-0 block" />
+                                )}
                             </button>
                         </div>
                     </div>
@@ -1822,25 +2102,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <div className="w-full flex items-center justify-between" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                         <div className="w-[22%] flex justify-center items-center">
                             <button onClick={handlePrevTrack} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                                <PrevTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale * buttonScaleFactor} />
                             </button>
                         </div>
                         <div className="w-[26%] flex justify-center items-center">
-                            <button onClick={handleTogglePlay} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 leading-none hover:bg-white/5" style={{ color: buttonActiveColor }}>
+                            <button onClick={handleTogglePlay} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: buttonActiveColor }}>
                                 {isRadioPlaying
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+                                    ? <PauseIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={playButtonScale * buttonScaleFactor} />
+                                    : <PlayIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={playButtonScale * buttonScaleFactor} />
                                 }
                             </button>
                         </div>
                         <div className="w-[22%] flex justify-center items-center">
                             <button onClick={handleNextTrack} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                                <NextTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale * buttonScaleFactor} />
                             </button>
                         </div>
-                        <div className="w-[30%] flex justify-end items-center gap-2 sm:gap-3">
+                        <div className="w-[30%] flex justify-end items-center gap-1.5 sm:gap-2">
                             <button onClick={() => onToggleFavorite(radioStation)} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: isFavorite ? buttonActiveColor : (isNight ? '#464646' : '#b0b0b0') }}>
                                 <FiHeart style={{ width: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`, height: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem` }} className={`${isFavorite ? 'fill-current' : ''}`} />
+                            </button>
+                            <button onClick={handleOpenSpotifySearch} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: inactiveButtonColor }} title="Cerca su Spotify" aria-label="Cerca su Spotify">
+                                <SearchIcon size={`${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`} />
                             </button>
                         </div>
                     </div>
@@ -1872,7 +2155,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             
             const isPodcastEpisode = Boolean(currentTrack?.uri?.includes('episode') || (currentTrack as any)?.type === 'episode');
             const buttonActiveColor = isNight ? nightPlayerButtonColor : dayPlayerButtonColor;
-            const inactiveButtonColor = isNight ? '#464646' : '#b0b0b0';
+            const inactiveButtonColor = isNight ? '#464646' : '#9ca3af';
             const songTitleColor = isNight ? '#f7f7f7' : (playerState.paused ? '#454545' : '#000000');
             return (
                 <div className="w-full h-full flex flex-col justify-between px-4 py-2 flex-1 self-stretch">
@@ -1929,23 +2212,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <div className="w-full flex items-center justify-between" style={{ transform: `translateY(${(playerControlsVerticalPosition) / 16}rem)`}}>
                         <div className="w-[22%] flex justify-center items-center">
                             <button onClick={handlePrevTrack} disabled={playerState.disallows.skipping_prev} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5" style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1zm3.66 6.82l5.77 4.07c.66.47 1.58-.01 1.58-.82V7.93c0-.81-.91-1.28-1.58-.82l-5.77 4.07c-.57.4-.57 1.24 0 1.64z"/></svg>
+                                <PrevTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale * buttonScaleFactor} />
                             </button>
                         </div>
                         <div className="w-[26%] flex justify-center items-center">
-                            <button onClick={handleTogglePlay} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 leading-none hover:bg-white/5" style={{ color: buttonActiveColor }}>
+                            <button onClick={handleTogglePlay} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5" style={{ color: buttonActiveColor }}>
                                 {playerState.paused 
-                                    ? <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
-                                    : <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 2.0) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 2.0) / 16}rem`} style={{ transform: `scale(${playButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                    ? <PlayIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={playButtonScale * buttonScaleFactor} />
+                                    : <PauseIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={playButtonScale * buttonScaleFactor} />
                                 }
                             </button>
                         </div>
                         <div className="w-[22%] flex justify-center items-center">
                             <button onClick={handleNextTrack} disabled={playerState.disallows.skipping_next} className="p-1 rounded-full flex items-center justify-center transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5" style={{ color: buttonActiveColor }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" height={`${(playerControlsSize * 1.4) / 16}rem`} viewBox="0 0 24 24" width={`${(playerControlsSize * 1.4) / 16}rem`} style={{ transform: `scale(${skipButtonScale * buttonScaleFactor})` }} fill="currentColor"><path d="M7.58 16.89l5.77-4.07c.56-.4.56-1.24 0-1.63L7.58 7.11C6.91 6.65 6 7.12 6 7.93v8.14c0 .81.91 1.28 1.58.82zM16 7v10c0 .55.45 1 1 1s1-.45 1-1V7c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+                                <NextTrackIcon size={`${(playerControlsSize * 1.25) / 16}rem`} scale={skipButtonScale * buttonScaleFactor} />
                             </button>
                         </div>
-                        <div className="w-[30%] flex justify-end items-center gap-2 sm:gap-3">
+                        <div className="w-[30%] flex justify-end items-center gap-1.5 sm:gap-2">
                             <button
                                 onClick={handleToggleLike}
                                 className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5"
@@ -1953,8 +2236,30 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             >
                                 <FiHeart style={{ width: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`, height: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem` }} className={`${isLiked ? 'fill-current' : ''}`} />
                             </button>
-                            <button ref={spotifyQueueButtonRef} onClick={() => handleToggleQueue('spotify')} className={`p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5 ${(playerState?.track_window?.next_tracks ?? []).length === 0 ? 'opacity-40' : ''}`} style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}>
-                                <BsList className="w-5 h-5 sm:w-5 sm:h-5" />
+                            <button
+                                onClick={handleOpenSpotifySearch}
+                                className="p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5"
+                                style={{ color: inactiveButtonColor }}
+                                title="Cerca su Spotify"
+                                aria-label="Cerca su Spotify"
+                            >
+                                <SearchIcon size={`${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`} />
+                            </button>
+                            <button 
+                                ref={spotifyQueueButtonRef} 
+                                onClick={() => handleToggleQueue('spotify')} 
+                                className={`p-1 rounded-full flex items-center justify-center transition active:scale-95 hover:bg-white/5 ${
+                                    (playerState?.track_window?.next_tracks ?? []).length === 0 ? 'opacity-40' : ''
+                                }`}
+                                style={{ color: isAutoQueueEnabled ? buttonActiveColor : inactiveButtonColor }}
+                                title={isAutoQueueEnabled ? "Prossimo in coda: Attivo" : "Prossimo in coda: Disattivato"}
+                                aria-label={isAutoQueueEnabled ? "Disattiva prossimo in coda" : "Attiva prossimo in coda"}
+                            >
+                                {isAutoQueueEnabled ? (
+                                    <HiQueueList style={{ width: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`, height: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem` }} className="flex-shrink-0 block fill-current" />
+                                ) : (
+                                    <HiOutlineQueueList style={{ width: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem`, height: `${(playerControlsSize * 0.9 * buttonScaleFactor) / 16}rem` }} className="flex-shrink-0 block" />
+                                )}
                             </button>
                         </div>
                     </div>
@@ -2074,12 +2379,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <QueuePopover
                         isNight={isNight}
                         nextTrack={nextTrackDetails}
-                        onClose={() => setVisibleQueue(null)}
+                        onClose={handleCloseQueuePopover}
                         isClosing={isQueueClosing}
                     />
                 )}
 
-                <div className="relative w-full h-full flex flex-col justify-between flex-1 self-stretch rounded-2xl squircle-card overflow-hidden">
+                <div className={`relative w-full h-full flex flex-col justify-between flex-1 self-stretch rounded-2xl squircle-card overflow-hidden z-[20] ${isNight ? 'bg-[#212121]' : 'bg-white'}`}>
                     {(nowPlaying.isLoading || debugSpinner) && (
                         <div className="player-spinner-overlay" style={spinnerStyle}>
                             <div className="spinner-visual" style={spinnerVisualDivStyle}></div>

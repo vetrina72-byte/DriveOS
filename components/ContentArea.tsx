@@ -19,9 +19,9 @@ const SkeletonCarousel = ({ isNight }: { isNight: boolean }) => {
     return (
         <div className="mb-6 sm:mb-8 px-3 sm:px-6 animate-pulse min-h-[220px]">
             <div className={`h-6 sm:h-7 w-48 rounded-md mb-3 sm:mb-4 ${bgColor}`}></div>
-            <div className="flex gap-2.5 sm:gap-4 overflow-hidden">
+            <div className="flex gap-2 sm:gap-3 overflow-hidden">
                 {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="py-1.5 sm:py-2 flex-shrink-0 w-32 sm:w-36 md:w-44">
+                    <div key={i} className="py-1 sm:py-1.5 flex-shrink-0 w-26 sm:w-28 md:w-32 lg:w-36">
                         <div className={`w-full aspect-square rounded-lg ${bgColor}`}></div>
                         <div className={`h-3.5 w-3/4 rounded-md mt-2.5 ${bgColor}`}></div>
                         <div className={`h-3 w-1/2 rounded-md mt-1.5 ${bgColor}`}></div>

@@ -80,6 +80,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({ query, isNight, o
     const handleAddToQueue = async (e: React.MouseEvent, track: SpotifyItem) => {
         e.stopPropagation();
         try {
+            window.dispatchEvent(new CustomEvent('spotify-queue-add', { detail: { uri: track.uri, name: track.name } }));
             await apiClient.post(`/me/player/queue?uri=${encodeURIComponent(track.uri)}`);
         } catch (err) {
             console.warn('Queue request notice:', err);

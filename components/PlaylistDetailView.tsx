@@ -269,6 +269,7 @@ duration_ms
         e.stopPropagation();
         try {
             setQueuedTrackId(track.id);
+            window.dispatchEvent(new CustomEvent('spotify-queue-add', { detail: { uri: track.uri, name: track.name } }));
             await apiClient.post(`/me/player/queue?uri=${encodeURIComponent(track.uri)}`);
             setQueueToast({ show: true, name: track.name });
             setTimeout(() => {

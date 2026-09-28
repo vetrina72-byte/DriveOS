@@ -134,37 +134,41 @@ body {
 @keyframes queueBubblePop {
   0% {
     opacity: 0;
-    transform: scale(0.68) translateY(14px);
+    transform: scale(0.01);
+    filter: blur(1px);
   }
-  65% {
+  60% {
     opacity: 1;
-    transform: scale(1.02) translateY(-2px);
+    transform: scale(1.04);
+    filter: blur(0px);
+  }
+  82% {
+    transform: scale(0.98);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: scale(1);
   }
 }
 
 @keyframes queueBubbleOut {
   0% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: scale(1);
   }
   100% {
     opacity: 0;
-    transform: scale(0.68) translateY(14px);
+    transform: scale(0.01);
+    filter: blur(1px);
   }
 }
 
 .animate-queue-bubble-in {
-  animation: queueBubblePop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transform-origin: bottom right;
+  animation: queueBubblePop 0.38s cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
 }
 
 .animate-queue-bubble-out {
-  animation: queueBubbleOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  transform-origin: bottom right;
+  animation: queueBubbleOut 0.28s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 /* Performance optimizations for mobile & low-end GPUs */

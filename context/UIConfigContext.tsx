@@ -108,7 +108,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [navigateToolWidth, setNavigateToolWidth] = useState(340);
   const [playerControlsSize, setPlayerControlsSize] = useState(18);
   const [playerControlsGap, setPlayerControlsGap] = useState(100);
-  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(-2.5);
+  const [playerControlsVerticalPosition, setPlayerControlsVerticalPosition] = useState(4.2);
   const [spinnerSize, setSpinnerSize] = useState(18);
   const [spinnerShuffleGap, setSpinnerShuffleGap] = useState(6);
   const [debugSpinner, setDebugSpinner] = useState(false);
@@ -130,13 +130,13 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
 
   const [appLauncherWidth, setAppLauncherWidth] = useState(30);
   const [appLauncherHeight, setAppLauncherHeight] = useState(286);
-  const [queuePopoverHeight, setQueuePopoverHeight] = useState(89);
+  const [queuePopoverHeight, setQueuePopoverHeight] = useState(65);
   const [queuePopoverBottomOffset, setQueuePopoverBottomOffset] = useState(16);
-  const [queuePopoverScale, setQueuePopoverScale] = useState(1.0);
-  const [queuePopoverWidth, setQueuePopoverWidth] = useState(288);
+  const [queuePopoverScale, setQueuePopoverScale] = useState(0.85);
+  const [queuePopoverWidth, setQueuePopoverWidth] = useState(200);
   const [queuePopoverOffsetX, setQueuePopoverOffsetX] = useState(-29);
 
-  const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#454545');
+  const [dayPlayerButtonColor, setDayPlayerButtonColor] = useState('#555555');
   const [nightPlayerButtonColor, setNightPlayerButtonColor] = useState('#ffffff');
   const [widgetBgHex, setWidgetBgHex] = useState('#ffffff');
   
@@ -160,8 +160,8 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
 
   const [progressBarHeight, setProgressBarHeight] = useState(5.4);
   const [progressBarVerticalOffset, setProgressBarVerticalOffset] = useState(12.9);
-  const [playButtonScale, setPlayButtonScale] = useState(0.87);
-  const [skipButtonScale, setSkipButtonScale] = useState(1.29);
+  const [playButtonScale, setPlayButtonScale] = useState(0.90);
+  const [skipButtonScale, setSkipButtonScale] = useState(0.90);
 
   const [virtualKeyboardKeySize, setVirtualKeyboardKeySize] = useState(41);
   const [virtualKeyboardHeight, setVirtualKeyboardHeight] = useState(38);

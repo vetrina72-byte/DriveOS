@@ -263,6 +263,14 @@ function AppContent() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    const handleOpenSearch = () => {
+      setActiveApp('spotify');
+    };
+    window.addEventListener('spotify-open-search', handleOpenSearch);
+    return () => window.removeEventListener('spotify-open-search', handleOpenSearch);
+  }, []);
+
   // --- DRAG INTERPOLATION STATE AS REF ---
   // Using a ref avoids re-rendering the entire App component on every drag frame.
   // CRITICAL: MUST be null when not dragging, so VehicleCanvas enables full manual camera OrbitControls.

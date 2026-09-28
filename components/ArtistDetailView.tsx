@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '../spotifyClient';
-import { FiPlay, FiMusic, FiAlertTriangle, FiHeart } from 'react-icons/fi';
+import { FiPlay, FiMusic, FiAlertTriangle, FiHeart, FiPlus, FiCheck } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import PlaylistItem, { SpotifyItem } from './PlaylistItem';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import ContentCarousel from './ContentCarousel';
+import AnimatedEqualizer from './AnimatedEqualizer';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -93,11 +94,27 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isFollowing, setIsFollowing] = useState(false);
+    const [queuedTrackId, setQueuedTrackId] = useState<string | null>(null);
+    const [queueToast, setQueueToast] = useState<{ show: boolean; name: string } | null>(null);
     const { nowPlaying, isPlayerReady } = useAuth();
     const playerState = nowPlaying.spotifyState;
 
     const isPlayingContext = playerState && !playerState.paused;
     const currentTrackId = playerState?.track_window?.current_track?.id;
+
+    const handleAddToQueue = async (e: React.MouseEvent, track: Track) => {
+        e.stopPropagation();
+        setQueuedTrackId(track.id);
+        try {
+            window.dispatchEvent(new CustomEvent('spotify-queue-add', { detail: { uri: track.uri, name: track.name } }));
+            await apiClient.post(`/me/player/queue?uri=${encodeURIComponent(track.uri)}`);
+        } catch (err) {
+            console.warn('Queue request notice:', err);
+        }
+        setQueueToast({ show: true, name: track.name });
+        setTimeout(() => setQueuedTrackId(null), 1800);
+        setTimeout(() => setQueueToast(null), 2600);
+    };
 
     const fetchDetails = useCallback(async () => {
         setIsLoading(true);
@@ -208,7 +225,32 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
     const trackUris = tracks.map(t => t.uri);
 
     return (
-        <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto pb-6 hide-scrollbar relative">
+            {/* Feedback Toast */}
+            <AnimatePresence>
+                {queueToast && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -16, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                        className={`fixed top-16 right-8 z-[9000] px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 backdrop-blur-xl border text-sm font-semibold ${
+                            isNight 
+                                ? 'bg-zinc-900/95 text-white border-white/20 shadow-black/80' 
+                                : 'bg-white/95 text-zinc-900 border-black/10 shadow-xl'
+                        }`}
+                    >
+                        <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                            <FiCheck className="w-3.5 h-3.5" />
+                        </span>
+                        <div className="truncate max-w-[16rem]">
+                            <span className="text-emerald-400 font-bold">Aggiunto in coda: </span>
+                            <span className="opacity-90">{queueToast.name}</span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <header className="flex items-end gap-6 mb-6 pt-4 px-6">
                 {artist.images?.[0]?.url ? (
                     <img src={artist.images[0].url} alt={artist.name} className="w-48 h-48 rounded-full object-cover shadow-2xl" />
@@ -259,6 +301,7 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                             artists: [{ name: artist.name }],
                             duration_ms: track.duration_ms
                         };
+                        const isQueued = queuedTrackId === track.id;
                         return (
                             <motion.div
                                 key={track.id}
@@ -274,6 +317,18 @@ const ArtistDetailView: React.FC<ArtistDetailViewProps> = ({ artistId, isNight, 
                                     {track.explicit && <span className="flex-shrink-0 text-xs bg-zinc-500/50 text-white rounded-sm px-1 py-0.5">E</span>}
                                 </div>
                                 <span className={`text-sm text-right ${theme.textSecondary}`}>{formatDuration(track.duration_ms)}</span>
+                                <button
+                                    onClick={(e) => handleAddToQueue(e, track)}
+                                    title="Aggiungi alla coda"
+                                    aria-label="Aggiungi alla coda"
+                                    className={`p-2 rounded-full transition-all duration-200 active:scale-90 flex-shrink-0 ${
+                                        isQueued 
+                                            ? 'text-emerald-400 bg-emerald-500/20' 
+                                            : (isNight ? 'text-zinc-400 hover:text-white hover:bg-white/10' : 'text-zinc-500 hover:text-black hover:bg-black/10')
+                                    }`}
+                                >
+                                    {isQueued ? <FiCheck className="w-4 h-4 text-emerald-400" /> : <FiPlus className="w-4 h-4" />}
+                                </button>
                             </motion.div>
                         );
                     })}
