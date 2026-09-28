@@ -760,23 +760,18 @@ const DisabledPlayerView = ({
                     </button>
                 </div>
                 <div className="w-[30%] flex justify-end items-center gap-1.5 sm:gap-2">
-                    <button disabled={!isReady} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} /></button>
-                    <button disabled={!isReady} onClick={handleOpenSpotifySearch} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: inactiveButtonColor }} title="Cerca su Spotify" aria-label="Cerca su Spotify">
+                    <button disabled={true} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: inactiveButtonColor }}><FiHeart style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} /></button>
+                    <button disabled={true} className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5 active:scale-95" style={{ color: inactiveButtonColor }} title="Cerca su Spotify" aria-label="Cerca su Spotify">
                         <SearchIcon size={`${(playerControlsSize * 0.9) / 16}rem`} />
                     </button>
                     <button 
-                        disabled={!isReady} 
-                        onClick={() => handleToggleQueue('spotify')}
-                        className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-pointer transition active:scale-95 hover:bg-white/5"
-                        style={{ color: isAutoQueueEnabled ? buttonColor : inactiveButtonColor }}
-                        title={isAutoQueueEnabled ? "Prossimo in coda: Attivo" : "Prossimo in coda: Disattivato"}
-                        aria-label={isAutoQueueEnabled ? "Disattiva prossimo in coda" : "Attiva prossimo in coda"}
+                        disabled={true} 
+                        className="p-1 rounded-full flex items-center justify-center disabled:opacity-40 cursor-not-allowed transition hover:bg-white/5"
+                        style={{ color: inactiveButtonColor }}
+                        title="Prossimo in coda: Disattivato"
+                        aria-label="Prossimo in coda: Disattivato"
                     >
-                        {isAutoQueueEnabled ? (
-                            <HiQueueList style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} className="flex-shrink-0 block fill-current" />
-                        ) : (
-                            <HiOutlineQueueList style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} className="flex-shrink-0 block" />
-                        )}
+                        <HiOutlineQueueList style={{ width: `${(playerControlsSize * 0.9) / 16}rem`, height: `${(playerControlsSize * 0.9) / 16}rem` }} className="flex-shrink-0 block" />
                     </button>
                 </div>
             </div>

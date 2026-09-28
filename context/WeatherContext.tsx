@@ -279,7 +279,14 @@ export const WeatherProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setWeatherStatus('fetching');
       setWeatherError(null);
       try {
-          const apiKey = (import.meta as any).env?.VITE_WEATHERAPI_KEY || (process as any).env?.VITE_WEATHERAPI_KEY || (process as any).env?.WEATHERAPI_KEY || '63e9f45688534b4ca8d120000242209';
+          const apiKey = 
+              (import.meta as any).env?.VITE_WEATHERAPI_KEY || 
+              (import.meta as any).env?.VITE_WEATHER_API_KEY || 
+              (process as any).env?.VITE_WEATHERAPI_KEY || 
+              (process as any).env?.VITE_WEATHER_API_KEY || 
+              (process as any).env?.WEATHERAPI_KEY || 
+              (process as any).env?.WEATHER_API_KEY || 
+              '63e9f45688534b4ca8d120000242209';
           
           const weatherPromise = fetch(
               `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${latitude},${longitude}&days=2&aqi=no&alerts=no&lang=it`
