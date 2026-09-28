@@ -443,7 +443,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         <div 
             ref={panelRef}
             data-app-id="youtube-music"
-            className={`spotify-app-panel squircle-24 shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
+            className={`spotify-app-panel squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
                 // Transform managed by physics loop
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
@@ -457,7 +457,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative squircle-24 overflow-hidden`}
+              className={`w-full h-full flex flex-col relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
                 {/* --- DRAG HANDLE (OUTSIDE LEFT) --- */}
@@ -473,7 +473,7 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                 </div>
                 {/* ------------------- */}
 
-                <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
+                <header className="px-8 pt-7 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <img 
                             src={isNight ? logoUrlDark : logoUrlLight} 

@@ -68,11 +68,11 @@ const TopNavBar = React.memo(({ isNight, activeView, onNavigate, onSearch, onBac
   };
   
   return (
-    <nav ref={navContainerRef} className={`w-full ${isNavCompact ? 'px-3 py-2.5 gap-2' : 'px-5 py-3 gap-3'} flex-shrink-0 z-30 relative flex items-center justify-between`}>
+    <nav ref={navContainerRef} className={`w-full ${isNavCompact ? 'px-4 sm:px-6 pt-3 pb-2.5 gap-2.5' : 'px-6 sm:px-8 pt-4 pb-3 gap-3.5'} flex-shrink-0 z-30 relative flex items-center justify-between`}>
       {/* Left side: Logo/Back + Search */}
-      <div className={`flex items-center ${isNavCompact ? 'gap-1.5' : 'gap-3'} flex-shrink-0`}>
+      <div className={`flex items-center ${isNavCompact ? 'gap-2' : 'gap-3'} flex-shrink-0`}>
         {showBackButton ? (
-          <button onClick={onBack} className={`p-1.5 -ml-1 rounded-full transition-colors ${hoverBg}`} aria-label="Indietro">
+          <button onClick={onBack} className={`p-1.5 rounded-full transition-colors ${hoverBg}`} aria-label="Indietro">
             <FiChevronLeft className={`w-6 h-6`} style={{ color: textColor }} />
           </button>
         ) : (

@@ -609,7 +609,7 @@ const RadioApp: React.FC<RadioAppProps> = ({
         <div 
             ref={panelRef}
             data-app-id="radio"
-            className={`radio-app-panel squircle-24 shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
+            className={`radio-app-panel squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
                 // Transform managed by physics loop
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
@@ -623,7 +623,7 @@ const RadioApp: React.FC<RadioAppProps> = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative backdrop-blur-lg squircle-24 overflow-hidden`}
+              className={`w-full h-full flex flex-col relative backdrop-blur-lg squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
                 {/* --- DRAG HANDLE --- */}
@@ -639,12 +639,12 @@ const RadioApp: React.FC<RadioAppProps> = ({
                 </div>
                 {/* ------------------- */}
 
-                 <header className="px-6 pt-6 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
+                 <header className="px-8 pt-7 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         {searchQuery.trim().length > 0 ? (
                             <button
                                 onClick={() => setSearchQuery('')}
-                                className="p-2 -ml-2 rounded-full transition-colors hover:bg-white/10"
+                                className="p-2 rounded-full transition-colors hover:bg-white/10"
                                 aria-label="Indietro"
                             >
                                 <FiChevronLeft className="w-7 h-7" style={{ color: 'var(--text-primary)' }} />

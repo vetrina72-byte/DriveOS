@@ -531,46 +531,54 @@ function AppContent() {
       return Math.round(width * (1 / 3));
   };
 
-  // Calculate if the player's space is actually occluded or occupied by an open app
-  const isPlayerOccluded = useMemo(() => {
-      if (isAppLauncherOpen) return true; // Launcher always occupies the bottom center space
-      if (!activeApp) return false; // No app covers the player
-      if (activeApp === 'maps') return true; // Opening the maps app should also dock the player
-
-      const appLeft = getAppLeftEdge(windowWidth, activeApp);
-      
-      // Calculate right edge of floating player at current screen width
-      const isStacked = windowWidth < 900;
-      const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, windowWidth - 32) : playerFloatingWidth;
-      const currentNavigateToolWidth = isStacked ? Math.min(navigateToolWidth, windowWidth - 32) : navigateToolWidth;
-      
-      const leftOffset = isStacked
-          ? -(currentFloatingPlayerWidth / 2)
-          : -(currentFloatingPlayerWidth / 2 + currentNavigateToolWidth / 2 + 8);
-      
-      const leftPx = windowWidth / 2 + leftOffset;
-      const playerRight = leftPx + currentFloatingPlayerWidth;
-
-      // Space is occluded if the app's left edge overlaps/collides with the player's floating right edge
-      return appLeft < playerRight;
-  }, [activeApp, isAppLauncherOpen, windowWidth, playerFloatingWidth, navigateToolWidth]);
-  
     // RESPONSIVE CONFIGURATIONS FOR PLAYER & NAVIGATION WIDGET
-    const isMobileOrTablet = windowWidth < 1180;
+    // Proportionally scale widgets so they stay side-by-side gracefully without jumping on top of the 3D car
+    const sideMargin = windowWidth < 640 ? 12 : 16;
+    const widgetGap = windowWidth < 640 ? 8 : 12;
+    const totalWidgetsNominal = playerFloatingWidth + navigateToolWidth + widgetGap;
+    const availableWidgetsWidth = windowWidth - (2 * sideMargin);
 
     const responsiveFloatingPlayerWidth = useMemo(() => {
-        if (isMobileOrTablet) {
-            return Math.min(playerFloatingWidth, windowWidth - 32);
+        if (availableWidgetsWidth < totalWidgetsNominal) {
+            const usable = availableWidgetsWidth - widgetGap;
+            const pRatio = playerFloatingWidth / (playerFloatingWidth + navigateToolWidth);
+            const calculated = Math.round(usable * pRatio);
+            return Math.max(260, Math.min(playerFloatingWidth, calculated));
         }
         return playerFloatingWidth;
-    }, [playerFloatingWidth, windowWidth, isMobileOrTablet]);
+    }, [playerFloatingWidth, navigateToolWidth, availableWidgetsWidth, widgetGap, totalWidgetsNominal]);
 
     const responsiveNavigateToolWidth = useMemo(() => {
-        if (isMobileOrTablet) {
-            return Math.min(navigateToolWidth, windowWidth - 32);
+        if (availableWidgetsWidth < totalWidgetsNominal) {
+            const usable = availableWidgetsWidth - widgetGap;
+            const remaining = usable - responsiveFloatingPlayerWidth;
+            return Math.max(220, Math.min(navigateToolWidth, remaining));
         }
         return navigateToolWidth;
-    }, [navigateToolWidth, windowWidth, isMobileOrTablet]);
+    }, [playerFloatingWidth, navigateToolWidth, availableWidgetsWidth, widgetGap, totalWidgetsNominal, responsiveFloatingPlayerWidth]);
+
+    // Calculate if the player's space is actually occluded or occupied by an open app
+    const isPlayerOccluded = useMemo(() => {
+        if (isAppLauncherOpen) return true; // Launcher always occupies the bottom center space
+        if (!activeApp) return false; // No app covers the player
+        if (activeApp === 'maps') return true; // Opening the maps app should also dock the player
+
+        const appLeft = getAppLeftEdge(windowWidth, activeApp);
+        
+        const isStacked = windowWidth < 480;
+        const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, windowWidth - 32) : responsiveFloatingPlayerWidth;
+        const currentNavigateToolWidth = isStacked ? Math.min(navigateToolWidth, windowWidth - 32) : responsiveNavigateToolWidth;
+        
+        const leftOffset = isStacked
+            ? -(currentFloatingPlayerWidth / 2)
+            : -(currentFloatingPlayerWidth / 2 + currentNavigateToolWidth / 2 + 6);
+        
+        const leftPx = windowWidth / 2 + leftOffset;
+        const playerRight = leftPx + currentFloatingPlayerWidth;
+
+        // Space is occluded if the app's left edge overlaps/collides with the player's floating right edge
+        return appLeft < playerRight;
+    }, [activeApp, isAppLauncherOpen, windowWidth, playerFloatingWidth, navigateToolWidth, responsiveFloatingPlayerWidth, responsiveNavigateToolWidth]);
 
     const responsiveDockedMargin = useMemo(() => {
         return windowWidth < 1024 ? 16 : 24;
@@ -664,15 +672,15 @@ function AppContent() {
                 navigateToolRef.current.style.transition = 'none';
 
                 const winWidth = window.innerWidth;
-                const isStacked = winWidth < 900;
-                const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, winWidth - 32) : playerFloatingWidth;
+                const isStacked = winWidth < 480;
+                const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, winWidth - 32) : responsiveFloatingPlayerWidth;
                 const currentNavigateToolWidth = isStacked ? Math.min(responsiveNavigateToolWidth, winWidth - 32) : responsiveNavigateToolWidth;
 
                 // Home position (tLauncher = 0):
                 const homePercent = 50;
                 const homeOffsetPx = isStacked
                     ? -(currentNavigateToolWidth / 2)
-                    : (currentFloatingPlayerWidth / 2 - currentNavigateToolWidth / 2 + 8);
+                    : (currentFloatingPlayerWidth / 2 - currentNavigateToolWidth / 2 + 6);
 
                 // Launcher open position (tLauncher = 1):
                 // Symmetrical to player on the left: positioned exactly `playerDockedLeft` from the right edge
@@ -683,7 +691,7 @@ function AppContent() {
                 const currentPercent = homePercent + (launcherPercent - homePercent) * tLauncher;
                 const currentOffsetPx = homeOffsetPx + (launcherOffsetPx - homeOffsetPx) * tLauncher;
 
-                // Bottom position
+                // Bottom position: always stays at playerFloatingBottom on tablet and desktop
                 const homeBottom = isStacked ? (playerFloatingBottom + playerFloatingHeight + 12) : playerFloatingBottom;
                 const launcherBottom = playerFloatingBottom;
                 const currentBottomPx = homeBottom + (launcherBottom - homeBottom) * tLauncher;

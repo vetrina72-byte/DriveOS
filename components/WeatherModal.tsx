@@ -219,7 +219,7 @@ export default function WeatherModal({ tempUnit, setTempUnit }: WeatherModalProp
 
                             <button 
                                 onClick={onClose} 
-                                className={`p-1.5 rounded-lg ${theme.textSecondary} ${theme.buttonHover} transition-colors cursor-pointer`}
+                                className={`p-2 rounded-xl ${theme.textSecondary} ${theme.buttonHover} transition-colors cursor-pointer mr-0 sm:mr-1`}
                                 aria-label="Chiudi"
                             >
                                 <FiX size={18} />
@@ -231,7 +231,7 @@ export default function WeatherModal({ tempUnit, setTempUnit }: WeatherModalProp
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-stretch">
                         
                         {/* LEFT COLUMN: Main Current Weather Panel */}
-                        <div className={`sm:col-span-5 md:col-span-4 flex flex-col justify-between p-4 rounded-2xl ${theme.cardBg}`}>
+                        <div className={`sm:col-span-5 md:col-span-4 flex flex-col justify-between p-4 sm:p-5 squircle-card rounded-2xl ${theme.cardBg}`}>
                             <div className="flex flex-col items-center justify-center text-center my-auto py-2">
                                 <div className="relative flex items-center justify-center mb-1">
                                     <WeatherIcon 
@@ -429,7 +429,7 @@ export default function WeatherModal({ tempUnit, setTempUnit }: WeatherModalProp
             onClick={onClose}
         >
             <div 
-                className={`w-full max-w-lg sm:max-w-2xl md:max-w-3xl ${theme.bg} ${theme.textPrimary} squircle-24 shadow-2xl p-4 sm:p-5 my-auto flex flex-col border ${theme.border} transition-all duration-300 transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-95 translate-y-4 opacity-0'}`}
+                className={`w-full max-w-lg sm:max-w-2xl md:max-w-3xl ${theme.bg} ${theme.textPrimary} squircle-modal rounded-3xl shadow-2xl p-6 sm:p-8 my-auto flex flex-col border ${theme.border} transition-all duration-300 transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-95 translate-y-4 opacity-0'}`}
                 onClick={stopPropagation}
                 role="dialog"
                 aria-modal="true"

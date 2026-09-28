@@ -3096,7 +3096,7 @@ const MapsContainer = React.memo(({
     <div 
         id="maps-app-panel"
         ref={panelRef}
-        className="fixed top-0 right-0 w-2/3 text-white shadow-2xl z-[4000] flex maps-app-panel squircle-24 pointer-events-auto touch-none"
+        className="fixed top-0 right-0 w-2/3 text-white shadow-2xl z-[4000] flex maps-app-panel squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden pointer-events-auto touch-none"
         style={{ 
             willChange: 'transform',
             top: 0,

@@ -477,7 +477,7 @@ const QueuePopover = ({
 }) => {
     return (
         <div
-            className={`queue-popover-card absolute bottom-[calc(100%+12px)] right-0 w-[290px] sm:w-[320px] max-w-[calc(100vw-2rem)] p-3 sm:p-3.5 rounded-2xl shadow-2xl z-[9500] border backdrop-blur-2xl transition-all duration-300 pointer-events-auto select-none ${
+            className={`queue-popover-card absolute bottom-[calc(100%+12px)] right-0 w-[290px] sm:w-[320px] max-w-[calc(100vw-2rem)] p-3.5 sm:p-4 squircle-card rounded-2xl shadow-2xl z-[9500] border backdrop-blur-2xl transition-all duration-300 pointer-events-auto select-none ${
                 isNight 
                     ? 'border-white/20 bg-[#1e1e1e]/95 text-white shadow-black/80' 
                     : 'border-black/15 bg-white/95 text-zinc-900 shadow-xl'
@@ -498,7 +498,7 @@ const QueuePopover = ({
             />
 
             {/* Header / Badge */}
-            <div className="flex items-center justify-between mb-2 flex-shrink-0 z-10 relative">
+            <div className="flex items-center justify-between mb-2.5 flex-shrink-0 z-10 relative">
                 <div className="flex items-center gap-1.5">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
                         isNight 
@@ -523,7 +523,7 @@ const QueuePopover = ({
                 {nextTrack ? (
                     <>
                         {nextTrack.imageUrl ? (
-                            <div className="relative flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden shadow-md border border-black/10 dark:border-white/10">
+                            <div className="relative flex-shrink-0 w-12 h-12 squircle-sm rounded-xl overflow-hidden shadow-md border border-black/10 dark:border-white/10">
                                 <img 
                                     src={nextTrack.imageUrl} 
                                     alt={nextTrack.name} 
@@ -531,7 +531,7 @@ const QueuePopover = ({
                                 />
                             </div>
                         ) : (
-                            <div className={`w-12 h-12 rounded-xl ${isNight ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} flex items-center justify-center flex-shrink-0 shadow-inner`}>
+                            <div className={`w-12 h-12 squircle-sm rounded-xl ${isNight ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} flex items-center justify-center flex-shrink-0 shadow-inner`}>
                                 <FiMusic className="w-5 h-5" />
                             </div>
                         )}
@@ -956,7 +956,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 playerContainerRef.current.style.transition = 'none';
 
                 const winWidth = window.innerWidth;
-                const isStacked = winWidth < 900;
+                const isStacked = winWidth < 480;
                 const pct = 50 * t;
                 const sideMargin = winWidth < 1024 ? 16 : 24;
 
@@ -999,7 +999,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const homeBottom = floatingConfig.bottom * remScale;
                 const homeOffsetPx = isStacked
                     ? -(homeWidth / 2)
-                    : -(homeWidth / 2 + (floatingConfig.otherWidgetWidth * remScale) / 2 + (8 * remScale));
+                    : -(homeWidth / 2 + (floatingConfig.otherWidgetWidth * remScale) / 2 + (6 * remScale));
 
                 // --- FLUID INTERPOLATION (0 = Docked, 1 = Home) ---
                 const offsetPx = dockedLeft * (1 - t) + homeOffsetPx * t;
@@ -2065,7 +2065,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     width: isAnyAppOpen ? `${dockedConfig.width}px` : `${floatingConfig.width}px`,
                     height: isAnyAppOpen ? `${dockedConfig.height}px` : `${floatingConfig.height}px`,
                     bottom: isAnyAppOpen ? `${dockedConfig.bottom}px` : `${floatingConfig.bottom}px`,
-                    left: isAnyAppOpen ? `${dockedConfig.left}px` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 8)}px)`,
+                    left: isAnyAppOpen ? `${dockedConfig.left}px` : `calc(50% - ${(floatingConfig.width / 2 + floatingConfig.otherWidgetWidth / 2 + 6)}px)`,
                     margin: 0,
                 }}
             >

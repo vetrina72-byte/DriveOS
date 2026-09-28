@@ -154,18 +154,18 @@ export default function NavigationStatus({ width, widgetBgColor }: NavigationSta
         background: !isNight ? widgetBgColor : theme.bg
       }}
     >
-      <div className="p-4 flex flex-col h-full justify-between">
-        <div className="flex justify-between items-start">
-          <div className="flex-grow min-w-0 pr-2">
-            <p className={`font-semibold truncate text-base ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>{target.name}</p>
-            <div className={`flex items-center gap-2 text-sm font-medium ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+      <div className="p-3 sm:p-4 flex flex-col h-full justify-between">
+        <div className="flex justify-between items-start gap-1.5">
+          <div className="flex-grow min-w-0 pr-1">
+            <p className={`font-semibold truncate text-sm sm:text-base ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>{target.name}</p>
+            <div className={`flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
               <span>{formatTravelTime(remainingTime)}</span>
-              <span className="text-xs">&#9679;</span>
+              <span className="text-[10px] sm:text-xs">&#9679;</span>
               <span>{remainingDistance?.toFixed(1) ?? '--'} km</span>
             </div>
           </div>
-          <button onClick={() => onCancel('Navigazione terminata.')} className={`flex-shrink-0 flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors ${isNight ? 'bg-red-800/50 hover:bg-red-800/80 text-red-200' : 'bg-red-100 hover:bg-red-200 text-red-700'}`}>
-            <ICONS.endTrip className="w-4 h-4" />
+          <button onClick={() => onCancel('Navigazione terminata.')} className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 py-1 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer select-none active:scale-95 ${isNight ? 'bg-red-800/50 hover:bg-red-800/80 text-red-200' : 'bg-red-100 hover:bg-red-200 text-red-700'}`}>
+            <ICONS.endTrip className="w-3.5 h-3.5 shrink-0" />
             <span>Termina</span>
           </button>
         </div>

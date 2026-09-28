@@ -454,7 +454,7 @@ export default function SearchPanel({
       ref={searchContainerRef}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
-      className={`absolute top-3 left-3 sm:top-5 sm:left-5 z-[2000] w-[calc(100%-4.5rem)] sm:w-[22rem] max-w-[22rem] backdrop-blur-md border squircle-card rounded-2xl shadow-xl overflow-hidden touch-auto transition-all duration-300 ease-in-out ${
+      className={`absolute top-3 left-3 sm:top-4 sm:left-4 z-[2000] w-[calc(100%-3rem)] sm:w-[18rem] md:w-[19rem] max-w-[19rem] backdrop-blur-md border squircle-card rounded-2xl shadow-xl overflow-hidden touch-auto transition-all duration-300 ease-in-out ${
         isVisible
           ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
           : 'opacity-0 -translate-y-4 scale-95 pointer-events-none'
@@ -467,17 +467,17 @@ export default function SearchPanel({
       {/* Search Input Header */}
       <div className="relative flex items-center p-2 sm:p-2.5">
         <Search
-          className={`absolute left-4 sm:left-5 w-4 h-4 sm:w-5 sm:h-5 pointer-events-none transition-colors z-10 ${
+          className={`absolute left-4 sm:left-4.5 w-4 h-4 pointer-events-none transition-colors z-10 ${
             isNight ? 'text-zinc-400' : 'text-zinc-500'
           }`}
         />
-        <div className={`w-full flex items-center gap-1.5 border rounded-lg sm:rounded-xl py-1.5 sm:py-2 pl-9 sm:pl-12 pr-2.5 sm:pr-3 min-h-[44px] sm:min-h-[50px] transition-all ${
+        <div className={`w-full flex items-center gap-1.5 border rounded-xl py-1.5 pl-8 sm:pl-8.5 pr-2 min-h-[38px] sm:min-h-[40px] transition-all ${
           isNight
             ? 'bg-zinc-800/80 border-white/10 text-white'
             : 'bg-zinc-100/90 border-zinc-200 text-zinc-900 hover:bg-zinc-100'
         }`}>
           {activeCategory && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600/20 text-blue-500 border border-blue-500/30 shrink-0 select-none">
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-600/20 text-blue-500 border border-blue-500/30 shrink-0 select-none">
               <span>{AUTOMOTIVE_CATEGORIES[activeCategory]?.label || activeCategory}</span>
               <button
                 type="button"
@@ -488,7 +488,7 @@ export default function SearchPanel({
                 className="hover:text-blue-700 dark:hover:text-white p-0.5 rounded cursor-pointer"
                 title="Rimuovi filtro categoria"
               >
-                <X className="w-3 h-3" />
+                <X className="w-2.5 h-2.5" />
               </button>
             </span>
           )}
@@ -524,12 +524,12 @@ export default function SearchPanel({
               activeCategory
                 ? "Filtra per nome o via..."
                 : settingSpecialLocation === 'home'
-                ? "Cerca il nuovo indirizzo di casa..."
+                ? "Cerca indirizzo di casa..."
                 : settingSpecialLocation === 'work'
-                ? "Cerca il nuovo indirizzo di lavoro..."
-                : "Cerca destinazione o recenti..."
+                ? "Cerca indirizzo di lavoro..."
+                : "Cerca destinazione..."
             }
-            className="w-full bg-transparent text-[15px] font-semibold focus:outline-none placeholder:text-zinc-400 select-text"
+            className="w-full bg-transparent text-xs sm:text-[13px] font-medium focus:outline-none placeholder:text-zinc-400 select-text"
           />
           {query ? (
             <button

@@ -111,17 +111,17 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
     }
 
     return (
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar">
-            <header className="flex items-end gap-6 mb-6 pt-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-8 pb-6 hide-scrollbar">
+            <header className="flex items-end gap-6 mb-6 pt-5">
                 {playlist.images?.[0]?.url ? (
-                    <img src={playlist.images[0].url} alt={playlist.name} className="w-48 h-48 rounded-md object-cover shadow-2xl flex-shrink-0" />
+                    <img src={playlist.images[0].url} alt={playlist.name} className="w-48 h-48 squircle-card rounded-2xl object-cover shadow-2xl flex-shrink-0" />
                 ) : (
-                    <div className={`w-48 h-48 rounded-md flex items-center justify-center shadow-2xl flex-shrink-0 ${theme.placeholderBg}`}>
+                    <div className={`w-48 h-48 squircle-card rounded-2xl flex items-center justify-center shadow-2xl flex-shrink-0 ${theme.placeholderBg}`}>
                         <FiMusic className={`w-24 h-24 ${theme.placeholderIcon}`} />
                     </div>
                 )}
                 <div className="flex flex-col gap-3">
-                    <button onClick={onBack} className={`flex items-center gap-1 text-sm font-semibold mb-2 ${theme.textSecondary} ${theme.hover} p-2 -ml-2 rounded-md`}>
+                    <button onClick={onBack} className={`flex items-center gap-1.5 text-sm font-semibold mb-2 ${theme.textSecondary} ${theme.hover} px-3 py-1.5 rounded-xl`}>
                         <FiChevronLeft /> Indietro
                     </button>
                     <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Playlist</span>
@@ -156,10 +156,10 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                             key={track.videoId}
                             variants={itemVariants}
                             onClick={() => handlePlaySingle(track)}
-                            className={`flex items-center gap-4 p-2 px-4 rounded-md cursor-pointer ${theme.hover}`}
+                            className={`flex items-center gap-4 p-2.5 px-4 squircle-card rounded-xl cursor-pointer ${theme.hover}`}
                         >
                             <span className={`w-8 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>
-                            <img src={track.thumbnail} alt={track.title} className="w-16 h-10 rounded object-cover flex-shrink-0" />
+                            <img src={track.thumbnail} alt={track.title} className="w-16 h-10 squircle-sm rounded-lg object-cover flex-shrink-0" />
                             <div className="flex-grow flex flex-col min-w-0">
                                 <span className={`truncate font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.title}</span>
                                 <span className={`text-sm truncate ${theme.textSecondary}`}>{track.channelTitle}</span>

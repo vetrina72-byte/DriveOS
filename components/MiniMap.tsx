@@ -143,7 +143,7 @@ const MiniMap: React.FC<MiniMapProps> = ({
         source: 'mini-vehicle-source',
         layout: {
           'icon-image': 'mini-vehicle-arrow',
-          'icon-size': 0.23,
+          'icon-size': 0.207,
           'icon-pitch-alignment': 'viewport',
           'icon-rotation-alignment': 'map',
           'icon-rotate': ['get', 'bearing'],

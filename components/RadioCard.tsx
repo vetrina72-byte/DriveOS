@@ -18,7 +18,7 @@ const RadioCard: React.FC<RadioCardProps> = ({ station, onPlay, isNight }) => {
     return (
         <div className="w-full max-w-[11rem] mx-auto flex-shrink-0">
             <div 
-                className={`p-3 rounded-lg w-full h-full flex flex-col transition-all duration-300 ${bgColor}`}
+                className={`p-3 squircle-card rounded-2xl w-full h-full flex flex-col transition-all duration-300 ${bgColor}`}
             >
                 <button
                     onClick={() => onPlay(station)}
@@ -32,10 +32,10 @@ const RadioCard: React.FC<RadioCardProps> = ({ station, onPlay, isNight }) => {
                             loading="lazy"
                             decoding="async"
                             onError={() => setImageError(true)}
-                            className={`w-full h-full rounded-md object-contain shadow-lg ${isNight ? 'bg-zinc-800' : 'bg-white'}`}
+                            className={`w-full h-full squircle-sm rounded-xl object-contain shadow-lg ${isNight ? 'bg-zinc-800' : 'bg-white'}`}
                         />
                     ) : (
-                         <div className={`w-full h-full rounded-md flex items-center justify-center ${placeholderBg}`}>
+                         <div className={`w-full h-full squircle-sm rounded-xl flex items-center justify-center ${placeholderBg}`}>
                            <FiRadio className={`w-10 h-10 ${placeholderIconColor}`} />
                         </div>
                     )}

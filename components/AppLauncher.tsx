@@ -26,7 +26,7 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
         <div
             className={`
                 absolute left-1/2 -translate-x-1/2 bottom-24 z-[7000]
-                bg-black/70 backdrop-blur-lg squircle-28 border border-white/20
+                bg-black/80 backdrop-blur-xl squircle-panel rounded-3xl border border-white/20 shadow-2xl
                 transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]
                 flex flex-col
                 ${isOpen ? 'opacity-100 translate-y-0 pointer-events-auto visible' : 'opacity-0 translate-y-8 pointer-events-none invisible'}
@@ -44,9 +44,9 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
             aria-labelledby="app-launcher-title"
         >
             <h2 id="app-launcher-title" className="sr-only">App Launcher</h2>
-            <div className="flex-grow p-6 overflow-y-auto hide-scrollbar">
+            <div className="flex-grow p-8 sm:p-10 overflow-y-auto hide-scrollbar">
                 {apps.length > 0 ? (
-                    <div className="flex flex-wrap gap-6 justify-center items-start">
+                    <div className="flex flex-wrap gap-5 sm:gap-6 justify-center items-start">
                         {apps.map(app => (
                             <div key={app.id} className="relative">
                                 <button
@@ -56,9 +56,9 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
                                             onAppLaunch(app.id);
                                         }
                                     }}
-                                    className={`flex flex-col items-center justify-center w-24 h-24 transition-transform duration-200 group gap-2 ${isCustomizing ? 'customizing-jiggle cursor-default' : 'cursor-pointer'}`}
+                                    className={`flex flex-col items-center justify-center w-24 h-24 sm:w-28 sm:h-28 p-2.5 squircle-card rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 transition-all duration-200 group gap-2 ${isCustomizing ? 'customizing-jiggle cursor-default' : 'cursor-pointer'}`}
                                 >
-                                    <app.icon className={`w-10 h-10 transition-transform group-hover:scale-110 ${app.colorClasses || (isNight ? 'text-gray-200' : 'text-zinc-800')}`} />
+                                    <app.icon className={`w-9 h-9 sm:w-10 sm:h-10 transition-transform group-hover:scale-110 ${app.colorClasses || (isNight ? 'text-gray-200' : 'text-zinc-800')}`} />
                                     <span className="text-xs font-semibold truncate w-full px-1 text-center text-white">
                                         {app.label}
                                     </span>
@@ -69,7 +69,7 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
                                         e.stopPropagation();
                                         onCustomizeClick(app.id);
                                       }}
-                                      className="absolute -top-1.5 -right-1.5 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer"
+                                      className="absolute -top-1 -right-1 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer shadow-md"
                                       aria-label={`Sposta ${app.label} sulla barra`}
                                     >
                                         <FiPlus className="w-4 h-4 text-white" strokeWidth={3}/>

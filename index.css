@@ -237,6 +237,25 @@ body {
   corner-shape: superellipse;
 }
 
+/* App panels: straight bottom corners and straight top-right corner (only top-left is rounded) */
+.maps-app-panel,
+.spotify-app-panel,
+.radio-app-panel,
+.theater-app-panel,
+.debug-app-panel,
+[class*="-app-panel"],
+.theater-container,
+.maps-app-panel > div,
+.spotify-app-panel > div,
+.radio-app-panel > div,
+.theater-app-panel > div,
+.debug-app-panel > div,
+[class*="-app-panel"] > div {
+  border-bottom-left-radius: 0px !important;
+  border-bottom-right-radius: 0px !important;
+  border-top-right-radius: 0px !important;
+}
+
 .squircle-card {
   border-radius: 20px;
   corner-shape: superellipse;
@@ -254,6 +273,22 @@ body {
 
 .squircle-button {
   border-radius: 14px;
+  corner-shape: superellipse;
+}
+
+/* Numeric Squircles & Backward Compatibility */
+.squircle-20 {
+  border-radius: 20px;
+  corner-shape: superellipse;
+}
+
+.squircle-24 {
+  border-radius: 24px;
+  corner-shape: superellipse;
+}
+
+.squircle-28 {
+  border-radius: 28px;
   corner-shape: superellipse;
 }
 

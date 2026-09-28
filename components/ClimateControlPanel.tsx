@@ -125,7 +125,7 @@ export default function ClimateControlPanel({ isOpen, onClose }: { isOpen: boole
             aria-modal="true"
             aria-labelledby="climate-panel-title"
         >
-            <div className="mx-auto w-full max-w-4xl bg-black/80 backdrop-blur-md rounded-t-3xl shadow-2xl p-6 text-white border-t border-white/10">
+            <div className="mx-auto w-full max-w-4xl bg-black/80 backdrop-blur-md squircle-panel rounded-t-3xl shadow-2xl px-8 sm:px-12 pt-8 pb-6 text-white border-t border-white/10">
                 <h2 id="climate-panel-title" className="sr-only">Climate Controls</h2>
                 
                 <div className="flex justify-between items-start">

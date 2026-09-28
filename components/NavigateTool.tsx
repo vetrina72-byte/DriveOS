@@ -12,7 +12,8 @@ import {
   Pill,
   ShoppingBag,
   Zap,
-  MapPin
+  MapPin,
+  X
 } from 'lucide-react';
 
 export const formatTravelTime = (minutes: number | null): string => {
@@ -225,6 +226,9 @@ const NavigateTool = ({
         }
     };
 
+    const isCompact = width < 320;
+    const isUltraCompact = width < 260;
+
     return (
         <div 
             id="navigate-tool-container"
@@ -238,10 +242,10 @@ const NavigateTool = ({
                 background: !isNight ? widgetBgColor : 'var(--player-bg, #212121)'
             }}
         >
-             <div className="p-3 flex flex-col h-full overflow-hidden">
-                <div className="relative flex-shrink-0 flex items-center gap-2">
-                    <div className="relative flex-grow flex items-center">
-                        <ICONS.search className={`absolute left-3.5 w-5 h-5 pointer-events-none ${theme.iconColor}`} />
+             <div className="px-3.5 pt-3 pb-2.5 flex flex-col h-full overflow-hidden">
+                <div className="relative flex-shrink-0 flex items-center gap-2 mb-2">
+                    <div className="relative flex-grow min-w-0 flex items-center">
+                        <ICONS.search className={`absolute left-3 w-4 h-4 pointer-events-none ${theme.iconColor}`} />
                         <input
                             ref={inputRef}
                             type="text"
@@ -254,22 +258,36 @@ const NavigateTool = ({
                                 setIsFocused(true);
                                 setIsExpanded(true);
                             }}
-                            placeholder="Cerca destinazione"
-                            className={`w-full h-10 pl-11 pr-4 rounded-xl text-sm font-medium transition-colors ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center select-text touch-auto pointer-events-auto`}
+                            placeholder={width < 290 ? "Cerca..." : "Cerca destinazione"}
+                            className={`w-full h-9 pl-9 ${query ? 'pr-8' : 'pr-3'} rounded-xl text-xs sm:text-[13px] font-medium transition-colors ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center select-text touch-auto pointer-events-auto`}
                             style={isNight ? { backgroundColor: darkNavigateInputBg } : undefined}
                         />
+                        {query && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setQuery('');
+                                    inputRef.current?.focus();
+                                }}
+                                className="absolute right-2 p-1 text-zinc-400 hover:text-white rounded-md cursor-pointer shrink-0"
+                                title="Cancella ricerca"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
                     </div>
                     {isExpanded && (
                         <button
                             onClick={handleClose}
-                            className={`flex-shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${theme.suggestionHover} ${isNight ? 'text-zinc-300' : 'text-zinc-700'}`}
+                            className={`flex-shrink-0 px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer select-none whitespace-nowrap ${theme.suggestionHover} ${isNight ? 'text-zinc-300' : 'text-zinc-700'}`}
                         >
                             Chiudi
                         </button>
                     )}
                 </div>
                 
-                <div className={`overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'flex-grow mt-2 opacity-100' : 'hidden'}`}>
+                <div className={`overflow-y-auto hide-scrollbar transition-opacity duration-200 ${isExpanded ? 'flex-grow mb-2 opacity-100' : 'hidden'}`}>
                     {loading && <div className="text-center p-2 text-sm text-zinc-400">Ricerca in corso...</div>}
                     
                     {!loading && query.trim().length === 0 && recents.length > 0 && (
@@ -282,17 +300,17 @@ const NavigateTool = ({
                                 <button
                                     key={`recent-${i}`}
                                     onMouseDown={() => handleRecentSelect(place)}
-                                    className={`w-full text-left p-2.5 rounded-lg flex items-center gap-4 ${theme.suggestionHover}`}
+                                    className={`w-full text-left p-2.5 squircle-card rounded-xl flex items-center gap-3 ${theme.suggestionHover}`}
                                 >
-                                    <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-                                        <FiClock className={`w-5 h-5 ${theme.iconColor}`} />
+                                    <div className={`flex-shrink-0 ${isCompact ? 'w-8 h-8' : 'w-10 h-10'} squircle-sm rounded-lg flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                        <FiClock className={`w-4 h-4 ${theme.iconColor}`} />
                                     </div>
                                     <div className="flex-grow min-w-0">
-                                        <p className={`font-medium truncate ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
+                                        <p className={`font-medium truncate text-xs sm:text-sm ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
                                             {place.name}
                                         </p>
                                         {place.address && (
-                                             <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                             <p className={`text-[11px] sm:text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                                                 {place.address}
                                             </p>
                                         )}
@@ -311,28 +329,28 @@ const NavigateTool = ({
                             <button 
                                 key={`${item.name}_${idx}`} 
                                 onMouseDown={() => handleSelect(item)} 
-                                className={`w-full text-left p-2.5 rounded-lg flex items-center gap-4 ${theme.suggestionHover}`}
+                                className={`w-full text-left p-2 sm:p-2.5 squircle-card rounded-xl flex items-center gap-2.5 sm:gap-3.5 ${theme.suggestionHover}`}
                             >
-                                <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                <div className={`flex-shrink-0 ${isCompact ? 'w-8 h-8' : 'w-10 h-10'} squircle-sm rounded-lg flex items-center justify-center ${isNight ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
                                     {renderCategoryIcon(item.category)}
                                 </div>
                                 <div className="flex-grow min-w-0">
-                                    <p className={`font-medium truncate ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
+                                    <p className={`font-medium truncate text-xs sm:text-sm ${isNight ? 'text-zinc-100' : 'text-zinc-800'}`}>
                                         {highlightMatch(name, query)}
                                     </p>
                                     {address && (
-                                        <p className={`text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                         <p className={`text-[11px] sm:text-xs truncate ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                                             {highlightMatch(address, query)}
                                         </p>
                                     )}
                                 </div>
                                 {distance !== undefined && (
-                                    <div className="flex-shrink-0 text-right">
-                                        <p className={`font-semibold text-sm ${isNight ? 'text-zinc-200' : 'text-zinc-700'}`}>
+                                    <div className="flex-shrink-0 text-right min-w-0 pl-1">
+                                        <p className={`font-semibold text-xs sm:text-sm ${isNight ? 'text-zinc-200' : 'text-zinc-700'}`}>
                                             {distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`}
                                         </p>
                                         {estimatedTime !== undefined && (
-                                            <p className={`text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                            <p className={`text-[10px] sm:text-xs ${isNight ? 'text-zinc-400' : 'text-zinc-500'}`}>
                                                 ~{formatTravelTime(estimatedTime)}
                                             </p>
                                         )}
@@ -343,9 +361,10 @@ const NavigateTool = ({
                     })}
                 </div>
 
-                <div className={`flex-shrink-0 mt-auto pt-2 border-t ${theme.border}`}>
+                <div className={`flex-shrink-0 mt-auto pt-2.5 border-t ${theme.border}`}>
                     <div className="flex justify-around items-center gap-2">
                         <button 
+                            type="button"
                             onClick={() => {
                                 if (homeLocation) {
                                     onSelectDestination(homeLocation);
@@ -353,14 +372,17 @@ const NavigateTool = ({
                                     window.dispatchEvent(new CustomEvent('reconfigure-location', { detail: 'home' }));
                                 }
                             }}
-                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${theme.suggestionHover}`}
+                            className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs sm:text-[13px] font-semibold transition-colors cursor-pointer select-none ${theme.suggestionHover}`}
                             style={{ color: isNight ? (homeLocation ? nightPlayerButtonColor : '#a1a1aa') : dayPlayerButtonColor }}
                             title={homeLocation ? `Naviga a Casa (${homeLocation.name})` : 'Imposta indirizzo di Casa'}
                         >
-                            <ICONS.home className="w-4 h-4" />
-                            <span>{homeLocation ? 'Casa' : 'Imposta Casa'}</span>
+                            <ICONS.home className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate whitespace-nowrap overflow-hidden">
+                                {homeLocation ? 'Casa' : (isCompact ? 'Casa' : 'Imposta Casa')}
+                            </span>
                         </button>
                         <button 
+                            type="button"
                             onClick={() => {
                                 if (workLocation) {
                                     onSelectDestination(workLocation);
@@ -368,12 +390,14 @@ const NavigateTool = ({
                                     window.dispatchEvent(new CustomEvent('reconfigure-location', { detail: 'work' }));
                                 }
                             }}
-                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${theme.suggestionHover}`}
+                            className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs sm:text-[13px] font-semibold transition-colors cursor-pointer select-none ${theme.suggestionHover}`}
                             style={{ color: isNight ? (workLocation ? nightPlayerButtonColor : '#a1a1aa') : dayPlayerButtonColor }}
                             title={workLocation ? `Naviga a Lavoro (${workLocation.name})` : 'Imposta indirizzo di Lavoro'}
                         >
-                            <ICONS.work className="w-4 h-4" />
-                            <span>{workLocation ? 'Lavoro' : 'Imposta Lavoro'}</span>
+                            <ICONS.work className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate whitespace-nowrap overflow-hidden">
+                                {workLocation ? 'Lavoro' : (isCompact ? 'Lavoro' : 'Imposta Lavoro')}
+                            </span>
                         </button>
                     </div>
                 </div>

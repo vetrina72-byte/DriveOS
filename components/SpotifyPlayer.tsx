@@ -467,7 +467,7 @@ const SpotifyPlayer = ({
             onClick={(e) => e.stopPropagation()}
         >
             <div 
-              className={`w-full h-full flex flex-col relative squircle-panel rounded-3xl overflow-hidden border border-white/10 shadow-2xl`}
+              className={`w-full h-full flex flex-col relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden border border-white/10 shadow-2xl`}
               style={{ backgroundColor }}
             >
                 {/* --- DRAG HANDLE (CONDITIONAL POS) --- */}

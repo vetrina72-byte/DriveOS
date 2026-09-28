@@ -426,7 +426,7 @@ const Theater = ({
         <div
             ref={panelRef}
             data-app-id="theater"
-            className={`theater-app-panel squircle-24 shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
+            className={`theater-app-panel squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
             style={{
                 top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
                 bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
@@ -439,7 +439,7 @@ const Theater = ({
             aria-labelledby="theater-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="theater-container relative squircle-24 overflow-hidden">
+            <div className="theater-container relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden pt-10 px-8 sm:px-12 pb-10">
                 {/* --- DRAG HANDLE --- */}
                 <div
                     className={handleContainerClass}
