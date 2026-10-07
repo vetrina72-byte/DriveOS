@@ -62,13 +62,21 @@ function kelvinToColor(kelvin: number): THREE.Color {
 // Reference aspect of open 3D area on desktop baseline (1920x1080 with 1/3 docked width)
 export const REF_ASPECT = 640 / 1080; // ~0.59259
 
-// Determinazione deterministica del confine dell'app quando aperta
-export function getDockedAppWidth(cw: number): number {
-  if (cw < 640) return Math.round(cw * 0.15);
-  if (cw < 768) return Math.round(cw * 0.25);
-  if (cw < 1024) return Math.round(cw * 0.50);
-  if (cw < 1280) return Math.round(cw * 0.40);
-  return Math.round(cw * (1 / 3));
+// Determinazione deterministica del confine dell'app quando aperta in base alle classi reali
+export function getDockedAppWidth(cw: number, activeApp?: string | null): number {
+  if (!activeApp || activeApp === 'maps') {
+    return Math.round(cw * (1 / 3));
+  }
+  if (activeApp === 'theater' || activeApp === 'debug') {
+    return 0;
+  }
+  // Drawer reattivo split-apps (Spotify, YouTube Music, Radio):
+  // fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0
+  if (cw >= 1280) return Math.round(cw * 0.40); // 1 - 0.60
+  if (cw >= 1024) return Math.round(cw * 0.35); // 1 - 0.65
+  if (cw >= 768) return Math.round(cw * 0.50);  // 1 - 0.50
+  if (cw >= 640) return Math.round(cw * 0.25);  // 1 - 0.75
+  return Math.round(cw * 0.15);                  // 1 - 0.85
 }
 
 // Cubic-bezier solver for cubic-bezier(0.16, 1, 0.3, 1)
@@ -456,6 +464,7 @@ function SceneController({
   redPanelLength = 10.0,
   redPanelWidth = 4.3,
   redPanelHeight = 5.0,
+  activeApp,
 }: {
   isAppOpen: boolean;
   activeConfig: SceneConfig;
@@ -481,6 +490,7 @@ function SceneController({
   redPanelLength?: number;
   redPanelWidth?: number;
   redPanelHeight?: number;
+  activeApp?: string | null;
 }) {
   const { camera, controls, gl, size } = useThree();
   const [interacting, setInteracting] = useState(false);
@@ -597,7 +607,7 @@ function SceneController({
     const isPortrait = H > W;
 
     // 1. Aspect ratio dell'area 3D aperta e fattore di scala proporzionale (fit)
-    const dockedWidth = getDockedAppWidth(W);
+    const dockedWidth = getDockedAppWidth(W, activeApp);
     const openAspect = dockedWidth / Math.max(1, H);
     const fit = Math.max(0.70, Math.min(1.0, openAspect / REF_ASPECT));
 
@@ -645,7 +655,7 @@ function SceneController({
         z: targetZ,
       },
     };
-  }, [appOpenConfig, viewportSize]);
+  }, [appOpenConfig, viewportSize, activeApp]);
 
   // Gestione interazione orbit controls
   useEffect(() => {
@@ -1281,7 +1291,7 @@ function SceneController({
       const ch = container.clientHeight;
 
       // Determinazione deterministica del confine dell'app quando aperta
-      const dockedAppWidth = getDockedAppWidth(cw);
+      const dockedAppWidth = getDockedAppWidth(cw, activeApp);
 
       let visibleWidth = cw;
 
@@ -1290,8 +1300,11 @@ function SceneController({
         if (typeof rawP !== "number" || isNaN(rawP)) rawP = isAppOpen ? 0 : 1;
         rawP = Math.max(0, Math.min(1, rawP));
         const lerpDocked = dockedAppWidth + (cw - dockedAppWidth) * rawP;
-        // MapsContainer usa w-2/3 (bordo sinistro = 1/3 + 2/3 * rawP): Math.max evita qualunque gap sotto il cassetto
-        visibleWidth = Math.round(Math.max(lerpDocked, cw * (1 / 3 + (2 / 3) * rawP)));
+        const drawerLeftP = activeApp === 'maps' || !activeApp
+          ? cw * (1 / 3 + (2 / 3) * rawP)
+          : dockedAppWidth + (cw - dockedAppWidth) * rawP;
+        // Math.max evita qualunque gap sotto il cassetto
+        visibleWidth = Math.round(Math.max(lerpDocked, drawerLeftP));
       } else if (transitionMode.current === "auto") {
         // Animazione automatica open/close/snap
         const targetWidth = isAppOpen ? dockedAppWidth : cw;
@@ -1730,10 +1743,12 @@ interface VehicleCanvasProps {
   redPanelOpacity?: number;
   redPanelColor?: string;
   redPanelOrientation?: 'longitudinal' | 'transverse' | 'horizontal';
+  activeApp?: string | null;
 }
 
 function VehicleCanvas({
   isAppOpen,
+  activeApp,
   isNight,
   aoMapIntensity = 1.0,
   minOrbitDistance,
@@ -2014,6 +2029,7 @@ function VehicleCanvas({
             redPanelLength={redPanelLength}
             redPanelWidth={redPanelWidth}
             redPanelHeight={redPanelHeight}
+            activeApp={activeApp}
           />
           <Suspense fallback={null}>
             <MemoizedEnvironment />
