@@ -59,26 +59,6 @@ function kelvinToColor(kelvin: number): THREE.Color {
   return new THREE.Color(r / 255, g / 255, b / 255);
 }
 
-// Reference aspect of open 3D area on desktop baseline (1920x1080 with 1/3 docked width)
-export const REF_ASPECT = 640 / 1080; // ~0.59259
-
-// Determinazione deterministica del confine dell'app quando aperta in base alle classi reali
-export function getDockedAppWidth(cw: number, activeApp?: string | null): number {
-  if (!activeApp || activeApp === 'maps') {
-    return Math.round(cw * (1 / 3));
-  }
-  if (activeApp === 'theater' || activeApp === 'debug') {
-    return 0;
-  }
-  // Drawer reattivo split-apps (Spotify, YouTube Music, Radio):
-  // fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0
-  if (cw >= 1280) return Math.round(cw * 0.40); // 1 - 0.60
-  if (cw >= 1024) return Math.round(cw * 0.35); // 1 - 0.65
-  if (cw >= 768) return Math.round(cw * 0.50);  // 1 - 0.50
-  if (cw >= 640) return Math.round(cw * 0.25);  // 1 - 0.75
-  return Math.round(cw * 0.15);                  // 1 - 0.85
-}
-
 // Cubic-bezier solver for cubic-bezier(0.16, 1, 0.3, 1)
 export function cubicBezierEase(t: number): number {
   if (t <= 0) return 0;
@@ -600,62 +580,8 @@ function SceneController({
   }, [homeConfig, responsiveCoeff, viewportSize]);
 
   const localAppOpenConfig = useMemo(() => {
-    const W = viewportSize.w;
-    const H = viewportSize.h;
-
-    const isNarrowMobile = W < 640;
-    const isPortrait = H > W;
-
-    // 1. Aspect ratio dell'area 3D aperta e fattore di scala proporzionale (fit)
-    const dockedWidth = getDockedAppWidth(W, activeApp);
-    const openAspect = dockedWidth / Math.max(1, H);
-    const fit = Math.max(0.70, Math.min(1.0, openAspect / REF_ASPECT));
-
-    // Preserve visual presence of the model without excessive shrinking:
-    // Reference desktop scale is appOpenConfig.modelScale (1.51).
-    // On tablet/resize, maintain strong presence with safe boundaries.
-    let scaleFactor = 1.0;
-    if (W < 1180) {
-      if (isNarrowMobile) {
-        scaleFactor = 0.82;
-      } else if (isPortrait) {
-        scaleFactor = 0.88;
-      } else {
-        scaleFactor = 0.94; // Solid, prominent framing on tablet
-      }
-    }
-
-    const effectiveScale = appOpenConfig.modelScale * scaleFactor * fit;
-
-    // Center the car cleanly in the visible left column matching default app open config
-    const targetX = W < 1180 ? (isNarrowMobile ? -4.20 : (isPortrait ? -4.40 : -4.60)) : appOpenConfig.modelPos.x;
-    const targetY = appOpenConfig.modelPos.y + (isPortrait && W < 1180 ? 0.20 : 0.0);
-    const targetZ = appOpenConfig.modelPos.z;
-
-    const camDeltaX = appOpenConfig.cameraPos.x - appOpenConfig.cameraTarget.x;
-    const camDeltaY = appOpenConfig.cameraPos.y - appOpenConfig.cameraTarget.y;
-    const camDeltaZ = appOpenConfig.cameraPos.z - appOpenConfig.cameraTarget.z;
-
-    return {
-      ...appOpenConfig,
-      modelScale: effectiveScale,
-      cameraTarget: {
-        x: targetX,
-        y: targetY + 0.60,
-        z: targetZ,
-      },
-      cameraPos: {
-        x: targetX + camDeltaX,
-        y: targetY + 0.60 + camDeltaY,
-        z: targetZ + camDeltaZ,
-      },
-      modelPos: {
-        x: targetX,
-        y: targetY,
-        z: targetZ,
-      },
-    };
-  }, [appOpenConfig, viewportSize, activeApp]);
+    return appOpenConfig;
+  }, [appOpenConfig]);
 
   // Gestione interazione orbit controls
   useEffect(() => {
@@ -1290,8 +1216,7 @@ function SceneController({
       const cw = container.clientWidth;
       const ch = container.clientHeight;
 
-      // Determinazione deterministica del confine dell'app quando aperta
-      const dockedAppWidth = getDockedAppWidth(cw, activeApp);
+      const dockedAppWidth = Math.round(cw * (1 / 3));
 
       let visibleWidth = cw;
 
@@ -1300,9 +1225,7 @@ function SceneController({
         if (typeof rawP !== "number" || isNaN(rawP)) rawP = isAppOpen ? 0 : 1;
         rawP = Math.max(0, Math.min(1, rawP));
         const lerpDocked = dockedAppWidth + (cw - dockedAppWidth) * rawP;
-        const drawerLeftP = activeApp === 'maps' || !activeApp
-          ? cw * (1 / 3 + (2 / 3) * rawP)
-          : dockedAppWidth + (cw - dockedAppWidth) * rawP;
+        const drawerLeftP = cw * (1 / 3 + (2 / 3) * rawP);
         // Math.max evita qualunque gap sotto il cassetto
         visibleWidth = Math.round(Math.max(lerpDocked, drawerLeftP));
       } else if (transitionMode.current === "auto") {

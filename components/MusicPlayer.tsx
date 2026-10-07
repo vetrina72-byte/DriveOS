@@ -967,79 +967,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         playingStateRef.current.isPlaying = isPlayingGlobal;
     }, [isPlayingGlobal]);
 
-    const targetDockedWidthRef = useRef<number>(dockedConfig.width);
     const lastFrameTimeRef = useRef<number>(performance.now());
-    const lastActiveAppRef = useRef<string | null>(activeApp);
-    const lastDockedWidthRef = useRef<number>(dockedConfig.width);
-
-    const getActivePanelElement = useCallback((appId: string | null): HTMLElement | null => {
-        if (!appId) return null;
-        switch (appId) {
-            case 'maps':
-                return document.getElementById('maps-app-panel');
-            case 'spotify':
-                return document.querySelector('.spotify-app-panel:not(#maps-anchored-container .spotify-app-panel)') as HTMLElement;
-            case 'youtube':
-            case 'youtube-music':
-                return (document.querySelector('#youtube-music-app-panel, .youtube-music-app-panel') || document.querySelector('.spotify-app-panel')) as HTMLElement;
-            case 'radio':
-                return document.querySelector('.radio-app-panel') as HTMLElement;
-            case 'theater':
-                return document.querySelector('.theater-app-panel') as HTMLElement;
-            case 'debug':
-                return document.querySelector('.debug-app-panel') as HTMLElement;
-            default:
-                return document.querySelector(`.${appId}-app-panel, #${appId}-app-panel`) as HTMLElement;
-        }
-    }, []);
-
-    // Calculate real app left edge and symmetric docked width
-    const updateTargetDockedWidth = useCallback(() => {
-        const wWidth = window.innerWidth;
-        const sideMargin = wWidth < 1024 ? 16 : 24;
-
-        if (activeApp) {
-            lastActiveAppRef.current = activeApp;
-        }
-        const targetApp = activeApp || lastActiveAppRef.current;
-
-        // Determine FINAL_APP_LEFT boundary for the active app
-        let appLeft = wWidth;
-        const activePanel = getActivePanelElement(targetApp);
-        if (activePanel && activePanel.offsetWidth > 0 && activePanel.offsetWidth < wWidth) {
-            appLeft = wWidth - activePanel.offsetWidth;
-        } else if (targetApp) {
-            appLeft = Math.round(wWidth * (1 / 3));
-        }
-
-        // Available width inside left column with perfectly symmetrical margins on left and right
-        const availablePx = appLeft - (2 * sideMargin);
-        const dockedWidth = Math.max(200, Math.round(availablePx));
-        if (activeApp) {
-            lastDockedWidthRef.current = dockedWidth;
-        }
-        targetDockedWidthRef.current = dockedWidth;
-    }, [activeApp, getActivePanelElement]);
-
-    // Recalculate fixed target when opening state or active app changes
-    useEffect(() => {
-        if (isAnyAppOpen !== lastIsAnyAppOpen.current) {
-            lastIsAnyAppOpen.current = isAnyAppOpen;
-            startT.current = visualState.current;
-            animStartTime.current = performance.now();
-            updateTargetDockedWidth();
-        }
-    }, [isAnyAppOpen, updateTargetDockedWidth]);
-
-    useEffect(() => {
-        updateTargetDockedWidth();
-    }, [activeApp, updateTargetDockedWidth]);
-
-    useEffect(() => {
-        window.addEventListener('resize', updateTargetDockedWidth);
-        return () => window.removeEventListener('resize', updateTargetDockedWidth);
-    }, [updateTargetDockedWidth]);
-
     const remScaleRef = useRef(1.0);
     const updateRemScale = useCallback(() => {
         remScaleRef.current = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16;
@@ -1051,12 +979,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         return () => window.removeEventListener('resize', updateRemScale);
     }, [updateRemScale]);
 
+    // Recalculate fixed target when opening state changes
+    useEffect(() => {
+        if (isAnyAppOpen !== lastIsAnyAppOpen.current) {
+            lastIsAnyAppOpen.current = isAnyAppOpen;
+            startT.current = visualState.current;
+            animStartTime.current = performance.now();
+        }
+    }, [isAnyAppOpen]);
+
     // Single unified requestAnimationFrame loop that handles BOTH manual dragging AND smooth, beautifully easing transitions in real-time
     useEffect(() => {
         let animationFrameId: number;
 
         const loop = () => {
-            const duration = APP_TRANSITION_DURATION; // 580ms synchronized transition (perfect lockstep with 3D camera and app panels)
+            const duration = APP_TRANSITION_DURATION; // 560ms synchronized transition (perfect lockstep with 3D camera and app panels)
 
             if (dragProgress.current !== null) {
                 wasDraggingRef.current = true;
@@ -1087,40 +1024,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 const winWidth = window.innerWidth;
                 const isStacked = winWidth < 480;
                 const pct = 50 * t;
-                const sideMargin = winWidth < 1024 ? 16 : 24;
 
                 // Root rem scaling factor read from cached ref (avoids forced layout recalc every frame)
                 const remScale = remScaleRef.current;
 
-                if (activeApp) {
-                    lastActiveAppRef.current = activeApp;
-                }
-                const targetApp = activeApp || lastActiveAppRef.current;
-
-                // Determine app boundary for the active app
-                let appLeft = winWidth;
-                const activePanel = getActivePanelElement(targetApp);
-                if (activePanel && activePanel.offsetWidth > 0 && activePanel.offsetWidth < winWidth) {
-                    appLeft = winWidth - activePanel.offsetWidth;
-                } else if (targetApp) {
-                    appLeft = Math.round(winWidth * (1 / 3));
-                }
-
                 // --- DOCKED GEOMETRY (when t = 0, app is open) ---
-                // Available width inside left column with perfectly symmetrical margins on left and right:
-                // leftMargin = sideMargin, rightMargin = sideMargin
-                // playerLeft = sideMargin, playerRight = appLeft - sideMargin
-                // playerWidth = appLeft - 2 * sideMargin
-                let effectiveDockedWidth: number;
-                if (activeApp) {
-                    effectiveDockedWidth = Math.max(200, Math.round(appLeft - 2 * sideMargin));
-                    lastDockedWidthRef.current = effectiveDockedWidth;
-                } else {
-                    effectiveDockedWidth = lastDockedWidthRef.current || Math.max(200, Math.round(appLeft - 2 * sideMargin));
-                }
-                const dockedLeft = sideMargin;
-                const dockedBottom = dockedConfig.bottom * remScale;
-                const dockedHeight = dockedConfig.height * remScale;
+                const dockedWidth = (dockedConfig.width || 380) * remScale;
+                const dockedLeft = (dockedConfig.left || 24) * remScale;
+                const dockedBottom = (dockedConfig.bottom || 80) * remScale;
+                const dockedHeight = (dockedConfig.height || 100) * remScale;
 
                 // --- HOME GEOMETRY (when t = 1, home view) ---
                 // Scaled exactly in lockstep with NavigateTool / NavigationWidget so they are vertically and horizontally aligned
@@ -1133,7 +1045,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
                 // --- FLUID INTERPOLATION (0 = Docked, 1 = Home) ---
                 const offsetPx = dockedLeft * (1 - t) + homeOffsetPx * t;
-                const currentWidth = effectiveDockedWidth + (homeWidth - effectiveDockedWidth) * t;
+                const currentWidth = dockedWidth + (homeWidth - dockedWidth) * t;
                 const currentHeight = dockedHeight + (homeHeight - dockedHeight) * t;
                 const currentBottom = dockedBottom + (homeBottom - dockedBottom) * t;
 

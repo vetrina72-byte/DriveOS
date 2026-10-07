@@ -529,22 +529,6 @@ function AppContent() {
   const toggleLauncher = (e: React.MouseEvent) => { e.stopPropagation(); const newLauncherState = !isAppLauncherOpen; setIsAppLauncherOpen(newLauncherState); if (!newLauncherState) setIsCustomizing(false); };
   const isHomeScreenDocked = activeApp !== null || isAppLauncherOpen;
 
-  // Helper to calculate theoretical app left edge (matches fixed panel widths in subapps)
-  const getAppLeftEdge = (width: number, activeAppId: string | null) => {
-      if (!activeAppId) return width;
-      // All split apps (Spotify, YouTube Music, Radio, Theater, Debug) use MapsContainer panel (w-2/3 right-0)
-      if (activeAppId === 'maps' || SPLIT_APPS_WITH_MAP_UNDER.includes(activeAppId)) {
-          return Math.round(width * (1 / 3));
-      }
-      
-      // Standalone app panel widths: fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0
-      if (width >= 1280) return Math.round(width * 0.40);
-      if (width >= 1024) return Math.round(width * 0.35);
-      if (width >= 768) return Math.round(width * 0.50);
-      if (width >= 640) return Math.round(width * 0.25);
-      return Math.round(width * (1 / 3));
-  };
-
     // RESPONSIVE CONFIGURATIONS FOR PLAYER & NAVIGATION WIDGET
     // Proportionally scale widgets so they stay side-by-side gracefully without jumping on top of the 3D car
     const sideMargin = windowWidth < 640 ? 12 : 16;
@@ -570,43 +554,6 @@ function AppContent() {
         }
         return navigateToolWidth;
     }, [playerFloatingWidth, navigateToolWidth, availableWidgetsWidth, widgetGap, totalWidgetsNominal, responsiveFloatingPlayerWidth]);
-
-    // Calculate if the player's space is actually occluded or occupied by an open app
-    const isPlayerOccluded = useMemo(() => {
-        if (isAppLauncherOpen) return true; // Launcher always occupies the bottom center space
-        if (!activeApp) return false; // No app covers the player
-        if (activeApp === 'maps') return true; // Opening the maps app should also dock the player
-
-        const appLeft = getAppLeftEdge(windowWidth, activeApp);
-        
-        const isStacked = windowWidth < 480;
-        const currentFloatingPlayerWidth = isStacked ? Math.min(playerFloatingWidth, windowWidth - 32) : responsiveFloatingPlayerWidth;
-        const currentNavigateToolWidth = isStacked ? Math.min(navigateToolWidth, windowWidth - 32) : responsiveNavigateToolWidth;
-        
-        const leftOffset = isStacked
-            ? -(currentFloatingPlayerWidth / 2)
-            : -(currentFloatingPlayerWidth / 2 + currentNavigateToolWidth / 2 + 6);
-        
-        const leftPx = windowWidth / 2 + leftOffset;
-        const playerRight = leftPx + currentFloatingPlayerWidth;
-
-        // Space is occluded if the app's left edge overlaps/collides with the player's floating right edge
-        return appLeft < playerRight;
-    }, [activeApp, isAppLauncherOpen, windowWidth, playerFloatingWidth, navigateToolWidth, responsiveFloatingPlayerWidth, responsiveNavigateToolWidth]);
-
-    const responsiveDockedMargin = useMemo(() => {
-        return windowWidth < 1024 ? 16 : 24;
-    }, [windowWidth]);
-
-    const responsiveDockedWidth = useMemo(() => {
-        const appLeft = getAppLeftEdge(windowWidth, activeApp);
-        const availablePx = appLeft - 2 * responsiveDockedMargin;
-        return Math.max(200, Math.round(availablePx));
-    }, [responsiveDockedMargin, windowWidth, activeApp]);
-
-    const responsiveDockedLeft = useMemo(() => {
-        return responsiveDockedMargin;
-    }, [responsiveDockedMargin]);
 
     // --- REFS AND STATE FOR FLUID NAVIGATE TOOL ANIMATION ---
     const launcherVisualState = useRef(isAppLauncherOpen ? 1 : 0);
@@ -849,7 +796,7 @@ function AppContent() {
             onStationChange={handleStationChange} 
             isAnyAppOpen={isHomeScreenDocked} 
             isNight={useDarkTheme} 
-            dockedConfig={{ width: responsiveDockedWidth, bottom: playerFloatingBottom, left: responsiveDockedLeft, height: playerDockedHeight }} 
+            dockedConfig={{ width: playerDockedWidth, bottom: playerFloatingBottom, left: playerDockedLeft, height: playerDockedHeight }} 
             floatingConfig={{ width: responsiveFloatingPlayerWidth, bottom: playerFloatingBottom, height: playerFloatingHeight, otherWidgetWidth: responsiveNavigateToolWidth }} 
             playerControlsSize={playerControlsSize} 
             playerControlsGap={playerControlsGap} 
