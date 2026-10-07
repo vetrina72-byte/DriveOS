@@ -21,6 +21,7 @@ import CategoryPlaylistsView from './CategoryPlaylistsView';
 import NewReleasesView from './NewReleasesView';
 import { PodcastService } from '../services/PodcastService';
 import AiDjView from './AiDjView';
+import DrawerHandle, { HANDLE_GAP_FROM_PANEL, HANDLE_PILL_THICKNESS, HANDLE_MIN_MARGIN_FROM_VIEWPORT } from './DrawerHandle';
 import { cubicBezierEase } from './VehicleCanvas';
 import { APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 
@@ -427,20 +428,8 @@ const SpotifyPlayer = ({
 
     // Styling
     const backgroundColor = isNight ? '#121212' : '#ffffff';
-    const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
-
-    // --- CONDITIONAL HANDLE STYLES & POSITIONING ---
-    // Rule: Handle must always be OUTSIDE the box.
-    // Rule: If renderLayered (Spotify over Maps) -> Handle on TOP, Horizontal Pill.
-    // Rule: If !renderLayered (Spotify alone) -> Handle on LEFT, Vertical Pill.
-    
-    const handleContainerClass = renderLayered
-        ? `absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-12 flex items-center justify-center cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
-        : `absolute top-1/2 -translate-y-1/2 -left-10 w-12 h-32 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
-
-    const handlePillClass = renderLayered
-        ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-110 ${handleColorClass}` // Horizontal Pill
-        : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`; // Vertical Pill
+    // Effective top margin when layered to respect HANDLE_MIN_MARGIN_FROM_VIEWPORT
+    const effectiveLayeredTop = Math.max(layeredAppTopOffset, HANDLE_GAP_FROM_PANEL + HANDLE_PILL_THICKNESS + HANDLE_MIN_MARGIN_FROM_VIEWPORT);
 
     // --- PORTAL LOGIC ---
     // If we are layered, we try to find the anchor container inside Maps.
@@ -450,9 +439,9 @@ const SpotifyPlayer = ({
     const mainContent = (
         <div 
             ref={panelRef}
-            className={`spotify-app-panel shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
+            className={`spotify-app-panel overflow-visible flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
-                top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+                top: renderLayered ? `${effectiveLayeredTop}px` : `${(spotifyPlayerTop) / 16}rem`,
                 // FIX: When layered inside Maps, bottom must be 0 to fill the Maps container fully.
                 // Maps container already has a bottom offset (e.g. 80px), so setting bottom:0 here
                 // ensures Spotify ends exactly where Maps ends, avoiding the double-gap issue.
@@ -466,23 +455,21 @@ const SpotifyPlayer = ({
             aria-labelledby="spotify-app-title"
             onClick={(e) => e.stopPropagation()}
         >
+            {/* --- DRAG HANDLE (OUTSIDE CLIPPING) --- */}
+            <DrawerHandle
+                orientation={renderLayered ? 'vertical' : 'horizontal'}
+                isOpen={isOpen}
+                isNight={isNight}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                ariaLabel="Trascina per chiudere Spotify"
+            />
+
             <div 
               className={`w-full h-full flex flex-col relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden border border-white/10 shadow-2xl`}
               style={{ backgroundColor }}
             >
-                {/* --- DRAG HANDLE (CONDITIONAL POS) --- */}
-                <div
-                    className={handleContainerClass}
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
-                    aria-label="Drag to close"
-                >
-                    <div className={handlePillClass} />
-                </div>
-                {/* ------------------- */}
-
                 <h1 id="spotify-app-title" className="sr-only">Spotify App</h1>
                 <div className="flex-grow flex justify-center items-center overflow-hidden relative">
                     {renderContent()}

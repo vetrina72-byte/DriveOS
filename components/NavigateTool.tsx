@@ -198,7 +198,7 @@ const NavigateTool = ({
         bg: isNight ? 'var(--player-bg, #212121)' : (widgetBgColor || 'rgba(255, 255, 255, 0.85)'),
         text: isNight ? 'text-zinc-100' : 'text-zinc-900',
         inputText: isNight ? 'text-zinc-100' : 'text-zinc-900',
-        placeholderText: isNight ? 'placeholder-zinc-400' : 'placeholder-zinc-500',
+        placeholderText: isNight ? 'placeholder:text-zinc-400' : 'placeholder:text-zinc-500',
         iconColor: isNight ? 'text-zinc-400' : 'text-zinc-500',
         suggestionHover: isNight ? 'hover:bg-zinc-700/50' : 'hover:bg-zinc-200/60',
         border: isNight ? 'border-zinc-700/50' : 'border-zinc-200/80',
@@ -259,7 +259,7 @@ const NavigateTool = ({
                                 setIsExpanded(true);
                             }}
                             placeholder={width < 290 ? "Cerca..." : "Cerca destinazione"}
-                            className={`w-full h-9 pl-9 ${query ? 'pr-8' : 'pr-3'} rounded-xl text-xs sm:text-[13px] font-medium transition-colors ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center select-text touch-auto pointer-events-auto`}
+                            className={`w-full h-9 pl-9 ${query ? 'pr-8' : 'pr-3'} rounded-xl text-xs sm:text-[13px] font-semibold placeholder:font-semibold leading-normal transition-colors ${!isNight ? 'bg-zinc-100' : ''} ${theme.inputText} ${theme.placeholderText} focus:outline-none focus:ring-2 focus:ring-blue-500 select-text touch-auto pointer-events-auto`}
                             style={isNight ? { backgroundColor: darkNavigateInputBg } : undefined}
                         />
                         {query && (

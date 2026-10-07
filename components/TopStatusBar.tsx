@@ -142,7 +142,7 @@ export default function TopStatusBar({
       style={{ transform: `translateY(${(offsetY) / 16}rem)` }}
     >
       <div
-        className={`flex items-center text-lg font-medium transition-colors duration-300 pt-1.5 ${textColor} ${shadowClass} gap-3`}
+        className={`flex items-center text-base sm:text-[17px] font-semibold transition-colors duration-300 pt-1.5 ${textColor} ${shadowClass} gap-3`}
         style={{
             transform: `scale(${scale})`,
             transformOrigin: 'center top'
@@ -151,15 +151,15 @@ export default function TopStatusBar({
          <button 
             onClick={toggleTimeFormat} 
             aria-label="Toggle time format" 
-            className="px-2 hover:opacity-80 text-center"
+            className="px-2 hover:opacity-80 text-center font-semibold tabular-nums tracking-tight"
           >
             <span className={`inline-flex w-full items-baseline justify-center ${isTimeFlipping ? 'time-slide-animation' : ''}`}>
-              <span>{timeParts.time}</span>
-              {timeParts.ampm && <span className="ml-1 text-sm">{timeParts.ampm}</span>}
+              <span className="font-semibold tabular-nums">{timeParts.time}</span>
+              {timeParts.ampm && <span className="ml-1 text-xs font-semibold uppercase opacity-90">{timeParts.ampm}</span>}
             </span>
          </button>
          
-         <div className="w-px h-5 bg-current opacity-30"></div>
+         <div className="w-px h-4.5 bg-current opacity-30"></div>
 
          <div className="flex items-center gap-2 pointer-events-auto">
             <button onClick={onWeatherClick} className="flex items-center transition-opacity hover:opacity-80" aria-label="Open weather details">
@@ -167,7 +167,7 @@ export default function TopStatusBar({
                 <WeatherIcon 
                   condition={weatherCondition} 
                   isNight={isNight}
-                  className={`w-9 h-9 ${isHot ? 'hot-sun' : ''}`} 
+                  className={`w-8 h-8 ${isHot ? 'hot-sun' : ''}`} 
                   arrowYPosition={arrowYPosition}
                 />
                 {(isHot || isCold) && (
@@ -179,7 +179,7 @@ export default function TopStatusBar({
                 )}
               </div>
             </button>
-            <button onClick={handleTempClick} className="font-semibold transition-opacity hover:opacity-80" aria-label="Switch temperature unit">
+            <button onClick={handleTempClick} className="font-semibold tabular-nums tracking-tight transition-opacity hover:opacity-80" aria-label="Switch temperature unit">
               <span className={`inline-block w-14 text-left ${isTempFlipping ? 'time-slide-animation' : ''}`}>
                 {temperatureText}
               </span>

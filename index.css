@@ -249,12 +249,12 @@ body {
 .debug-app-panel,
 [class*="-app-panel"],
 .theater-container,
-.maps-app-panel > div,
-.spotify-app-panel > div,
-.radio-app-panel > div,
-.theater-app-panel > div,
-.debug-app-panel > div,
-[class*="-app-panel"] > div {
+.maps-app-panel > div:not(.app-drawer-handle),
+.spotify-app-panel > div:not(.app-drawer-handle),
+.radio-app-panel > div:not(.app-drawer-handle),
+.theater-app-panel > div:not(.app-drawer-handle),
+.debug-app-panel > div:not(.app-drawer-handle),
+[class*="-app-panel"] > div:not(.app-drawer-handle) {
   border-bottom-left-radius: 0px !important;
   border-bottom-right-radius: 0px !important;
   border-top-right-radius: 0px !important;

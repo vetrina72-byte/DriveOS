@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, Variants } from 'framer-motion';
 import { useUIConfig, APP_TRANSITION_DURATION } from '../context/UIConfigContext';
+import DrawerHandle, { HANDLE_GAP_FROM_PANEL, HANDLE_PILL_THICKNESS, HANDLE_MIN_MARGIN_FROM_VIEWPORT } from './DrawerHandle';
 import { cubicBezierEase } from './VehicleCanvas';
 
 // A self-contained component for the service button with 3D hover effects.
@@ -409,16 +410,7 @@ const Theater = ({
         { name: 'Prime Video', url: 'https://www.primevideo.com', logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/90/Prime_Video_logo_%282024%29.svg', logoClassName: 'w-36', glowColor: '#00A8E1' }
     ];
 
-    const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
-
-    // --- CONDITIONAL HANDLE STYLES & POSITIONING ---
-    const handleContainerClass = renderLayered
-        ? `absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-12 flex items-center justify-center cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
-        : `absolute top-1/2 -translate-y-1/2 -left-10 w-12 h-32 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
-
-    const handlePillClass = renderLayered
-        ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-x-110 ${handleColorClass}`
-        : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
+    const effectiveLayeredTop = Math.max(layeredAppTopOffset ?? 18, HANDLE_GAP_FROM_PANEL + HANDLE_PILL_THICKNESS + HANDLE_MIN_MARGIN_FROM_VIEWPORT);
 
     const portalTarget = renderLayered ? document.getElementById('maps-anchored-container') : null;
 
@@ -426,9 +418,9 @@ const Theater = ({
         <div
             ref={panelRef}
             data-app-id="theater"
-            className={`theater-app-panel squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
+            className={`theater-app-panel overflow-visible flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`}
             style={{
-                top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+                top: renderLayered ? `${effectiveLayeredTop}px` : `${(spotifyPlayerTop) / 16}rem`,
                 bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
                 willChange: 'transform',
                 // Start initially closed (physics loop will open it)
@@ -439,19 +431,18 @@ const Theater = ({
             aria-labelledby="theater-app-title"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="theater-container relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden pt-10 px-8 sm:px-12 pb-10">
-                {/* --- DRAG HANDLE --- */}
-                <div
-                    className={handleContainerClass}
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
-                    aria-label="Drag to close"
-                >
-                    <div className={handlePillClass} />
-                </div>
-                {/* ------------------- */}
+            {/* --- DRAG HANDLE (OUTSIDE CLIPPING) --- */}
+            <DrawerHandle
+                orientation={renderLayered ? 'vertical' : 'horizontal'}
+                isOpen={isOpen}
+                isNight={isNight}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                ariaLabel="Trascina per chiudere Theater"
+            />
+
+            <div className="theater-container relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden pt-10 px-8 sm:px-12 pb-10 shadow-2xl">
 
                 <motion.header 
                     className="theater-header"

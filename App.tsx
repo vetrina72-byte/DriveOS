@@ -43,11 +43,11 @@ interface AppDefinition {
 
 const ALL_APPS: AppDefinition[] = [
   { id: 'spotify', icon: ICONS.spotify, label: 'Spotify', colorClasses: 'text-green-500 hover:text-green-400' },
-  { id: 'youtube-music', icon: ICONS.youtube, label: 'YouTube Music', colorClasses: '' },
-  { id: 'maps', icon: ICONS.maps, label: 'Maps' },
-  { id: 'theater', icon: ICONS.theater, label: 'Theater' },
-  { id: 'radio', icon: ICONS.radio, label: 'Radio', colorClasses: 'text-white' },
-  { id: 'debug', icon: ICONS.settings, label: 'Debug', colorClasses: 'text-gray-400 hover:text-white' },
+  { id: 'radio', icon: ICONS.radio, label: 'Radio', colorClasses: 'text-white hover:text-white/80' },
+  { id: 'youtube-music', icon: ICONS.youtube, label: 'YouTube Music', colorClasses: 'text-red-500 hover:text-red-400' },
+  { id: 'theater', icon: ICONS.theater, label: 'Theater', colorClasses: 'text-purple-400 hover:text-purple-300' },
+  { id: 'maps', icon: ICONS.maps, label: 'Mappe', colorClasses: 'text-blue-400 hover:text-blue-300' },
+  { id: 'debug', icon: ICONS.settings, label: 'Impostazioni', colorClasses: 'text-zinc-400 hover:text-white' },
 ];
 
 export const SPLIT_APPS_WITH_MAP_UNDER = ['spotify', 'youtube-music', 'radio', 'theater', 'debug'];
@@ -211,7 +211,8 @@ function AppContent() {
     volumeSliderWidth, volumeSliderThickness, volumeSliderThumbOffsetY,
     volumeSliderPopupWidth, volumeSliderPopupHeight, volumeControlZIndex,
     showRedPanel, redPanelLength, redPanelHeight, redPanelWidth, redPanelOffsetY, redPanelOffsetX, redPanelOpacity, redPanelColor, redPanelOrientation,
-    layeredAppTopOffset
+    layeredAppTopOffset,
+    enable3DModel
   } = useUIConfig();
 
   // Syncd reflection parameter defaults when mode changes between day and night
@@ -241,7 +242,7 @@ function AppContent() {
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
   const [dockApps, setDockApps] = useState<string[]>(['spotify', 'maps']);
-  const [launcherApps, setLauncherApps] = useState<string[]>(['theater', 'radio', 'youtube-music', 'debug']);
+  const [launcherApps, setLauncherApps] = useState<string[]>(['radio', 'youtube-music', 'theater', 'debug']);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
   
   const [favoriteStationUUIDs, setFavoriteStationUUIDs] = useState<string[]>([]);
@@ -294,14 +295,15 @@ function AppContent() {
 
   const handleSpotifyDrag = useCallback((progress: number | null) => {
     if (isSwitchingRef.current) return;
-    // We intentionally DO NOT update dragProgressRef here because Spotify/Radio/Theater
-    // always close back to the Maps app (appOpenConfig state), so the 3D scene should NOT tilt.
+    if (!isMapsLayered) {
+      dragProgressRef.current = progress;
+    }
     const isDragging = progress !== null;
     if (isDragging !== dragActiveRef.current) {
       dragActiveRef.current = isDragging;
       window.dispatchEvent(new CustomEvent('app-drag-state', { detail: isDragging }));
     }
-  }, []);
+  }, [isMapsLayered]);
 
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
@@ -414,12 +416,18 @@ function AppContent() {
 
   const moveAppToLauncher = (appId: string) => {
     setDockApps(prev => prev.filter(id => id !== appId));
-    setLauncherApps(prev => [...prev, appId]);
+    setLauncherApps(prev => {
+      const next = [...prev, appId];
+      return next.sort((a, b) => ALL_APPS.findIndex(x => x.id === a) - ALL_APPS.findIndex(x => x.id === b));
+    });
   };
 
   const moveAppToDock = (appId: string) => {
     setLauncherApps(prev => prev.filter(id => id !== appId));
-    setDockApps(prev => [...prev, appId]);
+    setDockApps(prev => {
+      const next = [...prev, appId];
+      return next.sort((a, b) => ALL_APPS.findIndex(x => x.id === a) - ALL_APPS.findIndex(x => x.id === b));
+    });
   };
 
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
@@ -745,63 +753,84 @@ function AppContent() {
 
   return (
     <div id="main-app-container" className="absolute top-0 left-0 w-full h-full select-none overflow-hidden" onClick={() => { if (isAppLauncherOpen) { setIsAppLauncherOpen(false); setIsCustomizing(false); }}} data-theme={useDarkTheme ? 'dark' : 'light'}>
-      <VehicleCanvas
-        isAppOpen={activeApp !== null}
-        isNight={isNight}
-        aoMapIntensity={aoMapIntensity}
-        minOrbitDistance={minOrbitDistance}
-        maxOrbitDistance={maxOrbitDistance}
-        sceneTransitionSpeed={sceneTransitionSpeed}
-        appOpenConfig={appOpenConfig}
-        homeConfig={homeConfig}
-        sceneColors={sceneColors}
-        nightAmbientIntensity={nightAmbientIntensity}
-        nightFrontLightIntensity={nightFrontLightIntensity}
-        nightEnvironmentIntensity={nightEnvironmentIntensity}
-        onInteractionChange={setIsCanvasInteracting}
-        effectiveWeatherCondition={effectiveWeatherCondition}
-        dayFogNear={dayFogNear}
-        dayFogFar={dayFogFar}
-        nightFogNear={nightFogNear}
-        nightFogFar={nightFogFar}
-        targetWeatherParams={targetWeatherParams}
-        uiScale={uiScale ?? 1.0}
-        headlightConfig={headlightConfig}
-        dragProgress={dragProgressRef}
-        carShadowOpacity={carShadowOpacity}
-        carShadowWidth={carShadowWidth}
-        carShadowLength={carShadowLength}
-        carShadowOffsetY={carShadowOffsetY}
-        carShadowOffsetX={carShadowOffsetX}
-        carShadowOffsetZ={carShadowOffsetZ}
-        dirLightPosX={dirLightPosX}
-        dirLightPosY={dirLightPosY}
-        dirLightPosZ={dirLightPosZ}
-        dirLightIntensity={dirLightIntensity}
-        spotLightPosX={spotLightPosX}
-        spotLightPosY={spotLightPosY}
-        spotLightPosZ={spotLightPosZ}
-        spotLightIntensity={spotLightIntensity}
-        spotLightAngle={spotLightAngle}
-        spotLightPenumbra={spotLightPenumbra}
-        spotLightTemperature={spotLightTemperature}
-        carReflectionOffsetY={carReflectionOffsetY}
-        carReflectionOpacity={carReflectionOpacity}
-        carReflectionRoughness={carReflectionRoughness}
-        carReflectionBlur={carReflectionBlur}
-        carReflectionMixStrength={carReflectionMixStrength}
-        carReflectionMetalness={carReflectionMetalness}
-        forceManualFog={forceManualFog}
-        showRedPanel={showRedPanel}
-        redPanelLength={redPanelLength}
-        redPanelHeight={redPanelHeight}
-        redPanelWidth={redPanelWidth}
-        redPanelOffsetY={redPanelOffsetY}
-        redPanelOffsetX={redPanelOffsetX}
-        redPanelOpacity={redPanelOpacity}
-        redPanelColor={redPanelColor}
-        redPanelOrientation={redPanelOrientation}
-      />
+      {enable3DModel ? (
+        <VehicleCanvas
+          isAppOpen={activeApp !== null}
+          isNight={isNight}
+          aoMapIntensity={aoMapIntensity}
+          minOrbitDistance={minOrbitDistance}
+          maxOrbitDistance={maxOrbitDistance}
+          sceneTransitionSpeed={sceneTransitionSpeed}
+          appOpenConfig={appOpenConfig}
+          homeConfig={homeConfig}
+          sceneColors={sceneColors}
+          nightAmbientIntensity={nightAmbientIntensity}
+          nightFrontLightIntensity={nightFrontLightIntensity}
+          nightEnvironmentIntensity={nightEnvironmentIntensity}
+          onInteractionChange={setIsCanvasInteracting}
+          effectiveWeatherCondition={effectiveWeatherCondition}
+          dayFogNear={dayFogNear}
+          dayFogFar={dayFogFar}
+          nightFogNear={nightFogNear}
+          nightFogFar={nightFogFar}
+          targetWeatherParams={targetWeatherParams}
+          uiScale={uiScale ?? 1.0}
+          headlightConfig={headlightConfig}
+          dragProgress={dragProgressRef}
+          carShadowOpacity={carShadowOpacity}
+          carShadowWidth={carShadowWidth}
+          carShadowLength={carShadowLength}
+          carShadowOffsetY={carShadowOffsetY}
+          carShadowOffsetX={carShadowOffsetX}
+          carShadowOffsetZ={carShadowOffsetZ}
+          dirLightPosX={dirLightPosX}
+          dirLightPosY={dirLightPosY}
+          dirLightPosZ={dirLightPosZ}
+          dirLightIntensity={dirLightIntensity}
+          spotLightPosX={spotLightPosX}
+          spotLightPosY={spotLightPosY}
+          spotLightPosZ={spotLightPosZ}
+          spotLightIntensity={spotLightIntensity}
+          spotLightAngle={spotLightAngle}
+          spotLightPenumbra={spotLightPenumbra}
+          spotLightTemperature={spotLightTemperature}
+          carReflectionOffsetY={carReflectionOffsetY}
+          carReflectionOpacity={carReflectionOpacity}
+          carReflectionRoughness={carReflectionRoughness}
+          carReflectionBlur={carReflectionBlur}
+          carReflectionMixStrength={carReflectionMixStrength}
+          carReflectionMetalness={carReflectionMetalness}
+          forceManualFog={forceManualFog}
+          showRedPanel={showRedPanel}
+          redPanelLength={redPanelLength}
+          redPanelHeight={redPanelHeight}
+          redPanelWidth={redPanelWidth}
+          redPanelOffsetY={redPanelOffsetY}
+          redPanelOffsetX={redPanelOffsetX}
+          redPanelOpacity={redPanelOpacity}
+          redPanelColor={redPanelColor}
+          redPanelOrientation={redPanelOrientation}
+        />
+      ) : (
+        <div 
+          className="absolute inset-0 z-0 pointer-events-none flex flex-col items-center justify-center transition-colors duration-500"
+          style={{
+            backgroundColor: useDarkTheme ? '#101012' : '#f0f2f5',
+            backgroundImage: useDarkTheme 
+              ? 'radial-gradient(circle at 50% 40%, #1e2029 0%, #0d0e12 70%)' 
+              : 'radial-gradient(circle at 50% 40%, #ffffff 0%, #e2e5eb 70%)',
+          }}
+        >
+          <div className="text-center opacity-40 select-none">
+            <div className="text-xs uppercase tracking-widest font-semibold mb-1" style={{ color: useDarkTheme ? '#a1a1aa' : '#71717a' }}>
+              3D Engine Suspended (A/B Test Mode)
+            </div>
+            <div className="text-[11px]" style={{ color: useDarkTheme ? '#71717a' : '#a1a1aa' }}>
+              Tutte le risorse WebGL / Three.js e il loop RAF sono completamente disattivati
+            </div>
+          </div>
+        </div>
+      )}
       <TopStatusBar tempUnit={tempUnit} setTempUnit={setTempUnit} scale={uiScale ?? 1.0} offsetY={topBarOffsetY} setTopBarOffsetY={setTopBarOffsetY} isMapVisible={shouldShowMap}/>
       <WeatherModal tempUnit={tempUnit} setTempUnit={setTempUnit}/>
       <MiniMap isVisible={activeApp === null && !isCanvasInteracting} top={miniMapTop} right={miniMapRight} size={miniMapSize} zoom={miniMapZoom} fadeStart={miniMapFadeStart} fadeEnd={miniMapFadeEnd} onClick={(e) => { e.stopPropagation(); toggleApp('maps'); }} uiScale={uiScale ?? 1.0}/>

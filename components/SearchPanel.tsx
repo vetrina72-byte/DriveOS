@@ -529,7 +529,7 @@ export default function SearchPanel({
                 ? "Cerca indirizzo di lavoro..."
                 : "Cerca destinazione..."
             }
-            className="w-full bg-transparent text-xs sm:text-[13px] font-medium focus:outline-none placeholder:text-zinc-400 select-text"
+            className="w-full bg-transparent text-xs sm:text-[13px] font-semibold tracking-normal placeholder:font-semibold focus:outline-none placeholder:text-zinc-400 select-text"
           />
           {query ? (
             <button

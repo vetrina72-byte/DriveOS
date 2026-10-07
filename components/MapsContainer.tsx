@@ -14,6 +14,7 @@ import { POIPreviewCard } from './POIPreviewCard';
 import { resolveBrand } from './BrandResolver';
 import { buildMapStyle, dist, bear, OSRM_URL } from './MapEngineUtils';
 import { CosmicStarfield } from './CosmicStarfield';
+import DrawerHandle from './DrawerHandle';
 import { cubicBezierEase } from './VehicleCanvas';
 import { useUIConfig, APP_TRANSITION_DURATION } from '../context/UIConfigContext';
 import { RouteOption, RoadHazard, LocationInfo, AutomotiveCategory } from '../types/maps';
@@ -3063,7 +3064,7 @@ const MapsContainer = React.memo(({
     <div 
         id="maps-app-panel"
         ref={panelRef}
-        className="fixed top-0 right-0 w-2/3 text-white shadow-2xl z-[4000] flex maps-app-panel squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden pointer-events-auto touch-none"
+        className="fixed top-0 right-0 w-2/3 text-white z-[4000] flex maps-app-panel overflow-visible pointer-events-auto touch-none"
         style={{ 
             willChange: 'transform',
             top: 0,
@@ -3076,22 +3077,19 @@ const MapsContainer = React.memo(({
         onClick={stopPropagation}
     >
         {/* Slide Close Drag handle bar */}
-        <div
-            className={`absolute top-1/2 -translate-y-1/2 -left-10 w-12 h-32 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-55 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`}
+        <DrawerHandle
+            orientation="horizontal"
+            isOpen={isOpen}
+            isNight={isNight}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            aria-label="Drag to close"
-        >
-            <div 
-                className={`w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`} 
-            />
-        </div>
+            ariaLabel="Trascina per chiudere Mappe"
+        />
 
         {/* Core WebGL Map container with Space Cosmos Starfield background */}
         <div 
-          className="relative w-full h-full overflow-hidden bg-black"
+          className="relative w-full h-full overflow-hidden bg-black shadow-2xl squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none"
           onPointerMove={() => window.dispatchEvent(new CustomEvent('map-user-interaction'))}
           onTouchStart={() => window.dispatchEvent(new CustomEvent('map-user-interaction'))}
           onPointerDown={() => window.dispatchEvent(new CustomEvent('map-user-interaction'))}

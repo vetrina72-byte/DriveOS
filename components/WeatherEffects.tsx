@@ -1,8 +1,9 @@
-import React, { useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Points, PointMaterial } from '@react-three/drei';
 import type { WeatherParams } from '../types';
+import { perfLab, ParticleCountOption } from '../lib/perfLabStore';
 
 const PointLight = 'pointLight' as any;
 
@@ -73,9 +74,10 @@ const Lightning = ({ isActive }: { isActive: boolean }) => {
 };
 
 // Ultra-lightweight Points rain system for maximum performance (0 lag, 60fps)
-const RainStreaks = ({ targetDensity, targetSpeed }: { targetDensity: number; targetSpeed: number }) => {
+const RainStreaks = ({ targetDensity, targetSpeed, particleLimit = 'default' }: { targetDensity: number; targetSpeed: number; particleLimit?: ParticleCountOption }) => {
     const pointsRef = useRef<THREE.Points>(null!);
     const MAX_COUNT = 800; // Ultra performant particle count
+    const effectiveLimit = particleLimit === 'default' ? MAX_COUNT : Math.min(particleLimit, MAX_COUNT);
     const velocitiesRef = useRef(new Float32Array(MAX_COUNT * 3));
     const currentDensity = useRef(0);
     const currentSpeed = useRef(0);
@@ -108,7 +110,7 @@ const RainStreaks = ({ targetDensity, targetSpeed }: { targetDensity: number; ta
         currentDensity.current = THREE.MathUtils.lerp(currentDensity.current, targetDensity, LERP_FACTOR);
         currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, targetSpeed, LERP_FACTOR);
 
-        const activeCount = Math.floor(currentDensity.current * MAX_COUNT);
+        const activeCount = Math.floor(currentDensity.current * effectiveLimit);
         pointsRef.current.geometry.setDrawRange(0, activeCount);
 
         if (activeCount < 1) return;
@@ -148,9 +150,10 @@ const RainStreaks = ({ targetDensity, targetSpeed }: { targetDensity: number; ta
     );
 };
 
-const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number; targetSpeed: number }) => {
+const Snow = ({ targetDensity, targetSpeed, particleLimit = 'default' }: { targetDensity: number; targetSpeed: number; particleLimit?: ParticleCountOption }) => {
     const pointsRef = useRef<THREE.Points>(null!);
     const MAX_COUNT = 400;
+    const effectiveLimit = particleLimit === 'default' ? MAX_COUNT : Math.min(particleLimit, MAX_COUNT);
     const velocitiesRef = useRef(new Float32Array(MAX_COUNT * 3));
     const currentDensity = useRef(0);
     const currentSpeed = useRef(0);
@@ -182,7 +185,7 @@ const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number; targetSpe
         
         currentDensity.current = THREE.MathUtils.lerp(currentDensity.current, targetDensity, LERP_FACTOR);
         currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, targetSpeed, LERP_FACTOR);
-        const activeCount = Math.floor(currentDensity.current * MAX_COUNT);
+        const activeCount = Math.floor(currentDensity.current * effectiveLimit);
         pointsRef.current.geometry.setDrawRange(0, activeCount);
         
         if (activeCount < 1) return;
@@ -213,9 +216,10 @@ const Snow = ({ targetDensity, targetSpeed }: { targetDensity: number; targetSpe
     );
 };
 
-const Hail = ({ targetDensity }: { targetDensity: number }) => {
+const Hail = ({ targetDensity, particleLimit = 'default' }: { targetDensity: number; particleLimit?: ParticleCountOption }) => {
     const pointsRef = useRef<THREE.Points>(null!);
     const MAX_COUNT = 150;
+    const effectiveLimit = particleLimit === 'default' ? MAX_COUNT : Math.min(particleLimit, MAX_COUNT);
     const velocitiesRef = useRef(new Float32Array(MAX_COUNT * 3));
     const currentDensity = useRef(0);
 
@@ -245,7 +249,7 @@ const Hail = ({ targetDensity }: { targetDensity: number }) => {
         if (!pointsRef.current) return;
         
         currentDensity.current = THREE.MathUtils.lerp(currentDensity.current, targetDensity, LERP_FACTOR);
-        const activeCount = Math.floor(currentDensity.current * MAX_COUNT);
+        const activeCount = Math.floor(currentDensity.current * effectiveLimit);
         pointsRef.current.geometry.setDrawRange(0, activeCount);
         
         if (activeCount < 1) return;
@@ -278,12 +282,20 @@ const Hail = ({ targetDensity }: { targetDensity: number }) => {
 
 export default function WeatherEffects({ targetParams, effectiveWeatherCondition }: { targetParams: WeatherParams; effectiveWeatherCondition: string; }) {
     const isThunderstorm = effectiveWeatherCondition === 'Temporale';
+    const particlesCount = useSyncExternalStore(
+        perfLab.subscribe.bind(perfLab),
+        () => perfLab.config.weatherParticlesCount
+    );
+
+    if (particlesCount === 0) {
+        return isThunderstorm ? <Lightning isActive={isThunderstorm} /> : null;
+    }
     
     return (
         <>
-            <RainStreaks targetDensity={targetParams.rainDensity} targetSpeed={targetParams.rainSpeed} />
-            <Snow targetDensity={targetParams.snowDensity} targetSpeed={targetParams.snowSpeed} />
-            <Hail targetDensity={targetParams.hailDensity} />
+            <RainStreaks targetDensity={targetParams.rainDensity} targetSpeed={targetParams.rainSpeed} particleLimit={particlesCount} />
+            <Snow targetDensity={targetParams.snowDensity} targetSpeed={targetParams.snowSpeed} particleLimit={particlesCount} />
+            <Hail targetDensity={targetParams.hailDensity} particleLimit={particlesCount} />
             <Lightning isActive={isThunderstorm} />
         </>
     );

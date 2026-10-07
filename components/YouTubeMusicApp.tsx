@@ -11,6 +11,7 @@ import YouTubePlaylistDetailView from './YouTubePlaylistDetailView';
 import QuotaErrorModal from './QuotaErrorModal';
 import { isDemoMode } from '../lib/youtubeDemoFallback';
 import { useYouTubeMusic, mapYouTubeItemToMediaItem } from '../context/YouTubeMusicContext';
+import DrawerHandle, { HANDLE_GAP_FROM_PANEL, HANDLE_PILL_THICKNESS, HANDLE_MIN_MARGIN_FROM_VIEWPORT } from './DrawerHandle';
 import { cubicBezierEase } from './VehicleCanvas';
 
 interface YouTubeMusicAppProps {
@@ -277,16 +278,6 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         startAnimation();
     };
 
-    const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
-    
-    // --- CONDITIONAL HANDLE STYLES & POSITIONING ---
-    const handleContainerClass = renderLayered
-        ? `absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-12 flex items-center justify-center cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
-        : `absolute top-1/2 -translate-y-1/2 -left-10 w-12 h-32 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
-
-    const handlePillClass = renderLayered
-        ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-x-110 ${handleColorClass}`
-        : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
 
     const portalTarget = renderLayered ? document.getElementById('maps-anchored-container') : null;
     
@@ -439,14 +430,16 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
         )
     };
 
+    const effectiveLayeredTop = Math.max(layeredAppTopOffset ?? 18, HANDLE_GAP_FROM_PANEL + HANDLE_PILL_THICKNESS + HANDLE_MIN_MARGIN_FROM_VIEWPORT);
+
     const mainContent = (
         <div 
             ref={panelRef}
             data-app-id="youtube-music"
-            className={`spotify-app-panel squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none shadow-2xl flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
+            className={`spotify-app-panel overflow-visible flex ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'fixed w-[85%] sm:w-[75%] md:w-1/2 lg:w-[65%] xl:w-[60%] right-0'}`}
             style={{
                 // Transform managed by physics loop
-                top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+                top: renderLayered ? `${effectiveLayeredTop}px` : `${(spotifyPlayerTop) / 16}rem`,
                 bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
                 willChange: 'transform',
             }}
@@ -456,22 +449,21 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
             aria-labelledby="youtube-music-app-title"
             onClick={(e) => e.stopPropagation()}
         >
+            {/* --- DRAG HANDLE (OUTSIDE CLIPPING) --- */}
+            <DrawerHandle
+                orientation={renderLayered ? 'vertical' : 'horizontal'}
+                isOpen={isOpen}
+                isNight={isNight}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                ariaLabel="Trascina per chiudere YouTube Music"
+            />
+
             <div 
-              className={`w-full h-full flex flex-col relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden`}
+              className={`w-full h-full flex flex-col relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none overflow-hidden shadow-2xl`}
               style={{ backgroundColor: 'var(--spotify-panel-bg)' }}
             >
-                {/* --- DRAG HANDLE (OUTSIDE LEFT) --- */}
-                <div
-                    className={handleContainerClass}
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
-                    aria-label="Drag to close"
-                >
-                    <div className={handlePillClass} />
-                </div>
-                {/* ------------------- */}
 
                 <header className="px-8 pt-7 pb-4 flex items-center justify-between gap-4 flex-shrink-0">
                     <div className="flex items-center gap-4">
@@ -483,13 +475,13 @@ const YouTubeMusicApp: React.FC<YouTubeMusicAppProps> = ({
                          <h1 id="youtube-music-app-title" className="sr-only">YouTube Music</h1>
                     </div>
                      <form onSubmit={handleSearchSubmit} className="relative flex-grow max-w-sm">
-                        <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+                        <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                         <input
                             type="text"
-                            placeholder="Cerca un video..."
+                            placeholder="Cerca un video o brano..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className={`w-full pl-11 pr-10 py-3 rounded-full text-sm font-medium transition-colors duration-300 placeholder:text-zinc-400 border border-transparent focus:outline-none ${isNight ? 'bg-white/10 focus:border-white/20' : 'bg-black/5 focus:border-black/20'}`}
+                            className={`w-full pl-10 pr-9 py-2 rounded-full text-xs sm:text-[13px] font-normal transition-colors duration-200 placeholder:text-zinc-400 border border-transparent focus:outline-none ${isNight ? 'bg-white/10 focus:border-white/20' : 'bg-black/5 focus:border-black/20'}`}
                             style={{ color: 'var(--text-primary)' }}
                         />
                         {searchQuery && (

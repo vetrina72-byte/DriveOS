@@ -1,83 +1,27 @@
-# Elastic Pop-Bubble Queue Animation Plan
+# Piano di Implementazione: Risoluzione Glitch Scena 3D e Dissolvenza Handle
 
-We will re-engineer the Queue Popover's opening and closing animations to behave like a physical elastic bubble. The bubble will appear to emerge from within/behind the player, scale up with an organic overshoot bounce, and then recede/sink down completely behind the player's boundary upon dismissal (avoiding any unsightly overlap on top of the active playback controls).
-
----
-
-## User Review & Critical Decisions
-
-> [!IMPORTANT]
-> **Confirmed Aesthetic Choice**: The user selected an **elastic pop with a soft bounce-back effect** ("Pop elastico con effetto rimbalzo morbido") for the queue overlay.
-> 
-> **Confirmed Behavioral Layering**: Upon closing, the queue bubble must sink/slide down **behind** the player card instead of floating above the active play controls, while upon opening it sits above the player for full legibility.
+Risoluzione dei due problemi segnalati relativi alla chiusura dell'app tramite la handle del drawer: la breve scossa della scena 3D al rilascio della handle a 100% chiusura e la scomparsa improvvisa della handle senza dissolvenza progressiva (fade out).
 
 ---
 
-## 1. Overview & Core Concept
-
-This update enhances the tactile, premium physical sensation of the music player dashboard. By employing dynamic `z-index` staging and highly-tuned keyframe transitions, the queue popover mimics a physical bubble:
-- **Emerge (In)**: Shoots up from inside the player, overshooting to `1.1` scale, then settling organically back to `1.0`.
-- **Retract (Out)**: Anticipates with a tiny micro-bounce upwards, then rapidly shrinks and sinks downwards, passing *behind* the player's solid background.
-
----
-
-## 2. User Experience & Visual Design
-
-### Layer Stacking Matrix
-To make the bubble emerge from "behind" and sink "behind" without overlapping the controls:
-- **Player Inner Container**: Set to `z-index: 10` with a solid background and `overflow-hidden`.
-- **Queue Popover (Opening/Open)**: Set to `z-index: 20` so it sits above the player container, floating beautifully.
-- **Queue Popover (Closing)**: Set to `z-index: 5` so it instantly falls below the player's stacking context. As the closing translation runs, the portion of the bubble that moves downwards is clipped and hidden by the player's solid boundary.
-
-### Keyframe Animation Design
-```css
-@keyframes queueBubblePop {
-  0% {
-    opacity: 0;
-    transform: scale(0.3) translateY(40px);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.1) translateY(-8px);
-  }
-  75% {
-    opacity: 1;
-    transform: scale(0.95) translateY(3px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes queueBubbleOut {
-  0% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  30% {
-    opacity: 1;
-    transform: scale(1.02) translateY(-3px);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.4) translateY(45px);
-  }
-}
-```
+## 1. Risoluzione Glitch Scena 3D (Frequenza di aggiornamento `currentP`)
+* **Problema:** Quando si trascina la handle fino a 100% (app completamente chiusa) e si rilascia il mouse/touch, `VehicleCanvas` rilevava un cambio di stato `isAppOpen` (da `true` a `false`), ma poiché `currentP.current` non veniva aggiornato continuamente durante il canale `drag`, `autoStartP` ripartiva da `0` (posizione app aperta), causando un salto visivo di un millisecondo prima di tornare a Home.
+* **Soluzione (`VehicleCanvas.tsx`):**
+  * Aggiornare continuamente `currentP.current = rawP` all'interno del canale di esecuzione `transitionMode.current === "drag"`.
+  * Quando la handle viene rilasciata a 100% chiusura, `autoStartP` sarà già `1.0` (Home), eliminando qualsiasi scatto o riposizionamento temporaneo della camera 3D.
 
 ---
 
-## 3. Technical Implementation Strategy
+## 2. Dissolvenza Progressiva (Fade Out) della Handle durante il Chiusura
+* **Problema:** La visibilità della handle era gestita tramite una classe binaria fissa (`isOpen ? opacity-100 : opacity-0`), causando una scomparsa di botto o disallineata rispetto al trascinamento.
+* **Soluzione (`SpotifyPlayer`, `RadioApp`, `YouTubeMusicApp`, `Theater`, `DebugControls`, `MapsContainer`):**
+  * Calcolare in tempo reale l'opacità e la scala della handle in base alla percentuale di chiusura visiva (`visualPercent` / `currentPercent`):
+    * A 0% chiusura (app aperta): Opacità 1.0, Scala 1.0.
+    * Man mano che l'app viene trascinata o scorre verso destra (da 0% a 60% chiusura): l'opacità della handle sfuma in modo fluido (`1 - visualPercent / 60`) e la scala si riduce gradualmente.
+  * La handle farà un **fade out perfettamente sincronizzato** con il movimento fisico del pannello sia durante il trascinamento manuale sia durante l'animazione di chiusura automatica.
 
-### CSS Animation Refinement
-We will update `index.css` to define the new spring keyframes and class utility definitions:
-- `.animate-queue-bubble-in`: Custom spring bezier `cubic-bezier(0.25, 1.1, 0.5, 1)` for 0.45s.
-- `.animate-queue-bubble-out`: Retraction cubic-bezier `cubic-bezier(0.5, -0.4, 0.1, 1.4)` for 0.35s.
+---
 
-### React Component Stacking Layer Updates
-In `components/MusicPlayer.tsx`:
-1. Add `relative z-10` to the player's inner content wrapper.
-2. Dynamically assign `z-index` to the `<QueuePopover>` component based on `isClosing`:
-   - `isClosing === true` $\to$ `z-index: 5` (behind player)
-   - `isClosing === false` $\to$ `z-index: 20` (above player)
+## 3. Verifica e Compilazione
+* Eseguire `compile_applet` per verificare che la build completi senza errori.
+* Verificare la fluidità della fotocamera 3D e della dissolvenza della handle sia con interazione mouse/touch che con i pulsanti della dock.

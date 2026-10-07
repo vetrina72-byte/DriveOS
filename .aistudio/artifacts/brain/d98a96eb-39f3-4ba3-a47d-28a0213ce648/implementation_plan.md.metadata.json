@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to introduce a realistic, elastic bubble pop-up animation for the queue popover. It implements an organic overshoot-and-settle transition when opening, and a 'receding-behind-the-player' visual sink on dismissal by dynamically toggling the z-index stacking layers.",
-  "updatedAt":  "2026-09-28T11:17:45.902795797Z",
+  "summary":  "Piano di implementazione per risolvere il glitch della scena 3D alla chiusura del drawer e sincronizzare la dissolvenza progressiva (fade out) della handle con il movimento del pannello.",
+  "updatedAt":  "2026-10-06T12:30:00.797956750Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

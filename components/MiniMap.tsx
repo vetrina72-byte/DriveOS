@@ -203,10 +203,22 @@ const MiniMap: React.FC<MiniMapProps> = ({
     map.setStyle(styleUrl);
   }, [isNight]);
 
-  // Update vehicle position, bearing, and camera smoothly
+  const [isInteracting, setIsInteracting] = React.useState(false);
+
+  useEffect(() => {
+    const handleCanvasInteracting = (e: any) => {
+      setIsInteracting(Boolean(e.detail));
+    };
+    window.addEventListener('canvas-interacting', handleCanvasInteracting, { passive: true });
+    return () => window.removeEventListener('canvas-interacting', handleCanvasInteracting);
+  }, []);
+
+  const effectivelyVisible = isVisible && !isInteracting;
+
+  // Update vehicle position, bearing, and camera smoothly only when visible
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !effectivelyVisible) return;
 
     // Update vehicle marker GeoJSON source
     const vehicleSource = map.getSource('mini-vehicle-source') as maplibregl.GeoJSONSource | undefined;
@@ -231,7 +243,7 @@ const MiniMap: React.FC<MiniMapProps> = ({
       duration: 350,
       easing: (t) => t
     });
-  }, [activePosition.lat, activePosition.lng, bearing]);
+  }, [activePosition.lat, activePosition.lng, bearing, effectivelyVisible]);
 
   // Sync route polyline from routeStore
   useEffect(() => {
@@ -256,22 +268,14 @@ const MiniMap: React.FC<MiniMapProps> = ({
     return unsubscribe;
   }, []);
 
-  const [isInteracting, setIsInteracting] = React.useState(false);
-
-  useEffect(() => {
-    const handleCanvasInteracting = (e: any) => {
-      setIsInteracting(Boolean(e.detail));
-    };
-    window.addEventListener('canvas-interacting', handleCanvasInteracting, { passive: true });
-    return () => window.removeEventListener('canvas-interacting', handleCanvasInteracting);
-  }, []);
-
-  const effectivelyVisible = isVisible && !isInteracting;
-
-  // Resize when visibility toggles
+  // Resize and sync center when visibility toggles
   useEffect(() => {
     if (effectivelyVisible && mapRef.current) {
       mapRef.current.resize();
+      mapRef.current.jumpTo({
+        center: [activePosition.lng, activePosition.lat],
+        bearing: bearing || 0
+      });
     }
   }, [effectivelyVisible]);
 

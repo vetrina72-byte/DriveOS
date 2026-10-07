@@ -1,14 +1,16 @@
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useSyncExternalStore } from 'react';
 import ReactDOM from 'react-dom';
 import { FiX } from 'react-icons/fi';
 import WeatherIcon, { ExtremeTemp } from './WeatherIcon';
 import type { SceneConfig, HeadlightConfig } from './VehicleCanvas';
+import DrawerHandle, { HANDLE_GAP_FROM_PANEL, HANDLE_PILL_THICKNESS, HANDLE_MIN_MARGIN_FROM_VIEWPORT } from './DrawerHandle';
 import { cubicBezierEase } from './VehicleCanvas';
 import type { SceneColors } from '../App';
 import { initialSceneColors } from '../App';
 import { useWeather } from '../context/WeatherContext';
 import { useNavigation } from '../context/NavigationContext';
+import { perfLab, PerfLabMetrics, ShadowMapSizeOption, ParticleCountOption } from '../lib/perfLabStore';
 
 import { useUIConfig, DEFAULT_APP_OPEN_CONFIG, DEFAULT_HOME_CONFIG } from '../context/UIConfigContext';
 
@@ -143,6 +145,56 @@ export default function DebugControls({
   } = useNavigation();
 
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // --- REAL GAP METER STATE (Zero cost when disabled) ---
+  const [gapMeterEnabled, setGapMeterEnabled] = useState(false);
+  const [gapData, setGapData] = useState<{ currentGap: number; maxPositiveGap: number; mode: string; panelLeft: number; canvasWidth: number }>({
+    currentGap: 0,
+    maxPositiveGap: 0,
+    mode: 'idle',
+    panelLeft: 0,
+    canvasWidth: 0,
+  });
+
+  useEffect(() => {
+    (window as any).__ENABLE_GAP_METER__ = gapMeterEnabled;
+    if (!gapMeterEnabled) return;
+
+    const interval = setInterval(() => {
+      const meter = (window as any).__GAP_METER__;
+      if (meter) {
+        setGapData({ ...meter });
+      }
+    }, 80);
+
+    return () => clearInterval(interval);
+  }, [gapMeterEnabled]);
+
+  const handleResetGapMeter = () => {
+    if ((window as any).__GAP_METER__) {
+      (window as any).__GAP_METER__.maxPositiveGap = 0;
+      setGapData(prev => ({ ...prev, maxPositiveGap: 0 }));
+    }
+  };
+
+  // --- 3D PERFORMANCE LAB STATE (Zero cost when disabled/closed) ---
+  const [perfLabEnabled, setPerfLabEnabled] = useState(false);
+  const [perfMetrics, setPerfMetrics] = useState<PerfLabMetrics>(perfLab.metrics);
+  const perfConfig = useSyncExternalStore(perfLab.subscribe.bind(perfLab), () => perfLab.config);
+
+  useEffect(() => {
+    perfLab.setLabOpen(isOpen && perfLabEnabled);
+    if (!isOpen || !perfLabEnabled) return;
+
+    const interval = setInterval(() => {
+      setPerfMetrics({ ...perfLab.metrics });
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+      perfLab.setLabOpen(false);
+    };
+  }, [isOpen, perfLabEnabled]);
 
   // --- PHYSICS ENGINE (Unified) ---
   const [renderLayered, setRenderLayered] = useState(isMapsLayered);
@@ -355,19 +407,10 @@ export default function DebugControls({
   
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
   
-  const handleColorClass = isNight ? 'bg-zinc-300' : 'bg-zinc-600';
-
-  const handleContainerClass = renderLayered
-      ? `absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-12 flex items-center justify-center cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`
-      : `absolute top-1/2 -translate-y-1/2 -left-10 w-12 h-32 flex items-center justify-end pr-2 cursor-grab active:cursor-grabbing z-50 touch-none group transition-opacity duration-300 ${isOpen ? 'opacity-100 bubble-handle' : 'opacity-0 pointer-events-none'}`;
-
-  const handlePillClass = renderLayered
-      ? `w-16 h-1.5 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-x-110 ${handleColorClass}`
-      : `w-1.5 h-16 rounded-full shadow-sm transition-all duration-300 opacity-70 group-hover:opacity-100 group-active:scale-y-110 ${handleColorClass}`;
-
   const containerClass = isAppView 
-    ? `debug-app-panel squircle-24 rounded-tl-3xl rounded-tr-none rounded-b-none shadow-2xl flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full border-t border-zinc-800' : 'relative w-full h-full border-l border-zinc-800'}`
+    ? `debug-app-panel overflow-visible flex flex-col ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'} ${renderLayered ? 'absolute left-0 right-0 w-full' : 'relative w-full h-full'}`
     : "absolute bottom-36 right-4 z-[50000] bg-zinc-900/90 text-white squircle-20 shadow-2xl p-4 w-96 backdrop-blur-sm max-h-[70vh] overflow-y-auto";
+
 
   const currentHour = timeOverride ? timeOverride.getHours() : new Date().getHours();
 
@@ -522,6 +565,8 @@ export default function DebugControls({
 
   const portalTarget = renderLayered ? document.getElementById('maps-anchored-container') : null;
 
+  const effectiveLayeredTop = Math.max(layeredAppTopOffset ?? 18, HANDLE_GAP_FROM_PANEL + HANDLE_PILL_THICKNESS + HANDLE_MIN_MARGIN_FROM_VIEWPORT);
+
   const mainContent = (
     <div 
       id="debug-panel"
@@ -529,7 +574,7 @@ export default function DebugControls({
       ref={panelRef}
       className={containerClass}
       style={isAppView ? {
-          top: renderLayered ? `${layeredAppTopOffset}px` : `${(spotifyPlayerTop) / 16}rem`,
+          top: renderLayered ? `${effectiveLayeredTop}px` : `${(spotifyPlayerTop) / 16}rem`,
           bottom: renderLayered ? 0 : `${(spotifyPlayerBottom) / 16}rem`,
           willChange: 'transform',
           transform: renderLayered 
@@ -542,18 +587,17 @@ export default function DebugControls({
       aria-labelledby="debug-panel-title"
     >
       {isAppView && (
-        <div
-            className={handleContainerClass}
+        <DrawerHandle
+            orientation={renderLayered ? 'vertical' : 'horizontal'}
+            isOpen={isOpen}
+            isNight={isNight}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            aria-label="Drag to close"
-        >
-            <div className={handlePillClass} />
-        </div>
+            ariaLabel="Trascina per chiudere Debug"
+        />
       )}
-      <div className={isAppView ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start relative rounded-t-[2rem]" : "w-full"}>
+      <div className={isAppView ? "w-full h-full bg-zinc-900 text-white p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 content-start relative squircle-panel rounded-tl-3xl rounded-tr-none rounded-b-none shadow-2xl" : "w-full"}>
         {!isAppView && (
         <div className="flex justify-between items-center mb-4">
           <h2 id="debug-panel-title" className="font-bold text-lg">Debug Controls</h2>
@@ -573,6 +617,228 @@ export default function DebugControls({
         )}
         
         <div className={isAppView ? "col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" : "space-y-6 text-sm"}>
+
+          {/* --- SECTION: REAL 3D GAP METER --- */}
+          <div className="space-y-4 p-4 bg-zinc-800/60 rounded-xl border border-blue-500/40 shadow-lg">
+            <div className="flex items-center justify-between border-b border-zinc-700 pb-2">
+              <h3 className="text-lg font-bold text-blue-400">3D Gap Meter</h3>
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <span>Attiva misuratore</span>
+                <input
+                  type="checkbox"
+                  checked={gapMeterEnabled}
+                  onChange={(e) => setGapMeterEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            {gapMeterEnabled ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-2.5 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">Gap Corrente:</span>
+                    <span className={`text-base font-bold ${gapData.currentGap > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {gapData.currentGap > 0 ? `+${gapData.currentGap}px (VUOTO)` : `${gapData.currentGap}px (COPERTO)`}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">Max Positivo (Gap):</span>
+                    <span className={`text-base font-bold ${gapData.maxPositiveGap > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {gapData.maxPositiveGap > 0 ? `+${gapData.maxPositiveGap}px` : '0px (Perfetto)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-zinc-900/80 rounded-lg border border-zinc-700/60 flex justify-between text-xs">
+                  <div>
+                    <span className="text-zinc-400 block">Modalità:</span>
+                    <span className="font-semibold text-zinc-200 uppercase">{gapData.mode || 'idle'}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-zinc-400 block">Panel / Canvas:</span>
+                    <span className="font-mono text-zinc-300">{gapData.panelLeft}px / {gapData.canvasWidth}px</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleResetGapMeter}
+                  className="w-full py-1.5 px-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Azzera Max Gap
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400">
+                Attiva il toggle per misurare in tempo reale a 60fps la distanza esatta tra il bordo del pannello e il viewport 3D.
+              </p>
+            )}
+          </div>
+
+          {/* --- SECTION: 3D PERFORMANCE LAB --- */}
+          <div className="space-y-4 p-4 bg-zinc-800/60 rounded-xl border border-purple-500/40 shadow-lg">
+            <div className="flex items-center justify-between border-b border-zinc-700 pb-2">
+              <h3 className="text-lg font-bold text-purple-400">3D Performance Lab</h3>
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <span>Attiva misurazioni</span>
+                <input
+                  type="checkbox"
+                  checked={perfLabEnabled}
+                  onChange={(e) => setPerfLabEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded accent-purple-500 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            {perfLabEnabled ? (
+              <div className="space-y-3">
+                {/* Real-time metrics grid */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">FPS Medio / FT:</span>
+                    <span className={`text-base font-bold font-mono ${perfMetrics.fps >= 55 ? 'text-emerald-400' : perfMetrics.fps >= 30 ? 'text-amber-400' : 'text-red-400'}`}>
+                      {perfMetrics.fps > 0 ? `${perfMetrics.fps} FPS` : '--'}
+                      <span className="text-xs text-zinc-400 font-normal ml-1.5">({perfMetrics.frameTime}ms)</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">Frame Time P95:</span>
+                    <span className={`text-base font-bold font-mono ${perfMetrics.p95FrameTime <= 20 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {perfMetrics.p95FrameTime > 0 ? `${perfMetrics.p95FrameTime} ms` : '--'}
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">Draw Calls / Triangles:</span>
+                    <span className="font-bold font-mono text-zinc-200">
+                      {perfMetrics.drawCalls} <span className="text-zinc-400 font-normal">calls</span> / {perfMetrics.triangles.toLocaleString()} <span className="text-zinc-400 font-normal">tri</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">Geometries / Textures:</span>
+                    <span className="font-bold font-mono text-zinc-200">
+                      {perfMetrics.geometries} <span className="text-zinc-400 font-normal">geo</span> / {perfMetrics.textures} <span className="text-zinc-400 font-normal">tex</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">DPR / Mode:</span>
+                    <span className="font-semibold text-zinc-300">
+                      DPR {perfMetrics.dpr} <span className="text-zinc-400 font-normal">| {perfMetrics.sceneMode}</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60">
+                    <span className="text-zinc-400 block mb-0.5">JS Heap Memory:</span>
+                    <span className="font-mono text-zinc-300">{perfMetrics.usedJSHeapSize}</span>
+                  </div>
+                </div>
+
+                {/* Toggles section */}
+                <div className="pt-2 border-t border-zinc-700/80 space-y-2.5 text-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400 block">Renderer Toggles</span>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* 3D ON/OFF */}
+                    <button
+                      type="button"
+                      onClick={() => perfLab.setConfig('enabled3D', !perfConfig.enabled3D)}
+                      className={`p-2 rounded-lg border font-semibold text-left transition-colors cursor-pointer ${
+                        perfConfig.enabled3D
+                          ? 'bg-purple-950/40 border-purple-500/60 text-purple-200'
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      <div className="text-[10px] text-zinc-400">Scena 3D</div>
+                      <div>{perfConfig.enabled3D ? '🟢 3D ATTIVO' : '⚪ 3D SPENTO'}</div>
+                    </button>
+
+                    {/* Reflector ON/OFF */}
+                    <button
+                      type="button"
+                      onClick={() => perfLab.setConfig('reflectorEnabled', !perfConfig.reflectorEnabled)}
+                      className={`p-2 rounded-lg border font-semibold text-left transition-colors cursor-pointer ${
+                        perfConfig.reflectorEnabled
+                          ? 'bg-purple-950/40 border-purple-500/60 text-purple-200'
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      <div className="text-[10px] text-zinc-400">Riflesso Pavimento</div>
+                      <div>{perfConfig.reflectorEnabled ? '🟢 Reflector ON' : '⚪ Semplice (OFF)'}</div>
+                    </button>
+                  </div>
+
+                  {/* Dynamic Shadows & Map Size */}
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-zinc-300">Ombre Dinamiche:</span>
+                      <button
+                        type="button"
+                        onClick={() => perfLab.setConfig('shadowsEnabled', !perfConfig.shadowsEnabled)}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors cursor-pointer ${
+                          perfConfig.shadowsEnabled ? 'bg-purple-600 text-white' : 'bg-zinc-700 text-zinc-300'
+                        }`}
+                      >
+                        {perfConfig.shadowsEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                    {perfConfig.shadowsEnabled && (
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800 text-[11px]">
+                        <span className="text-zinc-400">Shadow Map:</span>
+                        <div className="flex gap-1">
+                          {([256, 512, 1024] as ShadowMapSizeOption[]).map((size) => (
+                            <button
+                              key={size}
+                              type="button"
+                              onClick={() => perfLab.setConfig('shadowMapSize', size)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+                                perfConfig.shadowMapSize === size
+                                  ? 'bg-purple-600 text-white font-bold'
+                                  : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                              }`}
+                            >
+                              {size}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Weather Particles */}
+                  <div className="p-2 bg-zinc-900/80 rounded-lg border border-zinc-700/60 flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-zinc-300 block">Particelle Meteo:</span>
+                      <span className="text-[10px] text-zinc-400">Rain / Snow / Hail</span>
+                    </div>
+                    <div className="flex gap-1">
+                      {(['default', 0, 100, 400] as ParticleCountOption[]).map((opt) => (
+                        <button
+                          key={String(opt)}
+                          type="button"
+                          onClick={() => perfLab.setConfig('weatherParticlesCount', opt)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                            perfConfig.weatherParticlesCount === opt
+                              ? 'bg-purple-600 text-white font-bold'
+                              : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          {opt === 'default' ? 'Def' : opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400">
+                Attiva il toggle per monitorare FPS, frame time (medio e p95), draw calls, triangoli, geometrie, texture, memoria heap e testare l'impatto dei singoli moduli di rendering.
+              </p>
+            )}
+          </div>
 
           {/* --- SECTION: MUSIC PLAYER CUSTOMIZATION --- */}
         <div className="space-y-4 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">

@@ -24,6 +24,7 @@ import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjVisualState } from '../service
 import { cubicBezierEase } from './VehicleCanvas';
 import { SPLIT_APPS_WITH_MAP_UNDER } from '../App';
 import { APP_TRANSITION_DURATION } from '../context/UIConfigContext';
+import { drawerLayout } from '../lib/drawerLayout';
 
 // Lucide Player Control Icons requested by user
 const PrevTrackIcon = ({ size, scale = 1 }: { size: string; scale?: number }) => (
@@ -665,7 +666,7 @@ const RemotePlayerView = ({ device, isNight, onTakeControl }: { device: SpotifyD
     };
 
     return (
-        <div className="w-full h-full flex flex-row items-center justify-between px-6 py-2 bg-black/40 backdrop-blur-md rounded-xl overflow-hidden">
+        <div className={`w-full h-full flex flex-row items-center justify-between px-6 py-2 rounded-xl overflow-hidden ${isNight ? 'bg-black/40 backdrop-blur-md' : 'bg-transparent'}`}>
             <div className="flex items-center gap-4 min-w-0 flex-1">
                 <div className={`p-3 rounded-full flex-shrink-0 ${isNight ? 'bg-zinc-800 text-green-500' : 'bg-white text-green-600'}`}>
                     <DeviceIcon />
@@ -713,7 +714,7 @@ const DisabledPlayerView = ({
                         <FiMusic className={`w-7 h-7 ${isNight ? 'text-zinc-500' : 'text-zinc-400'}`} />
                     </div>
                     <div className="overflow-hidden flex-grow">
-                        <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>Nessun brano in riproduzione</div>
+                        <div className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>Nessun brano in riproduzione</div>
                         <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>Scegli qualcosa da ascoltare</div>
                     </div>
                 </div>
@@ -1072,20 +1073,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
                 // Determine app boundary (the real left edge of the open right-hand panel) in current coordinate space
                 let appLeft = winWidth;
-                const mapsPanel = document.getElementById('maps-app-panel');
-                if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < winWidth) {
-                    appLeft = winWidth - mapsPanel.offsetWidth;
-                } else {
-                    const panels = document.querySelectorAll('.spotify-app-panel');
-                    for (let i = 0; i < panels.length; i++) {
-                        const el = panels[i] as HTMLElement;
-                        if (el.offsetWidth > 0 && el.offsetWidth < winWidth && !el.closest('#maps-anchored-container')) {
-                            appLeft = winWidth - el.offsetWidth;
-                            break;
-                        }
-                    }
-                }
-                if (appLeft === winWidth && activeApp) {
+                if (drawerLayout.activeApp && drawerLayout.progress < 0.999) {
+                    appLeft = Math.round(drawerLayout.currentLeftPx);
+                } else if (activeApp) {
                     appLeft = Math.round(winWidth * (1 / 3));
                 }
 

@@ -33,7 +33,7 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
             `}
             style={{
                 width: `${width}%`,
-                maxWidth: '75rem',
+                maxWidth: '48rem',
                 minHeight: `${(height) / 16}rem`,
                 maxHeight: 'calc(100vh - 8rem)',
             }}
@@ -44,10 +44,15 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
             aria-labelledby="app-launcher-title"
         >
             <h2 id="app-launcher-title" className="sr-only">App Launcher</h2>
-            <div className="flex-grow p-8 sm:p-10 overflow-y-auto hide-scrollbar">
+            <div className="flex-grow p-5 sm:p-7 overflow-y-auto hide-scrollbar">
                 {apps.length > 0 ? (
-                    <div className="flex flex-wrap gap-5 sm:gap-6 justify-center items-start">
-                        {apps.map(app => (
+                    <div className="flex flex-wrap gap-4 sm:gap-6 justify-center items-start">
+                        {[...apps].sort((a, b) => {
+                            const priority = ['spotify', 'radio', 'youtube-music', 'theater', 'maps', 'debug'];
+                            const idxA = priority.indexOf(a.id);
+                            const idxB = priority.indexOf(b.id);
+                            return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+                        }).map(app => (
                             <div key={app.id} className="relative">
                                 <button
                                     onClick={(e) => {
@@ -56,10 +61,10 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
                                             onAppLaunch(app.id);
                                         }
                                     }}
-                                    className={`flex flex-col items-center justify-center w-24 h-24 sm:w-28 sm:h-28 p-2.5 squircle-card rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 transition-all duration-200 group gap-2 ${isCustomizing ? 'customizing-jiggle cursor-default' : 'cursor-pointer'}`}
+                                    className={`flex flex-col items-center justify-center w-22 h-22 sm:w-24 sm:h-24 p-2 rounded-2xl hover:bg-white/10 active:scale-95 transition-all duration-200 group gap-2 ${isCustomizing ? 'customizing-jiggle cursor-default' : 'cursor-pointer'}`}
                                 >
-                                    <app.icon className={`w-9 h-9 sm:w-10 sm:h-10 transition-transform group-hover:scale-110 ${app.colorClasses || (isNight ? 'text-gray-200' : 'text-zinc-800')}`} />
-                                    <span className="text-xs font-semibold truncate w-full px-1 text-center text-white">
+                                    <app.icon className={`w-9 h-9 sm:w-10 sm:h-10 transition-transform group-hover:scale-110 drop-shadow-sm ${app.colorClasses || (isNight ? 'text-gray-200' : 'text-zinc-800')}`} />
+                                    <span className="text-xs sm:text-[13px] font-bold tracking-tight truncate w-full px-1 text-center text-white drop-shadow-sm">
                                         {app.label}
                                     </span>
                                 </button>
@@ -69,10 +74,10 @@ export default function AppLauncher({ isOpen, width, height, apps, isCustomizing
                                         e.stopPropagation();
                                         onCustomizeClick(app.id);
                                       }}
-                                      className="absolute -top-1 -right-1 w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer shadow-md"
+                                      className="absolute -top-1 -right-1 w-6 h-6 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center border-2 border-black transition-all duration-200 hover:scale-110 cursor-pointer shadow-md"
                                       aria-label={`Sposta ${app.label} sulla barra`}
                                     >
-                                        <FiPlus className="w-4 h-4 text-white" strokeWidth={3}/>
+                                        <FiPlus className="w-3.5 h-3.5 text-white" strokeWidth={3}/>
                                     </button>
                                 )}
                             </div>

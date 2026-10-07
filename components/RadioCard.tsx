@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { RadioStation } from '../types';
-import { FiRadio } from 'react-icons/fi';
+import { FiRadio, FiPlay } from 'react-icons/fi';
 
 interface RadioCardProps {
     station: RadioStation;
@@ -11,38 +11,54 @@ interface RadioCardProps {
 const RadioCard: React.FC<RadioCardProps> = ({ station, onPlay, isNight }) => {
     const [imageError, setImageError] = useState(!station.favicon);
     
+    const textColorPrimary = isNight ? 'text-white' : 'text-zinc-800';
+    const textColorSecondary = isNight ? 'text-[#b3b3b3]' : 'text-zinc-500';
     const bgColor = isNight ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10';
-    const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-300';
+    const placeholderBg = isNight ? 'bg-zinc-800' : 'bg-zinc-200';
     const placeholderIconColor = isNight ? 'text-zinc-500' : 'text-zinc-600';
+    const tag = station.tags ? station.tags.split(',')[0].trim() : 'Live Radio';
 
     return (
-        <div className="w-full max-w-[11rem] mx-auto flex-shrink-0">
-            <div 
-                className={`p-3 squircle-card rounded-2xl w-full h-full flex flex-col transition-all duration-300 ${bgColor}`}
-            >
-                <button
-                    onClick={() => onPlay(station)}
-                    className="relative w-full aspect-square mb-3 cursor-pointer group"
-                    aria-label={`Play ${station.name}`}
+        <div 
+            onClick={() => onPlay(station)}
+            className={`p-2.5 sm:p-3 squircle-card rounded-2xl transition-all duration-200 w-full mx-auto ${bgColor} cursor-pointer border border-white/5 hover:border-white/20 hover:scale-[1.02] group relative flex flex-col`}
+            style={{ contain: 'layout paint' }}
+        >
+            <div className={`relative w-full aspect-square mb-2 sm:mb-2.5 overflow-hidden squircle-card rounded-xl ${isNight ? 'bg-zinc-900/80' : 'bg-zinc-100'} p-2 flex items-center justify-center shadow-inner`}>
+                {station.favicon && !imageError ? (
+                    <img
+                        src={station.favicon}
+                        alt={station.name}
+                        loading="lazy"
+                        decoding="async"
+                        onError={() => setImageError(true)}
+                        className="w-full h-full object-contain drop-shadow-sm transition-transform duration-300 group-hover:scale-105"
+                    />
+                ) : (
+                    <div className={`w-full h-full flex items-center justify-center ${placeholderBg} rounded-lg`}>
+                        <FiRadio className={`w-8 h-8 sm:w-10 sm:h-10 ${placeholderIconColor}`} />
+                    </div>
+                )}
+
+                {/* Persistent play button - always visible, neutral automotive styling */}
+                <div 
+                    className={`absolute bottom-2 right-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full ${
+                        isNight 
+                            ? 'bg-zinc-800/90 text-white border border-white/20' 
+                            : 'bg-white/95 text-zinc-900 border border-black/10'
+                    } shadow-md backdrop-blur-sm flex items-center justify-center transition-all duration-200 group-hover:scale-110 active:scale-95 pointer-events-none`}
+                    aria-hidden="true"
                 >
-                    {station.favicon && !imageError ? (
-                        <img
-                            src={station.favicon}
-                            alt={station.name}
-                            loading="lazy"
-                            decoding="async"
-                            onError={() => setImageError(true)}
-                            className={`w-full h-full squircle-sm rounded-xl object-contain shadow-lg ${isNight ? 'bg-zinc-800' : 'bg-white'}`}
-                        />
-                    ) : (
-                         <div className={`w-full h-full squircle-sm rounded-xl flex items-center justify-center ${placeholderBg}`}>
-                           <FiRadio className={`w-10 h-10 ${placeholderIconColor}`} />
-                        </div>
-                    )}
-                </button>
-                <h3 className={`font-bold truncate ${isNight ? 'text-white' : 'text-zinc-800'}`}>{station.name}</h3>
-                <p className={`text-sm truncate ${isNight ? 'text-[#b3b3b3]' : 'text-zinc-500'}`}>{station.tags?.split(',')[0] || ''}</p>
+                    <FiPlay className="w-3.5 h-3.5 fill-current ml-0.5" />
+                </div>
             </div>
+
+            <h3 className={`font-semibold truncate text-xs sm:text-sm ${textColorPrimary}`}>
+                {station.name}
+            </h3>
+            <p className={`text-[11px] sm:text-xs truncate capitalize ${textColorSecondary}`}>
+                Radio • {tag}
+            </p>
         </div>
     );
 };

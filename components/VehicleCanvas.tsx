@@ -6,6 +6,7 @@ import React, {
   forwardRef,
   useMemo,
   useCallback,
+  useSyncExternalStore,
 } from "react";
 import { Canvas, useFrame, useThree, ThreeElements } from "@react-three/fiber";
 import {
@@ -22,6 +23,7 @@ import WeatherEffects from "./WeatherEffects";
 import type { SceneColors } from "../App";
 import type { WeatherParams } from "../types";
 import { APP_TRANSITION_SECONDS } from "../context/UIConfigContext";
+import { perfLab } from "../lib/perfLabStore";
 
 // Fix: Definitions for R3F intrinsic elements to bypass JSX.IntrinsicElements errors
 const Primitive = "primitive" as any;
@@ -1255,41 +1257,24 @@ function SceneController({
       else if (cw < 1024) dockedAppWidth = Math.round(cw * 0.50);
       else if (cw < 1280) dockedAppWidth = Math.round(cw * 0.40);
 
-      // Posizione reale dell'handle se trascinato o presente nel DOM
-      const handleEl = document.querySelector('.app-drawer-handle') as HTMLElement | null;
-      const appPanel = (
-        document.querySelector('.spotify-app-panel') || 
-        document.getElementById('maps-app-panel') || 
-        document.querySelector('.app-panel')
-      ) as HTMLElement | null;
-
-      let realHandleX = -1;
-      if (handleEl) {
-        const hRect = handleEl.getBoundingClientRect();
-        if (hRect.left > 0 && hRect.left < cw) {
-          realHandleX = hRect.left;
-        }
-      } else if (appPanel && appPanel.offsetWidth > 0) {
-        const pRect = appPanel.getBoundingClientRect();
-        if (pRect.left > 0 && pRect.left < cw) {
-          realHandleX = pRect.left;
-        }
-      }
-
       let visibleWidth = cw;
 
-      if (transitionMode.current === "drag" && realHandleX > 0) {
-        // Drag in corso: la scena 3D segue la posizione dell'handle in tempo reale
-        visibleWidth = Math.round(realHandleX);
+      if (transitionMode.current === "drag") {
+        let rawP = dragProgress.current as number;
+        if (typeof rawP !== "number" || isNaN(rawP)) rawP = isAppOpen ? 0 : 1;
+        rawP = Math.max(0, Math.min(1, rawP));
+        const lerpDocked = dockedAppWidth + (cw - dockedAppWidth) * rawP;
+        // MapsContainer usa w-2/3 (bordo sinistro = 1/3 + 2/3 * rawP): Math.max evita qualunque gap sotto il cassetto
+        visibleWidth = Math.round(Math.max(lerpDocked, cw * (1 / 3 + (2 / 3) * rawP)));
       } else if (transitionMode.current === "auto") {
-        // Animazione open/close: progressione continua partendo da frozenStartWidth.current
-        const targetWidth = isAppOpen ? (realHandleX > 0 ? realHandleX : dockedAppWidth) : cw;
+        // Animazione automatica open/close/snap
+        const targetWidth = isAppOpen ? dockedAppWidth : cw;
         const normT = Math.min((performance.now() - animStartTime.current) / (APP_TRANSITION_SECONDS * 1000), 1.0);
         const easeT = cubicBezierEase(normT);
         visibleWidth = Math.round(frozenStartWidth.current + (targetWidth - frozenStartWidth.current) * easeT);
       } else {
-        // Stato stazionario idle
-        visibleWidth = isAppOpen ? (realHandleX > 0 ? realHandleX : dockedAppWidth) : cw;
+        // Stato stazionario idle (Mappe o Sub-app aperta -> dockedAppWidth; Home -> cw)
+        visibleWidth = isAppOpen ? dockedAppWidth : cw;
       }
 
       visibleWidth = Math.max(1, Math.min(cw, visibleWidth));
@@ -1313,6 +1298,28 @@ function SceneController({
       gl.setViewport(0, 0, visibleWidth, ch);
       gl.setScissor(0, 0, visibleWidth, ch);
       gl.setScissorTest(true);
+
+      // 5. GAP METER VERO (attivo solo sotto flag esplicito: zero costo da spento)
+      if (typeof window !== "undefined" && (window as any).__ENABLE_GAP_METER__) {
+        const mapsPanel = document.getElementById("maps-app-panel");
+        if (mapsPanel) {
+          const mRect = mapsPanel.getBoundingClientRect();
+          // Gap = bordo panel - larghezza canvas (positivo = vuoto visibile, negativo = 3D sotto il pannello, ok)
+          const gap = Math.round(mRect.left - visibleWidth);
+          const meter = (window as any).__GAP_METER__ || { currentGap: 0, maxPositiveGap: 0, mode: "idle", panelLeft: 0, canvasWidth: 0 };
+          meter.currentGap = gap;
+          meter.panelLeft = Math.round(mRect.left);
+          meter.canvasWidth = visibleWidth;
+          meter.mode = transitionMode.current;
+          if (gap > meter.maxPositiveGap) {
+            meter.maxPositiveGap = gap;
+          }
+          (window as any).__GAP_METER__ = meter;
+        }
+      }
+
+      // 6. 3D PERFORMANCE LAB (zero costo da chiuso)
+      perfLab.recordFrame(gl, transitionMode.current);
     }
 
     if (floorRef.current && modelRef.current) {
@@ -1926,6 +1933,11 @@ function VehicleCanvas({
     </Group>
   );
 
+  const perfConfig = useSyncExternalStore(
+    perfLab.subscribe.bind(perfLab),
+    () => perfLab.config
+  );
+
   return (
     <div
       className="absolute inset-0 z-0 pointer-events-auto"
@@ -1933,204 +1945,213 @@ function VehicleCanvas({
         transition: 'transform 0.56s cubic-bezier(0.16, 1, 0.3, 1), width 0.56s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.56s cubic-bezier(0.16, 1, 0.3, 1)'
       }}
     >
-      <Canvas
-        className="w-full h-full"
-        style={{ zIndex: 0, touchAction: "none" }}
-        shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, Math.min(window.devicePixelRatio, 1.25)]}
-        frameloop="always"
-        camera={{
-          fov: 48,
-          near: 0.5,
-          far: 200,
-          position: [
-            initialConfig.cameraPos.x,
-            initialConfig.cameraPos.y,
-            initialConfig.cameraPos.z,
-          ],
-        }}
-      >
-        <SceneController
-          isAppOpen={isAppOpen}
-          activeConfig={activeConfig}
-          homeConfig={initialConfig}
-          appOpenConfig={runtimeAppOpenConfig}
-          modelRef={modelRef}
-          floorRef={floorRef}
-          frontLightTarget={frontLightTarget}
-          frontLightRef={frontLightRef}
-          directionalLightRef={directionalLightRef}
-          spotLightPosX={spotLightPosX}
-          spotLightPosY={spotLightPosY}
-          spotLightPosZ={spotLightPosZ}
-          dirLightPosX={dirLightPosX}
-          dirLightPosY={dirLightPosY}
-          dirLightPosZ={dirLightPosZ}
-          onInteractionChange={onInteractionChange}
-          dragProgress={dragProgress}
-          sceneTransitionSpeed={sceneTransitionSpeed}
-          carReflectionOffsetY={carReflectionOffsetY}
-          redPanelOffsetX={redPanelOffsetX}
-          redPanelOffsetY={redPanelOffsetY}
-          redPanelLength={redPanelLength}
-          redPanelWidth={redPanelWidth}
-          redPanelHeight={redPanelHeight}
-        />
-        <Suspense fallback={null}>
-          <MemoizedEnvironment />
-          <WeatherEffects
-            targetParams={targetWeatherParams}
-            effectiveWeatherCondition={effectiveWeatherCondition}
-          />
-        </Suspense>
-
-        <ModelErrorBoundary>
-          <Suspense
-            fallback={
-              <Html center>
-                <div className="loading-spinner-border-dark w-12 h-12 rounded-full border-t-zinc-400 border-l-zinc-400"></div>
-              </Html>
-            }
-          >
-            {/* Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error */}
-            <Group ref={modelRef}>
-              <Model
-                position={{ x: 0, y: 0, z: 0 }}
-                rotation={{ x: 0, y: 0, z: 0 }}
-                scale={1}
-                isNight={isNight}
-                aoMapIntensity={aoMapIntensity}
-              />
-
-              {showRedPanel && (
-                <Mesh position={[redPanelOffsetX, redPanelOffsetY, 0]} castShadow={false} receiveShadow={false}>
-                  {redPanelOrientation === 'horizontal' ? (
-                    <BoxGeometry args={[redPanelWidth, 0.02, redPanelLength]} />
-                  ) : redPanelOrientation === 'transverse' ? (
-                    <BoxGeometry args={[redPanelWidth, redPanelHeight, 0.02]} />
-                  ) : (
-                    <BoxGeometry args={[redPanelWidth, redPanelHeight, redPanelLength]} />
-                  )}
-                  <MeshStandardMaterial 
-                    color={redPanelColor} 
-                    transparent 
-                    opacity={redPanelOpacity} 
-                    roughness={0.1}
-                    metalness={0.1}
-                    side={THREE.DoubleSide} 
-                  />
-                </Mesh>
-              )}
-
-              {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
-              <ContactShadow
-                shadowRef={shadowRef}
-                carShadowWidth={carShadowWidth}
-                carShadowLength={carShadowLength}
-                shadowPosition={shadowPosition}
-                shadowOpacity={shadowOpacity}
-              />
-
-              {/* Linked headlights follow the model's group rotation */}
-              {linked && renderHeadlights()}
-            </Group>
-            
-            {/* Target marker for lights, moved outside of modelRef so it doesn't double-transform */}
-            {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
-            <Primitive object={frontLightTarget} />
-
-            {/* Unlinked headlights stay fixed in world rotation while car spins */}
-            {!linked && (
-              // Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error
-              <Group
-                position={[
-                  activeConfig.modelPos.x,
-                  activeConfig.modelPos.y,
-                  activeConfig.modelPos.z,
-                ]}
-                scale={activeConfig.modelScale}
-              >
-                {renderHeadlights()}
-              </Group>
-            )}
-          </Suspense>
-        </ModelErrorBoundary>
-
-        <OrbitControls
-          makeDefault
-          enablePan={false}
-          target={defaultOrbitTarget}
-          minPolarAngle={Math.PI / 4}
-          maxPolarAngle={Math.PI / 2 - 0.035}
-          minDistance={minOrbitDistance * (typeof window !== "undefined" && window.innerWidth < 1024 ? 0.7 : 1.0)}
-          maxDistance={maxOrbitDistance}
-          enableDamping={true}
-          dampingFactor={0.06}
-          rotateSpeed={0.55}
-          zoomSpeed={0.85}
-          enableZoom={true}
-          enableRotate={!isAppOpen && dragProgress.current === null}
-        />
-
-        {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
-        <AmbientLight ref={ambientLightRef} intensity={0.5} />
-        <SpotLight
-          ref={frontLightRef}
-          position={[spotLightPosX, spotLightPosY, spotLightPosZ]}
-          intensity={spotLightIntensity}
-          angle={spotLightAngle}
-          penumbra={spotLightPenumbra}
-          color={calculatedTemperatureColor}
-          distance={25}
-          decay={1.5}
-        />
-        <DirectionalLight
-          ref={directionalLightRef}
-          position={[dirLightPosX, dirLightPosY, dirLightPosZ]}
-          intensity={1}
-          castShadow
-          shadow-bias={-0.0001}
-          shadow-normalBias={0.02}
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-          shadow-camera-near={0.5}
-          shadow-camera-far={50}
-          shadow-camera-left={-15}
-          shadow-camera-right={15}
-          shadow-camera-top={15}
-          shadow-camera-bottom={-15}
-        />
-
-        {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
-        <Mesh
-          ref={floorRef}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, -carReflectionOffsetY, 0]}
+      {perfConfig.enabled3D && (
+        <Canvas
+          className="w-full h-full"
+          style={{ zIndex: 0, touchAction: "none" }}
+          shadows={{ type: THREE.PCFSoftShadowMap }}
+          dpr={[1, Math.min(window.devicePixelRatio, 1.25)]}
+          frameloop="always"
+          camera={{
+            fov: 48,
+            near: 0.5,
+            far: 200,
+            position: [
+              initialConfig.cameraPos.x,
+              initialConfig.cameraPos.y,
+              initialConfig.cameraPos.z,
+            ],
+          }}
         >
-          {/* Dimensione ideale per precisione e ampiezza visiva senza distruggere lo Z-buffer */}
-          <PlaneGeometry args={[250, 250]} />
-          <MeshReflectorMaterial
-            blur={[carReflectionBlur, carReflectionBlur]}
-            resolution={512}
-            mixBlur={1}
-            mixStrength={carReflectionMixStrength}
-            roughness={carReflectionRoughness}
-            depthScale={0} // Mantiene stabile il riflesso ed evita l'effetto TV vecchia raso terra
-            minDepthThreshold={0.2}
-            maxDepthThreshold={1.2}
-            color="#101010"
-            metalness={carReflectionMetalness}
-            envMapIntensity={1.0} // Permette di catturare i riflessi speculari delle luci studio Lightformer
-            mirror={carReflectionOpacity} // Utilizza l'opacità di riflesso configurata per la lucentezza desiderata
+          <SceneController
+            isAppOpen={isAppOpen}
+            activeConfig={activeConfig}
+            homeConfig={initialConfig}
+            appOpenConfig={runtimeAppOpenConfig}
+            modelRef={modelRef}
+            floorRef={floorRef}
+            frontLightTarget={frontLightTarget}
+            frontLightRef={frontLightRef}
+            directionalLightRef={directionalLightRef}
+            spotLightPosX={spotLightPosX}
+            spotLightPosY={spotLightPosY}
+            spotLightPosZ={spotLightPosZ}
+            dirLightPosX={dirLightPosX}
+            dirLightPosY={dirLightPosY}
+            dirLightPosZ={dirLightPosZ}
+            onInteractionChange={onInteractionChange}
+            dragProgress={dragProgress}
+            sceneTransitionSpeed={sceneTransitionSpeed}
+            carReflectionOffsetY={carReflectionOffsetY}
+            redPanelOffsetX={redPanelOffsetX}
+            redPanelOffsetY={redPanelOffsetY}
+            redPanelLength={redPanelLength}
+            redPanelWidth={redPanelWidth}
+            redPanelHeight={redPanelHeight}
           />
-        </Mesh>
+          <Suspense fallback={null}>
+            <MemoizedEnvironment />
+            <WeatherEffects
+              targetParams={targetWeatherParams}
+              effectiveWeatherCondition={effectiveWeatherCondition}
+            />
+          </Suspense>
 
-        <EnvironmentController
-          isNight={isNight}
-          floorRef={floorRef}
-          ambientLightRef={ambientLightRef}
-          frontLightRef={frontLightRef}
-          directionalLightRef={directionalLightRef}
+          <ModelErrorBoundary>
+            <Suspense
+              fallback={
+                <Html center>
+                  <div className="loading-spinner-border-dark w-12 h-12 rounded-full border-t-zinc-400 border-l-zinc-400"></div>
+                </Html>
+              }
+            >
+              {/* Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error */}
+              <Group ref={modelRef}>
+                <Model
+                  position={{ x: 0, y: 0, z: 0 }}
+                  rotation={{ x: 0, y: 0, z: 0 }}
+                  scale={1}
+                  isNight={isNight}
+                  aoMapIntensity={aoMapIntensity}
+                />
+
+                {showRedPanel && (
+                  <Mesh position={[redPanelOffsetX, redPanelOffsetY, 0]} castShadow={false} receiveShadow={false}>
+                    {redPanelOrientation === 'horizontal' ? (
+                      <BoxGeometry args={[redPanelWidth, 0.02, redPanelLength]} />
+                    ) : redPanelOrientation === 'transverse' ? (
+                      <BoxGeometry args={[redPanelWidth, redPanelHeight, 0.02]} />
+                    ) : (
+                      <BoxGeometry args={[redPanelWidth, redPanelHeight, redPanelLength]} />
+                    )}
+                    <MeshStandardMaterial 
+                      color={redPanelColor} 
+                      transparent 
+                      opacity={redPanelOpacity} 
+                      roughness={0.1}
+                      metalness={0.1}
+                      side={THREE.DoubleSide} 
+                    />
+                  </Mesh>
+                )}
+
+                {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+                <ContactShadow
+                  shadowRef={shadowRef}
+                  carShadowWidth={carShadowWidth}
+                  carShadowLength={carShadowLength}
+                  shadowPosition={shadowPosition}
+                  shadowOpacity={shadowOpacity}
+                />
+
+                {/* Linked headlights follow the model's group rotation */}
+                {linked && renderHeadlights()}
+              </Group>
+              
+              {/* Target marker for lights, moved outside of modelRef so it doesn't double-transform */}
+              {/* Fix: Replaced 'primitive' with locally defined 'Primitive' constant to fix JSX.IntrinsicElements error */}
+              <Primitive object={frontLightTarget} />
+
+              {/* Unlinked headlights stay fixed in world rotation while car spins */}
+              {!linked && (
+                // Fix: Replaced 'group' with locally defined 'Group' constant to fix JSX.IntrinsicElements error
+                <Group
+                  position={[
+                    activeConfig.modelPos.x,
+                    activeConfig.modelPos.y,
+                    activeConfig.modelPos.z,
+                  ]}
+                  scale={activeConfig.modelScale}
+                >
+                  {renderHeadlights()}
+                </Group>
+              )}
+            </Suspense>
+          </ModelErrorBoundary>
+
+          <OrbitControls
+            makeDefault
+            enablePan={false}
+            target={defaultOrbitTarget}
+            minPolarAngle={Math.PI / 4}
+            maxPolarAngle={Math.PI / 2 - 0.035}
+            minDistance={minOrbitDistance * (typeof window !== "undefined" && window.innerWidth < 1024 ? 0.7 : 1.0)}
+            maxDistance={maxOrbitDistance}
+            enableDamping={true}
+            dampingFactor={0.06}
+            rotateSpeed={0.55}
+            zoomSpeed={0.85}
+            enableZoom={true}
+            enableRotate={!isAppOpen && dragProgress.current === null}
+          />
+
+          {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+          <AmbientLight ref={ambientLightRef} intensity={0.5} />
+          <SpotLight
+            ref={frontLightRef}
+            position={[spotLightPosX, spotLightPosY, spotLightPosZ]}
+            intensity={spotLightIntensity}
+            angle={spotLightAngle}
+            penumbra={spotLightPenumbra}
+            color={calculatedTemperatureColor}
+            distance={25}
+            decay={1.5}
+          />
+          <DirectionalLight
+            ref={directionalLightRef}
+            position={[dirLightPosX, dirLightPosY, dirLightPosZ]}
+            intensity={1}
+            castShadow={perfConfig.shadowsEnabled}
+            shadow-bias={-0.0001}
+            shadow-normalBias={0.02}
+            shadow-mapSize-width={perfConfig.shadowMapSize}
+            shadow-mapSize-height={perfConfig.shadowMapSize}
+            shadow-camera-near={0.5}
+            shadow-camera-far={50}
+            shadow-camera-left={-15}
+            shadow-camera-right={15}
+            shadow-camera-top={15}
+            shadow-camera-bottom={-15}
+          />
+
+          {/* Fix: Replaced intrinsic elements with locally defined constants to fix JSX.IntrinsicElements error */}
+          <Mesh
+            ref={floorRef}
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, -carReflectionOffsetY, 0]}
+          >
+            {/* Dimensione ideale per precisione e ampiezza visiva senza distruggere lo Z-buffer */}
+            <PlaneGeometry args={[250, 250]} />
+            {perfConfig.reflectorEnabled ? (
+              <MeshReflectorMaterial
+                blur={[carReflectionBlur, carReflectionBlur]}
+                resolution={512}
+                mixBlur={1}
+                mixStrength={carReflectionMixStrength}
+                roughness={carReflectionRoughness}
+                depthScale={0} // Mantiene stabile il riflesso ed evita l'effetto TV vecchia raso terra
+                minDepthThreshold={0.2}
+                maxDepthThreshold={1.2}
+                color="#101010"
+                metalness={carReflectionMetalness}
+                envMapIntensity={1.0} // Permette di catturare i riflessi speculari delle luci studio Lightformer
+                mirror={carReflectionOpacity} // Utilizza l'opacità di riflesso configurata per la lucentezza desiderata
+              />
+            ) : (
+              <MeshStandardMaterial
+                color="#101010"
+                roughness={carReflectionRoughness}
+                metalness={carReflectionMetalness}
+              />
+            )}
+          </Mesh>
+
+          <EnvironmentController
+            isNight={isNight}
+            floorRef={floorRef}
+            ambientLightRef={ambientLightRef}
+            frontLightRef={frontLightRef}
+            directionalLightRef={directionalLightRef}
           nightAmbientIntensity={nightAmbientIntensity}
           nightFrontLightIntensity={nightFrontLightIntensity}
           nightEnvironmentIntensity={nightEnvironmentIntensity}
@@ -2146,7 +2167,8 @@ function VehicleCanvas({
           dirLightIntensity={dirLightIntensity}
           spotLightIntensity={spotLightIntensity}
         />
-      </Canvas>
+        </Canvas>
+      )}
     </div>
   );
 }

@@ -25,6 +25,20 @@ interface YouTubePlaylistDetailViewProps {
     onQuotaError: (error: Error) => void;
 }
 
+const AnimatedEqualizer = ({ className = '' }: { className?: string }) => (
+    <div className={`flex items-end gap-[2px] h-3.5 w-3.5 ${className}`}>
+      <style>{`
+        @keyframes yt-equalizer-bar {
+          0%, 100% { height: 25%; }
+          50% { height: 100%; }
+        }
+      `}</style>
+      <span className="w-0.5 bg-current" style={{ animation: 'yt-equalizer-bar 1.2s ease-in-out infinite', animationDelay: '0s' }}></span>
+      <span className="w-0.5 bg-current" style={{ animation: 'yt-equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.2s' }}></span>
+      <span className="w-0.5 bg-current" style={{ animation: 'yt-equalizer-bar 1.2s ease-in-out infinite', animationDelay: '-0.4s' }}></span>
+    </div>
+);
+
 const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ playlist, isNight, onBack, onPlayTrack, onQuotaError }) => {
     const [tracks, setTracks] = useState<YouTubeTrackInfo[]>([]);
     const [loading, setLoading] = useState(true);
@@ -111,38 +125,46 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
     }
 
     return (
-        <div className="flex-1 min-h-0 overflow-y-auto px-8 pb-6 hide-scrollbar">
-            <header className="flex items-end gap-6 mb-6 pt-5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 hide-scrollbar">
+            <header className="flex items-end gap-6 mb-6 pt-4">
                 {playlist.images?.[0]?.url ? (
-                    <img src={playlist.images[0].url} alt={playlist.name} className="w-48 h-48 squircle-card rounded-2xl object-cover shadow-2xl flex-shrink-0" />
+                    <img src={playlist.images[0].url} alt={playlist.name} className="w-36 h-36 sm:w-44 sm:h-44 squircle-card rounded-2xl object-cover shadow-2xl flex-shrink-0 border border-white/10" />
                 ) : (
-                    <div className={`w-48 h-48 squircle-card rounded-2xl flex items-center justify-center shadow-2xl flex-shrink-0 ${theme.placeholderBg}`}>
-                        <FiMusic className={`w-24 h-24 ${theme.placeholderIcon}`} />
+                    <div className={`w-36 h-36 sm:w-44 sm:h-44 squircle-card rounded-2xl flex items-center justify-center shadow-2xl flex-shrink-0 border border-white/10 ${theme.placeholderBg}`}>
+                        <FiMusic className={`w-16 h-16 sm:w-20 sm:h-20 ${theme.placeholderIcon}`} />
                     </div>
                 )}
-                <div className="flex flex-col gap-3">
-                    <button onClick={onBack} className={`flex items-center gap-1.5 text-sm font-semibold mb-2 ${theme.textSecondary} ${theme.hover} px-3 py-1.5 rounded-xl`}>
-                        <FiChevronLeft /> Indietro
+                <div className="flex flex-col gap-2.5">
+                    <button onClick={onBack} className={`flex items-center gap-1.5 text-xs font-semibold self-start ${theme.textSecondary} ${theme.hover} px-2.5 py-1 rounded-lg transition-colors`}>
+                        <FiChevronLeft className="w-4 h-4" /> Indietro
                     </button>
-                    <span className={`text-sm font-bold uppercase ${theme.textSecondary}`}>Playlist</span>
-                    <h1 className="text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{playlist.name}</h1>
-                    <div className="flex items-center gap-4 mt-4">
-                        <button onClick={handlePlayAll} className="bg-red-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
-                            <FiPlay className="w-7 h-7 ml-1" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-red-500">YouTube Music • Playlist</span>
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight" style={{ color: 'var(--text-primary)'}}>{playlist.name}</h1>
+                    <div className="flex items-center gap-4 mt-2">
+                        <button onClick={handlePlayAll} className="bg-red-600 text-white w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer" aria-label="Riproduci tutto">
+                            <FiPlay className="w-6 h-6 sm:w-7 sm:h-7 ml-0.5 fill-current" />
                         </button>
                         <button
                             onClick={() => onToggleYouTubeFavorite(playlist.id)}
-                            className="p-2 text-gray-400 hover:text-white transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white transition-colors cursor-pointer"
                             aria-label={isFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
                         >
-                            <FiHeart className={`w-8 h-8 transition-all ${isFavorite ? 'fill-current text-red-500' : ''}`} />
+                            <FiHeart className={`w-7 h-7 sm:w-8 sm:h-8 transition-all ${isFavorite ? 'fill-current text-red-500' : ''}`} />
                         </button>
                     </div>
                 </div>
             </header>
 
+            {/* Track List Header matching Spotify */}
+            <div className={`grid grid-cols-[2.5rem_auto_1fr_6rem] gap-3 px-4 py-2 border-b ${theme.border} text-xs font-semibold ${theme.textSecondary}`}>
+                <div className="text-center">#</div>
+                <div className="w-12 text-center">Cover</div>
+                <div>Titolo</div>
+                <div className="text-right">Canale</div>
+            </div>
+
              <motion.div
-              className="mt-2 flex flex-col gap-2"
+              className="mt-2 flex flex-col gap-1"
               variants={containerVariants}
               initial="hidden"
               animate="visible"
@@ -156,13 +178,22 @@ const YouTubePlaylistDetailView: React.FC<YouTubePlaylistDetailViewProps> = ({ p
                             key={track.videoId}
                             variants={itemVariants}
                             onClick={() => handlePlaySingle(track)}
-                            className={`flex items-center gap-4 p-2.5 px-4 squircle-card rounded-xl cursor-pointer ${theme.hover}`}
+                            className={`grid grid-cols-[2.5rem_auto_1fr_6rem] gap-3 items-center p-2 px-4 squircle-card rounded-xl cursor-pointer transition-all duration-150 ${theme.hover} ${isPlaying ? (isNight ? 'bg-white/10' : 'bg-black/5') : ''}`}
                         >
-                            <span className={`w-8 text-center font-medium ${theme.textSecondary}`}>{index + 1}</span>
-                            <img src={track.thumbnail} alt={track.title} className="w-16 h-10 squircle-sm rounded-lg object-cover flex-shrink-0" />
-                            <div className="flex-grow flex flex-col min-w-0">
-                                <span className={`truncate font-semibold ${isPlaying ? activeColor : theme.textPrimary}`}>{track.title}</span>
-                                <span className={`text-sm truncate ${theme.textSecondary}`}>{track.channelTitle}</span>
+                            <div className="text-center">
+                                {isPlaying ? (
+                                    <AnimatedEqualizer className={`mx-auto ${activeColor}`} />
+                                ) : (
+                                    <span className={`text-xs font-medium ${theme.textSecondary}`}>{index + 1}</span>
+                                )}
+                            </div>
+                            <img src={track.thumbnail} alt={track.title} className="w-12 h-8 sm:w-14 sm:h-9 squircle-sm rounded-lg object-cover flex-shrink-0 shadow-sm" />
+                            <div className="flex flex-col min-w-0 pr-2">
+                                <span className={`truncate font-bold text-xs sm:text-[13px] ${isPlaying ? activeColor : theme.textPrimary}`}>{track.title}</span>
+                                <span className={`text-[10px] sm:text-[11px] truncate ${theme.textSecondary}`}>{track.channelTitle}</span>
+                            </div>
+                            <div className={`text-[11px] truncate text-right ${theme.textSecondary}`}>
+                                {track.channelTitle}
                             </div>
                         </motion.div>
                     );

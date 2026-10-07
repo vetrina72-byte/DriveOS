@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
 import type { SceneConfig, HeadlightConfig } from '../components/VehicleCanvas';
 import type { SceneColors } from '../App';
 import { initialSceneColors } from '../App';
+import { performanceManager, PerformanceSettings, PerformanceTier } from '../lib/performanceProfile';
 
 export const DEFAULT_HOME_CONFIG: SceneConfig = {
     cameraPos: { x: 8.30, y: 3.30, z: 8.80 }, 
@@ -25,6 +26,22 @@ export const APP_TRANSITION_SECONDS = 0.56; // 0.56s for Three.js / WebGL scene 
 export const UIConfigContext = createContext<any>(null);
 
 export function UIConfigProvider({ children }: { children: React.ReactNode }) {
+  // Performance Profile state
+  const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(() => performanceManager.getSettings());
+  const [performanceTier, setPerformanceTierState] = useState<PerformanceTier>(() => performanceManager.getTier());
+
+  useEffect(() => {
+    const unsubscribe = performanceManager.subscribe((newSettings) => {
+      setPerformanceSettings(newSettings);
+      setPerformanceTierState(newSettings.tier);
+    });
+    return unsubscribe;
+  }, []);
+
+  const setPerformanceTier = useCallback((tier: PerformanceTier) => {
+    performanceManager.setTier(tier);
+  }, []);
+
   const [topBarScale, setTopBarScale] = useState(1.0);
   const [layeredAppTopOffset, setLayeredAppTopOffset] = useState(18);
   const [topBarOffsetY, setTopBarOffsetY] = useState(-7);
@@ -41,6 +58,80 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [minOrbitDistance, setMinOrbitDistance] = useState(9.5);
   const [maxOrbitDistance, setMaxOrbitDistance] = useState(18);
   const [sceneTransitionSpeed, setSceneTransitionSpeed] = useState(APP_TRANSITION_SECONDS);
+  
+  const [enable3DModel, setEnable3DModelState] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('driveos_enable_3d_model');
+        if (stored !== null) return JSON.parse(stored);
+      } catch {}
+    }
+    return true;
+  });
+
+  const setEnable3DModel = useCallback((val: boolean) => {
+    setEnable3DModelState(val);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('driveos_enable_3d_model', JSON.stringify(val));
+      } catch {}
+    }
+  }, []);
+
+  // --- 3D PERFORMANCE LAB STATE & METRICS ---
+  const [perfReflector, setPerfReflector] = useState<boolean>(true);
+  const [perfShadows, setPerfShadows] = useState<'high' | 'low' | 'off'>('high');
+  const [perfWeatherParticles, setPerfWeatherParticles] = useState<'high' | 'low' | 'off'>('high');
+  const [perfVolumetricHeadlights, setPerfVolumetricHeadlights] = useState<boolean>(true);
+  const [perfEnvironment, setPerfEnvironment] = useState<'high' | 'low' | 'off'>('high');
+  const [perfAntialiasing, setPerfAntialiasing] = useState<boolean>(true);
+  const [perfDPR, setPerfDPR] = useState<'auto' | '1.0' | '0.9' | '0.8' | '0.7'>('auto');
+  const [perfTargetFps, setPerfTargetFps] = useState<60 | 30>(60);
+  const [perfProfilePreset, setPerfProfilePreset] = useState<'high' | 'medium' | 'low' | 'custom'>('high');
+
+  const [perfMetrics, setPerfMetrics] = useState({
+    fps: 0,
+    frameTime: 0,
+    drawCalls: 0,
+    triangles: 0,
+    geometries: 0,
+    textures: 0,
+  });
+
+  const applyPerformancePreset = useCallback((preset: 'high' | 'medium' | 'low') => {
+    setPerfProfilePreset(preset);
+    if (preset === 'high') {
+      setEnable3DModel(true);
+      setPerfReflector(true);
+      setPerfShadows('high');
+      setPerfWeatherParticles('high');
+      setPerfVolumetricHeadlights(true);
+      setPerfEnvironment('high');
+      setPerfAntialiasing(true);
+      setPerfDPR('auto');
+      setPerfTargetFps(60);
+    } else if (preset === 'medium') {
+      setEnable3DModel(true);
+      setPerfReflector(false);
+      setPerfShadows('low');
+      setPerfWeatherParticles('low');
+      setPerfVolumetricHeadlights(true);
+      setPerfEnvironment('low');
+      setPerfAntialiasing(true);
+      setPerfDPR('1.0');
+      setPerfTargetFps(60);
+    } else if (preset === 'low') {
+      setEnable3DModel(true);
+      setPerfReflector(false);
+      setPerfShadows('low');
+      setPerfWeatherParticles('off');
+      setPerfVolumetricHeadlights(false);
+      setPerfEnvironment('low');
+      setPerfAntialiasing(false);
+      setPerfDPR('1.0');
+      setPerfTargetFps(60);
+    }
+  }, [setEnable3DModel]);
   
   const [homeConfig, setHomeConfig] = useState<SceneConfig>(DEFAULT_HOME_CONFIG);
   const [appOpenConfig, setAppOpenConfig] = useState<SceneConfig>(DEFAULT_APP_OPEN_CONFIG);
@@ -79,12 +170,53 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [spotLightAngle, setSpotLightAngle] = useState(0.6);
   const [spotLightPenumbra, setSpotLightPenumbra] = useState(0.5);
   const [spotLightTemperature, setSpotLightTemperature] = useState(5500);
-  const [carReflectionOffsetY, setCarReflectionOffsetY] = useState(0.0);
-  const [carReflectionOpacity, setCarReflectionOpacity] = useState(1.08);
-  const [carReflectionRoughness, setCarReflectionRoughness] = useState(0.00);
-  const [carReflectionBlur, setCarReflectionBlur] = useState(0);
-  const [carReflectionMixStrength, setCarReflectionMixStrength] = useState(0.1);
-  const [carReflectionMetalness, setCarReflectionMetalness] = useState(0.00);
+
+  // Single combined reflection state to eliminate 5 individual setState cascades
+  const [reflectionState, setReflectionState] = useState({
+    offsetY: 0.0,
+    opacity: 1.08,
+    roughness: 0.00,
+    blur: 0,
+    mixStrength: 0.1,
+    metalness: 0.00,
+  });
+
+  const carReflectionOffsetY = reflectionState.offsetY;
+  const carReflectionOpacity = reflectionState.opacity;
+  const carReflectionRoughness = reflectionState.roughness;
+  const carReflectionBlur = reflectionState.blur;
+  const carReflectionMixStrength = reflectionState.mixStrength;
+  const carReflectionMetalness = reflectionState.metalness;
+
+  const setCarReflectionOffsetY = useCallback((val: number) => setReflectionState(p => ({ ...p, offsetY: val })), []);
+  const setCarReflectionOpacity = useCallback((val: number) => setReflectionState(p => ({ ...p, opacity: val })), []);
+  const setCarReflectionRoughness = useCallback((val: number) => setReflectionState(p => ({ ...p, roughness: val })), []);
+  const setCarReflectionBlur = useCallback((val: number) => setReflectionState(p => ({ ...p, blur: val })), []);
+  const setCarReflectionMixStrength = useCallback((val: number) => setReflectionState(p => ({ ...p, mixStrength: val })), []);
+  const setCarReflectionMetalness = useCallback((val: number) => setReflectionState(p => ({ ...p, metalness: val })), []);
+
+  const setDayNightReflection = useCallback((isNight: boolean) => {
+    if (isNight) {
+      setReflectionState(prev => ({
+        ...prev,
+        opacity: 0.00,
+        roughness: 0.70,
+        blur: 0,
+        mixStrength: 25.0,
+        metalness: 0.00
+      }));
+    } else {
+      setReflectionState(prev => ({
+        ...prev,
+        opacity: 1.08,
+        roughness: 0.00,
+        blur: 0,
+        mixStrength: 0.1,
+        metalness: 0.00
+      }));
+    }
+  }, []);
+
   const [forceManualFog, setForceManualFog] = useState(false);
 
   const [showRedPanel, setShowRedPanel] = useState(true);
@@ -183,7 +315,11 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
   const [resizeCameraOffsetY, setResizeCameraOffsetY] = useState(0.0);
   const [resizeCameraOffsetZ, setResizeCameraOffsetZ] = useState(0.0);
 
-  const value = {
+  // Memoize the entire context value to protect consumers from unnecessary re-renders
+  const value = useMemo(() => ({
+    performanceSettings,
+    performanceTier,
+    setPerformanceTier,
     isSimulatingResize, setIsSimulatingResize,
     simulatedWindowWidth, setSimulatedWindowWidth,
     simulatedWindowHeight, setSimulatedWindowHeight,
@@ -245,6 +381,7 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     carReflectionBlur, setCarReflectionBlur,
     carReflectionMixStrength, setCarReflectionMixStrength,
     carReflectionMetalness, setCarReflectionMetalness,
+    setDayNightReflection,
     forceManualFog, setForceManualFog,
     spotifyPlayerTop, setSpotifyPlayerTop,
     spotifyPlayerBottom, setSpotifyPlayerBottom,
@@ -313,7 +450,172 @@ export function UIConfigProvider({ children }: { children: React.ReactNode }) {
     redPanelColor, setRedPanelColor,
     redPanelOrientation, setRedPanelOrientation,
     layeredAppTopOffset, setLayeredAppTopOffset,
-  };
+    enable3DModel, setEnable3DModel,
+    perfReflector, setPerfReflector,
+    perfShadows, setPerfShadows,
+    perfWeatherParticles, setPerfWeatherParticles,
+    perfVolumetricHeadlights, setPerfVolumetricHeadlights,
+    perfEnvironment, setPerfEnvironment,
+    perfAntialiasing, setPerfAntialiasing,
+    perfDPR, setPerfDPR,
+    perfTargetFps, setPerfTargetFps,
+    perfProfilePreset, setPerfProfilePreset,
+    applyPerformancePreset,
+    perfMetrics, setPerfMetrics,
+  }), [
+    performanceSettings,
+    performanceTier,
+    setPerformanceTier,
+    isSimulatingResize,
+    simulatedWindowWidth,
+    simulatedWindowHeight,
+    compactLayoutThreshold,
+    forcePlayerLayout,
+    resizeModelScaleFactor,
+    resizeModelOffsetX,
+    resizeModelOffsetY,
+    resizeModelOffsetZ,
+    resizeCameraOffsetX,
+    resizeCameraOffsetY,
+    resizeCameraOffsetZ,
+    topBarScale,
+    topBarOffsetY,
+    mapsSearchPanelTop,
+    miniMapTop,
+    miniMapRight,
+    miniMapSize,
+    miniMapZoom,
+    miniMapFadeStart,
+    miniMapFadeEnd,
+    uiScale,
+    appBarWidth,
+    minOrbitDistance,
+    maxOrbitDistance,
+    sceneTransitionSpeed,
+    homeConfig,
+    appOpenConfig,
+    headlightConfig,
+    sceneColors,
+    nightAmbientIntensity,
+    nightFrontLightIntensity,
+    nightEnvironmentIntensity,
+    dayFogNear,
+    dayFogFar,
+    nightFogNear,
+    nightFogFar,
+    carShadowOpacity,
+    aoMapIntensity,
+    carShadowWidth,
+    carShadowLength,
+    carShadowOffsetY,
+    carShadowOffsetX,
+    carShadowOffsetZ,
+    dirLightPosX,
+    dirLightPosY,
+    dirLightPosZ,
+    dirLightIntensity,
+    spotLightPosX,
+    spotLightPosY,
+    spotLightPosZ,
+    spotLightIntensity,
+    spotLightAngle,
+    spotLightPenumbra,
+    spotLightTemperature,
+    carReflectionOffsetY,
+    carReflectionOpacity,
+    carReflectionRoughness,
+    carReflectionBlur,
+    carReflectionMixStrength,
+    carReflectionMetalness,
+    setCarReflectionOffsetY,
+    setCarReflectionOpacity,
+    setCarReflectionRoughness,
+    setCarReflectionBlur,
+    setCarReflectionMixStrength,
+    setCarReflectionMetalness,
+    setDayNightReflection,
+    forceManualFog,
+    spotifyPlayerTop,
+    spotifyPlayerBottom,
+    playerDockedWidth,
+    playerDockedLeft,
+    playerDockedHeight,
+    playerFloatingWidth,
+    playerFloatingBottom,
+    playerFloatingHeight,
+    navigateToolWidth,
+    playerControlsSize,
+    playerControlsGap,
+    playerControlsVerticalPosition,
+    spinnerSize,
+    spinnerShuffleGap,
+    debugSpinner,
+    spinnerTop,
+    spinnerRight,
+    spinnerBottom,
+    spinnerLeft,
+    volumeIconSize,
+    volumeSliderOffsetY,
+    volumeSliderOffsetX,
+    volumeControlMarginRight,
+    volumeSliderWidth,
+    volumeSliderThickness,
+    volumeSliderThumbOffsetY,
+    volumeSliderPopupWidth,
+    volumeSliderPopupHeight,
+    volumeControlZIndex,
+    appLauncherWidth,
+    appLauncherHeight,
+    queuePopoverHeight,
+    queuePopoverBottomOffset,
+    queuePopoverScale,
+    queuePopoverWidth,
+    queuePopoverOffsetX,
+    dayPlayerButtonColor,
+    nightPlayerButtonColor,
+    widgetBgHex,
+    widgetBgColor,
+    darkVolumeTrackBg,
+    darkVolumeThumbBg,
+    darkVolumeFillBg,
+    darkPlayerBg,
+    darkNavigateInputBg,
+    satelliteLabelBrightness,
+    satelliteLabelOutlineWidth,
+    progressBarHeight,
+    progressBarVerticalOffset,
+    playButtonScale,
+    skipButtonScale,
+    virtualKeyboardKeySize,
+    virtualKeyboardHeight,
+    virtualKeyboardPaddingX,
+    virtualKeyboardKeyGapX,
+    virtualKeyboardKeyGapY,
+    virtualKeyboardKeyFontWeight,
+    showRedPanel,
+    redPanelLength,
+    redPanelHeight,
+    redPanelWidth,
+    redPanelOffsetY,
+    redPanelOffsetX,
+    redPanelOpacity,
+    redPanelColor,
+    redPanelOrientation,
+    layeredAppTopOffset,
+    enable3DModel,
+    setEnable3DModel,
+    perfReflector,
+    perfShadows,
+    perfWeatherParticles,
+    perfVolumetricHeadlights,
+    perfEnvironment,
+    perfAntialiasing,
+    perfDPR,
+    perfTargetFps,
+    perfProfilePreset,
+    applyPerformancePreset,
+    perfMetrics,
+  ]);
 
   return <UIConfigContext.Provider value={value}>{children}</UIConfigContext.Provider>;
 }
