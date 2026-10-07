@@ -24,7 +24,6 @@ import { isSpotifyAiDj, isSpotifyAiDjPlaying, aiDjVisualState } from '../service
 import { cubicBezierEase } from './VehicleCanvas';
 import { SPLIT_APPS_WITH_MAP_UNDER } from '../App';
 import { APP_TRANSITION_DURATION } from '../context/UIConfigContext';
-import { drawerLayout } from '../lib/drawerLayout';
 
 // Lucide Player Control Icons requested by user
 const PrevTrackIcon = ({ size, scale = 1 }: { size: string; scale?: number }) => (
@@ -970,35 +969,57 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     const targetDockedWidthRef = useRef<number>(dockedConfig.width);
     const lastFrameTimeRef = useRef<number>(performance.now());
+    const lastActiveAppRef = useRef<string | null>(activeApp);
+    const lastDockedWidthRef = useRef<number>(dockedConfig.width);
+
+    const getActivePanelElement = useCallback((appId: string | null): HTMLElement | null => {
+        if (!appId) return null;
+        switch (appId) {
+            case 'maps':
+                return document.getElementById('maps-app-panel');
+            case 'spotify':
+                return document.querySelector('.spotify-app-panel:not(#maps-anchored-container .spotify-app-panel)') as HTMLElement;
+            case 'youtube':
+            case 'youtube-music':
+                return (document.querySelector('#youtube-music-app-panel, .youtube-music-app-panel') || document.querySelector('.spotify-app-panel')) as HTMLElement;
+            case 'radio':
+                return document.querySelector('.radio-app-panel') as HTMLElement;
+            case 'theater':
+                return document.querySelector('.theater-app-panel') as HTMLElement;
+            case 'debug':
+                return document.querySelector('.debug-app-panel') as HTMLElement;
+            default:
+                return document.querySelector(`.${appId}-app-panel, #${appId}-app-panel`) as HTMLElement;
+        }
+    }, []);
 
     // Calculate real app left edge and symmetric docked width
     const updateTargetDockedWidth = useCallback(() => {
         const wWidth = window.innerWidth;
         const sideMargin = wWidth < 1024 ? 16 : 24;
 
-        // Determine FINAL_APP_LEFT boundary
-        let appLeft = wWidth;
-        const mapsPanel = document.getElementById('maps-app-panel');
-        if (mapsPanel && mapsPanel.offsetWidth > 0 && mapsPanel.offsetWidth < wWidth) {
-            appLeft = wWidth - mapsPanel.offsetWidth;
-        } else {
-            const appElements = document.querySelectorAll('.spotify-app-panel');
-            for (let i = 0; i < appElements.length; i++) {
-                const el = appElements[i] as HTMLElement;
-                if (el.offsetWidth > 0 && el.offsetWidth < wWidth && !el.closest('#maps-anchored-container')) {
-                    appLeft = wWidth - el.offsetWidth;
-                    break;
-                }
-            }
+        if (activeApp) {
+            lastActiveAppRef.current = activeApp;
         }
-        if (appLeft === wWidth && activeApp) {
+        const targetApp = activeApp || lastActiveAppRef.current;
+
+        // Determine FINAL_APP_LEFT boundary for the active app
+        let appLeft = wWidth;
+        const activePanel = getActivePanelElement(targetApp);
+        if (activePanel && activePanel.offsetWidth > 0 && activePanel.offsetWidth < wWidth) {
+            appLeft = wWidth - activePanel.offsetWidth;
+        } else if (targetApp) {
             appLeft = Math.round(wWidth * (1 / 3));
         }
 
         // Available width inside left column with perfectly symmetrical margins on left and right
         const availablePx = appLeft - (2 * sideMargin);
-        targetDockedWidthRef.current = Math.max(200, Math.round(availablePx));
-    }, [activeApp]);
+        const dockedWidth = Math.max(200, Math.round(availablePx));
+        if (activeApp) {
+            lastDockedWidthRef.current = dockedWidth;
+        }
+        targetDockedWidthRef.current = dockedWidth;
+    }, [activeApp, getActivePanelElement]);
 
     // Recalculate fixed target when opening state or active app changes
     useEffect(() => {
@@ -1071,11 +1092,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // Root rem scaling factor read from cached ref (avoids forced layout recalc every frame)
                 const remScale = remScaleRef.current;
 
-                // Determine app boundary (the real left edge of the open right-hand panel) in current coordinate space
+                if (activeApp) {
+                    lastActiveAppRef.current = activeApp;
+                }
+                const targetApp = activeApp || lastActiveAppRef.current;
+
+                // Determine app boundary for the active app
                 let appLeft = winWidth;
-                if (drawerLayout.activeApp && drawerLayout.progress < 0.999) {
-                    appLeft = Math.round(drawerLayout.currentLeftPx);
-                } else if (activeApp) {
+                const activePanel = getActivePanelElement(targetApp);
+                if (activePanel && activePanel.offsetWidth > 0 && activePanel.offsetWidth < winWidth) {
+                    appLeft = winWidth - activePanel.offsetWidth;
+                } else if (targetApp) {
                     appLeft = Math.round(winWidth * (1 / 3));
                 }
 
@@ -1084,7 +1111,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 // leftMargin = sideMargin, rightMargin = sideMargin
                 // playerLeft = sideMargin, playerRight = appLeft - sideMargin
                 // playerWidth = appLeft - 2 * sideMargin
-                const effectiveDockedWidth = Math.max(200, Math.round(appLeft - 2 * sideMargin));
+                let effectiveDockedWidth: number;
+                if (activeApp) {
+                    effectiveDockedWidth = Math.max(200, Math.round(appLeft - 2 * sideMargin));
+                    lastDockedWidthRef.current = effectiveDockedWidth;
+                } else {
+                    effectiveDockedWidth = lastDockedWidthRef.current || Math.max(200, Math.round(appLeft - 2 * sideMargin));
+                }
                 const dockedLeft = sideMargin;
                 const dockedBottom = dockedConfig.bottom * remScale;
                 const dockedHeight = dockedConfig.height * remScale;

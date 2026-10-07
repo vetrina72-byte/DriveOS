@@ -59,6 +59,18 @@ function kelvinToColor(kelvin: number): THREE.Color {
   return new THREE.Color(r / 255, g / 255, b / 255);
 }
 
+// Reference aspect of open 3D area on desktop baseline (1920x1080 with 1/3 docked width)
+export const REF_ASPECT = 640 / 1080; // ~0.59259
+
+// Determinazione deterministica del confine dell'app quando aperta
+export function getDockedAppWidth(cw: number): number {
+  if (cw < 640) return Math.round(cw * 0.15);
+  if (cw < 768) return Math.round(cw * 0.25);
+  if (cw < 1024) return Math.round(cw * 0.50);
+  if (cw < 1280) return Math.round(cw * 0.40);
+  return Math.round(cw * (1 / 3));
+}
+
 // Cubic-bezier solver for cubic-bezier(0.16, 1, 0.3, 1)
 export function cubicBezierEase(t: number): number {
   if (t <= 0) return 0;
@@ -501,14 +513,27 @@ function SceneController({
   const snapshotHomePos = useRef(new THREE.Vector3());
   const snapshotHomeTarget = useRef(new THREE.Vector3());
 
+  // Tracciamento viewport reattivo su resize/orientamento (zero overhead/no RAF)
+  const [viewportSize, setViewportSize] = useState(() => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 1920,
+    h: typeof window !== 'undefined' ? window.innerHeight : 1080,
+  }));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportSize({ w: window.innerWidth, h: window.innerHeight });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Calcolo coefficiente di responsive e configurazioni locali dinamiche per evitare tagli
   // R3F size.width si riduce asincronamente d'un tratto all'apertura dell'app.
-  // Usiamo window.innerWidth / window.innerHeight per avere un coefficiente stabile durante il resizing del Canvas splittato.
+  // Usiamo viewportSize.w / viewportSize.h per avere un coefficiente stabile durante il resizing del Canvas splittato.
   const responsiveCoeff = useMemo(() => {
-    const aspect = window.innerWidth / window.innerHeight;
+    const aspect = viewportSize.w / Math.max(1, viewportSize.h);
     return Math.min(1.0, Math.max(0.0, (aspect - 1.0) / 0.77));
-  }, [size.height]);
+  }, [viewportSize]);
 
   // Mantieni il FOV fisso e stabile a 48 per evitare scatti visivi durante il resize
   useEffect(() => {
@@ -524,8 +549,8 @@ function SceneController({
     let baseModelScale = homeConfig.modelScale;
     let baseModelY = homeConfig.modelPos.y;
     
-    const W = window.innerWidth;
-    const H = window.innerHeight;
+    const W = viewportSize.w;
+    const H = viewportSize.h;
     const aspect = W / (H || 1);
     
     if (W < 1180) {
@@ -562,18 +587,23 @@ function SceneController({
         y: homeConfig.cameraPos.y + (baseModelY - homeConfig.modelPos.y),
       },
     };
-  }, [homeConfig, responsiveCoeff]);
+  }, [homeConfig, responsiveCoeff, viewportSize]);
 
   const localAppOpenConfig = useMemo(() => {
-    const W = window.innerWidth;
-    const H = window.innerHeight;
+    const W = viewportSize.w;
+    const H = viewportSize.h;
 
     const isNarrowMobile = W < 640;
     const isPortrait = H > W;
 
+    // 1. Aspect ratio dell'area 3D aperta e fattore di scala proporzionale (fit)
+    const dockedWidth = getDockedAppWidth(W);
+    const openAspect = dockedWidth / Math.max(1, H);
+    const fit = Math.max(0.70, Math.min(1.0, openAspect / REF_ASPECT));
+
     // Preserve visual presence of the model without excessive shrinking:
     // Reference desktop scale is appOpenConfig.modelScale (1.51).
-    // On tablet/resize, maintain strong presence (around 1.35 - 1.45) with safe boundaries.
+    // On tablet/resize, maintain strong presence with safe boundaries.
     let scaleFactor = 1.0;
     if (W < 1180) {
       if (isNarrowMobile) {
@@ -585,7 +615,7 @@ function SceneController({
       }
     }
 
-    const effectiveScale = appOpenConfig.modelScale * scaleFactor;
+    const effectiveScale = appOpenConfig.modelScale * scaleFactor * fit;
 
     // Center the car cleanly in the visible left column matching default app open config
     const targetX = W < 1180 ? (isNarrowMobile ? -4.20 : (isPortrait ? -4.40 : -4.60)) : appOpenConfig.modelPos.x;
@@ -615,7 +645,7 @@ function SceneController({
         z: targetZ,
       },
     };
-  }, [appOpenConfig]);
+  }, [appOpenConfig, viewportSize]);
 
   // Gestione interazione orbit controls
   useEffect(() => {
@@ -1251,11 +1281,7 @@ function SceneController({
       const ch = container.clientHeight;
 
       // Determinazione deterministica del confine dell'app quando aperta
-      let dockedAppWidth = Math.round(cw * (1 / 3));
-      if (cw < 640) dockedAppWidth = Math.round(cw * 0.15);
-      else if (cw < 768) dockedAppWidth = Math.round(cw * 0.25);
-      else if (cw < 1024) dockedAppWidth = Math.round(cw * 0.50);
-      else if (cw < 1280) dockedAppWidth = Math.round(cw * 0.40);
+      const dockedAppWidth = getDockedAppWidth(cw);
 
       let visibleWidth = cw;
 
